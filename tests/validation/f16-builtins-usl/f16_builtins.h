@@ -12,8 +12,9 @@ enum {
   F16_BUILTIN_BASE_OUTPUTS_PER_CASE = F16_BUILTIN_MATH_ROWS +
                                       F16_BUILTIN_GEOMETRIC_ROWS +
                                       F16_BUILTIN_TRIG_ROWS,
-  F16_BUILTIN_WIDTHS                = 4u,
-  F16_BUILTIN_WIDTH_ROWS            = 7u,
+  F16_BUILTIN_WIDTHS                = 3u,
+  F16_BUILTIN_WIDTH_ROWS            = F16_BUILTIN_MATH_ROWS +
+                                      F16_BUILTIN_TRIG_ROWS,
   F16_BUILTIN_WIDTH_ROWS_PER_CASE   = F16_BUILTIN_WIDTHS *
                                       F16_BUILTIN_WIDTH_ROWS,
   F16_BUILTIN_OUTPUTS_PER_CASE      = F16_BUILTIN_BASE_OUTPUTS_PER_CASE +
@@ -22,7 +23,7 @@ enum {
                                       F16_BUILTIN_OUTPUTS_PER_CASE,
   F16_BUILTIN_BASE_CHECKS           = F16_BUILTIN_CASES *
                                       F16_BUILTIN_BASE_OUTPUTS_PER_CASE * 4u,
-  F16_BUILTIN_WIDTH_CHECKS_PER_CASE = F16_BUILTIN_WIDTH_ROWS * 10u,
+  F16_BUILTIN_WIDTH_CHECKS_PER_CASE = F16_BUILTIN_WIDTH_ROWS * 6u,
   F16_BUILTIN_CHECKS                = F16_BUILTIN_BASE_CHECKS +
                                       F16_BUILTIN_CASES *
                                       F16_BUILTIN_WIDTH_CHECKS_PER_CASE

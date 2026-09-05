@@ -5,7 +5,7 @@ kern(1, 1, 1) f16_builtins(
   gid:           uint3 #global_id
 ) {
   let inputBase = gid.x * 2u
-  let out       = gid.x * 84u
+  let out       = gid.x * 200u
   let a         = half4(values[inputBase])
   let b         = half4(values[inputBase + 1u])
   let positiveA = abs(a) + half(0.25)
@@ -78,38 +78,243 @@ kern(1, 1, 1) f16_builtins(
   output[trig + 14u] = half4(acosh(a))
   output[trig + 15u] = half4(atanh(a))
 
-  output[widthOut]      = half4(fract(a.x), half3(0.0))
-  output[widthOut + 1u] = half4(sign(a.x), half3(0.0))
-  output[widthOut + 2u] = half4(step(b.x, a.x), half3(0.0))
-  output[widthOut + 3u] = half4(smoothstep(half(-1.0), half(1.0), a.x),
-                                 half3(0.0))
-  output[widthOut + 4u] = half4(atan(a.x), half3(0.0))
-  output[widthOut + 5u] = half4(tanh(a.x), half3(0.0))
-  output[widthOut + 6u] = half4(asinh(a.x), half3(0.0))
+  // floor scalar/half2/half3 overloads.
+  output[widthOut]         = half4(floor(a.x), half3(0.0))
+  output[widthOut + 48u]   = half4(floor(a.xy), half2(0.0))
+  output[widthOut + 96u]   = half4(floor(a.xyz), half(0.0))
 
-  output[widthOut + 7u]  = half4(fract(a.xy), half2(0.0))
-  output[widthOut + 8u]  = half4(sign(a.xy), half2(0.0))
-  output[widthOut + 9u]  = half4(step(b.xy, a.xy), half2(0.0))
-  output[widthOut + 10u] = half4(smoothstep(half(-1.0), half(1.0), a.xy),
-                                  half2(0.0))
-  output[widthOut + 11u] = half4(atan(a.xy), half2(0.0))
-  output[widthOut + 12u] = half4(tanh(a.xy), half2(0.0))
-  output[widthOut + 13u] = half4(asinh(a.xy), half2(0.0))
+  // ceil scalar/half2/half3 overloads.
+  output[widthOut + 1u]    = half4(ceil(a.x), half3(0.0))
+  output[widthOut + 49u]   = half4(ceil(a.xy), half2(0.0))
+  output[widthOut + 97u]   = half4(ceil(a.xyz), half(0.0))
 
-  output[widthOut + 14u] = half4(fract(a3), half(0.0))
-  output[widthOut + 15u] = half4(sign(a3), half(0.0))
-  output[widthOut + 16u] = half4(step(b3, a3), half(0.0))
-  output[widthOut + 17u] = half4(smoothstep(half(-1.0), half(1.0), a3),
-                                  half(0.0))
-  output[widthOut + 18u] = half4(atan(a3), half(0.0))
-  output[widthOut + 19u] = half4(tanh(a3), half(0.0))
-  output[widthOut + 20u] = half4(asinh(a3), half(0.0))
+  // round scalar/half2/half3 overloads.
+  output[widthOut + 2u]    = half4(round(a.x), half3(0.0))
+  output[widthOut + 50u]   = half4(round(a.xy), half2(0.0))
+  output[widthOut + 98u]   = half4(round(a.xyz), half(0.0))
 
-  output[widthOut + 21u] = half4(fract(a))
-  output[widthOut + 22u] = half4(sign(a))
-  output[widthOut + 23u] = half4(step(b, a))
-  output[widthOut + 24u] = half4(smoothstep(half(-1.0), half(1.0), a))
-  output[widthOut + 25u] = half4(atan(a))
-  output[widthOut + 26u] = half4(tanh(a))
-  output[widthOut + 27u] = half4(asinh(a))
+  // trunc scalar/half2/half3 overloads.
+  output[widthOut + 3u]    = half4(trunc(a.x), half3(0.0))
+  output[widthOut + 51u]   = half4(trunc(a.xy), half2(0.0))
+  output[widthOut + 99u]   = half4(trunc(a.xyz), half(0.0))
+
+  // fract scalar/half2/half3 overloads.
+  output[widthOut + 4u]    = half4(fract(a.x), half3(0.0))
+  output[widthOut + 52u]   = half4(fract(a.xy), half2(0.0))
+  output[widthOut + 100u]  = half4(fract(a.xyz), half(0.0))
+
+  // sqrt scalar/half2/half3 overloads.
+  output[widthOut + 5u]    = half4(sqrt(positiveA.x), half3(0.0))
+  output[widthOut + 53u]   = half4(sqrt(positiveA.xy), half2(0.0))
+  output[widthOut + 101u]  = half4(sqrt(positiveA.xyz), half(0.0))
+
+  // rsqrt scalar/half2/half3 overloads.
+  output[widthOut + 6u]    = half4(rsqrt(positiveA.x), half3(0.0))
+  output[widthOut + 54u]   = half4(rsqrt(positiveA.xy), half2(0.0))
+  output[widthOut + 102u]  = half4(rsqrt(positiveA.xyz), half(0.0))
+
+  // inversesqrt scalar/half2/half3 overloads.
+  output[widthOut + 7u]    = half4(inversesqrt(positiveB.x), half3(0.0))
+  output[widthOut + 55u]   = half4(inversesqrt(positiveB.xy), half2(0.0))
+  output[widthOut + 103u]  = half4(inversesqrt(positiveB.xyz), half(0.0))
+
+  // rcp scalar/half2/half3 overloads.
+  output[widthOut + 8u]    = half4(rcp(a.x), half3(0.0))
+  output[widthOut + 56u]   = half4(rcp(a.xy), half2(0.0))
+  output[widthOut + 104u]  = half4(rcp(a.xyz), half(0.0))
+
+  // exp scalar/half2/half3 overloads.
+  output[widthOut + 9u]    = half4(exp(a.x), half3(0.0))
+  output[widthOut + 57u]   = half4(exp(a.xy), half2(0.0))
+  output[widthOut + 105u]  = half4(exp(a.xyz), half(0.0))
+
+  // exp2 scalar/half2/half3 overloads.
+  output[widthOut + 10u]   = half4(exp2(a.x), half3(0.0))
+  output[widthOut + 58u]   = half4(exp2(a.xy), half2(0.0))
+  output[widthOut + 106u]  = half4(exp2(a.xyz), half(0.0))
+
+  // log scalar/half2/half3 overloads.
+  output[widthOut + 11u]   = half4(log(positiveA.x), half3(0.0))
+  output[widthOut + 59u]   = half4(log(positiveA.xy), half2(0.0))
+  output[widthOut + 107u]  = half4(log(positiveA.xyz), half(0.0))
+
+  // log2 scalar/half2/half3 overloads.
+  output[widthOut + 12u]   = half4(log2(positiveA.x), half3(0.0))
+  output[widthOut + 60u]   = half4(log2(positiveA.xy), half2(0.0))
+  output[widthOut + 108u]  = half4(log2(positiveA.xyz), half(0.0))
+
+  // degrees scalar/half2/half3 overloads.
+  output[widthOut + 13u]   = half4(degrees(a.x), half3(0.0))
+  output[widthOut + 61u]   = half4(degrees(a.xy), half2(0.0))
+  output[widthOut + 109u]  = half4(degrees(a.xyz), half(0.0))
+
+  // radians scalar/half2/half3 overloads.
+  output[widthOut + 14u]   = half4(radians(a.x), half3(0.0))
+  output[widthOut + 62u]   = half4(radians(a.xy), half2(0.0))
+  output[widthOut + 110u]  = half4(radians(a.xyz), half(0.0))
+
+  // saturate scalar/half2/half3 overloads.
+  output[widthOut + 15u]   = half4(saturate(a.x), half3(0.0))
+  output[widthOut + 63u]   = half4(saturate(a.xy), half2(0.0))
+  output[widthOut + 111u]  = half4(saturate(a.xyz), half(0.0))
+
+  // abs scalar/half2/half3 overloads.
+  output[widthOut + 16u]   = half4(abs(a.x), half3(0.0))
+  output[widthOut + 64u]   = half4(abs(a.xy), half2(0.0))
+  output[widthOut + 112u]  = half4(abs(a.xyz), half(0.0))
+
+  // sign scalar/half2/half3 overloads.
+  output[widthOut + 17u]   = half4(sign(a.x), half3(0.0))
+  output[widthOut + 65u]   = half4(sign(a.xy), half2(0.0))
+  output[widthOut + 113u]  = half4(sign(a.xyz), half(0.0))
+
+  // pow scalar/half2/half3 overloads.
+  output[widthOut + 18u]   = half4(pow(positiveA.x, b.x), half3(0.0))
+  output[widthOut + 66u]   = half4(pow(positiveA.xy, b.xy), half2(0.0))
+  output[widthOut + 114u]  = half4(pow(positiveA.xyz, b.xyz), half(0.0))
+
+  // mod scalar/half2/half3 overloads.
+  output[widthOut + 19u]   = half4(mod(a.x, b.x), half3(0.0))
+  output[widthOut + 67u]   = half4(mod(a.xy, b.xy), half2(0.0))
+  output[widthOut + 115u]  = half4(mod(a.xyz, b.xyz), half(0.0))
+
+  // fmod scalar/half2/half3 overloads.
+  output[widthOut + 20u]   = half4(fmod(a.x, b.x), half3(0.0))
+  output[widthOut + 68u]   = half4(fmod(a.xy, b.xy), half2(0.0))
+  output[widthOut + 116u]  = half4(fmod(a.xyz, b.xyz), half(0.0))
+
+  // min scalar/half2/half3 overloads.
+  output[widthOut + 21u]   = half4(min(a.x, b.x), half3(0.0))
+  output[widthOut + 69u]   = half4(min(a.xy, b.xy), half2(0.0))
+  output[widthOut + 117u]  = half4(min(a.xyz, b.xyz), half(0.0))
+
+  // max scalar/half2/half3 overloads.
+  output[widthOut + 22u]   = half4(max(a.x, b.x), half3(0.0))
+  output[widthOut + 70u]   = half4(max(a.xy, b.xy), half2(0.0))
+  output[widthOut + 118u]  = half4(max(a.xyz, b.xyz), half(0.0))
+
+  // clamp scalar/half2/half3 overloads.
+  output[widthOut + 23u]   = half4(clamp(a.x, half(-1.0), half(1.0)), half3(0.0))
+  output[widthOut + 71u]   = half4(clamp(a.xy, half(-1.0), half(1.0)), half2(0.0))
+  output[widthOut + 119u]  = half4(clamp(a.xyz, half(-1.0), half(1.0)), half(0.0))
+
+  // step scalar/half2/half3 overloads.
+  output[widthOut + 24u]   = half4(step(b.x, a.x), half3(0.0))
+  output[widthOut + 72u]   = half4(step(b.xy, a.xy), half2(0.0))
+  output[widthOut + 120u]  = half4(step(b.xyz, a.xyz), half(0.0))
+
+  // copysign scalar/half2/half3 overloads.
+  output[widthOut + 25u]   = half4(copysign(a.x, b.x), half3(0.0))
+  output[widthOut + 73u]   = half4(copysign(a.xy, b.xy), half2(0.0))
+  output[widthOut + 121u]  = half4(copysign(a.xyz, b.xyz), half(0.0))
+
+  // mix scalar/half2/half3 overloads.
+  output[widthOut + 26u]   = half4(mix(a.x, b.x, half(0.25)), half3(0.0))
+  output[widthOut + 74u]   = half4(mix(a.xy, b.xy, half(0.25)), half2(0.0))
+  output[widthOut + 122u]  = half4(mix(a.xyz, b.xyz, half(0.25)), half(0.0))
+
+  // lerp scalar/half2/half3 overloads.
+  output[widthOut + 27u]   = half4(lerp(a.x, b.x, half(0.75)), half3(0.0))
+  output[widthOut + 75u]   = half4(lerp(a.xy, b.xy, half(0.75)), half2(0.0))
+  output[widthOut + 123u]  = half4(lerp(a.xyz, b.xyz, half(0.75)), half(0.0))
+
+  // smoothstep scalar/half2/half3 overloads.
+  output[widthOut + 28u]   = half4(smoothstep(half(-1.0), half(1.0), a.x), half3(0.0))
+  output[widthOut + 76u]   = half4(smoothstep(half(-1.0), half(1.0), a.xy), half2(0.0))
+  output[widthOut + 124u]  = half4(smoothstep(half(-1.0), half(1.0), a.xyz), half(0.0))
+
+  // fma scalar/half2/half3 overloads.
+  output[widthOut + 29u]   = half4(fma(a.x, b.x, half(0.5)), half3(0.0))
+  output[widthOut + 77u]   = half4(fma(a.xy, b.xy, half(0.5)), half2(0.0))
+  output[widthOut + 125u]  = half4(fma(a.xyz, b.xyz, half(0.5)), half(0.0))
+
+  // inverselerp scalar/half2/half3 overloads.
+  output[widthOut + 30u]   = half4(inverselerp(a.x, b.x, -a.x), half3(0.0))
+  output[widthOut + 78u]   = half4(inverselerp(a.xy, b.xy, -a.xy), half2(0.0))
+  output[widthOut + 126u]  = half4(inverselerp(a.xyz, b.xyz, -a.xyz), half(0.0))
+
+  // remap scalar/half2/half3 overloads.
+  output[widthOut + 31u]   = half4(remap(a.x, b.x, -b.x, b.x, -a.x), half3(0.0))
+  output[widthOut + 79u]   = half4(remap(a.xy, b.xy, -b.xy, b.xy, -a.xy), half2(0.0))
+  output[widthOut + 127u]  = half4(remap(a.xyz, b.xyz, -b.xyz, b.xyz, -a.xyz), half(0.0))
+
+  // sin scalar/half2/half3 overloads.
+  output[widthOut + 32u]   = half4(sin(a.x), half3(0.0))
+  output[widthOut + 80u]   = half4(sin(a.xy), half2(0.0))
+  output[widthOut + 128u]  = half4(sin(a.xyz), half(0.0))
+
+  // cos scalar/half2/half3 overloads.
+  output[widthOut + 33u]   = half4(cos(a.x), half3(0.0))
+  output[widthOut + 81u]   = half4(cos(a.xy), half2(0.0))
+  output[widthOut + 129u]  = half4(cos(a.xyz), half(0.0))
+
+  // tan scalar/half2/half3 overloads.
+  output[widthOut + 34u]   = half4(tan(a.x), half3(0.0))
+  output[widthOut + 82u]   = half4(tan(a.xy), half2(0.0))
+  output[widthOut + 130u]  = half4(tan(a.xyz), half(0.0))
+
+  // asin scalar/half2/half3 overloads.
+  output[widthOut + 35u]   = half4(asin(a.x), half3(0.0))
+  output[widthOut + 83u]   = half4(asin(a.xy), half2(0.0))
+  output[widthOut + 131u]  = half4(asin(a.xyz), half(0.0))
+
+  // acos scalar/half2/half3 overloads.
+  output[widthOut + 36u]   = half4(acos(a.x), half3(0.0))
+  output[widthOut + 84u]   = half4(acos(a.xy), half2(0.0))
+  output[widthOut + 132u]  = half4(acos(a.xyz), half(0.0))
+
+  // atan scalar/half2/half3 overloads.
+  output[widthOut + 37u]   = half4(atan(a.x), half3(0.0))
+  output[widthOut + 85u]   = half4(atan(a.xy), half2(0.0))
+  output[widthOut + 133u]  = half4(atan(a.xyz), half(0.0))
+
+  // acot scalar/half2/half3 overloads.
+  output[widthOut + 38u]   = half4(acot(a.x), half3(0.0))
+  output[widthOut + 86u]   = half4(acot(a.xy), half2(0.0))
+  output[widthOut + 134u]  = half4(acot(a.xyz), half(0.0))
+
+  // asec scalar/half2/half3 overloads.
+  output[widthOut + 39u]   = half4(asec(a.x), half3(0.0))
+  output[widthOut + 87u]   = half4(asec(a.xy), half2(0.0))
+  output[widthOut + 135u]  = half4(asec(a.xyz), half(0.0))
+
+  // acsc scalar/half2/half3 overloads.
+  output[widthOut + 40u]   = half4(acsc(a.x), half3(0.0))
+  output[widthOut + 88u]   = half4(acsc(a.xy), half2(0.0))
+  output[widthOut + 136u]  = half4(acsc(a.xyz), half(0.0))
+
+  // atan2 scalar/half2/half3 overloads.
+  output[widthOut + 41u]   = half4(atan2(a.x, b.x), half3(0.0))
+  output[widthOut + 89u]   = half4(atan2(a.xy, b.xy), half2(0.0))
+  output[widthOut + 137u]  = half4(atan2(a.xyz, b.xyz), half(0.0))
+
+  // sinh scalar/half2/half3 overloads.
+  output[widthOut + 42u]   = half4(sinh(a.x), half3(0.0))
+  output[widthOut + 90u]   = half4(sinh(a.xy), half2(0.0))
+  output[widthOut + 138u]  = half4(sinh(a.xyz), half(0.0))
+
+  // cosh scalar/half2/half3 overloads.
+  output[widthOut + 43u]   = half4(cosh(a.x), half3(0.0))
+  output[widthOut + 91u]   = half4(cosh(a.xy), half2(0.0))
+  output[widthOut + 139u]  = half4(cosh(a.xyz), half(0.0))
+
+  // tanh scalar/half2/half3 overloads.
+  output[widthOut + 44u]   = half4(tanh(a.x), half3(0.0))
+  output[widthOut + 92u]   = half4(tanh(a.xy), half2(0.0))
+  output[widthOut + 140u]  = half4(tanh(a.xyz), half(0.0))
+
+  // asinh scalar/half2/half3 overloads.
+  output[widthOut + 45u]   = half4(asinh(a.x), half3(0.0))
+  output[widthOut + 93u]   = half4(asinh(a.xy), half2(0.0))
+  output[widthOut + 141u]  = half4(asinh(a.xyz), half(0.0))
+
+  // acosh scalar/half2/half3 overloads.
+  output[widthOut + 46u]   = half4(acosh(a.x), half3(0.0))
+  output[widthOut + 94u]   = half4(acosh(a.xy), half2(0.0))
+  output[widthOut + 142u]  = half4(acosh(a.xyz), half(0.0))
+
+  // atanh scalar/half2/half3 overloads.
+  output[widthOut + 47u]   = half4(atanh(a.x), half3(0.0))
+  output[widthOut + 95u]   = half4(atanh(a.xy), half2(0.0))
+  output[widthOut + 143u]  = half4(atanh(a.xyz), half(0.0))
 }

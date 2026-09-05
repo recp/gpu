@@ -429,16 +429,9 @@ half_trig_expected(uint32_t row, float a, float b) {
 
 static float
 half_width_expected(uint32_t row, float a, float b) {
-  switch (row) {
-    case 0u: return half_math_expected(4u, a, b);
-    case 1u: return half_math_expected(17u, a, b);
-    case 2u: return half_math_expected(24u, a, b);
-    case 3u: return half_math_expected(28u, a, b);
-    case 4u: return half_trig_expected(5u, a, b);
-    case 5u: return half_trig_expected(12u, a, b);
-    case 6u: return half_trig_expected(13u, a, b);
-    default: return NAN;
-  }
+  return row < F16_BUILTIN_MATH_ROWS
+           ? half_math_expected(row, a, b)
+           : half_trig_expected(row - F16_BUILTIN_MATH_ROWS, a, b);
 }
 
 static int
@@ -458,9 +451,6 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
   static const char *geometricNames[F16_BUILTIN_GEOMETRIC_ROWS] = {
     "dot-length-distance", "cross", "normalize", "reflect", "project",
     "reject", "refract", "faceforward"
-  };
-  static const char *widthNames[F16_BUILTIN_WIDTH_ROWS] = {
-    "fract", "sign", "step", "smoothstep", "atan", "tanh", "asinh"
   };
   uint32_t checks = 0u;
   int      ok = 1;
@@ -537,14 +527,21 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
                            (width - 1u) * F16_BUILTIN_WIDTH_ROWS;
 
       for (uint32_t row = 0u; row < F16_BUILTIN_WIDTH_ROWS; row++) {
+        const char *name = row < F16_BUILTIN_MATH_ROWS
+                            ? mathNames[row]
+                            : trigNames[row - F16_BUILTIN_MATH_ROWS];
+        uint16_t    limit = row >= 18u && row < F16_BUILTIN_MATH_ROWS
+                             ? 16u : 8u;
+        char        widthName[48];
+
+        (void)snprintf(widthName, sizeof(widthName), "%s half%u", name, width);
         for (uint32_t lane = 0u; lane < width; lane++) {
-          float    expected = half_width_expected(row, a[lane], b[lane]);
-          float    actual = half_bits_to_float(output[widthBase + row][lane]);
-          uint16_t limit = row == 3u ? 16u : 8u;
+          float expected = half_width_expected(row, a[lane], b[lane]);
+          float actual   = half_bits_to_float(output[widthBase + row][lane]);
 
           checks++;
-          if (row == 1u && actual == 0.0f && expected == 0.0f) continue;
-          if (!value_matches(widthNames[row],
+          if (row == 17u && actual == 0.0f && expected == 0.0f) continue;
+          if (!value_matches(widthName,
                              testCase,
                              lane,
                              actual,
