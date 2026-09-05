@@ -11,9 +11,9 @@
 enum {
   F16_BUILTIN_CASES            = 4u,
   F16_BUILTIN_INPUT_ROWS       = F16_BUILTIN_CASES * 2u,
-  F16_BUILTIN_MATH_ROWS        = 30u,
+  F16_BUILTIN_MATH_ROWS        = 32u,
   F16_BUILTIN_GEOMETRIC_ROWS   = 8u,
-  F16_BUILTIN_TRIG_ROWS        = 13u,
+  F16_BUILTIN_TRIG_ROWS        = 16u,
   F16_BUILTIN_OUTPUTS_PER_CASE = F16_BUILTIN_MATH_ROWS +
                                  F16_BUILTIN_GEOMETRIC_ROWS +
                                  F16_BUILTIN_TRIG_ROWS,
@@ -291,7 +291,8 @@ half_pow(float base, float exponent) {
 
 static float
 half_math_expected(uint32_t row, float a, float b) {
-  float positive = half_add(half_abs(a), 0.25f);
+  float positiveA = half_add(half_abs(a), 0.25f);
+  float positiveB = half_add(half_abs(b), 0.25f);
 
   switch (row) {
     case 0u: return half_round(floorf(a));
@@ -299,35 +300,37 @@ half_math_expected(uint32_t row, float a, float b) {
     case 2u: return half_round(nearbyintf(a));
     case 3u: return half_round(truncf(a));
     case 4u: return half_sub(a, half_round(floorf(a)));
-    case 5u: return half_round(sqrtf(positive));
-    case 6u: return half_round(1.0f / sqrtf(positive));
-    case 7u: return half_div(1.0f, a);
-    case 8u:
+    case 5u: return half_round(sqrtf(positiveA));
+    case 6u: return half_round(1.0f / sqrtf(positiveA));
+    case 7u: return half_round(1.0f / sqrtf(positiveB));
+    case 8u: return half_div(1.0f, a);
+    case 9u:
       return half_round(exp2f(half_mul(a, half_round(1.4426950408889634f))));
-    case 9u: return half_round(exp2f(a));
-    case 10u:
-      return half_mul(half_round(log2f(positive)),
+    case 10u: return half_round(exp2f(a));
+    case 11u:
+      return half_mul(half_round(log2f(positiveA)),
                       half_round(0.6931471805599453f));
-    case 11u: return half_round(log2f(positive));
-    case 12u: return half_mul(a, half_round(57.29577951308232f));
-    case 13u: return half_mul(a, half_round(0.017453292519943295f));
-    case 14u: return half_clamp(a, 0.0f, 1.0f);
-    case 15u: return half_abs(a);
-    case 16u: return half_sign(a);
-    case 17u: return half_pow(positive, b);
-    case 18u: return half_floor_mod(a, b);
-    case 19u: return half_round(fmodf(a, b));
-    case 20u: return half_min(a, b);
-    case 21u: return half_max(a, b);
-    case 22u: return half_clamp(a, -1.0f, 1.0f);
-    case 23u: return half_step(b, a);
-    case 24u: return half_round(copysignf(a, b));
-    case 25u: return half_mix(a, b, 0.25f);
-    case 26u: return half_smoothstep(-1.0f, 1.0f, a);
-    case 27u: return half_fma(a, b, 0.5f);
-    case 28u:
+    case 12u: return half_round(log2f(positiveA));
+    case 13u: return half_mul(a, half_round(57.29577951308232f));
+    case 14u: return half_mul(a, half_round(0.017453292519943295f));
+    case 15u: return half_clamp(a, 0.0f, 1.0f);
+    case 16u: return half_abs(a);
+    case 17u: return half_sign(a);
+    case 18u: return half_pow(positiveA, b);
+    case 19u: return half_floor_mod(a, b);
+    case 20u: return half_round(fmodf(a, b));
+    case 21u: return half_min(a, b);
+    case 22u: return half_max(a, b);
+    case 23u: return half_clamp(a, -1.0f, 1.0f);
+    case 24u: return half_step(b, a);
+    case 25u: return half_round(copysignf(a, b));
+    case 26u: return half_mix(a, b, 0.25f);
+    case 27u: return half_mix(a, b, 0.75f);
+    case 28u: return half_smoothstep(-1.0f, 1.0f, a);
+    case 29u: return half_fma(a, b, 0.5f);
+    case 30u:
       return half_div(half_sub(half_round(-a), a), half_sub(b, a));
-    case 29u:
+    case 31u:
       return half_mix(
         half_round(-b),
         b,
@@ -401,13 +404,16 @@ half_trig_expected(uint32_t row, float a, float b) {
     case 3u: return half_round(asinf(a));
     case 4u: return half_round(acosf(a));
     case 5u: return half_round(atanf(a));
-    case 6u: return half_round(atan2f(a, b));
-    case 7u: return half_round(sinhf(a));
-    case 8u: return half_round(coshf(a));
-    case 9u: return half_round(tanhf(a));
-    case 10u: return half_round(asinhf(a));
-    case 11u: return half_round(acoshf(a));
-    case 12u: return half_round(atanhf(a));
+    case 6u: return half_round(atanf(half_div(1.0f, a)));
+    case 7u: return half_round(acosf(half_div(1.0f, a)));
+    case 8u: return half_round(asinf(half_div(1.0f, a)));
+    case 9u: return half_round(atan2f(a, b));
+    case 10u: return half_round(sinhf(a));
+    case 11u: return half_round(coshf(a));
+    case 12u: return half_round(tanhf(a));
+    case 13u: return half_round(asinhf(a));
+    case 14u: return half_round(acoshf(a));
+    case 15u: return half_round(atanhf(a));
     default: return NAN;
   }
 }
@@ -416,14 +422,15 @@ static int
 validate_results(const float output[F16_BUILTIN_OUTPUT_ROWS][4]) {
   static const char *mathNames[F16_BUILTIN_MATH_ROWS] = {
     "floor", "ceil", "round", "trunc", "fract", "sqrt", "rsqrt",
-    "rcp", "exp", "exp2", "log", "log2", "degrees", "radians",
-    "saturate", "abs", "sign", "pow", "mod", "fmod", "min", "max",
-    "clamp", "step", "copysign", "mix", "smoothstep", "fma",
-    "inverselerp", "remap"
+    "inversesqrt", "rcp", "exp", "exp2", "log", "log2", "degrees",
+    "radians", "saturate", "abs", "sign", "pow", "mod", "fmod",
+    "min", "max", "clamp", "step", "copysign", "mix", "lerp",
+    "smoothstep", "fma", "inverselerp", "remap"
   };
   static const char *trigNames[F16_BUILTIN_TRIG_ROWS] = {
-    "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
-    "sinh", "cosh", "tanh", "asinh", "acosh", "atanh"
+    "sin", "cos", "tan", "asin", "acos", "atan", "acot", "asec",
+    "acsc", "atan2", "sinh", "cosh", "tanh", "asinh", "acosh",
+    "atanh"
   };
   static const char *geometricNames[F16_BUILTIN_GEOMETRIC_ROWS] = {
     "dot-length-distance", "cross", "normalize", "reflect", "project",
@@ -441,9 +448,9 @@ validate_results(const float output[F16_BUILTIN_OUTPUT_ROWS][4]) {
       b[lane] = half_round(kInputs[testCase * 2u + 1u][lane]);
       for (uint32_t row = 0u; row < F16_BUILTIN_MATH_ROWS; row++) {
         float expected = half_math_expected(row, a[lane], b[lane]);
-        uint16_t limit = row >= 17u ? 16u : 8u;
+        uint16_t limit = row >= 18u ? 16u : 8u;
 
-        if (row == 16u && output[base + row][lane] == 0.0f &&
+        if (row == 17u && output[base + row][lane] == 0.0f &&
             expected == 0.0f) {
           continue;
         }
