@@ -427,6 +427,20 @@ half_trig_expected(uint32_t row, float a, float b) {
   }
 }
 
+static float
+half_width_expected(uint32_t row, float a, float b) {
+  switch (row) {
+    case 0u: return half_math_expected(4u, a, b);
+    case 1u: return half_math_expected(17u, a, b);
+    case 2u: return half_math_expected(24u, a, b);
+    case 3u: return half_math_expected(28u, a, b);
+    case 4u: return half_trig_expected(5u, a, b);
+    case 5u: return half_trig_expected(12u, a, b);
+    case 6u: return half_trig_expected(13u, a, b);
+    default: return NAN;
+  }
+}
+
 static int
 validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
   static const char *mathNames[F16_BUILTIN_MATH_ROWS] = {
@@ -445,7 +459,11 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
     "dot-length-distance", "cross", "normalize", "reflect", "project",
     "reject", "refract", "faceforward"
   };
-  int ok = 1;
+  static const char *widthNames[F16_BUILTIN_WIDTH_ROWS] = {
+    "fract", "sign", "step", "smoothstep", "atan", "tanh", "asinh"
+  };
+  uint32_t checks = 0u;
+  int      ok = 1;
 
   for (uint32_t testCase = 0u; testCase < F16_BUILTIN_CASES; testCase++) {
     float a[4], b[4];
@@ -462,6 +480,7 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
         float actual   = half_bits_to_float(output[base + row][lane]);
         uint16_t limit = row >= 18u ? 16u : 8u;
 
+        checks++;
         if (row == 17u && actual == 0.0f && expected == 0.0f) {
           continue;
         }
@@ -478,6 +497,7 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
     half_geometric_expected(a, b, geometric);
     for (uint32_t row = 0u; row < F16_BUILTIN_GEOMETRIC_ROWS; row++) {
       for (uint32_t lane = 0u; lane < 4u; lane++) {
+        checks++;
         if (!value_matches(geometricNames[row],
                            testCase,
                            lane,
@@ -497,6 +517,7 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
                            ? 64u
                            : 8u;
 
+        checks++;
         if (!value_matches(
               trigNames[row],
               testCase,
@@ -511,6 +532,37 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
         }
       }
     }
+    for (uint32_t width = 1u; width <= F16_BUILTIN_WIDTHS; width++) {
+      uint32_t widthBase = base + F16_BUILTIN_BASE_OUTPUTS_PER_CASE +
+                           (width - 1u) * F16_BUILTIN_WIDTH_ROWS;
+
+      for (uint32_t row = 0u; row < F16_BUILTIN_WIDTH_ROWS; row++) {
+        for (uint32_t lane = 0u; lane < width; lane++) {
+          float    expected = half_width_expected(row, a[lane], b[lane]);
+          float    actual = half_bits_to_float(output[widthBase + row][lane]);
+          uint16_t limit = row == 3u ? 16u : 8u;
+
+          checks++;
+          if (row == 1u && actual == 0.0f && expected == 0.0f) continue;
+          if (!value_matches(widthNames[row],
+                             testCase,
+                             lane,
+                             actual,
+                             expected,
+                             limit)) {
+            ok = 0;
+          }
+        }
+      }
+    }
+  }
+  if (checks != F16_BUILTIN_CHECKS) {
+    fprintf(stderr,
+            "%s F16 check-count mismatch: expected %u, got %u\n",
+            GPU_F16_BUILTINS_BACKEND_NAME,
+            (unsigned)F16_BUILTIN_CHECKS,
+            (unsigned)checks);
+    return 0;
   }
   return ok;
 }
@@ -755,8 +807,10 @@ cleanup:
   GPUDestroyInstance(instance);
   free(artifact);
   if (!ok) return 1;
-  printf("%s F16 builtin validation passed\n",
-         GPU_F16_BUILTINS_BACKEND_NAME);
+  printf("%s F16 builtin validation passed (%u/%u)\n",
+         GPU_F16_BUILTINS_BACKEND_NAME,
+         (unsigned)F16_BUILTIN_CHECKS,
+         (unsigned)F16_BUILTIN_CHECKS);
   return 0;
 }
 #endif

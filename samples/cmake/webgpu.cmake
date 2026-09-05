@@ -914,7 +914,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
   set(GPU_WEBGPU_SAMPLE_TITLE "F16 builtin validation")
   set(GPU_WEBGPU_SAMPLE_KIND "Validation / compute")
   set(GPU_WEBGPU_SAMPLE_DESCRIPTION
-      "A strict 896-result half-precision boundary matrix with asynchronous WebGPU readback.")
+      "A strict 1176-result half-precision boundary and overload-width matrix with asynchronous WebGPU readback.")
   set(GPU_WEBGPU_SAMPLE_C_SOURCE "sources/f16-builtins-validation.c")
   set(GPU_WEBGPU_SAMPLE_ASSET_SOURCE "")
   set(GPU_WEBGPU_SAMPLE_ASSET_TAB "")

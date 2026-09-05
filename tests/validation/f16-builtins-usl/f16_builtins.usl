@@ -5,7 +5,7 @@ kern(1, 1, 1) f16_builtins(
   gid:           uint3 #global_id
 ) {
   let inputBase = gid.x * 2u
-  let out       = gid.x * 56u
+  let out       = gid.x * 84u
   let a         = half4(values[inputBase])
   let b         = half4(values[inputBase + 1u])
   let positiveA = abs(a) + half(0.25)
@@ -14,6 +14,7 @@ kern(1, 1, 1) f16_builtins(
   let b3        = b.xyz
   let geo       = out + 32u
   let trig      = geo + 8u
+  let widthOut  = out + 56u
 
   output[out]       = half4(floor(a))
   output[out + 1u]  = half4(ceil(a))
@@ -76,4 +77,39 @@ kern(1, 1, 1) f16_builtins(
   output[trig + 13u] = half4(asinh(a))
   output[trig + 14u] = half4(acosh(a))
   output[trig + 15u] = half4(atanh(a))
+
+  output[widthOut]      = half4(fract(a.x), half3(0.0))
+  output[widthOut + 1u] = half4(sign(a.x), half3(0.0))
+  output[widthOut + 2u] = half4(step(b.x, a.x), half3(0.0))
+  output[widthOut + 3u] = half4(smoothstep(half(-1.0), half(1.0), a.x),
+                                 half3(0.0))
+  output[widthOut + 4u] = half4(atan(a.x), half3(0.0))
+  output[widthOut + 5u] = half4(tanh(a.x), half3(0.0))
+  output[widthOut + 6u] = half4(asinh(a.x), half3(0.0))
+
+  output[widthOut + 7u]  = half4(fract(a.xy), half2(0.0))
+  output[widthOut + 8u]  = half4(sign(a.xy), half2(0.0))
+  output[widthOut + 9u]  = half4(step(b.xy, a.xy), half2(0.0))
+  output[widthOut + 10u] = half4(smoothstep(half(-1.0), half(1.0), a.xy),
+                                  half2(0.0))
+  output[widthOut + 11u] = half4(atan(a.xy), half2(0.0))
+  output[widthOut + 12u] = half4(tanh(a.xy), half2(0.0))
+  output[widthOut + 13u] = half4(asinh(a.xy), half2(0.0))
+
+  output[widthOut + 14u] = half4(fract(a3), half(0.0))
+  output[widthOut + 15u] = half4(sign(a3), half(0.0))
+  output[widthOut + 16u] = half4(step(b3, a3), half(0.0))
+  output[widthOut + 17u] = half4(smoothstep(half(-1.0), half(1.0), a3),
+                                  half(0.0))
+  output[widthOut + 18u] = half4(atan(a3), half(0.0))
+  output[widthOut + 19u] = half4(tanh(a3), half(0.0))
+  output[widthOut + 20u] = half4(asinh(a3), half(0.0))
+
+  output[widthOut + 21u] = half4(fract(a))
+  output[widthOut + 22u] = half4(sign(a))
+  output[widthOut + 23u] = half4(step(b, a))
+  output[widthOut + 24u] = half4(smoothstep(half(-1.0), half(1.0), a))
+  output[widthOut + 25u] = half4(atan(a))
+  output[widthOut + 26u] = half4(tanh(a))
+  output[widthOut + 27u] = half4(asinh(a))
 }

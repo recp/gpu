@@ -28,6 +28,12 @@ typedef struct WebGPUF16Validation {
 
 static WebGPUF16Validation validation;
 
+static bool
+webgpu_f16_setup_error(const char *stage) {
+  fprintf(stderr, "GPU: WebGPU F16 %s failed\n", stage ? stage : "setup");
+  return false;
+}
+
 static void
 webgpu_f16_cleanup(WebGPUF16Validation *state) {
   if (!state) return;
@@ -45,9 +51,9 @@ webgpu_f16_cleanup(WebGPUF16Validation *state) {
   GPUDestroyDevice(state->device);
   GPUDestroyInstance(state->instance);
   free(state->artifact);
-  state->bindGroup   = NULL;
-  state->buffers[0]  = NULL;
-  state->buffers[1]  = NULL;
+  state->bindGroup    = NULL;
+  state->buffers[0]   = NULL;
+  state->buffers[1]   = NULL;
   state->pipeline     = NULL;
   state->shaderLayout = NULL;
   state->library      = NULL;
@@ -73,6 +79,7 @@ webgpu_f16_mapped(WGPUMapAsyncStatus status,
                   void              *unused) {
   WebGPUF16Validation *state;
   const void          *mapped;
+  char                 statusText[96];
 
   (void)message;
   (void)unused;
@@ -96,9 +103,12 @@ webgpu_f16_mapped(WGPUMapAsyncStatus status,
                       true);
     return;
   }
-  webgpu_f16_finish(state,
-                    "GPU: WebGPU F16 builtin validation passed (896/896)",
-                    false);
+  (void)snprintf(statusText,
+                 sizeof(statusText),
+                 "GPU: WebGPU F16 builtin validation passed (%u/%u)",
+                 (unsigned)F16_BUILTIN_CHECKS,
+                 (unsigned)F16_BUILTIN_CHECKS);
+  webgpu_f16_finish(state, statusText, false);
 }
 
 static bool
@@ -120,17 +130,17 @@ webgpu_f16_begin_readback(WebGPUF16Validation *state) {
   native = gpu_webgpuDevice(state ? state->device : NULL);
   if (!state || !native || !native->device || !native->queue ||
       !state->buffers[1] || !state->buffers[1]->_priv) {
-    return false;
+    return webgpu_f16_setup_error("native readback setup");
   }
 
   bufferInfo.label = gpu_webgpuString("f16-builtins-readback");
   bufferInfo.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
   bufferInfo.size  = sizeof(state->output);
   state->staging   = wgpuDeviceCreateBuffer(native->device, &bufferInfo);
-  if (!state->staging) return false;
+  if (!state->staging) return webgpu_f16_setup_error("staging buffer");
 
   encoder = wgpuDeviceCreateCommandEncoder(native->device, &encoderInfo);
-  if (!encoder) return false;
+  if (!encoder) return webgpu_f16_setup_error("readback encoder");
   wgpuCommandEncoderCopyBufferToBuffer(
     encoder,
     (WGPUBuffer)state->buffers[1]->_priv,
@@ -141,7 +151,7 @@ webgpu_f16_begin_readback(WebGPUF16Validation *state) {
   );
   command = wgpuCommandEncoderFinish(encoder, &commandInfo);
   wgpuCommandEncoderRelease(encoder);
-  if (!command) return false;
+  if (!command) return webgpu_f16_setup_error("readback command");
   wgpuQueueSubmit(native->queue, 1u, &command);
   wgpuCommandBufferRelease(command);
 
@@ -172,21 +182,27 @@ webgpu_f16_dispatch(WebGPUF16Validation *state) {
   queue = GPUGetQueue(state->device, GPU_QUEUE_COMPUTE, 0u);
   if (!queue || !GPUIsFeatureEnabled(state->device,
                                      GPU_FEATURE_SHADER_F16)) {
-    return false;
+    return webgpu_f16_setup_error("queue or shader-f16 feature");
   }
   result = GPUCreateShaderLibraryFromUSL(state->device,
                                          state->artifact,
                                          state->artifactSize,
                                          &state->library);
-  if (result != GPU_OK || !state->library ||
-      GPUCreateShaderLayout(state->device,
-                            state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
+  if (result != GPU_OK || !state->library) {
+    fprintf(stderr,
+            "GPU: WebGPU F16 USL library failed (%d, %llu bytes)\n",
+            (int)result,
+            (unsigned long long)state->artifactSize);
+    return false;
+  }
+  result = GPUCreateShaderLayout(state->device,
+                                 state->library,
+                                 &state->shaderLayout);
+  if (result != GPU_OK || !state->shaderLayout ||
       state->shaderLayout->bindGroupLayoutCount != 1u ||
       !state->shaderLayout->bindGroupLayouts[0] ||
       !state->shaderLayout->pipelineLayout) {
-    return false;
+    return webgpu_f16_setup_error("reflected layout");
   }
 
   pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -199,7 +215,7 @@ webgpu_f16_dispatch(WebGPUF16Validation *state) {
                                &pipelineInfo,
                                &state->pipeline) != GPU_OK ||
       !state->pipeline) {
-    return false;
+    return webgpu_f16_setup_error("compute pipeline");
   }
 
   sizes[0] = sizeof(gpu_f16_builtin_inputs);
@@ -222,7 +238,7 @@ webgpu_f16_dispatch(WebGPUF16Validation *state) {
                               ? (const void *)gpu_f16_builtin_inputs
                               : (const void *)state->output,
                             sizes[binding]) != GPU_OK) {
-      return false;
+      return webgpu_f16_setup_error("storage buffer");
     }
     entries[binding].binding       = binding;
     entries[binding].bindingType   = binding == 0u
@@ -245,7 +261,7 @@ webgpu_f16_dispatch(WebGPUF16Validation *state) {
       !state->bindGroup ||
       GPUAcquireCommandBuffer(queue, "webgpu-f16-builtins", &cmdb) != GPU_OK ||
       !cmdb || !(pass = GPUBeginComputePass(cmdb, "webgpu-f16-builtins"))) {
-    return false;
+    return webgpu_f16_setup_error("bind group or command buffer");
   }
   GPUBindComputePipeline(pass, state->pipeline);
   GPUBindComputeGroup(pass, 0u, state->bindGroup, 0u, NULL);
@@ -256,8 +272,9 @@ webgpu_f16_dispatch(WebGPUF16Validation *state) {
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
-  return GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
-         webgpu_f16_begin_readback(state);
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK)
+    return webgpu_f16_setup_error("compute submit");
+  return webgpu_f16_begin_readback(state);
 }
 
 static void
