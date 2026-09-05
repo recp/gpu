@@ -1590,6 +1590,46 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_VULKAN)
 endif()
 
 if(GPU_BUILD_VULKAN AND GPU_BUILD_TESTS)
+  add_executable(gpu-f16-builtins-vulkan-usl
+    ${PROJECT_SOURCE_DIR}/tests/validation/f16-builtins-usl/main.c
+  )
+  target_compile_definitions(gpu-f16-builtins-vulkan-usl PRIVATE
+    GPU_F16_BUILTINS_BACKEND=GPU_BACKEND_VULKAN
+    GPU_F16_BUILTINS_BACKEND_NAME="Vulkan"
+  )
+  target_link_libraries(gpu-f16-builtins-vulkan-usl PRIVATE gpu)
+  if(NOT WIN32)
+    target_link_libraries(gpu-f16-builtins-vulkan-usl PRIVATE m)
+  endif()
+  gpu_attach_usl_validation(gpu-f16-builtins-vulkan-usl
+                            gpu-vulkan-f16-builtins-fixture
+                            "${GPU_VULKAN_F16_BUILTINS_US}")
+  set_target_properties(gpu-f16-builtins-vulkan-usl PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  if(MSVC)
+    target_compile_definitions(gpu-f16-builtins-vulkan-usl PRIVATE
+      _CRT_SECURE_NO_WARNINGS
+    )
+    target_compile_options(gpu-f16-builtins-vulkan-usl PRIVATE /W4 /WX)
+  else()
+    target_compile_options(gpu-f16-builtins-vulkan-usl PRIVATE
+      -Wall -Wextra -Werror
+    )
+  endif()
+  add_test(
+    NAME vulkan-f16-builtins
+    COMMAND gpu-f16-builtins-vulkan-usl
+            "${GPU_VULKAN_F16_BUILTINS_US}"
+  )
+  set_tests_properties(vulkan-f16-builtins PROPERTIES
+    ENVIRONMENT
+      "GPU_USL_LOG=1;GPU_USL_TEST_DISABLE_DISK_CACHE=1;USL_STRICT_IEEE=1"
+    TIMEOUT 30
+  )
+
   add_executable(gpu-async-copy-vulkan-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/async-copy-usl/main.c
   )

@@ -2835,6 +2835,10 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
                         GPU_FEATURE_SHADER_DEVICE_CLOCK)) {
     coreFeatures.shaderInt64 = VK_TRUE;
   }
+  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16) &&
+      adapterVk->features.shaderInt16) {
+    coreFeatures.shaderInt16 = VK_TRUE;
+  }
 
   deviceCI.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceCI.pEnabledFeatures        = &coreFeatures;
