@@ -1,0 +1,73 @@
+@require(shader_f16)
+kern(1, 1, 1) f16_builtins(
+  values:       [float4] #buffer(0),
+  inout output: [float4] #buffer(1),
+  gid:           uint3 #global_id
+) {
+  let inputBase = gid.x * 2u
+  let out       = gid.x * 51u
+  let a         = half4(values[inputBase])
+  let b         = half4(values[inputBase + 1u])
+  let positive  = abs(a) + half(0.25)
+  let a3        = a.xyz
+  let b3        = b.xyz
+  let geo       = out + 30u
+  let trig      = geo + 8u
+
+  output[out]       = float4(floor(a))
+  output[out + 1u]  = float4(ceil(a))
+  output[out + 2u]  = float4(round(a))
+  output[out + 3u]  = float4(trunc(a))
+  output[out + 4u]  = float4(fract(a))
+  output[out + 5u]  = float4(sqrt(positive))
+  output[out + 6u]  = float4(rsqrt(positive))
+  output[out + 7u]  = float4(rcp(a))
+  output[out + 8u]  = float4(exp(a))
+  output[out + 9u]  = float4(exp2(a))
+  output[out + 10u] = float4(log(positive))
+  output[out + 11u] = float4(log2(positive))
+  output[out + 12u] = float4(degrees(a))
+  output[out + 13u] = float4(radians(a))
+  output[out + 14u] = float4(saturate(a))
+  output[out + 15u] = float4(abs(a))
+  output[out + 16u] = float4(sign(a))
+  output[out + 17u] = float4(pow(positive, b))
+  output[out + 18u] = float4(mod(a, b))
+  output[out + 19u] = float4(fmod(a, b))
+  output[out + 20u] = float4(min(a, b))
+  output[out + 21u] = float4(max(a, b))
+  output[out + 22u] = float4(clamp(a, half(-1.0), half(1.0)))
+  output[out + 23u] = float4(step(b, a))
+  output[out + 24u] = float4(copysign(a, b))
+  output[out + 25u] = float4(mix(a, b, half(0.25)))
+  output[out + 26u] = float4(smoothstep(half(-1.0), half(1.0), a))
+  output[out + 27u] = float4(fma(a, b, half(0.5)))
+  output[out + 28u] = float4(inverselerp(a, b, -a))
+  output[out + 29u] = float4(remap(a, b, -b, b, -a))
+
+  output[geo]      = float4(dot(a, b),
+                            length(a),
+                            distance(a, b),
+                            half(0.0))
+  output[geo + 1u] = float4(cross(a3, b3), half(1.0))
+  output[geo + 2u] = float4(normalize(a))
+  output[geo + 3u] = float4(reflect(a, b))
+  output[geo + 4u] = float4(project(a, b))
+  output[geo + 5u] = float4(reject(a, b))
+  output[geo + 6u] = float4(refract(a, b, half(0.75)))
+  output[geo + 7u] = float4(faceforward(a, b, a))
+
+  output[trig]       = float4(sin(a))
+  output[trig + 1u]  = float4(cos(a))
+  output[trig + 2u]  = float4(tan(a))
+  output[trig + 3u]  = float4(asin(a))
+  output[trig + 4u]  = float4(acos(a))
+  output[trig + 5u]  = float4(atan(a))
+  output[trig + 6u]  = float4(atan2(a, b))
+  output[trig + 7u]  = float4(sinh(a))
+  output[trig + 8u]  = float4(cosh(a))
+  output[trig + 9u]  = float4(tanh(a))
+  output[trig + 10u] = float4(asinh(a))
+  output[trig + 11u] = float4(acosh(a))
+  output[trig + 12u] = float4(atanh(a))
+}

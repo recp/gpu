@@ -69,16 +69,18 @@ if(GPU_BUILD_DX12 AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
        ${GPU_DX12_F64_EXPONENTIAL_FIXTURE})
   set(GPU_USL_FIXTURE_TARGET_CAPS sm_6_9,shader_f16)
   gpu_add_usl_fixtures(
-    GPU_DX12_F16_TRIGONOMETRIC_FIXTURE
+    GPU_DX12_F16_BUILTINS_FIXTURE
     dxil
     validation
-    "${PROJECT_SOURCE_DIR}/tests/validation/f16-trigonometric-dx12-usl/f16_trigonometric.usl"
+    "${PROJECT_SOURCE_DIR}/tests/validation/f16-builtins-dx12-usl/f16_builtins.usl"
   )
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
-  list(GET GPU_DX12_F16_TRIGONOMETRIC_FIXTURE 0
-       GPU_DX12_F16_TRIGONOMETRIC_US)
+  list(GET GPU_DX12_F16_BUILTINS_FIXTURE 0 GPU_DX12_F16_BUILTINS_US)
   list(APPEND GPU_DX12_USL_FIXTURES
-       ${GPU_DX12_F16_TRIGONOMETRIC_FIXTURE})
+       ${GPU_DX12_F16_BUILTINS_FIXTURE})
+  add_custom_target(gpu-dx12-f16-builtins-fixture
+    DEPENDS ${GPU_DX12_F16_BUILTINS_FIXTURE}
+  )
   set(GPU_USL_FIXTURE_TARGET_CAPS descriptor_indexing)
   gpu_add_usl_fixtures(
     GPU_DX12_BINDLESS_USL_FIXTURE
