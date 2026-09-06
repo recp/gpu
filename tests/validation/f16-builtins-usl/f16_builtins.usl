@@ -5,7 +5,7 @@ kern(1, 1, 1) f16_builtins(
   gid:           uint3 #global_id
 ) {
   let inputBase = gid.x * 2u
-  let out       = gid.x * 200u
+  let out       = gid.x * 216u
   let a         = half4(values[inputBase])
   let b         = half4(values[inputBase + 1u])
   let positiveA = abs(a) + half(0.25)
@@ -316,4 +316,31 @@ kern(1, 1, 1) f16_builtins(
   output[geo + 5u] = half4(reject(a, b))
   output[geo + 6u] = half4(refract(a, b, half(0.75)))
   output[geo + 7u] = half4(faceforward(a, b, a))
+
+  let geo2      = out + 200u
+  let geo3      = geo2 + 7u
+  let scalarGeo = geo3 + 7u
+
+  output[geo2]      = half4(dot(a.xy, b.xy), length(a.xy),
+                            distance(a.xy, b.xy), half(0.0))
+  output[geo2 + 1u] = half4(normalize(a.xy), half2(0.0))
+  output[geo2 + 2u] = half4(reflect(a.xy, b.xy), half2(0.0))
+  output[geo2 + 3u] = half4(project(a.xy, b.xy), half2(0.0))
+  output[geo2 + 4u] = half4(reject(a.xy, b.xy), half2(0.0))
+  output[geo2 + 5u] = half4(refract(a.xy, b.xy, half(0.75)), half2(0.0))
+  output[geo2 + 6u] = half4(faceforward(a.xy, b.xy, a.xy), half2(0.0))
+
+  output[geo3]      = half4(dot(a3, b3), length(a3),
+                            distance(a3, b3), half(0.0))
+  output[geo3 + 1u] = half4(normalize(a3), half(0.0))
+  output[geo3 + 2u] = half4(reflect(a3, b3), half(0.0))
+  output[geo3 + 3u] = half4(project(a3, b3), half(0.0))
+  output[geo3 + 4u] = half4(reject(a3, b3), half(0.0))
+  output[geo3 + 5u] = half4(refract(a3, b3, half(0.75)), half(0.0))
+  output[geo3 + 6u] = half4(faceforward(a3, b3, a3), half(0.0))
+
+  output[scalarGeo] = half4(length(a.x), length(a.y),
+                             length(a.z), length(a.w))
+  output[scalarGeo + 1u] = half4(distance(a.x, b.x), distance(a.y, b.y),
+                                  distance(a.z, b.z), distance(a.w, b.w))
 }

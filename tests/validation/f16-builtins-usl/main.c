@@ -192,6 +192,15 @@ half_ulp_distance(float left, float right) {
 }
 
 static int
+half_value_matches(float actual, float expected, uint16_t ulpLimit) {
+  if (isnan(expected)) return isnan(actual);
+  if (actual == expected)
+    return expected != 0.0f || float_bits(actual) == float_bits(expected);
+  return !isnan(actual) && !isinf(actual) && !isinf(expected) &&
+         half_ulp_distance(actual, expected) <= ulpLimit;
+}
+
+static int
 value_matches(const char *name,
               uint32_t    testCase,
               uint32_t    lane,
@@ -200,15 +209,7 @@ value_matches(const char *name,
               uint16_t    ulpLimit) {
   uint16_t actualBits, expectedBits, ulp;
 
-  if (isnan(expected)) {
-    if (isnan(actual)) return 1;
-  } else if (actual == expected) {
-    if (expected != 0.0f || float_bits(actual) == float_bits(expected))
-      return 1;
-  } else if (!isnan(actual) && !isinf(actual) && !isinf(expected) &&
-             half_ulp_distance(actual, expected) <= ulpLimit) {
-    return 1;
-  }
+  if (half_value_matches(actual, expected, ulpLimit)) return 1;
   actualBits   = float_to_half_bits(actual);
   expectedBits = float_to_half_bits(expected);
   ulp          = isnan(actual) || isnan(expected)
@@ -352,10 +353,10 @@ half_math_expected(uint32_t row, float a, float b) {
 }
 
 static float
-half_dot4(const float left[4], const float right[4]) {
+half_dot(const float left[4], const float right[4], uint32_t width) {
   float sum = half_mul(left[0], right[0]);
 
-  for (uint32_t lane = 1u; lane < 4u; lane++)
+  for (uint32_t lane = 1u; lane < width; lane++)
     sum = half_fma(left[lane], right[lane], sum);
   return sum;
 }
@@ -363,11 +364,13 @@ half_dot4(const float left[4], const float right[4]) {
 static void
 half_geometric_expected(const float a[4],
                         const float b[4],
-                        float       expected[F16_BUILTIN_GEOMETRIC_ROWS][4]) {
+                        uint32_t    width,
+                        float       expected[F16_BUILTIN_GEOMETRIC_ROWS][4],
+                        float       fusedReject[4]) {
   float difference[4], incident[4], projected[4];
-  float dotAB = half_dot4(a, b);
-  float dotAA = half_dot4(a, a);
-  float dotBB = half_dot4(b, b);
+  float dotAB = half_dot(a, b, width);
+  float dotAA = half_dot(a, a, width);
+  float dotBB = half_dot(b, b, width);
   float inverseLength = half_round(1.0f / sqrtf(dotAA));
   float projectScale  = half_div(dotAB, dotBB);
   float reflectScale  = half_mul(-2.0f, dotAB);
@@ -379,24 +382,27 @@ half_geometric_expected(const float a[4],
   float refractScale   = half_fma(eta, dotAB,
                                   half_round(sqrtf(safeK)));
 
-  for (uint32_t lane = 0u; lane < 4u; lane++) {
+  for (uint32_t lane = 0u; lane < width; lane++) {
     difference[lane] = half_sub(a[lane], b[lane]);
     incident[lane]   = half_mul(eta, a[lane]);
     projected[lane]  = half_mul(projectScale, b[lane]);
   }
   expected[0][0] = dotAB;
   expected[0][1] = half_round(sqrtf(dotAA));
-  expected[0][2] = half_round(sqrtf(half_dot4(difference, difference)));
+  expected[0][2] = half_round(sqrtf(half_dot(difference, difference, width)));
   expected[0][3] = 0.0f;
   expected[1][0] = half_sub(half_mul(a[1], b[2]), half_mul(a[2], b[1]));
   expected[1][1] = half_sub(half_mul(a[2], b[0]), half_mul(a[0], b[2]));
   expected[1][2] = half_sub(half_mul(a[0], b[1]), half_mul(a[1], b[0]));
   expected[1][3] = 1.0f;
-  for (uint32_t lane = 0u; lane < 4u; lane++) {
+  for (uint32_t lane = 0u; lane < width; lane++) {
     expected[2][lane] = half_mul(a[lane], inverseLength);
     expected[3][lane] = half_fma(reflectScale, b[lane], a[lane]);
     expected[4][lane] = projected[lane];
     expected[5][lane] = half_sub(a[lane], projected[lane]);
+    /* The builtin may contract its multiply/subtract. Validate that exact
+     * evaluation separately instead of relaxing the result's ULP limit. */
+    fusedReject[lane] = half_fma(half_round(-projectScale), b[lane], a[lane]);
     expected[6][lane] = k < 0.0f
                           ? 0.0f
                           : half_fma(half_round(-refractScale),
@@ -458,7 +464,7 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
   int      ok = 1;
 
   for (uint32_t testCase = 0u; testCase < F16_BUILTIN_CASES; testCase++) {
-    float a[4], b[4];
+    float a[4], b[4], fusedReject[4];
     float geometric[F16_BUILTIN_GEOMETRIC_ROWS][4];
     uint32_t base = testCase * F16_BUILTIN_OUTPUTS_PER_CASE;
 
@@ -486,10 +492,14 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
         }
       }
     }
-    half_geometric_expected(a, b, geometric);
+    half_geometric_expected(a, b, 4u, geometric, fusedReject);
     for (uint32_t row = 0u; row < F16_BUILTIN_GEOMETRIC_ROWS; row++) {
       for (uint32_t lane = 0u; lane < 4u; lane++) {
         checks++;
+        if (row == 5u &&
+            half_value_matches(half_bits_to_float(
+                                 output[base + F16_BUILTIN_MATH_ROWS + row][lane]),
+                               fusedReject[lane], 8u)) continue;
         if (!value_matches(geometricNames[row],
                            testCase,
                            lane,
@@ -552,6 +562,43 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
             ok = 0;
           }
         }
+      }
+    }
+    for (uint32_t width = 2u; width <= 3u; width++) {
+      uint32_t geoBase = base + F16_BUILTIN_BASE_OUTPUTS_PER_CASE +
+                         F16_BUILTIN_WIDTH_ROWS_PER_CASE +
+                         (width - 2u) * F16_BUILTIN_GEOMETRIC_WIDTH_ROWS;
+
+      half_geometric_expected(a, b, width, geometric, fusedReject);
+      for (uint32_t row = 0u; row < F16_BUILTIN_GEOMETRIC_WIDTH_ROWS; row++) {
+        uint32_t sourceRow = row == 0u ? 0u : row + 1u;
+        uint32_t lanes     = row == 0u ? 3u : width;
+        char     name[64];
+
+        (void)snprintf(name, sizeof(name), "%s half%u",
+                       geometricNames[sourceRow], width);
+        for (uint32_t lane = 0u; lane < lanes; lane++) {
+          checks++;
+          if (sourceRow == 5u &&
+              half_value_matches(half_bits_to_float(output[geoBase + row][lane]),
+                                 fusedReject[lane], 8u)) continue;
+          if (!value_matches(name, testCase, lane,
+                             half_bits_to_float(output[geoBase + row][lane]),
+                             geometric[sourceRow][lane], 8u)) ok = 0;
+        }
+      }
+    }
+    {
+      uint32_t scalarBase = base + F16_BUILTIN_OUTPUTS_PER_CASE - 2u;
+
+      for (uint32_t lane = 0u; lane < 4u; lane++) {
+        checks += 2u;
+        if (!value_matches("length scalar", testCase, lane,
+                           half_bits_to_float(output[scalarBase][lane]),
+                           half_abs(a[lane]), 0u)) ok = 0;
+        if (!value_matches("distance scalar", testCase, lane,
+                           half_bits_to_float(output[scalarBase + 1u][lane]),
+                           half_abs(half_sub(a[lane], b[lane])), 0u)) ok = 0;
       }
     }
   }
