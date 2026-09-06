@@ -53,9 +53,13 @@ static const Double4 kExpectedRefract[2] = {
   {{0.0, -1.0, 0.0, 0.0}},
   {{0.0, 0.0, 0.0, 0.0}}
 };
-static const Double4 kExpectedProjection[2] = {
+static const Double4 kExpectedProjection[6] = {
   {{-26.0 / 15.0, 13.0 / 30.0, -13.0 / 10.0, -52.0 / 15.0}},
-  {{13.0 / 36.0, -13.0 / 24.0, -13.0 / 18.0, 65.0 / 72.0}}
+  {{13.0 / 36.0, -13.0 / 24.0, -13.0 / 18.0, 65.0 / 72.0}},
+  {{140.5, 140.5, 140.5, 140.5}},
+  {{399.0 / 2248.0, 399.0 / 2248.0, -399.0 / 562.0, 665.0 / 562.0}},
+  {{-133.0 / 45.0, 133.0 / 180.0, -133.0 / 60.0, -266.0 / 45.0}},
+  {{-11.0 / 108.0, 11.0 / 72.0, 11.0 / 54.0, -55.0 / 216.0}}
 };
 static const Float2 kPacked = {{1.5f, -2.25f}};
 static const Float2 kExpectedPacked = {{4.0f, -5.0f}};
@@ -233,10 +237,10 @@ main(int argc, char **argv) {
   GPUBindGroupEntry            groupEntries[5] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUQueueSubmitInfo           submitInfo = {0};
-  Double4                      output[28] = {0};
+  Double4                      output[32] = {0};
   Float2                       packed = {0};
   Int2                         integer = {0};
-  const Double4                zeroOutput[28] = {0};
+  const Double4                zeroOutput[32] = {0};
   const void                  *initialValues[5] = {
     &kInput, zeroOutput, &kPacked, &kInteger, kSqrtInput
   };
@@ -419,7 +423,7 @@ main(int argc, char **argv) {
     fprintf(stderr, "Direct3D 12 F64 readback validation failed\n");
     goto cleanup;
   }
-  for (uint32_t element = 0u; element < 2u; element++) {
+  for (uint32_t element = 0u; element < 6u; element++) {
     if (!double4_matches(&output[26u + element],
                           &kExpectedProjection[element], 26u + element)) {
       goto cleanup;

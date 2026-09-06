@@ -57,6 +57,11 @@ kern(1, 1, 1) f64_core(input: [double4] #buffer(0),
   let axis = double4(1.0, -0.25, 0.75, 2.0)
   output[26u] = project(value, axis)
   output[27u] = project(axis, value)
+  let other = value * double4(0.75, -0.5, 1.5, 2.0)
+  output[28u] = double4(dot(other, other))
+  output[29u] = project(axis, other)
+  output[30u] = project(other, axis)
+  output[31u] = project(normal, value)
   packed[index]            = float2(float(value.z), float(value.w))
   integer[index]           = int2(int(value.x), int(value.y))
 }
