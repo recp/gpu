@@ -53,6 +53,10 @@ static const Double4 kExpectedRefract[2] = {
   {{0.0, -1.0, 0.0, 0.0}},
   {{0.0, 0.0, 0.0, 0.0}}
 };
+static const Double4 kExpectedProjection[2] = {
+  {{-26.0 / 15.0, 13.0 / 30.0, -13.0 / 10.0, -52.0 / 15.0}},
+  {{13.0 / 36.0, -13.0 / 24.0, -13.0 / 18.0, 65.0 / 72.0}}
+};
 static const Float2 kPacked = {{1.5f, -2.25f}};
 static const Float2 kExpectedPacked = {{4.0f, -5.0f}};
 static const Int2   kInteger = {{7, -8}};
@@ -86,7 +90,8 @@ double4_matches(const Double4 *actual,
                 const Double4 *expected,
                 uint32_t       element) {
   for (uint32_t lane = 0u; lane < 4u; lane++) {
-    if (fabs(actual->lane[lane] - expected->lane[lane]) > 1e-12) {
+    if (!isfinite(actual->lane[lane]) ||
+        fabs(actual->lane[lane] - expected->lane[lane]) > 1e-12) {
       fprintf(stderr,
               "F64 output mismatch at element %u lane %u: "
               "expected %.17g, got %.17g\n",
@@ -228,10 +233,10 @@ main(int argc, char **argv) {
   GPUBindGroupEntry            groupEntries[5] = {0};
   GPUBindGroupCreateInfo       groupInfo = {0};
   GPUQueueSubmitInfo           submitInfo = {0};
-  Double4                      output[26] = {0};
+  Double4                      output[28] = {0};
   Float2                       packed = {0};
   Int2                         integer = {0};
-  const Double4                zeroOutput[26] = {0};
+  const Double4                zeroOutput[28] = {0};
   const void                  *initialValues[5] = {
     &kInput, zeroOutput, &kPacked, &kInteger, kSqrtInput
   };
@@ -413,6 +418,12 @@ main(int argc, char **argv) {
       integer.lane[1] != kExpectedInteger.lane[1]) {
     fprintf(stderr, "Direct3D 12 F64 readback validation failed\n");
     goto cleanup;
+  }
+  for (uint32_t element = 0u; element < 2u; element++) {
+    if (!double4_matches(&output[26u + element],
+                          &kExpectedProjection[element], 26u + element)) {
+      goto cleanup;
+    }
   }
   for (uint32_t element = 0u; element < 14u; element++) {
     if (!double4_matches(&output[element],

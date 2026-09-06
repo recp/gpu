@@ -54,6 +54,9 @@ kern(1, 1, 1) f64_core(input: [double4] #buffer(0),
   output[23u] = rsqrt(sqrtInput[0u])
   output[24u] = rsqrt(sqrtInput[1u])
   output[25u] = rsqrt(sqrtInput[2u])
+  let axis = double4(1.0, -0.25, 0.75, 2.0)
+  output[26u] = project(value, axis)
+  output[27u] = project(axis, value)
   packed[index]            = float2(float(value.z), float(value.w))
   integer[index]           = int2(int(value.x), int(value.y))
 }
