@@ -26,7 +26,9 @@ const float gpu_f16_builtin_inputs[F16_BUILTIN_INPUT_ROWS][4] = {
    6.103515625e-5f, 65504.0f},
   {1.0f, -1.0f, 2.0f, 2.0f},
   {INFINITY, -INFINITY, NAN, -1.0f},
-  {1.0f, 1.0f, 1.0f, NAN}
+  {1.0f, 1.0f, 1.0f, NAN},
+  {4.0f, -4.0f, 8.0f, -8.0f},
+  {0.75f, -0.75f, 0.75f, -0.75f}
 };
 
 #if !defined(GPU_F16_BUILTINS_ORACLE_ONLY)

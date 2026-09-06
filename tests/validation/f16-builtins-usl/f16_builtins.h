@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 enum {
-  F16_BUILTIN_CASES                 = 4u,
+  F16_BUILTIN_CASES                 = 5u,
   F16_BUILTIN_INPUT_ROWS            = F16_BUILTIN_CASES * 2u,
   F16_BUILTIN_MATH_ROWS             = 32u,
   F16_BUILTIN_GEOMETRIC_ROWS        = 8u,
