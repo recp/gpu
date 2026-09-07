@@ -2955,6 +2955,12 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
     static const char *const fmaAtoms[] = {
       "spirv_fma_f16", "spirv_fma_f32", "spirv_fma_f64"
     };
+    static const char *const denormAtoms[] = {
+      "spirv_denorm_f16", "spirv_denorm_f32", "spirv_denorm_f64"
+    };
+    static const char *const rteAtoms[] = {
+      "spirv_rte_f16", "spirv_rte_f32", "spirv_rte_f64"
+    };
     if (device->uslTargetProfile == 0u) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
@@ -2969,6 +2975,18 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
           us_cap_atom_text(&targetAtoms[targetAtomCount++], fmaAtoms[i]) != USLOk) {
         return GPU_ERROR_BACKEND_FAILURE;
       }
+      if ((device->uslDenormPreserve & (1u << i)) &&
+          us_cap_atom_text(&targetAtoms[targetAtomCount++], denormAtoms[i]) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+      if ((device->uslRoundingRTE & (1u << i)) &&
+          us_cap_atom_text(&targetAtoms[targetAtomCount++], rteAtoms[i]) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+    if (device->uslFloatControls2 &&
+        us_cap_atom_text(&targetAtoms[targetAtomCount++], "spirv_float_controls2") != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
     }
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       if (us_cap_atom_init(

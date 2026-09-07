@@ -10,6 +10,9 @@ static uint32_t observedMask;
 static uint32_t observedModes;
 static uint32_t observedFma;
 static uint32_t observedFmaCount;
+static uint32_t observedDenorm;
+static uint32_t observedRTE;
+static uint32_t observedDefaults;
 static uint32_t calls;
 static bool     valid;
 
@@ -31,15 +34,17 @@ capture_binary(GPUDevice *device, const void *data, uint64_t size) {
       valid = false;
       break;
     }
-    if ((words[i] & 0xffffu) == SpvOpExecutionMode && length == 4u &&
-        words[i + 2u] == SpvExecutionModeSignedZeroInfNanPreserve) {
-      switch (words[i + 3u]) {
-        case 16u: observedMask |= 1u; break;
-        case 32u: observedMask |= 2u; break;
-        case 64u: observedMask |= 4u; break;
-        default: valid = false; break;
+    if ((words[i] & 0xffffu) == SpvOpExecutionMode && length == 4u) {
+      uint32_t bit = words[i + 3u] / 16u;
+      switch (words[i + 2u]) {
+        case SpvExecutionModeSignedZeroInfNanPreserve:
+          observedMask |= bit;
+          observedModes++;
+          break;
+        case SpvExecutionModeDenormPreserve: observedDenorm |= bit; break;
+        case SpvExecutionModeRoundingModeRTE: observedRTE |= bit; break;
+        default: break;
       }
-      observedModes++;
     }
     if ((words[i] & 0xffffu) == SpvOpTypeFloat && length == 3u && words[i + 1u] < words[3]) {
       widths[words[i + 1u]] = (uint8_t)(words[i + 2u] / 16u);
@@ -49,6 +54,15 @@ capture_binary(GPUDevice *device, const void *data, uint64_t size) {
     } else if ((words[i] & 0xffffu) == SpvOpFmaKHR && length == 6u && words[i + 1u] < words[3]) {
       observedFma |= widths[words[i + 1u]];
       observedFmaCount++;
+    }
+    i += length;
+  }
+  for (size_t i = 5u; valid && i < count;) {
+    uint32_t length = words[i] >> 16u;
+    if ((words[i] & 0xffffu) == SpvOpExecutionModeId && length == 5u &&
+        words[i + 2u] == SpvExecutionModeFPFastMathDefault && words[i + 3u] < words[3]) {
+      valid = widths[words[i + 3u]] != 0u;
+      observedDefaults++;
     }
     i += length;
   }
@@ -87,22 +101,34 @@ main(int argc, char **argv) {
   info.disableDiskCache            = true;
   /* Repeat in one process: capability-sensitive cache keys must stay distinct. */
   for (uint32_t round = 0u; round < 2u; ++round) {
-    for (uint32_t mask = 0u; mask < 8u; ++mask) {
-      for (uint32_t fmaMask = 0u; fmaMask < 8u; ++fmaMask) {
+    for (uint32_t test = 0u; test < 128u; ++test) {
+      for (uint32_t controls2 = 0u; controls2 < 2u; ++controls2) {
+        uint32_t mask       = test < 64u ? test >> 3u : 7u;
+        uint32_t fmaMask    = test < 64u ? test & 7u : 7u;
+        uint32_t denormMask = test < 64u ? 0u : (test - 64u) >> 3u;
+        uint32_t rteMask    = test < 64u ? 0u : test & 7u;
+        bool modern = strict && controls2 && mask == 7u;
         GPUShaderLibrary *library = NULL;
-        uint32_t expectedMask  = strict ? mask : 0u;
+        uint32_t expectedMask  = strict && !modern ? mask : 0u;
         uint32_t expectedModes = (expectedMask & 1u) + ((expectedMask >> 1u) & 1u) + ((expectedMask >> 2u) & 1u);
         uint32_t expectedFma   = (fmaMask & 1u) + ((fmaMask >> 1u) & 1u) + ((fmaMask >> 2u) & 1u);
 
         device.uslFloatPreserve = (uint8_t)mask;
         device.uslFma           = (uint8_t)fmaMask;
+        device.uslDenormPreserve = (uint8_t)denormMask;
+        device.uslRoundingRTE = (uint8_t)rteMask;
+        device.uslFloatControls2 = controls2 != 0u;
         observedMask = observedModes = calls = 0u;
         observedFma = observedFmaCount = 0u;
+        observedDenorm = observedRTE = observedDefaults = 0u;
         valid = false;
         GPUResult result = GPUCreateShaderLibrary(&device, &info, &library);
         if (result != GPU_ERROR_BACKEND_FAILURE || library || calls != 1u ||
             !valid || observedMask != expectedMask || observedModes != expectedModes ||
-            observedFma != fmaMask || observedFmaCount != expectedFma) {
+            observedFma != fmaMask || observedFmaCount != expectedFma ||
+            observedDenorm != (strict ? denormMask : 0u) ||
+            observedRTE != (strict ? rteMask : 0u) ||
+            observedDefaults != (modern ? 1u : 0u)) {
           fprintf(stderr, "float controls round %u mask %u fma %u: result=%d calls=%u mask=%u modes=%u fma=%u/%u\n",
                   round, mask, fmaMask, result, calls, observedMask, observedModes, observedFma, observedFmaCount);
           ok = 0;

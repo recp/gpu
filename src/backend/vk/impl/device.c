@@ -525,7 +525,8 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
 #endif
 #endif
   if (strcmp(name, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME) == 0) {
-    return (adapter && adapter->signedZeroInfNanPreserve != 0u) ||
+    return (adapter && (adapter->signedZeroInfNanPreserve || adapter->denormPreserve ||
+                        adapter->roundingRTE || adapter->floatControls2)) ||
            rayQuery || rayTracingPipeline || meshShader;
   }
   if (strcmp(name, VK_KHR_SPIRV_1_4_EXTENSION_NAME) == 0) {
@@ -726,6 +727,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceShaderFmaFeaturesKHR fmaFeatures = {0};
   VkPhysicalDeviceFeatures2            fmaFeatures2 = {0};
   bool                                shaderFmaExtension = false;
+#endif
+#ifdef VK_KHR_shader_float_controls2
+  VkPhysicalDeviceShaderFloatControls2FeaturesKHR floatControls2Features = {0};
+  VkPhysicalDeviceFeatures2                       floatControls2Features2 = {0};
+  bool                                           floatControls2Extension = false;
 #endif
 #ifdef VK_KHR_shader_untyped_pointers
   VkPhysicalDeviceShaderUntypedPointersFeaturesKHR
@@ -1157,6 +1163,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
         shaderFmaExtension = true;
       }
 #endif
+#ifdef VK_KHR_shader_float_controls2
+      if (!strcmp(VK_KHR_SHADER_FLOAT_CONTROLS_2_EXTENSION_NAME, extensions[i].extensionName)) {
+        floatControls2Extension = true;
+      }
+#endif
 #ifdef VK_KHR_shader_untyped_pointers
       if (!strcmp(VK_KHR_SHADER_UNTYPED_POINTERS_EXTENSION_NAME,
                   extensions[i].extensionName)) {
@@ -1278,13 +1289,41 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
         (floatControls.shaderSignedZeroInfNanPreserveFloat16 ? 1u : 0u) |
         (floatControls.shaderSignedZeroInfNanPreserveFloat32 ? 2u : 0u) |
         (floatControls.shaderSignedZeroInfNanPreserveFloat64 ? 4u : 0u);
-      if (adapterVk->signedZeroInfNanPreserve && !spirv14Core &&
+      adapterVk->denormPreserve =
+        (floatControls.shaderDenormPreserveFloat16 ? 1u : 0u) |
+        (floatControls.shaderDenormPreserveFloat32 ? 2u : 0u) |
+        (floatControls.shaderDenormPreserveFloat64 ? 4u : 0u);
+      adapterVk->roundingRTE =
+        (floatControls.shaderRoundingModeRTEFloat16 ? 1u : 0u) |
+        (floatControls.shaderRoundingModeRTEFloat32 ? 2u : 0u) |
+        (floatControls.shaderRoundingModeRTEFloat64 ? 4u : 0u);
+      if ((adapterVk->signedZeroInfNanPreserve || adapterVk->denormPreserve ||
+           adapterVk->roundingRTE) && !spirv14Core &&
           !vk_addDeviceExtension(adapterVk,
                                  VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME)) {
         goto fail;
       }
     }
   }
+#ifdef VK_KHR_shader_float_controls2
+  if (getFeatures2 && instanceVk->apiVersion >= VK_API_VERSION_1_1 &&
+      adapterVk->props.apiVersion >= VK_API_VERSION_1_1) {
+    bool core = instanceVk->apiVersion >= VK_MAKE_API_VERSION(0, 1, 4, 0) &&
+                adapterVk->props.apiVersion >= VK_MAKE_API_VERSION(0, 1, 4, 0);
+    if (core || (floatControls2Extension && (spirv14Core || shaderFloatControlsExtension))) {
+      floatControls2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT_CONTROLS_2_FEATURES_KHR;
+      floatControls2Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+      floatControls2Features2.pNext = &floatControls2Features;
+      getFeatures2(raw, &floatControls2Features2);
+      adapterVk->floatControls2 = floatControls2Features.shaderFloatControls2 == VK_TRUE;
+      if (adapterVk->floatControls2 && !core &&
+          (!vk_addDeviceExtension(adapterVk, VK_KHR_SHADER_FLOAT_CONTROLS_2_EXTENSION_NAME) ||
+           (!spirv14Core && !vk_addDeviceExtension(adapterVk, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME)))) {
+        goto fail;
+      }
+    }
+  }
+#endif
 #if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
   maintenance5Core = instanceVk &&
                      instanceVk->apiVersion >= VK_API_VERSION_1_4 &&
@@ -2593,6 +2632,9 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   const char              *deviceExtensions[64];
   float                   *queuePriorities;
   VkPhysicalDeviceFeatures coreFeatures = {0};
+#ifdef VK_KHR_shader_float_controls2
+  VkPhysicalDeviceShaderFloatControls2FeaturesKHR floatControls2Features = {0};
+#endif
 #ifdef VK_KHR_shader_fma
   VkPhysicalDeviceShaderFmaFeaturesKHR fmaFeatures = {0};
 #endif
@@ -2981,6 +3023,14 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     deviceCI.pNext = &fmaFeatures;
   }
 #endif
+#ifdef VK_KHR_shader_float_controls2
+  if (adapterVk->floatControls2) {
+    floatControls2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT_CONTROLS_2_FEATURES_KHR;
+    floatControls2Features.pNext = (void *)deviceCI.pNext;
+    floatControls2Features.shaderFloatControls2 = VK_TRUE;
+    deviceCI.pNext = &floatControls2Features;
+  }
+#endif
 #ifdef VK_KHR_shader_untyped_pointers
   if (adapterVk->shaderUntypedPointers) {
     untypedPointerFeatures.sType =
@@ -3232,6 +3282,9 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   }
 #endif
   device->uslFloatPreserve = adapterVk->signedZeroInfNanPreserve;
+  device->uslDenormPreserve = adapterVk->denormPreserve;
+  device->uslRoundingRTE = adapterVk->roundingRTE;
+  device->uslFloatControls2 = adapterVk->floatControls2;
 #ifdef VK_KHR_shader_fma
   device->uslFma = (fmaFeatures.shaderFmaFloat16 ? 1u : 0u) |
                    (fmaFeatures.shaderFmaFloat32 ? 2u : 0u) |

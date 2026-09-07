@@ -167,6 +167,9 @@ typedef struct GPUAdapterVk {
 #endif
   uint8_t                       signedZeroInfNanPreserve; /* f16/f32/f64 bits */
   uint8_t                       shaderFma; /* same width bits */
+  uint8_t                       denormPreserve;
+  uint8_t                       roundingRTE;
+  bool                          floatControls2;
   bool                          dynamicRendering;
   bool                          shaderFloat16;
   bool                          storageBuffer16BitAccess;
