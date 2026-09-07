@@ -1,7 +1,7 @@
 kern(1) preserve_values(inout a: [half4] #buffer(0),
                          inout b: [float4] #buffer(1),
                          inout c: [double4] #buffer(2), gid: uint3 #global_id) {
-  a[gid.x] = a[gid.x] * half4(2.0)
-  b[gid.x] = b[gid.x] * float4(2.0)
-  c[gid.x] = c[gid.x] * double4(2.0)
+  a[gid.x] = fma(a[gid.x], a[gid.x], half4(0.75))
+  b[gid.x] = fma(b[gid.x], b[gid.x], float4(0.75))
+  c[gid.x] = fma(c[gid.x], c[gid.x], double4(0.75))
 }

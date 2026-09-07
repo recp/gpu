@@ -524,8 +524,11 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
   }
 #endif
 #endif
-  if (strcmp(name, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME) == 0 ||
-      strcmp(name, VK_KHR_SPIRV_1_4_EXTENSION_NAME) == 0) {
+  if (strcmp(name, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME) == 0) {
+    return (adapter && adapter->signedZeroInfNanPreserve != 0u) ||
+           rayQuery || rayTracingPipeline || meshShader;
+  }
+  if (strcmp(name, VK_KHR_SPIRV_1_4_EXTENSION_NAME) == 0) {
     return rayQuery || rayTracingPipeline || meshShader;
   }
 
@@ -718,6 +721,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
                                                 derivativeFeatures = {0};
   VkPhysicalDeviceFeatures2                     derivativeFeatures2 = {0};
+#endif
+#ifdef VK_KHR_shader_fma
+  VkPhysicalDeviceShaderFmaFeaturesKHR fmaFeatures = {0};
+  VkPhysicalDeviceFeatures2            fmaFeatures2 = {0};
+  bool                                shaderFmaExtension = false;
 #endif
 #ifdef VK_KHR_shader_untyped_pointers
   VkPhysicalDeviceShaderUntypedPointersFeaturesKHR
@@ -1144,6 +1152,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
         derivativeExtension = true;
       }
 #endif
+#ifdef VK_KHR_shader_fma
+      if (!strcmp(VK_KHR_SHADER_FMA_EXTENSION_NAME, extensions[i].extensionName)) {
+        shaderFmaExtension = true;
+      }
+#endif
 #ifdef VK_KHR_shader_untyped_pointers
       if (!strcmp(VK_KHR_SHADER_UNTYPED_POINTERS_EXTENSION_NAME,
                   extensions[i].extensionName)) {
@@ -1422,6 +1435,22 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
         !vk_addDeviceExtension(
           adapterVk,
           VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME)) {
+      goto fail;
+    }
+  }
+#endif
+#ifdef VK_KHR_shader_fma
+  if (getFeatures2 && shaderFmaExtension) {
+    fmaFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FMA_FEATURES_KHR;
+    fmaFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    fmaFeatures2.pNext = &fmaFeatures;
+    getFeatures2(raw, &fmaFeatures2);
+    adapterVk->shaderFma =
+      (fmaFeatures.shaderFmaFloat16 ? 1u : 0u) |
+      (fmaFeatures.shaderFmaFloat32 ? 2u : 0u) |
+      (fmaFeatures.shaderFmaFloat64 ? 4u : 0u);
+    if (adapterVk->shaderFma &&
+        !vk_addDeviceExtension(adapterVk, VK_KHR_SHADER_FMA_EXTENSION_NAME)) {
       goto fail;
     }
   }
@@ -2564,6 +2593,9 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   const char              *deviceExtensions[64];
   float                   *queuePriorities;
   VkPhysicalDeviceFeatures coreFeatures = {0};
+#ifdef VK_KHR_shader_fma
+  VkPhysicalDeviceShaderFmaFeaturesKHR fmaFeatures = {0};
+#endif
   VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicFeatures = {0};
   VkPhysicalDeviceShaderFloat16Int8Features float16Features = {0};
   VkPhysicalDevice16BitStorageFeatures storage16Features = {0};
@@ -2856,6 +2888,7 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     coreFeatures.sparseResidencyBuffer = VK_TRUE;
   }
   coreFeatures.independentBlend   = adapterVk->features.independentBlend;
+  coreFeatures.shaderFloat64      = adapterVk->features.shaderFloat64;
   coreFeatures.imageCubeArray     = adapterVk->features.imageCubeArray;
   coreFeatures.samplerAnisotropy  = adapterVk->features.samplerAnisotropy;
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u ||
@@ -2935,6 +2968,17 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
       vk_featureEnabled(enabledFeatureMask,
                         GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR);
     deviceCI.pNext = &derivativeFeatures;
+  }
+#endif
+#ifdef VK_KHR_shader_fma
+  if (adapterVk->shaderFma) {
+    fmaFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FMA_FEATURES_KHR;
+    fmaFeatures.pNext = (void *)deviceCI.pNext;
+    fmaFeatures.shaderFmaFloat16 = (adapterVk->shaderFma & 1u) &&
+      vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
+    fmaFeatures.shaderFmaFloat32 = (adapterVk->shaderFma & 2u) != 0u;
+    fmaFeatures.shaderFmaFloat64 = (adapterVk->shaderFma & 4u) && coreFeatures.shaderFloat64;
+    deviceCI.pNext = &fmaFeatures;
   }
 #endif
 #ifdef VK_KHR_shader_untyped_pointers
@@ -3188,6 +3232,11 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   }
 #endif
   device->uslFloatPreserve = adapterVk->signedZeroInfNanPreserve;
+#ifdef VK_KHR_shader_fma
+  device->uslFma = (fmaFeatures.shaderFmaFloat16 ? 1u : 0u) |
+                   (fmaFeatures.shaderFmaFloat32 ? 2u : 0u) |
+                   (fmaFeatures.shaderFmaFloat64 ? 4u : 0u);
+#endif
 #ifdef VK_KHR_shader_untyped_pointers
   deviceVk->shaderUntypedPointers = adapterVk->shaderUntypedPointers;
   device->uslUntypedPointers      = deviceVk->shaderUntypedPointers;

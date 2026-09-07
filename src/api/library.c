@@ -2952,6 +2952,9 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
     static const char *const preserveAtoms[] = {
       "spirv_preserve_f16", "spirv_preserve_f32", "spirv_preserve_f64"
     };
+    static const char *const fmaAtoms[] = {
+      "spirv_fma_f16", "spirv_fma_f32", "spirv_fma_f64"
+    };
     if (device->uslTargetProfile == 0u) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
@@ -2960,6 +2963,10 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
       if ((device->uslFloatPreserve & (1u << i)) &&
           us_cap_atom_text(&targetAtoms[targetAtomCount++],
                            preserveAtoms[i]) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+      if ((device->uslFma & (1u << i)) &&
+          us_cap_atom_text(&targetAtoms[targetAtomCount++], fmaAtoms[i]) != USLOk) {
         return GPU_ERROR_BACKEND_FAILURE;
       }
     }

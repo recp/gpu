@@ -8,6 +8,8 @@
 
 static uint32_t observedMask;
 static uint32_t observedModes;
+static uint32_t observedFma;
+static uint32_t observedFmaCount;
 static uint32_t calls;
 static bool     valid;
 
@@ -15,11 +17,14 @@ static GPUShaderLibrary *
 capture_binary(GPUDevice *device, const void *data, uint64_t size) {
   const uint32_t *words = data;
   size_t         count = (size_t)(size / sizeof(*words));
+  uint8_t       *widths;
 
   (void)device;
   calls++;
   valid = count >= 5u && size % sizeof(*words) == 0u &&
-          words[0] == SpvMagicNumber;
+          words[0] == SpvMagicNumber && words[3] > 0u && words[3] <= 65536u;
+  widths = valid ? calloc(words[3], 1u) : NULL;
+  valid = valid && widths;
   for (size_t i = 5u; valid && i < count;) {
     uint32_t length = words[i] >> 16u;
     if (length == 0u || length > count - i) {
@@ -36,8 +41,18 @@ capture_binary(GPUDevice *device, const void *data, uint64_t size) {
       }
       observedModes++;
     }
+    if ((words[i] & 0xffffu) == SpvOpTypeFloat && length == 3u && words[i + 1u] < words[3]) {
+      widths[words[i + 1u]] = (uint8_t)(words[i + 2u] / 16u);
+    } else if ((words[i] & 0xffffu) == SpvOpTypeVector && length == 4u &&
+               words[i + 1u] < words[3] && words[i + 2u] < words[3]) {
+      widths[words[i + 1u]] = widths[words[i + 2u]];
+    } else if ((words[i] & 0xffffu) == SpvOpFmaKHR && length == 6u && words[i + 1u] < words[3]) {
+      observedFma |= widths[words[i + 1u]];
+      observedFmaCount++;
+    }
     i += length;
   }
+  free(widths);
   /* Capture the real GPU->USL payload, but do not simulate native creation. */
   return NULL;
 }
@@ -73,18 +88,25 @@ main(int argc, char **argv) {
   /* Repeat in one process: capability-sensitive cache keys must stay distinct. */
   for (uint32_t round = 0u; round < 2u; ++round) {
     for (uint32_t mask = 0u; mask < 8u; ++mask) {
-      GPUShaderLibrary *library = NULL;
-      uint32_t expectedMask  = strict ? mask : 0u;
-      uint32_t expectedModes = (expectedMask & 1u) + ((expectedMask >> 1u) & 1u) + ((expectedMask >> 2u) & 1u);
-      device.uslFloatPreserve = (uint8_t)mask;
-      observedMask = observedModes = calls = 0u;
-      valid = false;
-      GPUResult result = GPUCreateShaderLibrary(&device, &info, &library);
-      if (result != GPU_ERROR_BACKEND_FAILURE || library || calls != 1u ||
-          !valid || observedMask != expectedMask || observedModes != expectedModes) {
-        fprintf(stderr, "float controls round %u mask %u: result=%d calls=%u mask=%u modes=%u\n",
-                round, mask, result, calls, observedMask, observedModes);
-        ok = 0;
+      for (uint32_t fmaMask = 0u; fmaMask < 8u; ++fmaMask) {
+        GPUShaderLibrary *library = NULL;
+        uint32_t expectedMask  = strict ? mask : 0u;
+        uint32_t expectedModes = (expectedMask & 1u) + ((expectedMask >> 1u) & 1u) + ((expectedMask >> 2u) & 1u);
+        uint32_t expectedFma   = (fmaMask & 1u) + ((fmaMask >> 1u) & 1u) + ((fmaMask >> 2u) & 1u);
+
+        device.uslFloatPreserve = (uint8_t)mask;
+        device.uslFma           = (uint8_t)fmaMask;
+        observedMask = observedModes = calls = 0u;
+        observedFma = observedFmaCount = 0u;
+        valid = false;
+        GPUResult result = GPUCreateShaderLibrary(&device, &info, &library);
+        if (result != GPU_ERROR_BACKEND_FAILURE || library || calls != 1u ||
+            !valid || observedMask != expectedMask || observedModes != expectedModes ||
+            observedFma != fmaMask || observedFmaCount != expectedFma) {
+          fprintf(stderr, "float controls round %u mask %u fma %u: result=%d calls=%u mask=%u modes=%u fma=%u/%u\n",
+                  round, mask, fmaMask, result, calls, observedMask, observedModes, observedFma, observedFmaCount);
+          ok = 0;
+        }
       }
     }
   }
