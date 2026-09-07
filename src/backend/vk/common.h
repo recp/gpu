@@ -165,6 +165,7 @@ typedef struct GPUAdapterVk {
 #ifdef VK_EXT_descriptor_buffer
   VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptorBufferProperties;
 #endif
+  uint8_t                       signedZeroInfNanPreserve; /* f16/f32/f64 bits */
   bool                          dynamicRendering;
   bool                          shaderFloat16;
   bool                          storageBuffer16BitAccess;

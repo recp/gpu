@@ -1242,6 +1242,36 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                  instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
                  adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
   spirv14Core = timelineCore;
+  if (spirv14Core || shaderFloatControlsExtension) {
+    PFN_vkGetPhysicalDeviceProperties2      getProperties2;
+    VkPhysicalDeviceFloatControlsProperties floatControls = {0};
+    VkPhysicalDeviceProperties2             properties2   = {0};
+
+    getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+      vkGetInstanceProcAddr(instanceVk->inst,
+                            "vkGetPhysicalDeviceProperties2");
+    if (!getProperties2) {
+      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+        vkGetInstanceProcAddr(instanceVk->inst,
+                              "vkGetPhysicalDeviceProperties2KHR");
+    }
+    if (getProperties2) {
+      floatControls.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES;
+      properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+      properties2.pNext = &floatControls;
+      getProperties2(raw, &properties2);
+      adapterVk->signedZeroInfNanPreserve =
+        (floatControls.shaderSignedZeroInfNanPreserveFloat16 ? 1u : 0u) |
+        (floatControls.shaderSignedZeroInfNanPreserveFloat32 ? 2u : 0u) |
+        (floatControls.shaderSignedZeroInfNanPreserveFloat64 ? 4u : 0u);
+      if (adapterVk->signedZeroInfNanPreserve && !spirv14Core &&
+          !vk_addDeviceExtension(adapterVk,
+                                 VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME)) {
+        goto fail;
+      }
+    }
+  }
 #if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
   maintenance5Core = instanceVk &&
                      instanceVk->apiVersion >= VK_API_VERSION_1_4 &&
@@ -3157,6 +3187,7 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
                                 deviceVk->importSemaphoreHandle;
   }
 #endif
+  device->uslFloatPreserve = adapterVk->signedZeroInfNanPreserve;
 #ifdef VK_KHR_shader_untyped_pointers
   deviceVk->shaderUntypedPointers = adapterVk->shaderUntypedPointers;
   device->uslUntypedPointers      = deviceVk->shaderUntypedPointers;

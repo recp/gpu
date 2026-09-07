@@ -2949,10 +2949,20 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
       }
     }
   } else if (api->backend == GPU_BACKEND_VULKAN) {
+    static const char *const preserveAtoms[] = {
+      "spirv_preserve_f16", "spirv_preserve_f32", "spirv_preserve_f64"
+    };
     if (device->uslTargetProfile == 0u) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
     target.profile = (USLTargetProfile)device->uslTargetProfile;
+    for (uint32_t i = 0u; i < GPU_ARRAY_LEN(preserveAtoms); ++i) {
+      if ((device->uslFloatPreserve & (1u << i)) &&
+          us_cap_atom_text(&targetAtoms[targetAtomCount++],
+                           preserveAtoms[i]) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       if (us_cap_atom_init(
             &targetAtoms[targetAtomCount++],

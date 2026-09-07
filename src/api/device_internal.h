@@ -87,6 +87,7 @@ struct GPUDevice {
   uint32_t                     uslTargetVersion;
   uint32_t                     transientFrameIndex;
   uint32_t                     deviceLostReported;
+  uint8_t                      uslFloatPreserve; /* f16/f32/f64 bits */
   bool                         transientConfigured;
   bool                         transientFrameBegun;
   bool                         transientCpuPtrOwned;

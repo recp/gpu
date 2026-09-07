@@ -542,6 +542,39 @@ if(GPU_BUILD_TESTS)
   endif()
   add_test(NAME api-usl-target COMMAND gpu-usl-target-test)
 
+  if(GPU_USL_ROOT AND EXISTS "${GPU_USL_ROOT}/us/deps/SPIRV-Headers/include/spirv/unified1/spirv.h")
+    set(GPU_USL_FIXTURE_TARGET_CAPS vulkan1_3,shader_f16)
+    gpu_add_usl_fixtures(GPU_FLOAT_CONTROLS_FIXTURE vulkan api-float-controls
+      "${PROJECT_SOURCE_DIR}/tests/api/float_controls.usl")
+    unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    add_executable(gpu-float-controls-test
+      ${PROJECT_SOURCE_DIR}/tests/api/float_controls.c
+      ${GPU_FLOAT_CONTROLS_FIXTURE})
+    target_include_directories(gpu-float-controls-test PRIVATE
+      "${GPU_USL_ROOT}/us/include"
+      "${GPU_USL_ROOT}/us/deps/SPIRV-Headers/include")
+    target_link_libraries(gpu-float-controls-test PRIVATE gpu)
+    set_target_properties(gpu-float-controls-test PROPERTIES
+      C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+      target_compile_options(gpu-float-controls-test PRIVATE /W4 /WX)
+    else()
+      target_compile_options(gpu-float-controls-test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME api-float-controls
+      COMMAND gpu-float-controls-test ${GPU_FLOAT_CONTROLS_FIXTURE})
+    add_test(NAME api-float-controls-relaxed
+      COMMAND gpu-float-controls-test ${GPU_FLOAT_CONTROLS_FIXTURE} relaxed)
+    set_tests_properties(api-float-controls PROPERTIES
+      ENVIRONMENT "USL_STRICT_IEEE=1"
+      LABELS "usl;spirv;strict-ieee;cache"
+      TIMEOUT 60)
+    set_tests_properties(api-float-controls-relaxed PROPERTIES
+      ENVIRONMENT "USL_STRICT_IEEE=0;USL_BACKEND_STRICT_IEEE=0"
+      LABELS "usl;spirv;relaxed-fp;cache"
+      TIMEOUT 60)
+  endif()
+
   add_executable(gpu-public-layout-test
     ${PROJECT_SOURCE_DIR}/tests/api/layout.c
   )
