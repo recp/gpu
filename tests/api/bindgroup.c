@@ -1037,9 +1037,11 @@ check_bind_group_layout_validation(GPUDevice *device) {
 }
 
 static int
-check_dynamic_offset_bind_validation(GPUDevice *device) {
+check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
   GPUApiDescriptor saved;
   GPUApi *api;
+  GPUApi fallback = {0};
+  GPUFrameStats warmStats = {0};
   GPUBindGroupLayoutEntry entry = {0};
   GPUBindGroupLayoutCreateInfo layoutInfo = {0};
   GPUBindGroupLayout *layout = NULL;
@@ -1053,10 +1055,12 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   GPUBindGroup *group = NULL;
   GPURenderPassEncoder renderPass = {0};
   GPUComputePassEncoder computePass = {0};
-  uint32_t validOffset   = 256u;
-  uint32_t changedOffset = 0u;
+  uint32_t stride          = type == GPU_BINDING_UNIFORM_BUFFER ? 0u : 12u;
+  uint32_t validOffset     = stride ? 252u : 256u;
+  uint32_t changedOffset   = 0u;
+  uint32_t invalidOffset   = 497u;
+  uint32_t unalignedOffset = 256u;
 #if GPU_BUILD_WITH_VALIDATION
-  uint32_t invalidOffset = 497u;
   uint32_t extraOffsets[2] = {256u, 0u};
 #endif
   int      ok = 0;
@@ -1071,13 +1075,14 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   descriptorHookCounts.bindRender  = 0u;
   descriptorHookCounts.bindCompute = 0u;
 
-  entry.binding = 0u;
-  entry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
-  entry.visibility = GPU_SHADER_STAGE_VERTEX_BIT |
-                     GPU_SHADER_STAGE_FRAGMENT_BIT |
-                     GPU_SHADER_STAGE_COMPUTE_BIT;
-  entry.arrayCount = 1u;
-  entry.hasDynamicOffset = true;
+  entry.binding            = 0u;
+  entry.bindingType        = type;
+  entry.visibility         = GPU_SHADER_STAGE_VERTEX_BIT |
+                             GPU_SHADER_STAGE_FRAGMENT_BIT |
+                             GPU_SHADER_STAGE_COMPUTE_BIT;
+  entry.arrayCount         = 1u;
+  entry.hasDynamicOffset   = true;
+  entry.buffer.strideBytes = stride;
 
   layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layoutInfo.chain.structSize = sizeof(layoutInfo);
@@ -1103,17 +1108,18 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.sizeBytes = 512u;
-  bufferInfo.usage = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage = (stride ? GPU_BUFFER_USAGE_STORAGE : GPU_BUFFER_USAGE_UNIFORM) |
+                    GPU_BUFFER_USAGE_COPY_DST;
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     fprintf(stderr, "dynamic offset buffer setup failed\n");
     goto cleanup;
   }
 
   groupEntry.binding = 0u;
-  groupEntry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntry.bindingType = type;
   groupEntry.buffer.buffer = buffer;
   groupEntry.buffer.offset = 0u;
-  groupEntry.buffer.size = 16u;
+  groupEntry.buffer.size = stride ? 24u : 16u;
 
   groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
@@ -1132,6 +1138,7 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   GPUBindRenderGroup(&renderPass, 0u, group, 0u, NULL);
   GPUBindRenderGroup(&renderPass, 0u, group, 2u, extraOffsets);
   GPUBindRenderGroup(&renderPass, 0u, group, 1u, &invalidOffset);
+  if (stride) GPUBindRenderGroup(&renderPass, 0u, group, 1u, &unalignedOffset);
   if (renderPass._boundGroupLayouts[0]) {
     fprintf(stderr, "render bind accepted invalid dynamic offset\n");
     goto cleanup;
@@ -1158,6 +1165,7 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
   GPUBindComputeGroup(&computePass, 0u, group, 0u, NULL);
   GPUBindComputeGroup(&computePass, 0u, group, 2u, extraOffsets);
   GPUBindComputeGroup(&computePass, 0u, group, 1u, &invalidOffset);
+  if (stride) GPUBindComputeGroup(&computePass, 0u, group, 1u, &unalignedOffset);
   if (computePass._boundGroupLayouts[0]) {
     fprintf(stderr, "compute bind accepted invalid dynamic offset\n");
     goto cleanup;
@@ -1175,6 +1183,46 @@ check_dynamic_offset_bind_validation(GPUDevice *device) {
       computePass._boundDynamicOffsetCounts[0] != 1u ||
       computePass._boundDynamicOffsets[0][0] != changedOffset) {
     fprintf(stderr, "compute dynamic offset shadowing failed\n");
+    goto cleanup;
+  }
+
+  /* The generic binding visitor is also used without native group hooks. */
+  renderPass  = (GPURenderPassEncoder){0};
+  computePass = (GPUComputePassEncoder){0};
+  renderPass._api             = &fallback;
+  renderPass._pipelineLayout  = pipelineLayout;
+  computePass._api            = &fallback;
+  computePass._device         = device;
+  computePass._pipelineLayout = pipelineLayout;
+  GPUBindRenderGroup(&renderPass, 0u, group, 1u, &invalidOffset);
+  GPUBindComputeGroup(&computePass, 0u, group, 1u, &invalidOffset);
+  if (stride) {
+    GPUBindRenderGroup(&renderPass, 0u, group, 1u, &unalignedOffset);
+    GPUBindComputeGroup(&computePass, 0u, group, 1u, &unalignedOffset);
+  }
+  if (renderPass._boundGroupLayouts[0] || computePass._boundGroupLayouts[0]) {
+    fprintf(stderr, "binding visitor accepted invalid dynamic offset\n");
+    goto cleanup;
+  }
+  GPUBindRenderGroup(&renderPass, 0u, group, 1u, &validOffset);
+  GPUBindComputeGroup(&computePass, 0u, group, 1u, &validOffset);
+  if (renderPass._boundGroupLayouts[0] != layout ||
+      computePass._boundGroupLayouts[0] != layout) {
+    fprintf(stderr, "binding visitor rejected valid dynamic offset\n");
+    goto cleanup;
+  }
+  renderPass._stats  = &warmStats;
+  computePass._stats = &warmStats;
+  for (uint32_t i = 0u; i < 1024u; i++) {
+    uint32_t offset = i & 1u ? validOffset : changedOffset;
+
+    GPUBindRenderGroup(&renderPass, 0u, group, 1u, &offset);
+    GPUBindComputeGroup(&computePass, 0u, group, 1u, &offset);
+  }
+  if (warmStats.hotPathAllocCount || warmStats.hotPathFreeCount ||
+      renderPass._boundDynamicOffsets[0][0] != validOffset ||
+      computePass._boundDynamicOffsets[0][0] != validOffset) {
+    fprintf(stderr, "dynamic binding visitor warm path failed\n");
     goto cleanup;
   }
 
@@ -1613,7 +1661,9 @@ gpu_test_bindgroup(GPUDevice *device) {
          (!bindgroup_test_selected("layout") ||
           check_bind_group_layout_validation(device)) &&
          (!bindgroup_test_selected("dynamic") ||
-          check_dynamic_offset_bind_validation(device)) &&
+          (check_dynamic_offset_bind_validation(device, GPU_BINDING_UNIFORM_BUFFER) &&
+           check_dynamic_offset_bind_validation(device, GPU_BINDING_READ_ONLY_STORAGE_BUFFER) &&
+           check_dynamic_offset_bind_validation(device, GPU_BINDING_STORAGE_BUFFER))) &&
          (!bindgroup_test_selected("arrays") ||
           check_binding_arrays(device)) &&
          (!bindgroup_test_selected("cache") ||

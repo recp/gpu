@@ -4011,7 +4011,8 @@ gpuValidateBindGroupDynamicOffsets(GPUPipelineLayout *pipelineLayout,
   dynamicIndex = 0u;
   for (uint32_t i = 0u; i < priv->count; i++) {
     const GPUBindGroupBindingPriv *binding;
-    uint64_t effectiveOffset;
+    uint64_t                      effectiveOffset;
+    uint32_t                      stride;
 
     binding = &priv->bindings[i];
     if (binding->layoutEntryIndex >= layout->count) {
@@ -4021,8 +4022,11 @@ gpuValidateBindGroupDynamicOffsets(GPUPipelineLayout *pipelineLayout,
       continue;
     }
 
+    stride = layout->entries[binding->layoutEntryIndex].buffer.strideBytes;
     if (binding->kind != GPUBindKindBuffer ||
         binding->dynamicOffsetIndex >= dynamicOffsetCount ||
+        (stride != 0u &&
+         dynamicOffsets[binding->dynamicOffsetIndex] % stride != 0u) ||
         !gpu_u64Add(binding->offset,
                     dynamicOffsets[binding->dynamicOffsetIndex],
                     &effectiveOffset) ||
@@ -4088,8 +4092,12 @@ gpu_bindGroupEachDynamic(GPUPipelineLayout      *pipelineLayout,
                         ? binding->offset
                         : 0u;
     if (binding->dynamicOffsetIndex != UINT32_MAX) {
+      uint32_t stride = layoutEntry->buffer.strideBytes;
+
       if (binding->kind != GPUBindKindBuffer ||
           binding->dynamicOffsetIndex >= dynamicOffsetCount ||
+          (stride != 0u &&
+           pDynamicOffsets[binding->dynamicOffsetIndex] % stride != 0u) ||
           !gpu_u64Add(effectiveOffset,
                       pDynamicOffsets[binding->dynamicOffsetIndex],
                       &effectiveOffset)) {
