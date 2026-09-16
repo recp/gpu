@@ -2,6 +2,16 @@
  * Copyright (C) 2026 Recep Aslantas
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "../common.h"
@@ -48,11 +58,12 @@ cuda__sharedTextureSupported(const GPUDeviceInteropCuda *native,
   if (!native || !info || !cuda__textureUsageSupported(info->usage)) {
     return false;
   }
-#if defined(_WIN32) || defined(WIN32)
+  /* Vulkan depth16 storage does not reliably map to a CUDA u16 array. */
   if (native->graphicsApi->backend == GPU_BACKEND_VULKAN &&
       info->format == GPU_FORMAT_DEPTH16_UNORM) {
     return false;
   }
+#if defined(_WIN32) || defined(WIN32)
   if (native->graphicsApi->backend == GPU_BACKEND_VULKAN &&
       info->dimension == GPU_TEXTURE_DIMENSION_2D &&
       info->depthOrLayers > 1u &&
