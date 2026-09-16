@@ -35,6 +35,16 @@ if(NOT GPU_PACKAGE_MULTI_CONFIG AND GPU_PACKAGE_CONFIG)
   set(build_type_arg "-DCMAKE_BUILD_TYPE=${GPU_PACKAGE_CONFIG}")
 endif()
 
+set(vulkan_args)
+if(GPU_PACKAGE_VULKAN_INCLUDE_DIR)
+  list(APPEND vulkan_args
+       "-DVulkan_INCLUDE_DIR=${GPU_PACKAGE_VULKAN_INCLUDE_DIR}")
+endif()
+if(GPU_PACKAGE_VULKAN_LIBRARY)
+  list(APPEND vulkan_args
+       "-DVulkan_LIBRARY=${GPU_PACKAGE_VULKAN_LIBRARY}")
+endif()
+
 execute_process(
   COMMAND "${CMAKE_COMMAND}" --install "${GPU_PACKAGE_BUILD_DIR}"
           --prefix "${package_prefix}" ${config_args}
@@ -54,6 +64,7 @@ execute_process(
           ${generator_args}
           "-DCMAKE_PREFIX_PATH=${package_prefix}"
           "-DGPU_EXPECTED_PACKAGE_VERSION=${GPU_PACKAGE_VERSION}"
+          ${vulkan_args}
           ${build_type_arg}
   RESULT_VARIABLE result
 )
