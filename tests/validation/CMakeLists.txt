@@ -2145,6 +2145,9 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
       ${PROJECT_SOURCE_DIR}/tests/validation/graphics-cuda-interop-usl/main.c
     )
     target_link_libraries(gpu-graphics-cuda-interop-usl PRIVATE gpu)
+    if(NOT WIN32)
+      target_link_libraries(gpu-graphics-cuda-interop-usl PRIVATE m)
+    endif()
     gpu_attach_usl_validation(gpu-graphics-cuda-interop-usl
                               gpu-cuda-fixtures
                               "${GPU_CUDA_COMPUTE_BUFFER_US}"
