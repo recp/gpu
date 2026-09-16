@@ -698,7 +698,7 @@ gpu_normalizeLayoutEntry(const GPUBindGroupLayoutEntry *src,
   }
   switch (src->bindingType) {
     case GPU_BINDING_UNIFORM_BUFFER:
-      if (src->buffer.strideBytes != 0u) {
+      if (src->buffer.strideBytes != 0u || src->buffer.byteAddress) {
         return 0;
       }
       break;
@@ -709,6 +709,7 @@ gpu_normalizeLayoutEntry(const GPUBindGroupLayoutEntry *src,
           src->buffer.minBindingSize < src->buffer.strideBytes) {
         return 0;
       }
+      if (src->buffer.strideBytes == 0u) dst->buffer.byteAddress = true;
       break;
     case GPU_BINDING_SAMPLED_TEXTURE:
       if ((uint32_t)src->sampledTexture.viewType > GPU_TEXTURE_VIEW_3D ||
@@ -2358,7 +2359,8 @@ gpu_layoutResourceTypeMatches(const GPUBindGroupLayoutEntry     *entry,
     case GPU_BINDING_STORAGE_BUFFER:
       return entry->buffer.minBindingSize ==
                resource->buffer.minBindingSize &&
-             entry->buffer.strideBytes == resource->buffer.strideBytes;
+             entry->buffer.strideBytes == resource->buffer.strideBytes &&
+             entry->buffer.byteAddress == resource->buffer.byteAddress;
     case GPU_BINDING_SAMPLED_TEXTURE:
       return entry->sampledTexture.viewType ==
                resource->sampledTexture.viewType &&

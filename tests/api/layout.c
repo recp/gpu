@@ -59,6 +59,9 @@ _Static_assert(
   "transient allocator 64-bit fields must stay packed"
 );
 GPU_ASSERT_64BIT_SIZE(GPUMemoryRequirements, 24u);
+GPU_ASSERT_64BIT_SIZE(GPUBufferBindingLayout, 16u);
+_Static_assert(offsetof(GPUBufferBindingLayout, byteAddress) == 12u,
+               "buffer access must occupy existing layout padding");
 GPU_ASSERT_64BIT_SIZE(GPUAdapterProperties, 24u);
 GPU_ASSERT_64BIT_SIZE(GPUAdapterIdentity, 40u);
 GPU_ASSERT_64BIT_SIZE(GPUAdapterRequestOptions, 40u);

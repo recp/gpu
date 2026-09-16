@@ -1312,6 +1312,9 @@ gpu_bindingLayoutFromUSLResource(const USLRuntimeResource     *resource,
     case GPU_BINDING_STORAGE_BUFFER:
       out->buffer.minBindingSize = resource->buffer_min_binding_size;
       out->buffer.strideBytes    = resource->buffer_stride_bytes;
+      out->buffer.byteAddress    =
+        (resource->buffer_access & USL_RUNTIME_BUFFER_ACCESS_BYTE_ADDRESS) != 0u ||
+        (bindingType != GPU_BINDING_UNIFORM_BUFFER && resource->buffer_stride_bytes == 0u);
       return 1;
     case GPU_BINDING_SAMPLED_TEXTURE:
       if (!gpu_textureViewTypeFromUSL(resource->type.texture_dim,
@@ -1358,7 +1361,8 @@ gpu_shaderResourceLayoutEqual(const GPUShaderResourceReflection *a,
     case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
     case GPU_BINDING_STORAGE_BUFFER:
       return a->buffer.minBindingSize == b->buffer.minBindingSize &&
-             a->buffer.strideBytes == b->buffer.strideBytes;
+             a->buffer.strideBytes == b->buffer.strideBytes &&
+             a->buffer.byteAddress == b->buffer.byteAddress;
     case GPU_BINDING_SAMPLED_TEXTURE:
       return a->sampledTexture.viewType == b->sampledTexture.viewType &&
              a->sampledTexture.sampleType == b->sampledTexture.sampleType &&

@@ -1,0 +1,13 @@
+@require(descriptor_indexing)
+
+kern(1) half_buffer_cs(
+  inout values: [buffer_view<half>; 2] #buffer(0),
+  count: uint #buffer(2),
+  inout output: [float2] #buffer(3)) {
+  let index = count - 1u
+  let a = values[0][index]
+  let b = values[1][index]
+  values[0][index] = a + half(0.5)
+  values[1][index] = b + half(0.25)
+  output[0] = float2(float(a), float(b))
+}

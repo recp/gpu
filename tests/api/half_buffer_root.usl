@@ -1,0 +1,11 @@
+kern(1) half_buffer_cs(
+  left: [half] #buffer(0) #dynamic_offset,
+  inout right: [half] #buffer(1) #dynamic_offset,
+  count: uint #buffer(2),
+  inout output: [float2] #buffer(3)) {
+  let index = count - 1u
+  let a = left[index]
+  let b = right[index]
+  right[index] = b + half(0.25)
+  output[0] = float2(float(a), float(b))
+}

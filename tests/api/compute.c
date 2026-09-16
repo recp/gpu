@@ -48,6 +48,83 @@ expect_compute_pipeline_error(GPUDevice *device,
 }
 
 static int
+check_compute_buffer_layout(GPUDevice *device, GPUShaderLibrary *library) {
+  const GPUBindGroupLayoutEntry *entries;
+  GPUShaderLayout              *reflected = NULL;
+  GPUBindGroupLayout           *group = NULL;
+  GPUPipelineLayout            *layout = NULL;
+  GPUComputePipeline           *pipeline = NULL;
+  GPUBindGroupLayoutEntry        entry;
+  GPUBindGroupLayoutCreateInfo    groupInfo = {0};
+  GPUPipelineLayoutCreateInfo     layoutInfo = {0};
+  GPUComputePipelineCreateInfo    pipelineInfo = {0};
+  uint32_t                       entryCount;
+  int                            ok = 0;
+
+  if (GPUCreateShaderLayout(device, library, &reflected) != GPU_OK ||
+      !reflected || reflected->bindGroupLayoutCount != 1u) goto cleanup;
+  entries = GPUGetBindGroupLayoutEntries(reflected->bindGroupLayouts[0], &entryCount);
+  if (!entries || entryCount != 1u ||
+      entries[0].bindingType != GPU_BINDING_STORAGE_BUFFER ||
+      entries[0].buffer.strideBytes != sizeof(uint32_t)) goto cleanup;
+
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.entryCount       = 1u;
+  groupInfo.pEntries         = &entry;
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.bindGroupLayoutCount = 1u;
+  layoutInfo.ppBindGroupLayouts   = &group;
+  pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  pipelineInfo.library          = library;
+  pipelineInfo.entryPoint       = "api_indirect_cs";
+
+  /* Only the access flag differs. Test both public reflection matching and
+     selected-entry pipeline validation, with valid clones before and after. */
+  for (uint32_t i = 0u; i < 3u; i++) {
+    bool mismatch = i == 1u;
+
+    entry = entries[0];
+    if (mismatch) entry.buffer.byteAddress = !entry.buffer.byteAddress;
+    if (GPUCreateBindGroupLayout(device, &groupInfo, &group) != GPU_OK) goto cleanup;
+    if (mismatch) {
+      if (GPUCreatePipelineLayoutFromReflection(device, library, 1u, &group, &layout) !=
+            GPU_ERROR_INVALID_ARGUMENT || layout) goto cleanup;
+      if (GPUCreatePipelineLayout(device, &layoutInfo, &layout) != GPU_OK) goto cleanup;
+    } else if (GPUCreatePipelineLayoutFromReflection(device, library, 1u, &group, &layout) !=
+                 GPU_OK) {
+      goto cleanup;
+    }
+    pipelineInfo.layout = layout;
+    if (mismatch) {
+      if (!expect_compute_pipeline_error(device, &pipelineInfo,
+                                           "compute pipeline accepted wrong buffer access")) {
+        goto cleanup;
+      }
+    } else if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
+               !pipeline) {
+      goto cleanup;
+    }
+    GPUDestroyComputePipeline(pipeline);
+    GPUDestroyPipelineLayout(layout);
+    GPUDestroyBindGroupLayout(group);
+    pipeline = NULL;
+    layout   = NULL;
+    group    = NULL;
+  }
+  ok = 1;
+cleanup:
+  if (!ok) fprintf(stderr, "compute buffer access layout validation failed\n");
+  GPUDestroyComputePipeline(pipeline);
+  GPUDestroyPipelineLayout(layout);
+  GPUDestroyBindGroupLayout(group);
+  GPUDestroyShaderLayout(reflected);
+  return ok;
+}
+
+static int
 check_compute_disk_cache(GPUDevice                   *device,
                          GPUComputePipelineCreateInfo *info) {
   GPUPipelineCacheCreateInfo cacheInfo = {0};
@@ -283,6 +360,11 @@ check_compute_pipeline_validation(GPUDevice *device,
 
   if (!create_compute_usl_library(device, bytecodePath, &library)) {
     fprintf(stderr, "failed to create compute pipeline test library\n");
+    return 0;
+  }
+
+  if (!check_compute_buffer_layout(device, library)) {
+    GPUDestroyShaderLibrary(library);
     return 0;
   }
 

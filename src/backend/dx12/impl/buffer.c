@@ -42,8 +42,11 @@ dx12__validateBufferUsage(GPUBufferUsageFlags usage) {
 }
 
 static bool
-dx12__alignUniformBufferSize(uint64_t sizeBytes, uint64_t *outSizeBytes) {
-  const uint64_t alignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
+dx12__bufferAllocationSize(const GPUBufferCreateInfo *info, uint64_t *outSizeBytes) {
+  const uint64_t alignment = (info->usage & GPU_BUFFER_USAGE_UNIFORM) != 0u
+                              ? D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT
+                              : (info->usage & GPU_BUFFER_USAGE_STORAGE) != 0u ? 4u : 1u;
+  const uint64_t sizeBytes = info->sizeBytes;
 
   if (!outSizeBytes || sizeBytes > UINT64_MAX - (alignment - 1u)) {
     return false;
@@ -78,9 +81,7 @@ dx12_bufferDesc(const GPUBufferCreateInfo *info,
       dx12__validateBufferUsage(info->usage) != GPU_OK) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  allocationSize = info->sizeBytes;
-  if ((info->usage & GPU_BUFFER_USAGE_UNIFORM) != 0u &&
-      !dx12__alignUniformBufferSize(info->sizeBytes, &allocationSize)) {
+  if (!dx12__bufferAllocationSize(info, &allocationSize)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   unorderedAccess =
@@ -107,13 +108,20 @@ dx12_wrapBuffer(GPUDevice                 *device,
                 ID3D12Resource            *resource,
                 D3D12_RESOURCE_STATES      initialState,
                 GPUBuffer                **outBuffer) {
-  GPUBuffer     *buffer;
-  GPUBufferDX12 *native;
+  GPUBuffer          *buffer;
+  GPUBufferDX12      *native;
+  D3D12_RESOURCE_DESC desc;
 
   if (!device || !info || !resource || !outBuffer) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
   *outBuffer = NULL;
+
+  resource->lpVtbl->GetDesc(resource, &desc);
+  if (desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER ||
+      info->sizeBytes == 0u || info->sizeBytes > desc.Width) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
 
   buffer = calloc(1, sizeof(*buffer) + sizeof(*native));
   if (!buffer) {
@@ -126,6 +134,7 @@ dx12_wrapBuffer(GPUDevice                 *device,
   native                = (GPUBufferDX12 *)(buffer + 1);
   native->resource      = resource;
   native->gpuAddress    = resource->lpVtbl->GetGPUVirtualAddress(resource);
+  native->sizeBytes     = desc.Width;
   native->state         = initialState;
   native->defaultHeap   = true;
   buffer->_priv         = native;
@@ -283,6 +292,7 @@ dx12_createSparseBuffer(GPUDevice                 *device,
     native->resource
   );
   native->state       = D3D12_RESOURCE_STATE_COMMON;
+  native->sizeBytes   = desc.Width;
   native->defaultHeap = true;
   native->sparse      = true;
   buffer->_priv       = native;
@@ -348,6 +358,7 @@ dx12_createPlacedBuffer(GPUDevice                 *device,
     native->resource
   );
   native->state       = initialState;
+  native->sizeBytes   = desc.Width;
   native->defaultHeap = true;
   buffer->_priv       = native;
   buffer->device      = device;
@@ -475,9 +486,7 @@ dx12_createBuffer(GPUDevice                 * __restrict device,
     return usageResult;
   }
 
-  allocationSize = info->sizeBytes;
-  if ((info->usage & GPU_BUFFER_USAGE_UNIFORM) != 0u &&
-      !dx12__alignUniformBufferSize(info->sizeBytes, &allocationSize)) {
+  if (!dx12__bufferAllocationSize(info, &allocationSize)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -546,6 +555,7 @@ dx12_createBuffer(GPUDevice                 * __restrict device,
     native->resource
   );
   native->state          = initialState;
+  native->sizeBytes      = desc.Width;
   native->defaultHeap    = defaultHeap;
   buffer->_priv          = native;
   buffer->device         = device;

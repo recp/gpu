@@ -18,6 +18,7 @@
 #define dx12_common_h
 
 #include "../common.h"
+#include "buffer_range.h"
 #include "../../api/adapter_internal.h"
 #include "../../api/buffer_internal.h"
 #include "../../api/cmdqueue_internal.h"
@@ -305,8 +306,12 @@ typedef struct GPUBindGroupDX12 {
   uint32_t       samplerOffset;
   uint32_t       samplerCount;
   uint32_t       entryCount;
+  uint32_t       dynamicOffsetCount;
   uint32_t       descriptorOffsets[];
 } GPUBindGroupDX12;
+
+_Static_assert(_Alignof(DX12DynamicBufferRange) <= _Alignof(uint32_t),
+               "dynamic ranges follow the descriptor-offset tail");
 
 typedef struct GPUSamplerFeedbackMapDX12 {
   GPUDeviceDX12        *device;
@@ -319,6 +324,7 @@ typedef struct GPUBufferDX12 {
   ID3D12Resource            *resource;
   void                      *mapped;
   D3D12_GPU_VIRTUAL_ADDRESS  gpuAddress;
+  uint64_t                   sizeBytes;
   D3D12_RESOURCE_STATES      state;
   bool                       defaultHeap;
   bool                       sparse;

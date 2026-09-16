@@ -961,16 +961,17 @@ dx12__writeNullResourceDescriptor(
       return true;
     case GPU_BINDING_READ_ONLY_STORAGE_BUFFER: {
       D3D12_SHADER_RESOURCE_VIEW_DESC desc = {0};
+      bool raw = entry->buffer.byteAddress || entry->buffer.strideBytes == 0u;
 
       desc.Shader4ComponentMapping =
         D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-      desc.Format              = entry->buffer.strideBytes == 0u
+      desc.Format              = raw
                                    ? DXGI_FORMAT_R32_TYPELESS
                                    : DXGI_FORMAT_UNKNOWN;
       desc.ViewDimension       = D3D12_SRV_DIMENSION_BUFFER;
       desc.Buffer.NumElements  = 1u;
-      desc.Buffer.StructureByteStride = entry->buffer.strideBytes;
-      desc.Buffer.Flags        = entry->buffer.strideBytes == 0u
+      desc.Buffer.StructureByteStride = raw ? 0u : entry->buffer.strideBytes;
+      desc.Buffer.Flags        = raw
                                    ? D3D12_BUFFER_SRV_FLAG_RAW
                                    : D3D12_BUFFER_SRV_FLAG_NONE;
       device->d3dDevice->lpVtbl->CreateShaderResourceView(device->d3dDevice,
@@ -981,14 +982,15 @@ dx12__writeNullResourceDescriptor(
     }
     case GPU_BINDING_STORAGE_BUFFER: {
       D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {0};
+      bool raw = entry->buffer.byteAddress || entry->buffer.strideBytes == 0u;
 
-      desc.Format              = entry->buffer.strideBytes == 0u
+      desc.Format              = raw
                                    ? DXGI_FORMAT_R32_TYPELESS
                                    : DXGI_FORMAT_UNKNOWN;
       desc.ViewDimension       = D3D12_UAV_DIMENSION_BUFFER;
       desc.Buffer.NumElements  = 1u;
-      desc.Buffer.StructureByteStride = entry->buffer.strideBytes;
-      desc.Buffer.Flags        = entry->buffer.strideBytes == 0u
+      desc.Buffer.StructureByteStride = raw ? 0u : entry->buffer.strideBytes;
+      desc.Buffer.Flags        = raw
                                    ? D3D12_BUFFER_UAV_FLAG_RAW
                                    : D3D12_BUFFER_UAV_FLAG_NONE;
       device->d3dDevice->lpVtbl->CreateUnorderedAccessView(device->d3dDevice,
@@ -1904,6 +1906,35 @@ dx12__bindGroupDescriptorOffset(const GPUBindGroupDX12        *group,
   return true;
 }
 
+static void
+dx12__bufferAlignments(GPUBindingType type, const GPUBufferBindingLayout *layout,
+                       bool table, uint32_t *address, uint32_t *size) {
+  *address = 1u;
+  *size    = 1u;
+  if (type == GPU_BINDING_UNIFORM_BUFFER) {
+    *address = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
+    *size    = table ? D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT : 1u;
+  } else if (layout->byteAddress || layout->strideBytes == 0u) {
+    *address = D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT;
+    *size    = 4u;
+  }
+}
+
+static bool
+dx12__bufferBindingSize(const GPUBindGroupBindingView *binding,
+                        const GPUBufferDX12           *buffer,
+                        bool                           table,
+                        uint64_t                      *outSize) {
+  uint32_t addressAlignment, sizeAlignment;
+
+  if (!buffer || !buffer->resource) return false;
+  dx12__bufferAlignments(binding->bindingType, &binding->bufferLayout, table,
+                         &addressAlignment, &sizeAlignment);
+  return dx12_bufferViewRange(buffer->gpuAddress, buffer->sizeBytes,
+                              binding->offset, binding->size,
+                              addressAlignment, sizeAlignment, outSize);
+}
+
 static bool
 dx12__writeBufferDescriptor(GPUDeviceDX12                 *device,
                             uint32_t                        resourceOffset,
@@ -1912,40 +1943,25 @@ dx12__writeBufferDescriptor(GPUDeviceDX12                 *device,
                             uint32_t                       descriptorOffset) {
   GPUBufferDX12                 *buffer;
   D3D12_CPU_DESCRIPTOR_HANDLE    handle;
-  D3D12_RESOURCE_DESC            resourceDesc;
-  uint64_t                       stride;
+  uint64_t                       stride, size;
+  bool                           raw;
 
   buffer = binding->buffer ? binding->buffer->_priv : NULL;
   if (!device || !binding->buffer || !buffer || !buffer->resource ||
       !binding->buffer->device ||
       binding->buffer->device->_priv != device ||
-      descriptorOffset >= resourceCount) {
+      descriptorOffset >= resourceCount ||
+      !dx12__bufferBindingSize(binding, buffer, true, &size)) {
     return false;
   }
 
   handle = dx12_cpuDescriptor(&device->resourceDescriptors,
                               resourceOffset + descriptorOffset);
-  buffer->resource->lpVtbl->GetDesc(buffer->resource, &resourceDesc);
-  stride       = binding->bufferLayout.strideBytes;
+  stride = binding->bufferLayout.strideBytes;
   if (binding->bindingType == GPU_BINDING_UNIFORM_BUFFER) {
     D3D12_CONSTANT_BUFFER_VIEW_DESC desc = {0};
-    uint64_t                         size;
 
-    if (binding->size >
-          UINT64_MAX -
-            (D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1u)) {
-      return false;
-    }
-    size = (binding->size +
-            (D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1u)) &
-           ~(uint64_t)(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1u);
-    if ((binding->offset &
-         (D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1u)) != 0u ||
-        size == 0u ||
-        size > D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16u ||
-        binding->offset > resourceDesc.Width ||
-        size > resourceDesc.Width - binding->offset ||
-        binding->offset > UINT64_MAX - buffer->gpuAddress) {
+    if (size > D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16u) {
       return false;
     }
 
@@ -1959,13 +1975,13 @@ dx12__writeBufferDescriptor(GPUDeviceDX12                 *device,
     return true;
   }
 
-  if (stride == 0u) {
+  raw = binding->bufferLayout.byteAddress || stride == 0u;
+  if (raw) {
+    if ((binding->offset & (D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT - 1u)) != 0u) return false;
     stride = 4u;
   }
   if (binding->offset % stride != 0u ||
-      binding->size % stride != 0u ||
-      binding->offset / stride > UINT32_MAX ||
-      binding->size / stride > UINT32_MAX) {
+      size % stride != 0u || size / stride > UINT32_MAX) {
     return false;
   }
 
@@ -1974,15 +1990,15 @@ dx12__writeBufferDescriptor(GPUDeviceDX12                 *device,
 
     desc.Shader4ComponentMapping =
       D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    desc.Format                   = binding->bufferLayout.strideBytes == 0u
+    desc.Format                   = raw
                                       ? DXGI_FORMAT_R32_TYPELESS
                                       : DXGI_FORMAT_UNKNOWN;
     desc.ViewDimension            = D3D12_SRV_DIMENSION_BUFFER;
     desc.Buffer.FirstElement      = binding->offset / stride;
-    desc.Buffer.NumElements       = (UINT)(binding->size / stride);
+    desc.Buffer.NumElements       = (UINT)(size / stride);
     desc.Buffer.StructureByteStride =
-      binding->bufferLayout.strideBytes;
-    desc.Buffer.Flags = binding->bufferLayout.strideBytes == 0u
+      raw ? 0u : binding->bufferLayout.strideBytes;
+    desc.Buffer.Flags = raw
                           ? D3D12_BUFFER_SRV_FLAG_RAW
                           : D3D12_BUFFER_SRV_FLAG_NONE;
     device->d3dDevice->lpVtbl->CreateShaderResourceView(
@@ -1997,15 +2013,15 @@ dx12__writeBufferDescriptor(GPUDeviceDX12                 *device,
   if (binding->bindingType == GPU_BINDING_STORAGE_BUFFER) {
     D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {0};
 
-    desc.Format                   = binding->bufferLayout.strideBytes == 0u
+    desc.Format                   = raw
                                       ? DXGI_FORMAT_R32_TYPELESS
                                       : DXGI_FORMAT_UNKNOWN;
     desc.ViewDimension            = D3D12_UAV_DIMENSION_BUFFER;
     desc.Buffer.FirstElement      = binding->offset / stride;
-    desc.Buffer.NumElements       = (UINT)(binding->size / stride);
+    desc.Buffer.NumElements       = (UINT)(size / stride);
     desc.Buffer.StructureByteStride =
-      binding->bufferLayout.strideBytes;
-    desc.Buffer.Flags = binding->bufferLayout.strideBytes == 0u
+      raw ? 0u : binding->bufferLayout.strideBytes;
+    desc.Buffer.Flags = raw
                           ? D3D12_BUFFER_UAV_FLAG_RAW
                           : D3D12_BUFFER_UAV_FLAG_NONE;
     device->d3dDevice->lpVtbl->CreateUnorderedAccessView(
@@ -2037,6 +2053,7 @@ dx12__writeBindGroup(void *context,
     case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
     case GPU_BINDING_STORAGE_BUFFER: {
       uint32_t descriptorOffset;
+      uint64_t size;
 
       if (binding->kind != GPUBindKindBuffer) {
         writeContext->valid = false;
@@ -2055,16 +2072,19 @@ dx12__writeBindGroup(void *context,
       }
       if (dx12__resourceTableBindingType(writeContext->group->device,
                                          binding->bindingType,
-                                         binding->arrayCount) &&
-          (!dx12__bindGroupDescriptorOffset(writeContext->group,
-                                            binding,
-                                            false,
-                                            &descriptorOffset) ||
-           !dx12__writeBufferDescriptor(writeContext->group->device,
-                                        writeContext->group->resourceOffset,
-                                        writeContext->group->resourceCount,
-                                        binding,
-                                        descriptorOffset))) {
+                                         binding->arrayCount)) {
+        if (!dx12__bindGroupDescriptorOffset(writeContext->group,
+                                              binding,
+                                              false,
+                                              &descriptorOffset) ||
+            !dx12__writeBufferDescriptor(writeContext->group->device,
+                                           writeContext->group->resourceOffset,
+                                           writeContext->group->resourceCount,
+                                           binding,
+                                           descriptorOffset)) {
+          writeContext->valid = false;
+        }
+      } else if (!dx12__bufferBindingSize(binding, binding->buffer->_priv, false, &size)) {
         writeContext->valid = false;
       }
       break;
@@ -2279,17 +2299,61 @@ dx12__writeBindGroup(void *context,
   }
 }
 
+static DX12DynamicBufferRange *
+dx12__dynamicRanges(GPUBindGroupDX12 *group) {
+  return (DX12DynamicBufferRange *)(group->descriptorOffsets + group->entryCount);
+}
+
+static bool
+dx12__initDynamicRanges(GPUBindGroupDX12 *native, const GPUBindGroupPriv *group,
+                        const GPUBindGroupLayoutEntry *entries) {
+  DX12DynamicBufferRange *ranges = dx12__dynamicRanges(native);
+  uint32_t count = 0u;
+
+  /* Bindless groups reject dynamic offsets; these records never need updates. */
+  for (uint32_t i = 0u; i < group->count; i++) {
+    const GPUBindGroupBindingPriv *binding = &group->bindings[i];
+    const GPUBindGroupLayoutEntry *entry;
+    const GPUBufferDX12           *buffer;
+    uint32_t                       addressAlignment, sizeAlignment;
+
+    if (binding->dynamicOffsetIndex == UINT32_MAX) continue;
+    if (binding->kind != GPUBindKindBuffer || !binding->buffer ||
+        binding->layoutEntryIndex >= native->entryCount ||
+        binding->dynamicOffsetIndex >= native->dynamicOffsetCount ||
+        !(buffer = binding->buffer->_priv) || !buffer->resource) {
+      return false;
+    }
+    entry = &entries[binding->layoutEntryIndex];
+    dx12__bufferAlignments(entry->bindingType, &entry->buffer,
+                           dx12__resourceTableBinding(native->device, entry),
+                           &addressAlignment, &sizeAlignment);
+    if (!dx12_dynamicBufferRange(buffer->gpuAddress, buffer->sizeBytes,
+                                 binding->buffer->sizeBytes,
+                                 binding->offset, binding->size,
+                                 addressAlignment, sizeAlignment,
+                                 entry->buffer.strideBytes,
+                                 &ranges[binding->dynamicOffsetIndex])) {
+      return false;
+    }
+    count++;
+  }
+  return count == native->dynamicOffsetCount;
+}
+
 GPU_HIDE
 GPUResult
 dx12_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   GPUBindGroupLayout              *layout;
   const GPUBindGroupLayoutEntry   *entries;
   GPUBindGroupDX12                *native;
+  const GPUBindGroupPriv          *priv;
   DX12BindGroupWriteContext        writeContext;
+  size_t                           allocationSize;
   GPUResult                        result;
   uint32_t                         entryCount;
 
-  if (!device || !device->_priv || !group) {
+  if (!device || !device->_priv || !group || !(priv = group->_priv)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -2303,16 +2367,25 @@ dx12_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native = calloc(1,
-                  sizeof(*native) +
-                    entryCount * sizeof(*native->descriptorOffsets));
+  allocationSize = sizeof(*native) + entryCount * sizeof(*native->descriptorOffsets);
+  if (priv->dynamicOffsetCount >
+      (SIZE_MAX - allocationSize) / sizeof(DX12DynamicBufferRange)) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+  allocationSize += priv->dynamicOffsetCount * sizeof(DX12DynamicBufferRange);
+  native = calloc(1, allocationSize);
   if (!native) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
-  native->device     = device->_priv;
-  native->entryCount = entryCount;
+  native->device             = device->_priv;
+  native->entryCount         = entryCount;
+  native->dynamicOffsetCount = priv->dynamicOffsetCount;
   for (uint32_t i = 0u; i < entryCount; i++) {
     native->descriptorOffsets[i] = UINT32_MAX;
+  }
+  if (native->dynamicOffsetCount && !dx12__initDynamicRanges(native, priv, entries)) {
+    free(native);
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   for (uint32_t i = 0u; i < entryCount; i++) {
@@ -2953,8 +3026,6 @@ dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
             buffer,
             D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER
           ) ||
-          (binding->offset &
-           (D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1u)) != 0u ||
           binding->offset > UINT64_MAX - buffer->gpuAddress) {
         bindContext->valid = false;
         return;
@@ -3280,7 +3351,10 @@ dx12_bindRenderGroup(GPURenderPassEncoder *pass,
       pass->_pipelineLayout != pipelineLayout ||
       encoder->rootSignature != encoder->pipeline->rootSignature ||
       !nativeGroup || nativeGroup->device != device ||
-      groupIndex >= layout->groupCount) {
+      groupIndex >= layout->groupCount ||
+      !dx12_dynamicOffsetsValid(dx12__dynamicRanges(nativeGroup),
+                                nativeGroup->dynamicOffsetCount,
+                                dynamicOffsetCount, dynamicOffsets)) {
     return false;
   }
 
@@ -3409,7 +3483,10 @@ dx12__bindComputeLikeGroup(GPUCommandBufferDX12      *command,
       !resourceOffsets || !resourceOffsetMask ||
       !layout || !layout->rootSignature ||
       !nativeGroup || nativeGroup->device != device ||
-      groupIndex >= layout->groupCount) {
+      groupIndex >= layout->groupCount ||
+      !dx12_dynamicOffsetsValid(dx12__dynamicRanges(nativeGroup),
+                                nativeGroup->dynamicOffsetCount,
+                                dynamicOffsetCount, dynamicOffsets)) {
     return false;
   }
 

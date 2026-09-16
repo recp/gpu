@@ -80,6 +80,7 @@ typedef struct GPUSamplerBindingLayout {
 typedef struct GPUBufferBindingLayout {
   uint64_t minBindingSize;
   uint32_t strideBytes;
+  bool     byteAddress;
 } GPUBufferBindingLayout;
 
 typedef struct GPUBindGroupLayoutEntry {
