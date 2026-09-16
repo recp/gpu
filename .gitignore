@@ -62,9 +62,7 @@ build/
 # Sample build outputs
 samples/**/hello-*
 samples/**/*.us
-samples/**/*.usl.metal
 samples/**/*.usl.logs
-samples/**/*.us.metal
 samples/**/*.us.logs
 samples/**/*.usl.ptx
 samples/**/*.us.ptx
@@ -72,15 +70,16 @@ samples/**/.build.lock/
 samples/shell/web/.dev/
 tests/validation/**/hello-*
 tests/validation/**/*.us
-tests/validation/**/*.usl.metal
 tests/validation/**/*.usl.logs
-tests/validation/**/*.us.metal
 tests/validation/**/*.us.logs
 tests/validation/**/*.usl.ptx
 tests/validation/**/*.us.ptx
 tests/validation/**/.build.lock/
 tests/validation/usl-reflection-check/usl-reflection-check
-!tests/validation/triangle-manual/triangle.usl.metal
+
+# Generated Metal sources stay tracked for codegen comparisons.
+!samples/**/*.metal
+!tests/validation/**/*.metal
 
 # Test build outputs
 tests/api/api-tests
