@@ -7,8 +7,10 @@
 #include <string.h>
 
 static GPUShaderLibrary *
-new_library(GPUDevice *device, const char *source, uint64_t sourceSize) {
+new_library(GPUDevice *device, const char *source, uint64_t sourceSize,
+            uint32_t compileFlags) {
   (void)device;
+  (void)compileFlags;
   if (!source || sourceSize == 0u) {
     return NULL;
   }

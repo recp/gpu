@@ -15,11 +15,13 @@ typedef struct PTXSource {
 } PTXSource;
 
 static GPUShaderLibrary *
-new_library(GPUDevice *device, const char *source, uint64_t sourceSize) {
+new_library(GPUDevice *device, const char *source, uint64_t sourceSize,
+            uint32_t compileFlags) {
   GPUShaderLibrary *library;
   PTXSource        *ptx;
 
   (void)device;
+  (void)compileFlags;
   if (!source || sourceSize == 0u || sourceSize > SIZE_MAX - 1u) {
     return NULL;
   }
