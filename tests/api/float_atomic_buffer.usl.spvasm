@@ -1,0 +1,52 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos; 0
+; Bound: 31
+; Schema: 0
+               OpCapability Shader
+               OpCapability AtomicFloat32AddEXT
+               OpExtension "SPV_EXT_shader_atomic_float_add"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %22 "float_atomic" %gl_GlobalInvocationID
+               OpExecutionMode %22 LocalSize 64 1 1
+               OpDecorate %_runtimearr_float ArrayStride 4
+               OpDecorate %_struct_5 BufferBlock
+               OpMemberDecorate %_struct_5 0 Offset 0
+               OpDecorate %19 DescriptorSet 0
+               OpDecorate %19 Binding 0
+               OpDecorate %20 DescriptorSet 0
+               OpDecorate %20 Binding 1
+               OpDecorate %gl_GlobalInvocationID BuiltIn GlobalInvocationId
+       %void = OpTypeVoid
+          %2 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+%_runtimearr_float = OpTypeRuntimeArray %float
+  %_struct_5 = OpTypeStruct %_runtimearr_float
+%_ptr_Uniform__struct_5 = OpTypePointer Uniform %_struct_5
+       %uint = OpTypeInt 32 0
+     %v3uint = OpTypeVector %uint 3
+%_ptr_Input_v3uint = OpTypePointer Input %v3uint
+        %int = OpTypeInt 32 1
+      %int_0 = OpConstant %int 0
+%_ptr_Uniform_float = OpTypePointer Uniform %float
+     %uint_1 = OpConstant %uint 1
+     %uint_0 = OpConstant %uint 0
+    %float_1 = OpConstant %float 1
+%_ptr_Input_uint = OpTypePointer Input %uint
+      %int_1 = OpConstant %int 1
+  %float_0_5 = OpConstant %float 0.5
+         %19 = OpVariable %_ptr_Uniform__struct_5 Uniform
+         %20 = OpVariable %_ptr_Uniform__struct_5 Uniform
+%gl_GlobalInvocationID = OpVariable %_ptr_Input_v3uint Input
+         %22 = OpFunction %void None %2
+         %23 = OpLabel
+         %24 = OpAccessChain %_ptr_Uniform_float %19 %int_0 %int_0
+         %25 = OpAtomicFAddEXT %float %24 %uint_1 %uint_0 %float_1
+         %26 = OpAccessChain %_ptr_Input_uint %gl_GlobalInvocationID %int_0
+         %27 = OpLoad %uint %26
+         %28 = OpAccessChain %_ptr_Uniform_float %20 %int_0 %27
+               OpStore %28 %25
+         %29 = OpAccessChain %_ptr_Uniform_float %19 %int_0 %int_1
+         %30 = OpAtomicFAddEXT %float %29 %uint_1 %uint_0 %float_0_5
+               OpReturn
+               OpFunctionEnd

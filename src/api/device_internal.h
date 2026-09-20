@@ -91,6 +91,7 @@ struct GPUDevice {
   uint8_t                      uslFma; /* same width bits, enabled native FMA */
   uint8_t                      uslDenormPreserve;
   uint8_t                      uslRoundingRTE;
+  uint8_t                      uslFloatAtomicAdd; // buffer/workgroup bits, enabled on the device
   bool                         uslFloatControls2;
   bool                         transientConfigured;
   bool                         transientFrameBegun;

@@ -970,6 +970,21 @@ mt_createDevice(GPUAdapter              * __restrict adapter,
   device->_priv            = deviceMT;
   device->inst             = adapter->inst;
   device->adapter          = adapter;
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    bool apple7 = [adapterMT->device supportsFamily:MTLGPUFamilyApple7];
+
+    if (apple7 || [adapterMT->device supportsFamily:MTLGPUFamilyMac2]) {
+      device->uslFloatAtomicAdd = 1u;
+    }
+#if defined(__MAC_27_0) && defined(__IPHONE_27_0)
+    if (@available(macOS 27.0, iOS 27.0, *)) {
+      if (apple7) {
+        device->uslTargetVersion  = 401u;
+        device->uslFloatAtomicAdd = 3u;
+      }
+    }
+#endif
+  }
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u) {
     MTLSize workgroupSize;
 

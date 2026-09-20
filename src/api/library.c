@@ -3107,6 +3107,10 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
       }
     }
   } else if (api->backend == GPU_BACKEND_METAL) {
+    if (device->uslTargetVersion >= 401u &&
+        us_cap_atom_text(&targetAtoms[targetAtomCount++], "msl4_1") != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS)) {
       if (us_cap_atom_init(
             &targetAtoms[targetAtomCount++],
@@ -3175,6 +3179,21 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
             USL_SEMANTIC_FEATURE_ID_STORAGE_TEXTURE_EXTENDED_FORMATS,
             0u,
             0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+  }
+  if (api->backend == GPU_BACKEND_METAL || api->backend == GPU_BACKEND_VULKAN) {
+    static const uint32_t floatAtomicFeatures[] = {
+      USL_SEMANTIC_FEATURE_ID_BUFFER_F32_ATOMIC_ADD,
+      USL_SEMANTIC_FEATURE_ID_WORKGROUP_F32_ATOMIC_ADD
+    };
+
+    for (uint32_t i = 0u; i < GPU_ARRAY_LEN(floatAtomicFeatures); i++) {
+      if ((device->uslFloatAtomicAdd & (1u << i)) &&
+          us_cap_atom_init(&targetAtoms[targetAtomCount++],
+                           USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+                           floatAtomicFeatures[i], 0u, 0u) != USLOk) {
         return GPU_ERROR_BACKEND_FAILURE;
       }
     }

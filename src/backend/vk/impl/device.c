@@ -657,6 +657,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceFeatures2                 memoryModelFeatures2 = {0};
   VkPhysicalDeviceShaderAtomicInt64Features atomic64Features = {0};
   VkPhysicalDeviceFeatures2                 atomic64Features2 = {0};
+#ifdef VK_EXT_shader_atomic_float
+  VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatAtomicFeatures = {0};
+  VkPhysicalDeviceFeatures2                    floatAtomicFeatures2 = {0};
+  bool                                         floatAtomicExtension = false;
+#endif
   VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
   VkPhysicalDeviceFeatures2                  descriptorFeatures2 = {0};
   VkPhysicalDeviceTimelineSemaphoreFeatures  timelineFeatures = {0};
@@ -1163,6 +1168,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
         shaderFmaExtension = true;
       }
 #endif
+#ifdef VK_EXT_shader_atomic_float
+      if (!strcmp(VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, extensions[i].extensionName)) {
+        floatAtomicExtension = true;
+      }
+#endif
 #ifdef VK_KHR_shader_float_controls2
       if (!strcmp(VK_KHR_SHADER_FLOAT_CONTROLS_2_EXTENSION_NAME, extensions[i].extensionName)) {
         floatControls2Extension = true;
@@ -1417,6 +1427,20 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
         }
         adapterVk->pipelineBinary = true;
       }
+    }
+  }
+#endif
+#ifdef VK_EXT_shader_atomic_float
+  if (getFeatures2 && floatAtomicExtension) {
+    floatAtomicFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
+    floatAtomicFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    floatAtomicFeatures2.pNext = &floatAtomicFeatures;
+    getFeatures2(raw, &floatAtomicFeatures2);
+    adapterVk->floatAtomicAdd = (floatAtomicFeatures.shaderBufferFloat32AtomicAdd ? 1u : 0u) |
+                               (floatAtomicFeatures.shaderSharedFloat32AtomicAdd ? 2u : 0u);
+    if (adapterVk->floatAtomicAdd &&
+        !vk_addDeviceExtension(adapterVk, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME)) {
+      goto fail;
     }
   }
 #endif
@@ -2643,6 +2667,9 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   VkPhysicalDevice16BitStorageFeatures storage16Features = {0};
   VkPhysicalDeviceVulkanMemoryModelFeatures memoryModelFeatures = {0};
   VkPhysicalDeviceShaderAtomicInt64Features atomic64Features = {0};
+#ifdef VK_EXT_shader_atomic_float
+  VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatAtomicFeatures = {0};
+#endif
   VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
   VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures = {0};
   VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {0};
@@ -2971,6 +2998,15 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
       deviceCI.pNext = &storage16Features;
     }
   }
+#ifdef VK_EXT_shader_atomic_float
+  if (adapterVk->floatAtomicAdd) {
+    floatAtomicFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
+    floatAtomicFeatures.pNext = (void *)deviceCI.pNext;
+    floatAtomicFeatures.shaderBufferFloat32AtomicAdd = (adapterVk->floatAtomicAdd & 1u) != 0u;
+    floatAtomicFeatures.shaderSharedFloat32AtomicAdd = (adapterVk->floatAtomicAdd & 2u) != 0u;
+    deviceCI.pNext = &floatAtomicFeatures;
+  }
+#endif
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u) {
     atomic64Features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES;
@@ -3285,6 +3321,10 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   device->uslDenormPreserve = adapterVk->denormPreserve;
   device->uslRoundingRTE = adapterVk->roundingRTE;
   device->uslFloatControls2 = adapterVk->floatControls2;
+#ifdef VK_EXT_shader_atomic_float
+  device->uslFloatAtomicAdd = (floatAtomicFeatures.shaderBufferFloat32AtomicAdd ? 1u : 0u) |
+                            (floatAtomicFeatures.shaderSharedFloat32AtomicAdd ? 2u : 0u);
+#endif
 #ifdef VK_KHR_shader_fma
   device->uslFma = (fmaFeatures.shaderFmaFloat16 ? 1u : 0u) |
                    (fmaFeatures.shaderFmaFloat32 ? 2u : 0u) |

@@ -1,0 +1,8 @@
+kern(64, 1, 1) float_atomic(
+  values: &mut [float] #buffer(0),
+  output: &mut [float] #buffer(1),
+  gid: uint3 #global_id
+) {
+  output[gid.x] = values.atomic_add(0u, 1.0);
+  values.atomic_add(1u, 0.5);
+}

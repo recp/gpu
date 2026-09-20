@@ -1,0 +1,14 @@
+kern(64, 1, 1) float_atomic(
+  values: &mut [float] #buffer(0),
+  output: &mut [float] #buffer(1),
+  group: uint3 #workgroup_id,
+  local: uint #local_index,
+  gid: uint3 #global_id
+) {
+  workgroup var shared: [float; 1];
+  if local == 0u { shared[0] = 0.0; }
+  workgroup_barrier();
+  output[gid.x] = shared.atomic_add(0u, 1.0);
+  workgroup_barrier();
+  if local == 0u { values[group.x] = shared[0]; }
+}

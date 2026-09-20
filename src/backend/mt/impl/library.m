@@ -53,6 +53,14 @@ mt_newLibraryWithSource(GPUDevice *device,
     return NULL;
   }
 
+#if defined(__MAC_27_0) && defined(__IPHONE_27_0)
+  if (@available(macOS 27.0, iOS 27.0, *)) {
+    if (device->uslTargetVersion >= 401u) {
+      options.languageVersion = MTLLanguageVersion4_1;
+    }
+  }
+#endif
+
   if ((compileFlags & GPU_SHADER_SOURCE_COMPILE_STRICT_IEEE) != 0u) {
     if (@available(macOS 15.0, iOS 18.0, *)) {
       options.mathMode                    = MTLMathModeSafe;

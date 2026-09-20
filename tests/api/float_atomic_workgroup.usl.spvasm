@@ -1,0 +1,83 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos; 0
+; Bound: 49
+; Schema: 0
+               OpCapability Shader
+               OpCapability AtomicFloat32AddEXT
+               OpExtension "SPV_EXT_shader_atomic_float_add"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %30 "float_atomic" %gl_WorkGroupID %gl_LocalInvocationIndex %gl_GlobalInvocationID
+               OpExecutionMode %30 LocalSize 64 1 1
+               OpDecorate %_runtimearr_float ArrayStride 4
+               OpDecorate %_struct_5 BufferBlock
+               OpMemberDecorate %_struct_5 0 Offset 0
+               OpDecorate %24 DescriptorSet 0
+               OpDecorate %24 Binding 0
+               OpDecorate %25 DescriptorSet 0
+               OpDecorate %25 Binding 1
+               OpDecorate %gl_WorkGroupID BuiltIn WorkgroupId
+               OpDecorate %gl_LocalInvocationIndex BuiltIn LocalInvocationIndex
+               OpDecorate %gl_GlobalInvocationID BuiltIn GlobalInvocationId
+       %void = OpTypeVoid
+          %2 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+%_runtimearr_float = OpTypeRuntimeArray %float
+  %_struct_5 = OpTypeStruct %_runtimearr_float
+%_ptr_Uniform__struct_5 = OpTypePointer Uniform %_struct_5
+       %uint = OpTypeInt 32 0
+     %v3uint = OpTypeVector %uint 3
+%_ptr_Input_v3uint = OpTypePointer Input %v3uint
+%_ptr_Input_uint = OpTypePointer Input %uint
+     %uint_1 = OpConstant %uint 1
+%_arr_float_uint_1 = OpTypeArray %float %uint_1
+%_ptr_Workgroup__arr_float_uint_1 = OpTypePointer Workgroup %_arr_float_uint_1
+       %bool = OpTypeBool
+     %uint_0 = OpConstant %uint 0
+    %float_0 = OpConstant %float 0
+        %int = OpTypeInt 32 1
+      %int_0 = OpConstant %int 0
+%_ptr_Workgroup_float = OpTypePointer Workgroup %float
+     %uint_2 = OpConstant %uint 2
+   %uint_264 = OpConstant %uint 264
+    %float_1 = OpConstant %float 1
+%_ptr_Uniform_float = OpTypePointer Uniform %float
+         %24 = OpVariable %_ptr_Uniform__struct_5 Uniform
+         %25 = OpVariable %_ptr_Uniform__struct_5 Uniform
+%gl_WorkGroupID = OpVariable %_ptr_Input_v3uint Input
+%gl_LocalInvocationIndex = OpVariable %_ptr_Input_uint Input
+%gl_GlobalInvocationID = OpVariable %_ptr_Input_v3uint Input
+         %29 = OpVariable %_ptr_Workgroup__arr_float_uint_1 Workgroup
+         %30 = OpFunction %void None %2
+         %31 = OpLabel
+         %32 = OpLoad %uint %gl_LocalInvocationIndex
+         %33 = OpIEqual %bool %32 %uint_0
+               OpSelectionMerge %36 None
+               OpBranchConditional %33 %34 %36
+         %34 = OpLabel
+         %35 = OpAccessChain %_ptr_Workgroup_float %29 %int_0
+               OpStore %35 %float_0
+               OpBranch %36
+         %36 = OpLabel
+               OpControlBarrier %uint_2 %uint_2 %uint_264
+         %37 = OpAccessChain %_ptr_Workgroup_float %29 %int_0
+         %38 = OpAtomicFAddEXT %float %37 %uint_2 %uint_0 %float_1
+         %39 = OpAccessChain %_ptr_Input_uint %gl_GlobalInvocationID %int_0
+         %40 = OpLoad %uint %39
+         %41 = OpAccessChain %_ptr_Uniform_float %25 %int_0 %40
+               OpStore %41 %38
+               OpControlBarrier %uint_2 %uint_2 %uint_264
+               OpSelectionMerge %43 None
+               OpBranchConditional %33 %43 %42
+         %42 = OpLabel
+               OpReturn
+         %43 = OpLabel
+         %44 = OpLoad %float %37
+         %45 = OpAccessChain %_ptr_Input_uint %gl_WorkGroupID %int_0
+         %46 = OpLoad %uint %45
+         %47 = OpAccessChain %_ptr_Uniform_float %24 %int_0 %46
+               OpStore %47 %44
+               OpBranch %48
+         %48 = OpLabel
+               OpReturn
+               OpFunctionEnd
