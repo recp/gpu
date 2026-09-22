@@ -3321,6 +3321,11 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   device->uslDenormPreserve = adapterVk->denormPreserve;
   device->uslRoundingRTE = adapterVk->roundingRTE;
   device->uslFloatControls2 = adapterVk->floatControls2;
+#if defined(_WIN32) || defined(WIN32)
+  device->uslHalfRoundtrip = gpu_uslVulkanHalfRoundtrip(adapterVk->props.vendorID,
+                                                       adapterVk->props.deviceID,
+                                                       adapterVk->props.driverVersion);
+#endif
 #ifdef VK_EXT_shader_atomic_float
   device->uslFloatAtomicAdd = (floatAtomicFeatures.shaderBufferFloat32AtomicAdd ? 1u : 0u) |
                             (floatAtomicFeatures.shaderSharedFloat32AtomicAdd ? 2u : 0u);

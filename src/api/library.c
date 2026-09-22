@@ -2988,6 +2988,10 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice *device,
         return GPU_ERROR_BACKEND_FAILURE;
       }
     }
+    if (device->uslHalfRoundtrip &&
+        us_cap_atom_text(&targetAtoms[targetAtomCount++], "spirv_f16_roundtrip") != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
     if (device->uslFloatControls2 &&
         us_cap_atom_text(&targetAtoms[targetAtomCount++], "spirv_float_controls2") != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;

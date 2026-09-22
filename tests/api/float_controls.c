@@ -8,6 +8,7 @@
 
 static uint32_t observedMask;
 static uint32_t observedModes;
+static uint32_t observedHalfFence;
 static uint32_t observedFma;
 static uint32_t observedFmaCount;
 static uint32_t observedDenorm;
@@ -55,6 +56,10 @@ capture_binary(GPUDevice *device, const void *data, uint64_t size) {
       observedFma |= widths[words[i + 1u]];
       observedFmaCount++;
     }
+    if ((words[i] & 0xffffu) == SpvOpFMul && length == 5u &&
+        words[i + 1u] < words[3] && widths[words[i + 1u]] == 1u) {
+      observedHalfFence++;
+    }
     i += length;
   }
   for (size_t i = 5u; valid && i < count;) {
@@ -100,7 +105,7 @@ main(int argc, char **argv) {
   info.sourceSize                  = (uint64_t)size;
   info.disableDiskCache            = true;
   /* Repeat in one process: capability-sensitive cache keys must stay distinct. */
-  for (uint32_t round = 0u; round < 2u; ++round) {
+  for (uint32_t round = 0u; round < 3u; ++round) {
     for (uint32_t test = 0u; test < 128u; ++test) {
       for (uint32_t controls2 = 0u; controls2 < 2u; ++controls2) {
         uint32_t mask       = test < 64u ? test >> 3u : 7u;
@@ -118,6 +123,8 @@ main(int argc, char **argv) {
         device.uslDenormPreserve = (uint8_t)denormMask;
         device.uslRoundingRTE = (uint8_t)rteMask;
         device.uslFloatControls2 = controls2 != 0u;
+        device.uslHalfRoundtrip = round == 1u && (mask & denormMask & rteMask & 1u);
+        observedHalfFence = 0u;
         observedMask = observedModes = calls = 0u;
         observedFma = observedFmaCount = 0u;
         observedDenorm = observedRTE = observedDefaults = 0u;
@@ -128,7 +135,8 @@ main(int argc, char **argv) {
             observedFma != fmaMask || observedFmaCount != expectedFma ||
             observedDenorm != (strict ? denormMask : 0u) ||
             observedRTE != (strict ? rteMask : 0u) ||
-            observedDefaults != (modern ? 1u : 0u)) {
+            observedHalfFence != (strict && device.uslHalfRoundtrip ? 1u : 0u) ||
+            observedDefaults != (modern ? 3u : 0u)) {
           fprintf(stderr, "float controls round %u mask %u fma %u: result=%d calls=%u mask=%u modes=%u fma=%u/%u\n",
                   round, mask, fmaMask, result, calls, observedMask, observedModes, observedFma, observedFmaCount);
           ok = 0;

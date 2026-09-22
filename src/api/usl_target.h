@@ -165,6 +165,12 @@ gpu_uslVulkanProfile(uint32_t major, uint32_t minor) {
   return USL_TARGET_PROFILE_VULKAN_1_0;
 }
 
+static inline bool
+gpu_uslVulkanHalfRoundtrip(uint32_t vendor, uint32_t device, uint32_t driver) {
+  /* Confirmed on Windows T1200, NVIDIA 596.52; expand only with native proof. */
+  return vendor == 0x10deu && device == 0x1fbcu && driver == 2500657152u;
+}
+
 static inline int
 gpu_uslDX12NativeEnabled(void) {
   const char *value = getenv("GPU_DX12_NATIVE_DXIL");

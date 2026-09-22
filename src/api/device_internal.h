@@ -93,6 +93,7 @@ struct GPUDevice {
   uint8_t                      uslRoundingRTE;
   uint8_t                      uslFloatAtomicAdd; // buffer/workgroup bits, enabled on the device
   bool                         uslFloatControls2;
+  bool                         uslHalfRoundtrip;
   bool                         transientConfigured;
   bool                         transientFrameBegun;
   bool                         transientCpuPtrOwned;
