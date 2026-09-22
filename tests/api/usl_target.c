@@ -67,11 +67,24 @@ main(void) {
   ok &= expect_profile("future Vulkan",
                        2u, 0u,
                        USL_TARGET_PROFILE_VULKAN_1_4);
+#if defined(_WIN32) || defined(WIN32)
   ok &= gpu_uslVulkanHalfRoundtrip(0x10deu, 0x1fbcu, 2500657152u);
+#else
+  ok &= !gpu_uslVulkanHalfRoundtrip(0x10deu, 0x1fbcu, 2500657152u);
+#endif
+#if defined(__linux__)
+  ok &= gpu_uslVulkanHalfRoundtrip(0x10deu, 0x2684u, 2496987136u);
+#else
+  ok &= !gpu_uslVulkanHalfRoundtrip(0x10deu, 0x2684u, 2496987136u);
+#endif
   ok &= !gpu_uslVulkanHalfRoundtrip(0x1002u, 0x1fbcu, 2500657152u);
   ok &= !gpu_uslVulkanHalfRoundtrip(0x10deu, 0x2684u, 2500657152u);
   ok &= !gpu_uslVulkanHalfRoundtrip(0x10deu, 0x1fbcu, 2500657151u);
   ok &= !gpu_uslVulkanHalfRoundtrip(0x10deu, 0x1fbcu, 2500657153u);
+  ok &= !gpu_uslVulkanHalfRoundtrip(0x1002u, 0x2684u, 2496987136u);
+  ok &= !gpu_uslVulkanHalfRoundtrip(0x10deu, 0x1fbcu, 2496987136u);
+  ok &= !gpu_uslVulkanHalfRoundtrip(0x10deu, 0x2684u, 2496987135u);
+  ok &= !gpu_uslVulkanHalfRoundtrip(0x10deu, 0x2684u, 2496987137u);
   ok &= gpu_uslDefaultTarget(GPU_BACKEND_CUDA, &target);
   ok &= target.backend == USL_BACKEND_PTX;
   ok &= target.profile == USL_TARGET_PROFILE_NONE;

@@ -167,8 +167,17 @@ gpu_uslVulkanProfile(uint32_t major, uint32_t minor) {
 
 static inline bool
 gpu_uslVulkanHalfRoundtrip(uint32_t vendor, uint32_t device, uint32_t driver) {
-  /* Confirmed on Windows T1200, NVIDIA 596.52; expand only with native proof. */
+  /* Exact native-tested device/driver pairs; do not widen to a driver range. */
+#if defined(_WIN32) || defined(WIN32)
   return vendor == 0x10deu && device == 0x1fbcu && driver == 2500657152u;
+#elif defined(__linux__)
+  return vendor == 0x10deu && device == 0x2684u && driver == 2496987136u;
+#else
+  (void)vendor;
+  (void)device;
+  (void)driver;
+  return false;
+#endif
 }
 
 static inline int
