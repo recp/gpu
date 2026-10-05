@@ -580,6 +580,16 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
   gpu_attach_usl_validation(gpu-compute-metal-usl
                         gpu-metal-fixtures
                         "${GPU_METAL_COMPUTE_US}")
+  if(GPU_BUILD_TESTS)
+    add_test(NAME metal-compute
+             COMMAND gpu-compute-metal-usl)
+    set_tests_properties(metal-compute PROPERTIES
+      ENVIRONMENT
+        "GPU_METAL_MODE=auto;GPU_SAMPLE_EXIT_AFTER_FRAMES=96;GPU_SAMPLE_ASSERT_ZERO_ALLOC=1;MTL_DEBUG_LAYER=1"
+      RUN_SERIAL TRUE
+      TIMEOUT 30
+    )
+  endif()
 
   add_executable(gpu-compute-buffer-metal-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/compute-buffer-usl/main.m
@@ -588,6 +598,16 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL AND
   gpu_attach_usl_validation(gpu-compute-buffer-metal-usl
                         gpu-metal-fixtures
                         "${GPU_METAL_COMPUTE_BUFFER_US}")
+  if(GPU_BUILD_TESTS)
+    add_test(NAME metal-compute-buffer
+             COMMAND gpu-compute-buffer-metal-usl)
+    set_tests_properties(metal-compute-buffer PROPERTIES
+      ENVIRONMENT
+        "GPU_METAL_MODE=auto;GPU_SAMPLE_EXIT_AFTER_FRAMES=96;GPU_SAMPLE_ASSERT_ZERO_ALLOC=1;MTL_DEBUG_LAYER=1"
+      RUN_SERIAL TRUE
+      TIMEOUT 30
+    )
+  endif()
 
   add_executable(gpu-compute-atomics-metal-usl
     ${PROJECT_SOURCE_DIR}/tests/validation/compute-atomics-usl/main.c

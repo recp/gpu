@@ -72,6 +72,8 @@ typedef struct ComputeParams {
 }
 
 - (void)frameCompleted;
+- (void)failAndStop;
+- (void)cleanupGPU;
 - (BOOL)validationFailed;
 @end
 
@@ -86,8 +88,6 @@ static const QuadVertex kQuadVertices[] = {
   { {  0.8f, -0.8f, 0.0f, 1.0f }, { 1.0f, 1.0f } },
   { {  0.8f,  0.8f, 0.0f, 1.0f }, { 1.0f, 0.0f } },
 };
-
-static volatile int gComputeUSLValidationFailed = 0;
 
 static void
 ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
@@ -476,7 +476,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPURenderPassEncoder        *render         = NULL;
   GPUResult                    submitResult   = GPU_OK;
 
-  if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
+  if (_terminating || (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames)) {
     return;
   }
 
@@ -605,6 +605,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   if (submitResult != GPU_OK) {
     NSLog(@"GPUFinishFrame failed: %d", submitResult);
+    [self failAndStop];
   } else {
     _submittedFrames++;
 
@@ -612,12 +613,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                                  (uint32_t)_submittedFrames,
                                  _assertZeroAlloc,
                                  "GPU Metal compute texture copy")) {
-      _validationFailed           = YES;
-      gComputeUSLValidationFailed = 1;
-      _terminating                = YES;
-      [_timer invalidate];
-      _timer = nil;
-      [NSApp terminate:nil];
+      [self failAndStop];
       return;
     }
   }
@@ -669,29 +665,38 @@ cleanup:
   return YES;
 }
 
+- (void)failAndStop {
+  _validationFailed = YES;
+  _terminating      = YES;
+  [_timer invalidate];
+  _timer = nil;
+  GPUSampleStopApplication();
+}
+
 - (void)frameCompleted {
-  _completedFrames++;
+  /* synchronous readback must run after the native completion callback returns. */
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self->_terminating) {
+      return;
+    }
 
-  if (_exitAfterFrames <= 0 || _terminating) {
-    return;
-  }
+    self->_completedFrames++;
 
-  if (![self verifyReadback]) {
-    _validationFailed           = YES;
-    gComputeUSLValidationFailed = 1;
-    exit(1);
-  }
+    if (![self verifyReadback]) {
+      [self failAndStop];
+      return;
+    }
 
-  if (_completedFrames >= _exitAfterFrames) {
-    _terminating = YES;
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [NSApp terminate:nil];
-    });
-  }
+    if (self->_completedFrames >= self->_exitAfterFrames) {
+      NSLog(@"GPU compute texture validated %ld frames", (long)self->_completedFrames);
+      self->_terminating = YES;
+      GPUSampleStopApplication();
+    }
+  });
 }
 
 - (BOOL)validationFailed {
-  return _validationFailed || gComputeUSLValidationFailed != 0;
+  return _validationFailed;
 }
 
 - (void)tick:(NSTimer *)timer {
@@ -700,6 +705,16 @@ cleanup:
 }
 
 - (void)cleanupGPU {
+  _terminating = YES;
+  [_timer invalidate];
+  _timer = nil;
+
+  if (_queue && !GPUSampleWaitForGPU(_device, _queue)) {
+    NSLog(@"GPU compute texture shutdown wait failed");
+    _validationFailed = YES;
+    return;
+  }
+
   if (_samplerBindGroup) {
     GPUDestroyBindGroup(_samplerBindGroup);
     _samplerBindGroup = NULL;
@@ -794,16 +809,12 @@ cleanup:
   _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
 
   if (![self setupWindow]) {
-    _validationFailed           = YES;
-    gComputeUSLValidationFailed = 1;
-    [NSApp terminate:nil];
+    [self failAndStop];
     return;
   }
 
   if (![self setupGPU]) {
-    _validationFailed           = YES;
-    gComputeUSLValidationFailed = 1;
-    [NSApp terminate:nil];
+    [self failAndStop];
     return;
   }
 
@@ -851,9 +862,8 @@ cleanup:
 
 - (void)windowWillClose:(NSNotification *)notification {
   (void)notification;
-  [_timer invalidate];
-  _timer = nil;
-  [self cleanupGPU];
+  _terminating = YES;
+  GPUSampleStopApplication();
 }
 
 @end
@@ -871,6 +881,7 @@ main(int argc, const char *argv[]) {
     [NSApp setDelegate:delegate];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp run];
+    [delegate cleanupGPU];
 
     return [delegate validationFailed] ? 1 : 0;
   }

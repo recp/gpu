@@ -18,8 +18,57 @@
 #define gpu_sample_app_h
 
 #import <AppKit/AppKit.h>
+#include <string.h>
 
 #import "../../include/gpu/gpu.h"
+
+static inline void
+GPUSampleStopApplication(void) {
+  NSEvent *event;
+
+  [NSApp stop:nil];
+  event = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
+                             location:NSZeroPoint
+                        modifierFlags:0
+                            timestamp:0
+                         windowNumber:0
+                              context:nil
+                              subtype:0
+                                data1:0
+                                data2:0];
+  [NSApp postEvent:event atStart:YES];
+}
+
+static inline BOOL
+GPUSampleWaitForGPU(GPUDevice *device, GPUQueue *queue) {
+  GPUQueueSubmitInfo submitInfo;
+  GPUCommandBuffer  *buffers[1];
+  GPUCommandBuffer  *cmdb;
+  GPUFence          *fence;
+  GPUResult          result;
+
+  if (GPUCreateFence(device, NULL, &fence) != GPU_OK) {
+    return NO;
+  }
+
+  result = GPUAcquireCommandBuffer(queue, "sample-shutdown", &cmdb);
+
+  if (result == GPU_OK) {
+    memset(&submitInfo, 0, sizeof(submitInfo));
+    buffers[0]                    = cmdb;
+    submitInfo.ppCommandBuffers   = buffers;
+    submitInfo.commandBufferCount = 1u;
+    submitInfo.fence              = fence;
+    result                        = GPUQueueSubmit(queue, &submitInfo);
+
+    if (result == GPU_OK) {
+      result = GPUWaitFence(fence, UINT64_MAX);
+    }
+  }
+
+  GPUDestroyFence(fence);
+  return result == GPU_OK;
+}
 
 static inline BOOL
 GPUSampleCreateWindow(NSString            *title,

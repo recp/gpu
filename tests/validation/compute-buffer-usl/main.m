@@ -69,6 +69,8 @@ typedef struct ComputeConstants {
 }
 
 - (void)frameCompleted;
+- (void)failAndStop;
+- (void)cleanupGPU;
 - (BOOL)validationFailed;
 @end
 
@@ -82,8 +84,6 @@ static const uint16_t         kIndices[]          = {0u, 1u, 2u};
 static const uint32_t         kDispatchArgs[]     = {3u, 1u, 1u};
 static const uint32_t         kExpectedDrawArgs[] = {3u, 1u, 0u, 0u, 0u};
 static const ComputeConstants kComputeConstants  = {{1.0f, 1.0f, 1.0f, 1.0f}};
-
-static volatile int gComputeBufferValidationFailed = 0;
 
 static void
 ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
@@ -369,7 +369,7 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPURenderPassEncoder        *render       = NULL;
   GPUResult                    submitResult = GPU_OK;
 
-  if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
+  if (_terminating || (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames)) {
     return;
   }
 
@@ -455,6 +455,7 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   if (submitResult != GPU_OK) {
     NSLog(@"GPUFinishFrame failed: %d", submitResult);
+    [self failAndStop];
   } else {
     _submittedFrames++;
 
@@ -462,12 +463,7 @@ ComputeBufferFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                                  (uint32_t)_submittedFrames,
                                  _assertZeroAlloc,
                                  "GPU compute render")) {
-      _validationFailed              = YES;
-      gComputeBufferValidationFailed = 1;
-      _terminating                   = YES;
-      [_timer invalidate];
-      _timer = nil;
-      [NSApp terminate:nil];
+      [self failAndStop];
       return;
     }
   }
@@ -541,32 +537,38 @@ cleanup:
   return YES;
 }
 
+- (void)failAndStop {
+  _validationFailed = YES;
+  _terminating      = YES;
+  [_timer invalidate];
+  _timer = nil;
+  GPUSampleStopApplication();
+}
+
 - (void)frameCompleted {
-  _completedFrames++;
-
-  if (_exitAfterFrames <= 0 || _terminating) {
-    return;
-  }
-
-  if (![self verifyReadback]) {
-    _validationFailed              = YES;
-    gComputeBufferValidationFailed = 1;
-
-    if (_exitAfterFrames > 0) {
-      exit(1);
+  /* synchronous readback must run after the native completion callback returns. */
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self->_terminating) {
+      return;
     }
-  }
 
-  if (_completedFrames >= _exitAfterFrames) {
-    _terminating = YES;
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [NSApp terminate:nil];
-    });
-  }
+    self->_completedFrames++;
+
+    if (![self verifyReadback]) {
+      [self failAndStop];
+      return;
+    }
+
+    if (self->_completedFrames >= self->_exitAfterFrames) {
+      NSLog(@"GPU compute buffer validated %ld frames", (long)self->_completedFrames);
+      self->_terminating = YES;
+      GPUSampleStopApplication();
+    }
+  });
 }
 
 - (BOOL)validationFailed {
-  return _validationFailed || gComputeBufferValidationFailed != 0;
+  return _validationFailed;
 }
 
 - (void)tick:(NSTimer *)timer {
@@ -575,6 +577,16 @@ cleanup:
 }
 
 - (void)cleanupGPU {
+  _terminating = YES;
+  [_timer invalidate];
+  _timer = nil;
+
+  if (_queue && !GPUSampleWaitForGPU(_device, _queue)) {
+    NSLog(@"GPU compute buffer shutdown wait failed");
+    _validationFailed = YES;
+    return;
+  }
+
   if (_computeBindGroup) {
     GPUDestroyBindGroup(_computeBindGroup);
     _computeBindGroup = NULL;
@@ -648,12 +660,12 @@ cleanup:
   (void)notification;
 
   if (![self setupWindow]) {
-    [NSApp terminate:nil];
+    [self failAndStop];
     return;
   }
 
   if (![self setupGPU]) {
-    [NSApp terminate:nil];
+    [self failAndStop];
     return;
   }
 
@@ -709,9 +721,8 @@ cleanup:
 
 - (void)windowWillClose:(NSNotification *)notification {
   (void)notification;
-  [_timer invalidate];
-  _timer = nil;
-  [self cleanupGPU];
+  _terminating = YES;
+  GPUSampleStopApplication();
 }
 
 @end
@@ -729,6 +740,7 @@ main(int argc, const char *argv[]) {
     delegate     = [[ComputeBufferUSLApp alloc] init];
     app.delegate = delegate;
     [app run];
+    [delegate cleanupGPU];
 
     return [delegate validationFailed] ? 1 : 0;
   }
