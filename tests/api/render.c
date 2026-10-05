@@ -35,7 +35,10 @@ typedef enum RenderReadbackDrawMode {
   RENDER_READBACK_DRAW_OCCLUSION,
   RENDER_READBACK_DRAW_MSAA,
   RENDER_READBACK_DRAW_MRT,
-  RENDER_READBACK_DRAW_COLOR_WRITE_NONE
+  RENDER_READBACK_DRAW_COLOR_WRITE_NONE,
+  RENDER_READBACK_DRAW_R32_BLEND,
+  RENDER_READBACK_DRAW_RG32_BLEND,
+  RENDER_READBACK_DRAW_RGBA32_BLEND
 } RenderReadbackDrawMode;
 
 typedef struct RenderIndirectArgs {
@@ -79,6 +82,8 @@ static const float kFullscreenTriangle[] = {
    3.0f, -1.0f,
   -1.0f,  3.0f
 };
+
+static const float floatBlendExpected[] = {0.5f, 0.25f, 2.0f, 1.5f};
 
 static const float kMultiTriangles[] = {
   -1.0f, -1.0f,
@@ -1325,6 +1330,12 @@ render_readback_label(RenderReadbackDrawMode mode, int clipped) {
       return "api-render-readback-mrt";
     case RENDER_READBACK_DRAW_COLOR_WRITE_NONE:
       return "api-render-readback-color-write-none";
+    case RENDER_READBACK_DRAW_R32_BLEND:
+      return "api-render-readback-r32-blend";
+    case RENDER_READBACK_DRAW_RG32_BLEND:
+      return "api-render-readback-rg32-blend";
+    case RENDER_READBACK_DRAW_RGBA32_BLEND:
+      return "api-render-readback-rgba32-blend";
     case RENDER_READBACK_DRAW:
     default:
       return "api-render-readback";
@@ -1414,6 +1425,7 @@ check_render_readback_case(GPUDevice             *device,
                                                   : (const void *)kTriangleIndices;
   const uint64_t               indexDataSize  = multi ? sizeof(kMultiTriangleIndices)
                                                   : sizeof(kTriangleIndices);
+  GPUFormatCapabilities        formatCaps;
   GPUQueue                    *queue;
   GPUShaderLibrary            *library        = NULL;
   GPURenderPipeline           *pipeline       = NULL;
@@ -1458,6 +1470,42 @@ check_render_readback_case(GPUDevice             *device,
   size_t                       centerOffset;
   int                          ok = 0;
   const void                  *argsData;
+  float                        value;
+  GPUFormat                    format;
+  uint32_t                     componentCount;
+  uint32_t                     x, y, c;
+  bool                         floatBlend;
+
+  floatBlend     = mode == RENDER_READBACK_DRAW_R32_BLEND
+                   || mode == RENDER_READBACK_DRAW_RG32_BLEND
+                   || mode == RENDER_READBACK_DRAW_RGBA32_BLEND;
+  format         = GPU_FORMAT_BGRA8_UNORM;
+  componentCount = 0u;
+
+  if (floatBlend) {
+    switch (mode) {
+      case RENDER_READBACK_DRAW_R32_BLEND:
+        format         = GPU_FORMAT_R32_FLOAT;
+        componentCount = 1u;
+        break;
+      case RENDER_READBACK_DRAW_RG32_BLEND:
+        format         = GPU_FORMAT_RG32_FLOAT;
+        componentCount = 2u;
+        break;
+      default:
+        format         = GPU_FORMAT_RGBA32_FLOAT;
+        componentCount = 4u;
+        break;
+    }
+
+    if (GPUGetFormatCapabilities(device->adapter, format, &formatCaps) != GPU_OK) {
+      return 0;
+    }
+
+    if (!formatCaps.blendable && gpuDeviceApi(device)->backend != GPU_BACKEND_METAL) {
+      return 1;
+    }
+  }
 
   if (!(queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u))) {
     fprintf(stderr, "failed to get graphics queue for %s test\n", label);
@@ -1487,7 +1535,7 @@ check_render_readback_case(GPUDevice             *device,
     goto cleanup;
   }
 
-  colorTargets[0].format = GPU_FORMAT_BGRA8_UNORM;
+  colorTargets[0].format = format;
   colorTargets[1].format = GPU_FORMAT_BGRA8_UNORM;
 
   if (colorWriteNone) {
@@ -1504,6 +1552,17 @@ check_render_readback_case(GPUDevice             *device,
     colorTargets[0].blend.alpha.op        = GPU_BLEND_OP_ADD;
     colorTargets[0].blend.writeMask       = GPU_COLOR_WRITE_ALL;
     colorTargets[1].blend.writeMask       = GPU_COLOR_WRITE_G;
+  }
+
+  if (floatBlend) {
+    colorTargets[0].blend.enabled         = true;
+    colorTargets[0].blend.color.srcFactor = GPU_BLEND_FACTOR_ONE;
+    colorTargets[0].blend.color.dstFactor = GPU_BLEND_FACTOR_ONE;
+    colorTargets[0].blend.color.op        = GPU_BLEND_OP_ADD;
+    colorTargets[0].blend.alpha.srcFactor = GPU_BLEND_FACTOR_ONE;
+    colorTargets[0].blend.alpha.dstFactor = GPU_BLEND_FACTOR_ONE;
+    colorTargets[0].blend.alpha.op        = GPU_BLEND_OP_ADD;
+    colorTargets[0].blend.writeMask       = GPU_COLOR_WRITE_ALL;
   }
 
   attr.shaderLocation         = 0u;
@@ -1636,7 +1695,7 @@ check_render_readback_case(GPUDevice             *device,
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = label;
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
-  textureInfo.format           = GPU_FORMAT_BGRA8_UNORM;
+  textureInfo.format           = format;
   textureInfo.width            = width;
   textureInfo.height           = height;
   textureInfo.depthOrLayers    = 1u;
@@ -1654,7 +1713,7 @@ check_render_readback_case(GPUDevice             *device,
   viewInfo.chain.structSize = sizeof(viewInfo);
   viewInfo.label            = label;
   viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
-  viewInfo.format           = GPU_FORMAT_BGRA8_UNORM;
+  viewInfo.format           = format;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
 
@@ -1701,6 +1760,14 @@ check_render_readback_case(GPUDevice             *device,
   colors[0].clearColor.float32[1] = 0.0f;
   colors[0].clearColor.float32[2] = mrt ? 1.0f : 0.0f;
   colors[0].clearColor.float32[3] = 1.0f;
+
+  if (floatBlend) {
+    colors[0].clearColor.float32[0] = -0.5f;
+    colors[0].clearColor.float32[1] = 0.25f;
+    colors[0].clearColor.float32[2] = 2.0f;
+    colors[0].clearColor.float32[3] = 0.5f;
+  }
+
   colors[1]                       = colors[0];
   colors[1].view                  = targetView2;
   colors[1].resolveView           = NULL;
@@ -1901,7 +1968,28 @@ check_render_readback_case(GPUDevice             *device,
     goto cleanup;
   }
 
-  if (mrt) {
+  if (floatBlend) {
+    for (y = 0u; y < height; y++) {
+      for (x = 0u; x < width; x++) {
+        for (c = 0u; c < componentCount; c++) {
+          centerOffset = (size_t)y * rowPitch + (size_t)(x * componentCount + c) * sizeof(float);
+          memcpy(&value, pixels + centerOffset, sizeof(value));
+
+          if (value != floatBlendExpected[c]) {
+            fprintf(stderr,
+                    "%s pixel %u/%u/%u: %g expected %g\n",
+                    label,
+                    x,
+                    y,
+                    c,
+                    value,
+                    floatBlendExpected[c]);
+            goto cleanup;
+          }
+        }
+      }
+    }
+  } else if (mrt) {
     centerOffset = (size_t)2u * rowPitch + 2u * 4u;
 
     if (pixels[centerOffset + 0u] < 96u
@@ -2022,6 +2110,18 @@ check_render_readback(GPUDevice *device, const char *mrtBytecodePath) {
                                        mrtBytecodePath)
          && check_render_readback_case(device,
                                        RENDER_READBACK_DRAW_COLOR_WRITE_NONE,
+                                       0,
+                                       mrtBytecodePath)
+         && check_render_readback_case(device,
+                                       RENDER_READBACK_DRAW_R32_BLEND,
+                                       0,
+                                       mrtBytecodePath)
+         && check_render_readback_case(device,
+                                       RENDER_READBACK_DRAW_RG32_BLEND,
+                                       0,
+                                       mrtBytecodePath)
+         && check_render_readback_case(device,
+                                       RENDER_READBACK_DRAW_RGBA32_BLEND,
                                        0,
                                        mrtBytecodePath);
 }

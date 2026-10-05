@@ -593,7 +593,6 @@ mt_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
 
   if (mt_isFloat32Format(format)) {
     outCaps->filterable = adapterMT->float32Filterable;
-    outCaps->blendable  = false;
   }
 
   if (outCaps->colorAttachment) {
