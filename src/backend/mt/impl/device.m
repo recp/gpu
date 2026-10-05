@@ -594,6 +594,13 @@ mt_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
     return;
   }
 
+  if (format == GPU_FORMAT_RGB9E5_UFLOAT && !adapterMT->appleFamily2) {
+    memset(outCaps, 0, sizeof(*outCaps));
+    outCaps->sampled    = true;
+    outCaps->filterable = true;
+    return;
+  }
+
   if (outCaps->depthStencil) {
     if (format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8
         && !adapterMT->depth24Supported) {

@@ -27,7 +27,8 @@ typedef enum FilterSupport {
 typedef enum SampleSupport {
   SAMPLES_DEFAULT,
   SAMPLES_INTEGER32,
-  SAMPLES_WIDE_FLOAT
+  SAMPLES_WIDE_FLOAT,
+  SAMPLES_APPLE
 } SampleSupport;
 
 typedef struct FormatCase {
@@ -49,6 +50,9 @@ static const FormatCase cases[] = {
   {GPU_FORMAT_R32_FLOAT, FILTER_FLOAT32, MTLPixelFormatR32Float, SAMPLES_DEFAULT, false},
   {GPU_FORMAT_RG32_FLOAT, FILTER_FLOAT32, MTLPixelFormatRG32Float, SAMPLES_WIDE_FLOAT, false},
   {GPU_FORMAT_RGBA32_FLOAT, FILTER_FLOAT32, MTLPixelFormatRGBA32Float, SAMPLES_WIDE_FLOAT, false},
+  {GPU_FORMAT_RGB10A2_UNORM, FILTER_ALWAYS, MTLPixelFormatRGB10A2Unorm, SAMPLES_DEFAULT, false},
+  {GPU_FORMAT_RG11B10_UFLOAT, FILTER_ALWAYS, MTLPixelFormatRG11B10Float, SAMPLES_DEFAULT, false},
+  {GPU_FORMAT_RGB9E5_UFLOAT, FILTER_ALWAYS, MTLPixelFormatRGB9E5Float, SAMPLES_APPLE, false},
   {GPU_FORMAT_DEPTH16_UNORM, FILTER_ALWAYS, MTLPixelFormatDepth16Unorm, SAMPLES_DEFAULT, true},
   {GPU_FORMAT_DEPTH32_FLOAT, FILTER_FLOAT32, MTLPixelFormatDepth32Float, SAMPLES_DEFAULT, true},
   {GPU_FORMAT_DEPTH32_FLOAT_STENCIL8, FILTER_DEPTH32_STENCIL,
@@ -75,18 +79,20 @@ check_policy(GPUAdapter *adapter) {
   GPUSampleCountFlags   expectedSamples;
   uint32_t              flags, mask, i;
   uint32_t              failures = 0u;
+  bool                  expectedColor;
   bool                  expectedFilter;
   bool                  supported;
 
   native = adapter->_priv;
 
   /* vary cached cold-path facts without sending synthetic capabilities to Metal. */
-  for (flags = 0u; flags < 32u; flags++) {
+  for (flags = 0u; flags < 64u; flags++) {
     native->float32Filterable        = (flags & 1u) != 0u;
     native->msaa32Supported          = (flags & 2u) != 0u;
     native->depth24Supported         = (flags & 4u) != 0u;
     native->depth32StencilFilterable = (flags & 8u) != 0u;
     native->wideFloatMSAA            = (flags & 16u) != 0u;
+    native->appleFamily2             = (flags & 32u) != 0u;
 
     for (mask = 0u; mask < GPU_ARRAY_LEN(sampleMasks); mask++) {
       native->sampleCounts = sampleMasks[mask];
@@ -95,9 +101,11 @@ check_policy(GPUAdapter *adapter) {
         test            = &cases[i];
         supported       = test->format != GPU_FORMAT_DEPTH24_UNORM_STENCIL8
                           || (flags & 4u) != 0u;
+        expectedColor   = supported && !test->depth
+                          && (test->samples != SAMPLES_APPLE || (flags & 32u));
         expectedSamples = sampleMasks[mask];
 
-        if (!supported) {
+        if (!supported || (!test->depth && !expectedColor)) {
           expectedSamples = 0u;
         } else if ((test->samples == SAMPLES_INTEGER32 && !(flags & 2u))
                    || (test->samples == SAMPLES_WIDE_FLOAT && !(flags & 16u))) {
@@ -114,7 +122,9 @@ check_policy(GPUAdapter *adapter) {
             || caps.filterable != expectedFilter
             || caps.sampled != supported
             || caps.depthStencil != (supported && test->depth)
-            || caps.colorAttachment != (supported && !test->depth)) {
+            || caps.colorAttachment != expectedColor
+            || caps.blendable != (expectedColor && test->filter != FILTER_NONE)
+            || (test->samples == SAMPLES_APPLE && caps.storage)) {
           fprintf(stderr, "format=%u flags=%u mask=%u: samples=%u filter=%u\n",
                   test->format, flags, mask, caps.supportedSampleCounts, caps.filterable);
           failures++;
@@ -123,7 +133,8 @@ check_policy(GPUAdapter *adapter) {
     }
   }
 
-  printf("format-policy: 1024 cases, %u failures\n", failures);
+  printf("format-policy: %zu cases, %u failures\n",
+         64u * GPU_ARRAY_LEN(sampleMasks) * GPU_ARRAY_LEN(cases), failures);
   return failures == 0u;
 }
 
@@ -142,6 +153,11 @@ check_native(GPUAdapter *adapter) {
   native        = adapter->_priv;
   device        = native->device;
   stencilFilter = [device supportsFamily:MTLGPUFamilyMac2];
+
+  if (native->appleFamily2 != [device supportsFamily:MTLGPUFamilyApple2]) {
+    fprintf(stderr, "native Apple format support cache mismatch\n");
+    return false;
+  }
 
   if (@available(macOS 14.0, *)) {
     stencilFilter |= [device supportsFamily:MTLGPUFamilyApple9];
