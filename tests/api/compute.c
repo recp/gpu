@@ -20,6 +20,10 @@
 #include "../../src/api/compute_internal.h"
 #include "../../src/api/device_internal.h"
 
+#if defined(__APPLE__)
+#  include <sys/stat.h>
+#endif
+
 typedef enum ComputeReadbackMode {
   COMPUTE_READBACK_DIRECT = 0,
   COMPUTE_READBACK_INDIRECT,
@@ -185,6 +189,12 @@ cleanup:
 static int
 check_compute_disk_cache(GPUDevice                    *device,
                          GPUComputePipelineCreateInfo *info) {
+#if defined(__APPLE__)
+  struct stat                archiveBefore;
+  struct stat                metadataBefore;
+  struct stat                archiveAfter;
+  struct stat                metadataAfter;
+#endif
   GPUPipelineCacheCreateInfo cacheInfo = {0};
   char                       path[160];
   char                       metadataPath[168];
@@ -268,6 +278,14 @@ check_compute_disk_cache(GPUDevice                    *device,
     goto cleanup;
   }
 
+#if defined(__APPLE__)
+  if (api->backend == GPU_BACKEND_METAL
+      && (stat(path, &archiveBefore) != 0 || stat(metadataPath, &metadataBefore) != 0)) {
+    fprintf(stderr, "failed to snapshot Metal pipeline cache files\n");
+    goto cleanup;
+  }
+#endif
+
   if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
     fprintf(stderr, "native compute pipeline disk cache reopen failed\n");
     goto cleanup;
@@ -279,6 +297,24 @@ check_compute_disk_cache(GPUDevice                    *device,
     fprintf(stderr, "native compute pipeline create from reopened cache failed\n");
     goto cleanup;
   }
+
+  GPUDestroyComputePipeline(pipeline);
+  pipeline    = NULL;
+  info->cache = NULL;
+  GPUDestroyPipelineCache(cache);
+  cache = NULL;
+
+#if defined(__APPLE__)
+  if (api->backend == GPU_BACKEND_METAL
+      && (stat(path, &archiveAfter) != 0 || stat(metadataPath, &metadataAfter) != 0
+          || archiveAfter.st_dev != archiveBefore.st_dev || archiveAfter.st_ino != archiveBefore.st_ino
+          || archiveAfter.st_size != archiveBefore.st_size
+          || metadataAfter.st_dev != metadataBefore.st_dev || metadataAfter.st_ino != metadataBefore.st_ino
+          || metadataAfter.st_size != metadataBefore.st_size)) {
+    fprintf(stderr, "Metal pipeline cache hit rewrote archive or metadata\n");
+    goto cleanup;
+  }
+#endif
 
   ok = 1;
 

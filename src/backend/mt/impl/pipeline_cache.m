@@ -682,8 +682,12 @@ mt_compileRenderPipeline4(GPUPipelineCache *cache,
                           NSError         **error) {
 #if MT_HAS_METAL4
   MTPipelineCache *native;
+  NSError        *archiveError = nil;
   id<MTL4Compiler> compiler;
   id               state;
+  id               archived;
+  bool             archiveHit;
+  bool             checkArchive;
 
   if (!device || !descriptor) {
     return nil;
@@ -697,11 +701,29 @@ mt_compileRenderPipeline4(GPUPipelineCache *cache,
       return nil;
     }
 
+    archiveHit   = false;
+    checkArchive = false;
+
+    if (native && native->modern && native->lookupArchive) {
+      os_unfair_lock_lock(&native->lock);
+      checkArchive = !native->dirty;
+      os_unfair_lock_unlock(&native->lock);
+    }
+
+    if (checkArchive) {
+      archived = [(id<MTL4Archive>)native->lookupArchive
+        newRenderPipelineStateWithDescriptor:(MTL4PipelineDescriptor *)descriptor
+                                      error:&archiveError];
+      archiveHit = archived != nil;
+      [archived release];
+    }
+
+    /* keep compiler capture complete for mixed archive hits and misses. */
     state = [compiler newRenderPipelineStateWithDescriptor:(MTL4PipelineDescriptor *)descriptor
                                        compilerTaskOptions:native && native->modern ? native->taskOptions : nil
                                                      error:error];
 
-    if (state && native && native->modern) {
+    if (state && native && native->modern && !archiveHit) {
       os_unfair_lock_lock(&native->lock);
       native->dirty = true;
       os_unfair_lock_unlock(&native->lock);
@@ -727,8 +749,12 @@ mt_compileComputePipeline4(GPUPipelineCache *cache,
                            NSError         **error) {
 #if MT_HAS_METAL4
   MTPipelineCache *native;
+  NSError        *archiveError = nil;
   id<MTL4Compiler> compiler;
   id               state;
+  id               archived;
+  bool             archiveHit;
+  bool             checkArchive;
 
   if (!device || !descriptor) {
     return nil;
@@ -742,11 +768,29 @@ mt_compileComputePipeline4(GPUPipelineCache *cache,
       return nil;
     }
 
+    archiveHit   = false;
+    checkArchive = false;
+
+    if (native && native->modern && native->lookupArchive) {
+      os_unfair_lock_lock(&native->lock);
+      checkArchive = !native->dirty;
+      os_unfair_lock_unlock(&native->lock);
+    }
+
+    if (checkArchive) {
+      archived = [(id<MTL4Archive>)native->lookupArchive
+        newComputePipelineStateWithDescriptor:(MTL4ComputePipelineDescriptor *)descriptor
+                                      error:&archiveError];
+      archiveHit = archived != nil;
+      [archived release];
+    }
+
+    /* keep compiler capture complete for mixed archive hits and misses. */
     state = [compiler newComputePipelineStateWithDescriptor:(MTL4ComputePipelineDescriptor *)descriptor
                                         compilerTaskOptions:native && native->modern ? native->taskOptions : nil
                                                       error:error];
 
-    if (state && native && native->modern) {
+    if (state && native && native->modern && !archiveHit) {
       os_unfair_lock_lock(&native->lock);
       native->dirty = true;
       os_unfair_lock_unlock(&native->lock);

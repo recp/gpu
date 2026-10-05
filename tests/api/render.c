@@ -25,6 +25,10 @@
 
 #include <math.h>
 
+#if defined(__APPLE__)
+#  include <sys/stat.h>
+#endif
+
 typedef enum RenderReadbackDrawMode {
   RENDER_READBACK_DRAW,
   RENDER_READBACK_DRAW_INDEXED,
@@ -196,6 +200,12 @@ pipeline_cache_file_recovered(const char *path) {
 static int
 check_pipeline_disk_cache(GPUDevice                   *device,
                           GPURenderPipelineCreateInfo *info) {
+#if defined(__APPLE__)
+  struct stat                archiveBefore;
+  struct stat                metadataBefore;
+  struct stat                archiveAfter;
+  struct stat                metadataAfter;
+#endif
   GPUPipelineCacheCreateInfo cacheInfo = {0};
   GPUPipelineCache          *cache;
   GPURenderPipeline         *pipeline;
@@ -309,6 +319,14 @@ check_pipeline_disk_cache(GPUDevice                   *device,
     }
   }
 
+#if defined(__APPLE__)
+  if (api->backend == GPU_BACKEND_METAL
+      && (stat(path, &archiveBefore) != 0 || stat(metadataPath, &metadataBefore) != 0)) {
+    fprintf(stderr, "failed to snapshot Metal pipeline cache files\n");
+    goto cleanup;
+  }
+#endif
+
   if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
     fprintf(stderr, "native pipeline disk cache reopen failed\n");
     goto cleanup;
@@ -326,6 +344,18 @@ check_pipeline_disk_cache(GPUDevice                   *device,
   GPUDestroyPipelineCache(cache);
   cache       = NULL;
   info->cache = NULL;
+
+#if defined(__APPLE__)
+  if (api->backend == GPU_BACKEND_METAL
+      && (stat(path, &archiveAfter) != 0 || stat(metadataPath, &metadataAfter) != 0
+          || archiveAfter.st_dev != archiveBefore.st_dev || archiveAfter.st_ino != archiveBefore.st_ino
+          || archiveAfter.st_size != archiveBefore.st_size
+          || metadataAfter.st_dev != metadataBefore.st_dev || metadataAfter.st_ino != metadataBefore.st_ino
+          || metadataAfter.st_size != metadataBefore.st_size)) {
+    fprintf(stderr, "Metal pipeline cache hit rewrote archive or metadata\n");
+    goto cleanup;
+  }
+#endif
 
   if (!write_pipeline_cache_corruption(path)) {
     fprintf(stderr, "native pipeline cache corruption setup failed\n");
