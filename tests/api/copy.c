@@ -28,6 +28,18 @@ enum {
   COPY_TEST_WARM_RUNS  = 16u
 };
 
+typedef struct TextureBlitCase {
+  const void *sourcePixels;
+  const void *expectedPixels;
+  const char *label;
+  GPUFormat   sourceFormat;
+  GPUFormat   destinationFormat;
+  uint32_t    sourcePixelSize;
+  uint32_t    destinationPixelSize;
+  uint32_t    sourceMip;
+  uint32_t    destinationMip;
+} TextureBlitCase;
+
 static const uint32_t weights[4] = {0u, 1u, 3u, 4u};
 
 static const uint8_t uintPixels[2u * 2u * 4u] = {
@@ -56,15 +68,56 @@ static const float rgba32Pixels[2u * 2u * 4u] = {
    0.75f,  1.5f,  3.0f,  6.0f
 };
 
+static const uint8_t bgraPixels[2u * 2u * 4u] = {
+    3u,   2u,   1u,   4u,  19u,  18u,  17u,  20u,
+   35u,  34u,  33u,  36u, 131u, 130u, 129u, 132u
+};
+
+static const uint16_t uint16Pixels[2u * 2u * 4u] = {
+    1u,   2u,   3u,   4u,  17u,  18u,  19u,  20u,
+   33u,  34u,  35u,  36u, 129u, 130u, 131u, 132u
+};
+
+static const int16_t sint16Pixels[2u * 2u * 4u] = {
+    -1,   2,   -3,   4,  17, -18,  19, -20,
+    33, -34,   35, -36,  63, -64,  65, -66
+};
+
+/* exact binary16 representations of the dyadic rgba32Pixels values. */
+static const uint16_t rgba16Pixels[2u * 2u * 4u] = {
+  0x3400u, 0x3800u, 0x3c00u, 0x4000u,
+  0x4400u, 0x4800u, 0x4c00u, 0x5000u,
+  0xb400u, 0xb800u, 0xbc00u, 0xc000u,
+  0x3a00u, 0x3e00u, 0x4200u, 0x4600u
+};
+
+static const TextureBlitCase blitCases[] = {
+  {uintPixels, uintPixels, "api-texture-blit-uint",
+   GPU_FORMAT_RGBA8_UINT, GPU_FORMAT_RGBA8_UINT, 4u, 4u, 0u, 0u},
+  {sintPixels, sintPixels, "api-texture-blit-sint",
+   GPU_FORMAT_RGBA8_SINT, GPU_FORMAT_RGBA8_SINT, 4u, 4u, 0u, 0u},
+  {uintPixels, bgraPixels, "api-texture-blit-rgba-bgra-mips",
+   GPU_FORMAT_RGBA8_UNORM, GPU_FORMAT_BGRA8_UNORM, 4u, 4u, 2u, 1u},
+  {uintPixels, bgraPixels, "api-texture-blit-bgra-rgba-mips",
+   GPU_FORMAT_BGRA8_UNORM, GPU_FORMAT_RGBA8_UNORM, 4u, 4u, 1u, 2u},
+  {uintPixels, uint16Pixels, "api-texture-blit-uint8-uint16-mips",
+   GPU_FORMAT_RGBA8_UINT, GPU_FORMAT_RGBA16_UINT, 4u, 8u, 1u, 2u},
+  {sintPixels, sint16Pixels, "api-texture-blit-sint8-sint16-mips",
+   GPU_FORMAT_RGBA8_SINT, GPU_FORMAT_RGBA16_SINT, 4u, 8u, 2u, 1u},
+  {rgba32Pixels, rgba16Pixels, "api-texture-blit-float-half-mips",
+   GPU_FORMAT_RGBA32_FLOAT, GPU_FORMAT_RGBA16_FLOAT, 16u, 8u, 2u, 1u},
+  {rgba16Pixels, rgba32Pixels, "api-texture-blit-half-float-mips",
+   GPU_FORMAT_RGBA16_FLOAT, GPU_FORMAT_RGBA32_FLOAT, 8u, 16u, 1u, 2u}
+};
+
 static const struct {
   const void *pixels;
-  uint64_t    size;
   GPUFormat   format;
   uint32_t    bytesPerPixel;
 } unfilterableCases[] = {
-  {r32Pixels,    sizeof(r32Pixels),    GPU_FORMAT_R32_FLOAT,    4u},
-  {rg32Pixels,   sizeof(rg32Pixels),   GPU_FORMAT_RG32_FLOAT,   8u},
-  {rgba32Pixels, sizeof(rgba32Pixels), GPU_FORMAT_RGBA32_FLOAT, 16u}
+  {r32Pixels,    GPU_FORMAT_R32_FLOAT,    4u},
+  {rg32Pixels,   GPU_FORMAT_RG32_FLOAT,   8u},
+  {rgba32Pixels, GPU_FORMAT_RGBA32_FLOAT, 16u}
 };
 
 static const uint8_t layerColors[2][4] = {
@@ -1247,6 +1300,7 @@ run_texture_blit(GPUQueue                 *queue,
                  GPUTexture               *destination,
                  GPUBuffer                *readback,
                  GPUFence                 *fence,
+                 uint32_t                  readMip,
                  const char               *label,
                  uint8_t                  *result) {
   GPUTextureBarrier          textureBarrier = {0};
@@ -1289,12 +1343,13 @@ run_texture_blit(GPUQueue                 *queue,
     goto cleanup;
   }
 
-  readRegion.bytesPerRow        = COPY_TEST_ROW_PITCH;
-  readRegion.rowsPerImage       = 4u;
-  readRegion.texture.width      = 4u;
-  readRegion.texture.height     = 4u;
-  readRegion.texture.depth      = 1u;
-  readRegion.texture.layerCount = 1u;
+  readRegion.bytesPerRow              = COPY_TEST_ROW_PITCH;
+  readRegion.rowsPerImage             = 4u;
+  readRegion.texture.width            = 4u;
+  readRegion.texture.height           = 4u;
+  readRegion.texture.texture.mipLevel = readMip;
+  readRegion.texture.depth            = 1u;
+  readRegion.texture.layerCount       = 1u;
   GPUCopyTextureToBuffer(transferPass,
                          destination,
                          readback,
@@ -1397,28 +1452,28 @@ blit_copy_result_matches(const uint8_t *result,
 }
 
 static int
-check_texture_blit_variant(GPUDevice  *device,
-                           GPUFormat   format,
-                           const void *sourcePixels,
-                           uint64_t    sourceSize,
-                           uint32_t    bytesPerPixel,
-                           const char *label) {
+check_texture_blit_variant(GPUDevice             *device,
+                           const TextureBlitCase *test) {
   GPUTextureCreateInfo  textureInfo = {0};
   GPUTextureWriteRegion writeRegion = {0};
   GPUTextureBlitInfo    blitInfo    = {0};
   GPUBufferCreateInfo   bufferInfo  = {0};
   GPUFormatCapabilities caps;
   uint8_t               result[COPY_TEST_ROW_PITCH * 4u] = {0};
+  uint8_t               zeroPixels[8u * 8u * 16u] = {0};
   GPUQueue             *queue;
   GPUTexture           *source;
   GPUTexture           *destination;
   GPUBuffer            *readback;
   GPUFence             *fence;
+  uint32_t              mip;
   int                   ok;
 
-  if (GPUGetFormatCapabilities(device->adapter, format, &caps) != GPU_OK
-      || !caps.sampled || !caps.colorAttachment) {
-    printf("%s skipped: format unsupported\n", label);
+  if (GPUGetFormatCapabilities(device->adapter, test->sourceFormat, &caps) != GPU_OK
+      || !caps.sampled
+      || GPUGetFormatCapabilities(device->adapter, test->destinationFormat, &caps) != GPU_OK
+      || !caps.colorAttachment) {
+    printf("%s skipped: format unsupported\n", test->label);
     return 1;
   }
 
@@ -1431,30 +1486,31 @@ check_texture_blit_variant(GPUDevice  *device,
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
-  textureInfo.label            = label;
+  textureInfo.label            = test->label;
   textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
-  textureInfo.format           = format;
-  textureInfo.width            = 2u;
-  textureInfo.height           = 2u;
+  textureInfo.format           = test->sourceFormat;
+  textureInfo.width            = 2u << test->sourceMip;
+  textureInfo.height           = 2u << test->sourceMip;
   textureInfo.depthOrLayers    = 1u;
-  textureInfo.mipLevelCount    = 1u;
+  textureInfo.mipLevelCount    = test->sourceMip + 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_SRC |
                                  GPU_TEXTURE_USAGE_COPY_DST;
   ok = ok && GPUCreateTexture(device, &textureInfo, &source) == GPU_OK;
 
-  textureInfo.width  = 4u;
-  textureInfo.height = 4u;
-  textureInfo.usage  = GPU_TEXTURE_USAGE_COLOR_TARGET |
-                       GPU_TEXTURE_USAGE_COPY_SRC |
-                       GPU_TEXTURE_USAGE_COPY_DST;
-  ok                 = ok
-                       && GPUCreateTexture(device, &textureInfo, &destination) == GPU_OK;
+  textureInfo.format        = test->destinationFormat;
+  textureInfo.width         = 4u << test->destinationMip;
+  textureInfo.height        = 4u << test->destinationMip;
+  textureInfo.mipLevelCount = test->destinationMip + 1u;
+  textureInfo.usage         = GPU_TEXTURE_USAGE_COLOR_TARGET |
+                              GPU_TEXTURE_USAGE_COPY_SRC |
+                              GPU_TEXTURE_USAGE_COPY_DST;
+  ok = ok && GPUCreateTexture(device, &textureInfo, &destination) == GPU_OK;
 
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.label            = label;
+  bufferInfo.label            = test->label;
   bufferInfo.sizeBytes        = sizeof(result);
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
@@ -1462,51 +1518,95 @@ check_texture_blit_variant(GPUDevice  *device,
   ok = ok && GPUCreateFence(device, NULL, &fence) == GPU_OK && fence;
 
   if (!ok) {
-    fprintf(stderr, "%s resource creation failed\n", label);
+    fprintf(stderr, "%s resource creation failed\n", test->label);
     goto cleanup;
   }
 
-  writeRegion.width        = 2u;
-  writeRegion.height       = 2u;
   writeRegion.depth        = 1u;
   writeRegion.layerCount   = 1u;
-  writeRegion.bytesPerRow  = 2u * bytesPerPixel;
+
+  /* initialize the other source levels so a wrong mip view cannot pass. */
+  for (mip = 0u; mip < test->sourceMip; mip++) {
+    writeRegion.mipLevel     = mip;
+    writeRegion.width        = 2u << (test->sourceMip - mip);
+    writeRegion.height       = writeRegion.width;
+    writeRegion.bytesPerRow  = writeRegion.width * test->sourcePixelSize;
+    writeRegion.rowsPerImage = writeRegion.height;
+
+    if (GPUQueueWriteTexture(queue,
+                             source,
+                             &writeRegion,
+                             zeroPixels,
+                             writeRegion.bytesPerRow * writeRegion.height) != GPU_OK) {
+      fprintf(stderr, "%s source mip initialization failed\n", test->label);
+      ok = 0;
+      goto cleanup;
+    }
+  }
+
+  writeRegion.mipLevel     = test->sourceMip;
+  writeRegion.width        = 2u;
+  writeRegion.height       = 2u;
+  writeRegion.bytesPerRow  = 2u * test->sourcePixelSize;
   writeRegion.rowsPerImage = 2u;
 
   if (GPUQueueWriteTexture(queue,
                            source,
                            &writeRegion,
-                           sourcePixels,
-                           sourceSize) != GPU_OK) {
-    fprintf(stderr, "%s source upload failed\n", label);
+                           test->sourcePixels,
+                           4u * test->sourcePixelSize) != GPU_OK) {
+    fprintf(stderr, "%s source upload failed\n", test->label);
     ok = 0;
     goto cleanup;
   }
 
-  blitInfo.src                      = source;
-  blitInfo.dst                      = destination;
-  blitInfo.srcRegion.texture.aspect = GPU_TEXTURE_ASPECT_ALL;
-  blitInfo.srcRegion.width          = 2u;
-  blitInfo.srcRegion.height         = 2u;
-  blitInfo.srcRegion.depth          = 1u;
-  blitInfo.srcRegion.layerCount     = 1u;
-  blitInfo.dstRegion.texture.aspect = GPU_TEXTURE_ASPECT_ALL;
-  blitInfo.dstRegion.width          = 4u;
-  blitInfo.dstRegion.height         = 4u;
-  blitInfo.dstRegion.depth          = 1u;
-  blitInfo.dstRegion.layerCount     = 1u;
-  blitInfo.filter                   = GPU_FILTER_NEAREST;
+  writeRegion.mipLevel     = test->destinationMip;
+  writeRegion.width        = 4u;
+  writeRegion.height       = 4u;
+  writeRegion.bytesPerRow  = 4u * test->destinationPixelSize;
+  writeRegion.rowsPerImage = 4u;
+
+  if (GPUQueueWriteTexture(queue,
+                           destination,
+                           &writeRegion,
+                           zeroPixels,
+                           16u * test->destinationPixelSize) != GPU_OK) {
+    fprintf(stderr, "%s destination initialization failed\n", test->label);
+    ok = 0;
+    goto cleanup;
+  }
+
+  blitInfo.src                        = source;
+  blitInfo.dst                        = destination;
+  blitInfo.srcRegion.texture.aspect   = GPU_TEXTURE_ASPECT_ALL;
+  blitInfo.srcRegion.texture.mipLevel = test->sourceMip;
+  blitInfo.srcRegion.width            = 2u;
+  blitInfo.srcRegion.height           = 2u;
+  blitInfo.srcRegion.depth            = 1u;
+  blitInfo.srcRegion.layerCount       = 1u;
+  blitInfo.dstRegion.texture.aspect   = GPU_TEXTURE_ASPECT_ALL;
+  blitInfo.dstRegion.texture.mipLevel = test->destinationMip;
+  blitInfo.dstRegion.width            = 4u;
+  blitInfo.dstRegion.height           = 4u;
+  blitInfo.dstRegion.depth            = 1u;
+  blitInfo.dstRegion.layerCount       = 1u;
+  blitInfo.filter                     = GPU_FILTER_NEAREST;
   ok = run_texture_blit(queue,
                         &blitInfo,
                         destination,
                         readback,
                         fence,
-                        label,
+                        test->destinationMip,
+                        test->label,
                         result)
        && blit_variant_result_matches(result,
-                                      sourcePixels,
-                                      bytesPerPixel,
-                                      label);
+                                      test->expectedPixels,
+                                      test->destinationPixelSize,
+                                      test->label);
+
+  if (ok) {
+    printf("%s passed\n", test->label);
+  }
 
 cleanup:
   GPUDestroyFence(fence);
@@ -1518,41 +1618,37 @@ cleanup:
 
 static int
 check_texture_blit_variants(GPUDevice *device) {
+  TextureBlitCase        test = {0};
   GPUFormatCapabilities caps;
+  GPUFormat             format;
   uint32_t              i;
   bool                  testedUnfilterable;
 
-  if (!check_texture_blit_variant(device,
-                                  GPU_FORMAT_RGBA8_UINT,
-                                  uintPixels,
-                                  sizeof(uintPixels),
-                                  4u,
-                                  "api-texture-blit-uint")
-      || !check_texture_blit_variant(device,
-                                     GPU_FORMAT_RGBA8_SINT,
-                                     sintPixels,
-                                     sizeof(sintPixels),
-                                     4u,
-                                     "api-texture-blit-sint")) {
-    return 0;
+  for (i = 0u; i < GPU_ARRAY_LEN(blitCases); i++) {
+    if (!check_texture_blit_variant(device, &blitCases[i])) {
+      return 0;
+    }
   }
 
   testedUnfilterable = false;
 
   for (i = 0u; i < GPU_ARRAY_LEN(unfilterableCases); i++) {
-    const GPUFormat format = unfilterableCases[i].format;
+    format = unfilterableCases[i].format;
 
     if (GPUGetFormatCapabilities(device->adapter, format, &caps) != GPU_OK
         || !caps.sampled || !caps.colorAttachment || caps.filterable) {
       continue;
     }
 
-    if (!check_texture_blit_variant(device,
-                                    format,
-                                    unfilterableCases[i].pixels,
-                                    unfilterableCases[i].size,
-                                    unfilterableCases[i].bytesPerPixel,
-                                    "api-texture-blit-unfilterable-float")) {
+    test.sourcePixels         = unfilterableCases[i].pixels;
+    test.expectedPixels       = unfilterableCases[i].pixels;
+    test.label                = "api-texture-blit-unfilterable-float";
+    test.sourceFormat         = format;
+    test.destinationFormat    = format;
+    test.sourcePixelSize      = unfilterableCases[i].bytesPerPixel;
+    test.destinationPixelSize = unfilterableCases[i].bytesPerPixel;
+
+    if (!check_texture_blit_variant(device, &test)) {
       return 0;
     }
 
@@ -2052,6 +2148,7 @@ check_texture_blit(GPUDevice *device) {
                               destination,
                               readback,
                               fence,
+                              0u,
                               "api-texture-blit-nearest",
                               result)
              && blit_result_matches(result, sourcePixels, "public nearest"))) {
@@ -2066,6 +2163,7 @@ check_texture_blit(GPUDevice *device) {
                               destination,
                               readback,
                               fence,
+                              0u,
                               "api-texture-blit-linear",
                               result)
              && blit_linear_result_matches(result, sourcePixels, "public"))) {
@@ -2101,6 +2199,7 @@ check_texture_blit(GPUDevice *device) {
                               destination,
                               readback,
                               fence,
+                              0u,
                               "api-texture-blit-native-copy",
                               result)
              && blit_copy_result_matches(result,
@@ -2134,6 +2233,7 @@ check_texture_blit(GPUDevice *device) {
                               destination,
                               readback,
                               fence,
+                              0u,
                               "api-texture-blit-partial",
                               result)
              && blit_partial_result_matches(result,
