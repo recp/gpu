@@ -96,6 +96,7 @@ mt_adapterDevice(const GPUAdapter *adapter) {
 static void
 mt_initFormatSupport(GPUAdapterMT *adapterMT) {
   id<MTLDevice> device;
+  bool          macFamily2 = false;
 
   if (!adapterMT || !(device = adapterMT->device)) {
     return;
@@ -129,6 +130,7 @@ mt_initFormatSupport(GPUAdapterMT *adapterMT) {
 
   if (@available(macOS 11.0, iOS 14.0, *)) {
     adapterMT->float32Filterable = device.supports32BitFloatFiltering;
+    adapterMT->msaa32Supported   = device.supports32BitMSAA;
   }
 
   if (@available(macOS 11.0, iOS 16.4, *)) {
@@ -136,8 +138,16 @@ mt_initFormatSupport(GPUAdapterMT *adapterMT) {
   }
 
   if (@available(macOS 10.15, iOS 13.0, *)) {
+    macFamily2 = [device supportsFamily:MTLGPUFamilyMac2];
+
     adapterMT->appleFamily1 = [device supportsFamily:MTLGPUFamilyApple1];
     adapterMT->appleFamily2 = [device supportsFamily:MTLGPUFamilyApple2];
+
+    adapterMT->depth32StencilFilterable = macFamily2;
+  }
+
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    adapterMT->depth32StencilFilterable |= [device supportsFamily:MTLGPUFamilyApple9];
   }
 
   if (@available(macOS 13.0, iOS 16.0, *)) {
@@ -146,8 +156,7 @@ mt_initFormatSupport(GPUAdapterMT *adapterMT) {
 #if TARGET_OS_OSX
   if (@available(macOS 11.0, *)) {
     adapterMT->sparseTextures = [device supportsFamily:MTLGPUFamilyApple6]
-      || ([device supportsFamily:MTLGPUFamilyMac2]
-          && !device.hasUnifiedMemory);
+      || (macFamily2 && !device.hasUnifiedMemory);
   }
 #endif
 }
@@ -492,6 +501,16 @@ mt_isFloat32Format(GPUFormat format) {
 }
 
 static bool
+mt_isInteger32Format(GPUFormat format) {
+  return format == GPU_FORMAT_R32_UINT
+         || format == GPU_FORMAT_R32_SINT
+         || format == GPU_FORMAT_RG32_UINT
+         || format == GPU_FORMAT_RG32_SINT
+         || format == GPU_FORMAT_RGBA32_UINT
+         || format == GPU_FORMAT_RGBA32_SINT;
+}
+
+static bool
 mt_isTier1StorageFormat(GPUFormat format) {
   return format == GPU_FORMAT_R32_UINT
          || format == GPU_FORMAT_R32_SINT
@@ -582,7 +601,12 @@ mt_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
 
     outCaps->supportedSampleCounts = adapterMT->sampleCounts;
     outCaps->sampled               = true;
-    outCaps->filterable            = false;
+    outCaps->filterable            = format == GPU_FORMAT_DEPTH16_UNORM
+                                    || format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8
+                                    || (format == GPU_FORMAT_DEPTH32_FLOAT
+                                        && adapterMT->float32Filterable)
+                                    || (format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8
+                                        && adapterMT->depth32StencilFilterable);
     return;
   }
 
@@ -597,6 +621,11 @@ mt_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
 
   if (outCaps->colorAttachment) {
     outCaps->supportedSampleCounts = adapterMT->sampleCounts;
+
+    /* float32 allocation and float32 resolve have separate native support. */
+    if (mt_isInteger32Format(format) && !adapterMT->msaa32Supported) {
+      outCaps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
+    }
   }
 }
 

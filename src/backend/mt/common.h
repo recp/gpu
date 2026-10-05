@@ -87,7 +87,9 @@ typedef struct GPUAdapterMT {
   uint32_t                minSubgroupSize;
   uint32_t                maxSubgroupSize;
   bool                    float32Filterable;
+  bool                    msaa32Supported;
   bool                    depth24Supported;
+  bool                    depth32StencilFilterable;
   bool                    appleFamily1;
   bool                    appleFamily2;
   bool                    sparseTextures;

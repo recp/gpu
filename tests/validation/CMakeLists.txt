@@ -41,6 +41,32 @@ if(GPU_BUILD_TESTS)
     set_tests_properties(metal-sparse-support-contract PROPERTIES
       SKIP_RETURN_CODE 77
     )
+
+    add_executable(gpu-metal-format-support-contract
+      ${PROJECT_SOURCE_DIR}/tests/validation/metal-format-support/main.m
+    )
+    target_include_directories(gpu-metal-format-support-contract PRIVATE
+      $<TARGET_PROPERTY:gpu,INCLUDE_DIRECTORIES>
+    )
+    target_compile_definitions(gpu-metal-format-support-contract PRIVATE
+      $<TARGET_PROPERTY:gpu,COMPILE_DEFINITIONS>
+    )
+    target_compile_options(gpu-metal-format-support-contract PRIVATE
+      -Wall -Wextra -Werror -Wno-error=deprecated-declarations
+    )
+    set_target_properties(gpu-metal-format-support-contract PROPERTIES
+      OBJC_STANDARD 11
+      OBJC_STANDARD_REQUIRED YES
+      OBJC_EXTENSIONS NO
+    )
+    target_link_libraries(gpu-metal-format-support-contract PRIVATE
+      gpu ${GPU_FRAMEWORK_FOUNDATION} ${GPU_FRAMEWORK_METAL}
+    )
+    add_test(NAME metal-format-support-contract
+             COMMAND gpu-metal-format-support-contract)
+    set_tests_properties(metal-format-support-contract PROPERTIES
+      SKIP_RETURN_CODE 77
+    )
   endif()
 
   add_executable(gpu-cache-file-concurrency-contract
