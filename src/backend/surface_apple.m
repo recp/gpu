@@ -67,10 +67,13 @@ gpuCreateMetalLayer(void *nativeHandle, GPUSurfaceType type, float scale) {
   layer               = [[CAMetalLayer alloc] init];
   layer.frame         = bounds;
   layer.contentsScale = scale;
-  layer.drawableSize     = CGSizeMake(bounds.size.width * scale,
-                                      bounds.size.height * scale);
-  layer.opaque           = YES;
+  layer.drawableSize  = CGSizeMake(bounds.size.width * scale,
+                                   bounds.size.height * scale);
+  layer.opaque        = YES;
+#if !TARGET_OS_IOS
   layer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
+#endif
+
   [rootLayer addSublayer:layer];
 
   return layer;
