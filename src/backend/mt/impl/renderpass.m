@@ -537,6 +537,12 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
     if (!color->view)
       return NULL;
 
+    /* integer attachments support msaa, but not automatic color resolve. */
+    if (color->resolveView
+        && gpuFormatNumericType(color->view->format) != GPU_FORMAT_NUMERIC_FLOAT) {
+      return NULL;
+    }
+
     if (color->resolveView
         && (color->view->format == GPU_FORMAT_R32_FLOAT
             || color->view->format == GPU_FORMAT_RG32_FLOAT

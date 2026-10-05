@@ -17,21 +17,55 @@
 #include <gpu/gpu.h>
 #include "../../../src/backend/mt/common.h"
 
-static const GPUFormat formats[] = {
-  GPU_FORMAT_R32_FLOAT, GPU_FORMAT_RG32_FLOAT, GPU_FORMAT_RGBA32_FLOAT, GPU_FORMAT_BGRA8_UNORM
-};
+typedef union ResolvePixels {
+  float    scalars[128];
+  uint32_t packed[128];
+} ResolvePixels;
 
-static const uint32_t components[] = {1u, 2u, 4u, 0u};
+typedef struct ResolveCase {
+  GPUFormat format;
+  uint32_t  channels;
+  uint32_t  packed;
+  bool      integer;
+} ResolveCase;
+
+static const ResolveCase cases[] = {
+  {GPU_FORMAT_R32_FLOAT, 1u, 0u, false},
+  {GPU_FORMAT_RG32_FLOAT, 2u, 0u, false},
+  {GPU_FORMAT_RGBA32_FLOAT, 4u, 0u, false},
+  {GPU_FORMAT_BGRA8_UNORM, 0u, 0xffffffffu, false},
+  {GPU_FORMAT_RGB10A2_UNORM, 0u, 0xffffffffu, false},
+  {GPU_FORMAT_RG11B10_UFLOAT, 0u, 0x781e03c0u, false},
+  {GPU_FORMAT_RGB9E5_UFLOAT, 0u, 0x84020100u, false},
+  {GPU_FORMAT_R8_UINT, 0u, 0u, true},
+  {GPU_FORMAT_R8_SINT, 0u, 0u, true},
+  {GPU_FORMAT_R16_UINT, 0u, 0u, true},
+  {GPU_FORMAT_R16_SINT, 0u, 0u, true},
+  {GPU_FORMAT_RG8_UINT, 0u, 0u, true},
+  {GPU_FORMAT_RG8_SINT, 0u, 0u, true},
+  {GPU_FORMAT_R32_UINT, 0u, 0u, true},
+  {GPU_FORMAT_R32_SINT, 0u, 0u, true},
+  {GPU_FORMAT_RG16_UINT, 0u, 0u, true},
+  {GPU_FORMAT_RG16_SINT, 0u, 0u, true},
+  {GPU_FORMAT_RGBA8_UINT, 0u, 0u, true},
+  {GPU_FORMAT_RGBA8_SINT, 0u, 0u, true},
+  {GPU_FORMAT_RGB10A2_UINT, 0u, 0u, true},
+  {GPU_FORMAT_RG32_UINT, 0u, 0u, true},
+  {GPU_FORMAT_RG32_SINT, 0u, 0u, true},
+  {GPU_FORMAT_RGBA16_UINT, 0u, 0u, true},
+  {GPU_FORMAT_RGBA16_SINT, 0u, 0u, true},
+  {GPU_FORMAT_RGBA32_UINT, 0u, 0u, true},
+  {GPU_FORMAT_RGBA32_SINT, 0u, 0u, true}
+};
 static const float expected[] = {0.25f, 0.5f, -0.5f, 2.0f};
 
 static bool
-check_format(GPUDevice *device,
-             GPUQueue  *queue,
-             GPUFence  *fence,
-             GPUBuffer *readback,
-             GPUFormat  format,
-             uint32_t   channels) {
-  float                         pixels[128];
+check_format(GPUDevice         *device,
+             GPUQueue          *queue,
+             GPUFence          *fence,
+             GPUBuffer         *readback,
+             const ResolveCase *test) {
+  ResolvePixels                 pixels;
   GPUTextureCreateInfo          textureInfo = {0};
   GPUTextureViewCreateInfo      viewInfo    = {0};
   GPURenderPassColorAttachment  color       = {0};
@@ -47,13 +81,19 @@ check_format(GPUDevice *device,
   GPURenderPassEncoder          *render     = NULL;
   GPUTransferPassEncoder        *copy       = NULL;
   GPUAccessMask                 resolveAccess = GPU_ACCESS_NONE;
+  GPUFormat                     format;
   uint32_t                      i, flags, x, y, c;
-  uint32_t                      failures    = 0u;
-  uint32_t                      values      = 0u;
+  uint32_t                      channels;
+  uint32_t                      failures     = 0u;
+  uint32_t                      values       = 0u;
+  uint32_t                      packedValues = 0u;
   bool                          actualSupport;
   bool                          supported;
   bool                          resolve;
   bool                          ok          = false;
+
+  format   = test->format;
+  channels = test->channels;
 
   if (GPUGetFormatCapabilities(device->adapter, format, &caps) != GPU_OK) {
     return false;
@@ -121,9 +161,7 @@ check_format(GPUDevice *device,
     color.loadOp      = GPU_LOAD_OP_CLEAR;
     color.storeOp     = GPU_STORE_OP_STORE;
 
-    for (c = 0u; c < 4u; c++) {
-      color.clearColor.float32[c] = -1.0f;
-    }
+    memset(&color.clearColor, 0, sizeof(color.clearColor));
 
     if (!(render = GPUBeginRenderPass(cmdb, &passInfo))) {
       goto cleanup;
@@ -132,15 +170,32 @@ check_format(GPUDevice *device,
     GPUEndRenderPass(render);
     render = NULL;
 
+    GPUTransitionTexture(cmdb, textures[1], GPU_ACCESS_COLOR_WRITE, GPU_ACCESS_COLOR_WRITE);
+    GPUTransitionTexture(cmdb, textures[0], GPU_ACCESS_COLOR_WRITE, GPU_ACCESS_COLOR_WRITE);
+
     resolve           = (flags & 2u) != 0u;
     color.view        = views[0];
     color.resolveView = resolve ? views[1] : NULL;
     color.storeOp     = (flags & 4u) ? GPU_STORE_OP_STORE : GPU_STORE_OP_DONT_CARE;
-    memcpy(color.clearColor.float32, expected, sizeof(expected));
+
+    if (channels) {
+      memcpy(color.clearColor.float32, expected, sizeof(expected));
+    } else if (test->integer) {
+      /* positive values share the signed/unsigned representation. */
+      color.clearColor.uint32[0] = 37u;
+      color.clearColor.uint32[1] = 53u;
+      color.clearColor.uint32[2] = 71u;
+      color.clearColor.uint32[3] = 2u;
+    } else {
+      for (c = 0u; c < 4u; c++) {
+        color.clearColor.float32[c] = 1.0f;
+      }
+    }
 
     /* never turn on a native capability that the real device lacks. */
     native->msaa32Supported = actualSupport && (flags & 1u);
-    supported = !resolve || channels == 0u || native->msaa32Supported;
+    supported = !resolve
+                || (!test->integer && (channels == 0u || native->msaa32Supported));
     render    = GPUBeginRenderPass(cmdb, &passInfo);
     native->msaa32Supported = actualSupport;
 
@@ -155,7 +210,7 @@ check_format(GPUDevice *device,
       render = NULL;
     }
 
-    if (resolve && channels && supported) {
+    if (resolve && supported) {
       GPUTransitionTexture(cmdb, textures[1], GPU_ACCESS_COLOR_WRITE, GPU_ACCESS_TRANSFER_READ);
       resolveAccess = GPU_ACCESS_TRANSFER_READ;
 
@@ -191,18 +246,29 @@ check_format(GPUDevice *device,
       goto cleanup;
     }
 
-    if (resolve && channels && supported) {
-      if (GPUQueueReadBuffer(queue, readback, 0u, pixels, sizeof(pixels)) != GPU_OK) {
+    if (resolve && supported) {
+      if (GPUQueueReadBuffer(queue, readback, 0u, &pixels, sizeof(pixels)) != GPU_OK) {
         goto cleanup;
       }
 
       for (y = 0u; y < 2u; y++) {
         for (x = 0u; x < 2u; x++) {
+          if (test->packed) {
+            if (pixels.packed[y * 64u + x] != test->packed) {
+              fprintf(stderr,
+                      "format-resolve: format=%u flags=%u pixel=%u,%u packed=%08x expected=%08x\n",
+                      format, flags, x, y, pixels.packed[y * 64u + x], test->packed);
+              goto cleanup;
+            }
+
+            packedValues++;
+          }
+
           for (c = 0u; c < channels; c++) {
-            if (pixels[y * 64u + x * channels + c] != expected[c]) {
+            if (pixels.scalars[y * 64u + x * channels + c] != expected[c]) {
               fprintf(stderr,
                       "format-resolve: format=%u flags=%u pixel=%u,%u channel=%u actual=%g expected=%g\n",
-                      format, flags, x, y, c, pixels[y * 64u + x * channels + c], expected[c]);
+                      format, flags, x, y, c, pixels.scalars[y * 64u + x * channels + c], expected[c]);
               goto cleanup;
             }
 
@@ -213,7 +279,8 @@ check_format(GPUDevice *device,
     }
   }
 
-  printf("format-resolve: format=%u eight cases, %u failures, %u exact scalars\n", format, failures, values);
+  printf("format-resolve: format=%u eight cases, %u failures, %u exact scalars, %u packed pixels\n",
+         format, failures, values, packedValues);
   ok = failures == 0u;
 
 cleanup:
@@ -268,8 +335,8 @@ check_resolve(GPUAdapter *adapter) {
 
   ok = true;
 
-  for (i = 0u; i < GPU_ARRAY_LEN(formats); i++) {
-    ok = check_format(device, queue, fence, readback, formats[i], components[i]) && ok;
+  for (i = 0u; i < GPU_ARRAY_LEN(cases); i++) {
+    ok = check_format(device, queue, fence, readback, &cases[i]) && ok;
   }
 
 cleanup:
