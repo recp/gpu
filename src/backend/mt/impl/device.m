@@ -185,6 +185,12 @@ mt_supportsBlitCounterSampling(id<MTLDevice> device) {
 }
 
 static bool
+mt_supportsClassicTimestamps(id<MTLDevice> device) {
+  return mt_hasCounterSet(device, MTLCommonCounterSetTimestamp)
+         && mt_supportsBlitCounterSampling(device);
+}
+
+static bool
 mt_supportsSubgroupFamily(id<MTLDevice> device) {
   if (@available(macOS 10.15, iOS 13.0, *)) {
     return device
@@ -1056,8 +1062,7 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
       }
 #endif
 
-      return mt_hasCounterSet(device, MTLCommonCounterSetTimestamp)
-             && mt_supportsBlitCounterSampling(device);
+      return mt_supportsClassicTimestamps(device);
     default:
       return false;
   }
@@ -1091,7 +1096,10 @@ mt_createDevice(GPUAdapter   *__restrict adapter,
           && !mt_supportsFeature(adapter, GPU_FEATURE_SUBGROUP_MATRIX))
       || !mt_selectCommandMode(adapterMT->device,
                                enabledFeatureMask,
-                               &commandMode)) {
+                               &commandMode)
+      || ((enabledFeatureMask & (UINT64_C(1) << GPU_FEATURE_TIMESTAMPS)) != 0u
+          && commandMode == MTCommandModeClassic
+          && !mt_supportsClassicTimestamps(adapterMT->device))) {
     return NULL;
   }
 

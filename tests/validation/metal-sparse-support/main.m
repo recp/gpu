@@ -18,11 +18,12 @@
 #include <stdio.h>
 
 #if MT_HAS_METAL4 && TARGET_OS_OSX
-#define RAY_FEATURE      (UINT64_C(1) << GPU_FEATURE_RAY_QUERY)
-#define SPARSE_PLACEMENT (UINT64_C(1) << GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT)
-#define SPARSE_BUFFER    (SPARSE_PLACEMENT | (UINT64_C(1) << GPU_FEATURE_SPARSE_BUFFERS))
-#define SPARSE_TEXTURE   (SPARSE_PLACEMENT | (UINT64_C(1) << GPU_FEATURE_SPARSE_TEXTURES))
-#define IFT_FEATURES     (RAY_FEATURE | (UINT64_C(1) << GPU_FEATURE_INTERSECTION_FUNCTION_TABLE))
+#define RAY_FEATURE       (UINT64_C(1) << GPU_FEATURE_RAY_QUERY)
+#define SPARSE_PLACEMENT  (UINT64_C(1) << GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT)
+#define SPARSE_BUFFER     (SPARSE_PLACEMENT | (UINT64_C(1) << GPU_FEATURE_SPARSE_BUFFERS))
+#define SPARSE_TEXTURE    (SPARSE_PLACEMENT | (UINT64_C(1) << GPU_FEATURE_SPARSE_TEXTURES))
+#define IFT_FEATURES      (RAY_FEATURE | (UINT64_C(1) << GPU_FEATURE_INTERSECTION_FUNCTION_TABLE))
+#define TIMESTAMP_FEATURE (UINT64_C(1) << GPU_FEATURE_TIMESTAMPS)
 
 enum {
   METAL4_QUEUE   = 1u,
@@ -52,11 +53,28 @@ typedef struct ModeCase {
   int8_t       expected;
 } ModeCase;
 
-@interface SparseDevice : NSObject {
-@public
+typedef struct TimestampCase {
+  const char  *name;
+  const char  *mode;
+  uint64_t     features;
+  uint64_t     frequency;
   MTLGPUFamily family;
   uint8_t      methods;
+  int8_t       expectedMode;
+  bool         counterSet;
+  bool         blit;
+  bool         supported;
+} TimestampCase;
+
+@interface SparseDevice : NSObject {
+@public
+  uint64_t     frequency;
+  MTLGPUFamily family;
+  uint32_t     counterQueries;
+  uint8_t      methods;
   bool         placement;
+  bool         counterSet;
+  bool         blit;
 }
 @end
 
@@ -124,6 +142,51 @@ static const ModeCase modeCases[] = {
   {"invalid-mode", "invalid", 0u, MTLGPUFamilyApple7, METAL4_ALL, -1}
 };
 
+static const TimestampCase timestampCases[] = {
+  {"ray-apple7", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, METAL4_ALL, -1, false, false, true},
+  {"ray-apple8", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple8, METAL4_ALL, -1, false, false, true},
+  {"ray-default", NULL, RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, METAL4_ALL, -1, false, false, true},
+  {"ift-apple7", "auto", IFT_FEATURES | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, METAL4_ALL, -1, false, false, true},
+  {"timestamp-only", "auto", TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, METAL4_ALL, MTCommandMode4, false, false, true},
+  {"ray-apple9", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple9, METAL4_ALL, MTCommandMode4, false, false, true},
+  {"ray-classic-counter7", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, METAL4_ALL, MTCommandModeClassic, true, true, true},
+  {"ray-classic-counter8", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple8, METAL4_ALL, MTCommandModeClassic, true, true, true},
+  {"ray-no-blit", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, METAL4_ALL, -1, true, false, true},
+  {"ray-no-counter", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, METAL4_ALL, -1, false, true, true},
+  {"forced-classic-missing", "classic", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, METAL4_ALL, -1, false, false, false},
+  {"forced-classic-valid", "classic", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, METAL4_ALL, MTCommandModeClassic, true, true, true},
+  {"classic-timestamp-only", "classic", TIMESTAMP_FEATURE, 0u,
+   MTLGPUFamilyApple7, METAL4_ALL, MTCommandModeClassic, true, true, true},
+  {"classic-no-blit", "classic", TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, METAL4_ALL, -1, true, false, false},
+  {"forced-metal4-modern", "metal4", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple9, METAL4_ALL, MTCommandMode4, false, false, true},
+  {"forced-metal4-old-ray", "metal4", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, METAL4_ALL, -1, true, true, true},
+  {"old-api-missing", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, 0u, -1, false, false, false},
+  {"old-api-valid", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, 0u, MTCommandModeClassic, true, true, true},
+  {"ray-without-timestamps", "auto", RAY_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, METAL4_ALL, MTCommandModeClassic, false, false, true},
+  {"zero-frequency", "auto", RAY_FEATURE, 0u,
+   MTLGPUFamilyApple9, METAL4_ALL, MTCommandMode4, true, true, false},
+  {"classic-without-timestamps", "classic", RAY_FEATURE, 24000000u,
+   MTLGPUFamilyApple7, METAL4_ALL, MTCommandModeClassic, false, false, false}
+};
+
 static MTCommandMode observedMode;
 static uint32_t      modeInitializations;
 static uint32_t      unexpectedWork;
@@ -168,6 +231,25 @@ mt_createDevice(GPUAdapter               *adapter,
   return family >= MTLGPUFamilyApple1 && family <= MTLGPUFamilyApple9
          && value >= MTLGPUFamilyApple1 && value <= family;
 }
+
+- (NSUInteger)queryTimestampFrequency {
+  counterQueries++;
+  return (NSUInteger)frequency;
+}
+
+- (NSArray<id<MTLCounterSet>> *)counterSets {
+  counterQueries++;
+  return counterSet ? @[(id<MTLCounterSet>)self] : @[];
+}
+
+- (NSString *)name {
+  return MTLCommonCounterSetTimestamp;
+}
+
+- (BOOL)supportsCounterSampling:(MTLCounterSamplingPoint)point {
+  counterQueries++;
+  return blit && point == MTLCounterSamplingPointAtBlitBoundary;
+}
 @end
 
 /* stop after mode selection, before native compiler or queue work. */
@@ -201,20 +283,21 @@ mt_destroyCommandQueue(GPUQueue *queue) {
   unexpectedWork++;
 }
 
-int
-main(void) {
-  GPUQueueCreateInfo queues[1] = {{0}};
-  GPUAdapterMT       native    = {0};
-  GPUAdapter         adapter   = {0};
-  SparseDevice      *device;
-  const SparseCase  *test;
-  const ModeCase    *modeTest;
-  uint32_t           i, j;
-  uint32_t           modeFailures = 0u;
-  uint8_t            expected;
-  bool               modern;
-  bool               actual;
-  bool               wanted;
+static int
+run_tests(void) {
+  GPUQueueCreateInfo   queues[1] = {{0}};
+  GPUAdapterMT         native    = {0};
+  GPUAdapter           adapter   = {0};
+  SparseDevice        *device;
+  const SparseCase    *test;
+  const ModeCase      *modeTest;
+  const TimestampCase *timestampTest;
+  uint32_t             i, j;
+  uint32_t             modeFailures = 0u;
+  uint8_t              expected;
+  bool                 modern;
+  bool                 actual;
+  bool                 wanted;
 
   if (@available(macOS 26.0, *)) {
     modern = false;
@@ -299,6 +382,44 @@ main(void) {
     }
   }
 
+  for (i = 0u; i < GPU_ARRAY_LEN(timestampCases); i++) {
+    timestampTest = &timestampCases[i];
+
+    if (timestampTest->mode) {
+      setenv("GPU_METAL_MODE", timestampTest->mode, 1);
+    } else {
+      unsetenv("GPU_METAL_MODE");
+    }
+
+    device->family     = timestampTest->family;
+    device->methods    = timestampTest->methods;
+    device->frequency  = timestampTest->frequency;
+    device->counterSet = timestampTest->counterSet;
+    device->blit       = timestampTest->blit;
+
+    actual = mt_supportsFeature(&adapter, GPU_FEATURE_TIMESTAMPS);
+
+    device->counterQueries = 0u;
+    modeInitializations    = 0u;
+    unexpectedWork         = 0u;
+
+    if (actual != timestampTest->supported
+        || mt_createDevice(&adapter, queues, 1u, timestampTest->features)
+        || unexpectedWork != 0u
+        || modeInitializations != (timestampTest->expectedMode >= 0 ? 1u : 0u)
+        || (modeInitializations && observedMode != (MTCommandMode)timestampTest->expectedMode)
+        || (!(timestampTest->features & TIMESTAMP_FEATURE) && device->counterQueries != 0u)) {
+      fprintf(stderr,
+              "%s: supported %u, initialized %u, mode %u, expected %d\n",
+              timestampTest->name,
+              actual,
+              modeInitializations,
+              observedMode,
+              timestampTest->expectedMode);
+      modeFailures++;
+    }
+  }
+
   [device release];
 
   if (modeFailures) {
@@ -307,7 +428,15 @@ main(void) {
 
   printf("metal sparse support: %zu cases passed\n", GPU_ARRAY_LEN(cases) * GPU_ARRAY_LEN(features) + 6u);
   printf("metal command modes: %zu cases passed\n", GPU_ARRAY_LEN(modeCases));
+  printf("metal timestamp modes: %zu cases passed\n", GPU_ARRAY_LEN(timestampCases));
   return 0;
+}
+
+int
+main(void) {
+  @autoreleasepool {
+    return run_tests();
+  }
 }
 #else
 int
