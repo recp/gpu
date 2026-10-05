@@ -180,6 +180,7 @@ gpu_test_sampler_feedback_write(GPUDevice *device, const char *bytecodePath) {
   bytecodeSize   = 0u;
   bytecode       = gpu_test_read_file(bytecodePath, &bytecodeSize);
   ok = queue && bytecode;
+
   memset(sampledPixels, 0xff, sizeof(sampledPixels));
 
   if (!ok

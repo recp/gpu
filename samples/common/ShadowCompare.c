@@ -97,6 +97,7 @@ create_depth_target(GPUSampleShadowCompare *state,
   GPUDestroyBindGroup(state->shadowGroup);
   GPUDestroyTextureView(state->depthView);
   GPUDestroyTexture(state->depthTexture);
+
   state->shadowGroup  = group;
   state->depthView    = view;
   state->depthTexture = texture;

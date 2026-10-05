@@ -107,6 +107,7 @@ create_depth_stencil_target(WebGPUStencilOutline *state,
 
   GPUDestroyTextureView(state->depthStencilView);
   GPUDestroyTexture(state->depthStencilTexture);
+
   state->depthStencilTexture = texture;
   state->depthStencilView    = view;
 

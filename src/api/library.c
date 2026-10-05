@@ -228,6 +228,7 @@ gpu_setShaderUSLSource(GPUShaderLibrary        *library,
   memcpy(source->artifact, artifact, source->artifactSize);
 
   gpu_clearShaderUSLSource(library);
+
   library->_uslSource = source;
 
   return 1;
@@ -1144,6 +1145,7 @@ gpu_resolvePTXStaticSamplers(const USRuntimeInfo                  *runtime,
     }
 
     gpu_staticSamplerInfoFromUSL(source, 0u, 0u, &item);
+
     samplerIndex = UINT32_MAX;
 
     for (matchIndex = 0u; matchIndex < samplers->count; matchIndex++) {
@@ -2227,6 +2229,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
   }
 
   gpu_clearShaderMetadata(library);
+
   library->_metadata         = metadata;
   library->_entryInfo        = entryInfo;
   library->_entryResources   = entryResources;

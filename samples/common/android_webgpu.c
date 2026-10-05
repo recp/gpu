@@ -923,6 +923,7 @@ sample_fetch_url(const char         *url,
   pthread_mutex_lock(&fetchMutex);
   request->generation = fetchGeneration;
   pthread_mutex_unlock(&fetchMutex);
+
   request->callback = callback;
   request->userData = userData;
 

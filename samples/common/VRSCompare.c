@@ -233,6 +233,7 @@ create_rate_attachment(GPUSampleVRSCompare *state,
 
   GPUDestroyTextureView(state->rateView);
   GPUDestroyTexture(state->rateTexture);
+
   state->rateTexture = texture;
   state->rateView    = view;
   state->width       = width;

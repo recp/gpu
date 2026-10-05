@@ -442,6 +442,7 @@ descriptor_binding_path(GPUDevice *device,
   passVk->pipelineLayout             = pipelineLayoutVk->layout;
   passVk->descriptors.pipelineLayout = pipelineLayoutVk;
   GPUBindComputeGroup(pass, 0u, group, 0u, NULL);
+
   ok = pass->_boundGroups[0] == group;
   GPUEndComputePass(pass);
 
@@ -469,6 +470,7 @@ descriptor_binding_path(GPUDevice *device,
   passVk->pipelineLayout             = mixedPipelineLayoutVk->layout;
   passVk->descriptors.pipelineLayout = mixedPipelineLayoutVk;
   GPUBindComputeGroup(pass, 0u, group, 0u, NULL);
+
   ok = pass->_boundGroups[0] == group;
   GPUEndComputePass(pass);
 

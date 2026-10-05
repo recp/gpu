@@ -725,6 +725,7 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   copyPass = NULL;
 
   GPUResetFence(fence);
+
   submitList[0]                     = cmdb;
   copySubmitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   copySubmitInfo.chain.structSize   = sizeof(copySubmitInfo);
@@ -960,6 +961,7 @@ gpu_test_sparse_buffer_memory(GPUAdapter *adapter) {
   }
 
   GPUResetFence(fence);
+
   mapping.mode = GPU_SPARSE_MAPPING_UNMAP;
 
   if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK
@@ -1008,6 +1010,7 @@ gpu_test_sparse_buffer_memory(GPUAdapter *adapter) {
   }
 
   GPUResetFence(fence);
+
   mapping.mode = GPU_SPARSE_MAPPING_UNMAP;
 
   if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK

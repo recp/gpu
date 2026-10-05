@@ -205,6 +205,7 @@ create_targets(GPUSampleMRTBlend *state, uint32_t width, uint32_t height) {
     GPUDestroyBindGroup(state->compositeGroups[i]);
     GPUDestroyTextureView(state->targetViews[i]);
     GPUDestroyTexture(state->targets[i]);
+
     state->targets[i]         = targets[i];
     state->targetViews[i]     = views[i];
     state->compositeGroups[i] = groups[i];

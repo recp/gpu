@@ -140,6 +140,7 @@ bench_percentile(double *values, size_t count, double percentile) {
   }
 
   qsort(values, count, sizeof(*values), bench_compare);
+
   index = (size_t)(percentile * (double)(count - 1u) + 0.5);
 
   return values[index];

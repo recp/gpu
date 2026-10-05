@@ -287,6 +287,7 @@ wWinMain(HINSTANCE  instance,
   }
 
   GetClientRect(window, &client);
+
   host.window.width  = (uint32_t)client.right;
   host.window.height = (uint32_t)client.bottom;
   host.window.scale  = display_scale(window, GetDpiForWindow(window));

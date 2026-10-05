@@ -458,6 +458,7 @@ vk_createPlacedBuffer(GPUDevice                 *device,
                   VK_OBJECT_TYPE_BUFFER,
                   (uint64_t)native->buffer,
                   info->label);
+
   *outBuffer = buffer;
 
   return GPU_OK;
@@ -613,6 +614,7 @@ vk_createSparseBuffer(GPUDevice                 *device,
                   VK_OBJECT_TYPE_BUFFER,
                   (uint64_t)native->buffer,
                   info->label);
+
   *outBuffer = buffer;
 
   return GPU_OK;
@@ -675,6 +677,7 @@ vk_wrapBuffer(GPUDevice                 *device,
                   VK_OBJECT_TYPE_BUFFER,
                   (uint64_t)native->buffer,
                   info->label);
+
   *outBuffer = buffer;
 
   return GPU_OK;

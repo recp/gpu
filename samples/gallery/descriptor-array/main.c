@@ -249,6 +249,7 @@ create_resources(DescriptorArray *state) {
 
   for (i = 0u; i < DESCRIPTOR_COUNT; i++) {
     fill_texture(pixels, i);
+
     textureInfo.label = textureLabels[i];
 
     if (GPUCreateTexture(state->device,

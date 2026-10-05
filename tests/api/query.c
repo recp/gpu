@@ -183,6 +183,7 @@ check_query_commands_are_safe_noops(void) {
   GPUEndPipelineStatisticsQuery(&submittedCmdb, NULL);
   GPUResolveQuerySet(NULL, NULL, 0u, 0u, NULL, 0u);
   GPUResolveQuerySet(&submittedCmdb, NULL, 0u, 0u, NULL, 0u);
+
   timestampPeriod = 1.0;
 
   if (GPUGetTimestampPeriod(NULL, &timestampPeriod) != GPU_ERROR_INVALID_ARGUMENT

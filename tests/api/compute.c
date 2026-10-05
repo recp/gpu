@@ -225,6 +225,7 @@ check_compute_disk_cache(GPUDevice                    *device,
   remove(metadataPath);
   remove(metadataTemporaryPath);
   remove(lockPath);
+
   cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
   cacheInfo.chain.structSize = sizeof(cacheInfo);
   cacheInfo.label            = "api-compute-disk-cache";

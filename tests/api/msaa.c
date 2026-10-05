@@ -401,6 +401,7 @@ gpu_test_msaa_resolve_sample(GPUDevice *device, const char *bytecodePath) {
                          manualTexture,
                          readbackBuffer,
                          &copyRegion);
+
   copyRegion.bufferOffset = imageBytes;
   GPUCopyTextureToBuffer(copyPass,
                          resolvedTexture,

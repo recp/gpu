@@ -301,6 +301,7 @@ create_fonts(GPUGallery *gallery) {
   }
   DeleteObject(gallery->bodyFont);
   DeleteObject(gallery->titleFont);
+
   gallery->titleFont = titleFont;
   gallery->bodyFont  = bodyFont;
 
@@ -609,6 +610,7 @@ card_rect(const GPUGallery *gallery,
   int              column, row;
 
   gallery_layout(gallery, client, &layout);
+
   column = (int)(index % (size_t)layout.columns);
   row    = (int)(index / (size_t)layout.columns);
 
@@ -895,6 +897,7 @@ ensure_backbuffer(GPUGallery *gallery,
     gallery->backDefaultBitmap = replaced;
   }
   DeleteObject(gallery->backBitmap);
+
   gallery->backBitmap = bitmap;
   gallery->backWidth  = width;
   gallery->backHeight = height;
@@ -1080,6 +1083,7 @@ start_sample(GPUGallery *gallery, size_t index) {
     return;
   }
   CloseHandle(process.hThread);
+
   gallery->child  = process.hProcess;
   gallery->status = gpuNativeSamples[index].id;
 
@@ -1241,6 +1245,7 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
       info.cbSize = sizeof(info);
       info.fMask  = SIF_ALL;
       GetScrollInfo(window, SB_VERT, &info);
+
       value = gallery->scroll;
 
       switch (LOWORD(wParam)) {

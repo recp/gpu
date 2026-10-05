@@ -558,6 +558,7 @@ check_buffer_layout_validation(GPUDevice *device) {
                    && copy[0].buffer.minBindingSize == 8u
                    && copy[0].buffer.strideBytes == 4u
                    && copy[0].buffer.byteAddress == (rawIndex != 0u));
+
       groupInfo.layout      = layouts[rawIndex];
       binding.buffer.buffer = buffer;
       binding.buffer.offset = 0u;

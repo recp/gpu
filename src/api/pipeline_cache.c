@@ -1397,6 +1397,7 @@ GPUCreatePipelineCache(GPUDevice                        *__restrict device,
   cache->deviceNext       = device->_pipelineCaches;
   device->_pipelineCaches = cache;
   gpu_deviceCacheUnlock(device);
+
   *outCache = cache;
 
   return GPU_OK;

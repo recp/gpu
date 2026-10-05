@@ -283,6 +283,7 @@ check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   blitInfo.dstRegion.layerCount = 1u;
   blitInfo.filter               = GPU_FILTER_NEAREST;
   GPUBlit(&cmdb, &blitInfo);
+
   blitSource.usage = GPU_TEXTURE_USAGE_COPY_SRC;
   GPUBlit(&cmdb, &blitInfo);
 
@@ -296,6 +297,7 @@ check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   texture.depthOrLayers = 2u;
   texture.mipLevelCount = 3u;
   GPUGenerateMipmaps(&cmdb, &texture);
+
   texture.usage = GPU_TEXTURE_USAGE_SAMPLED;
   GPUGenerateMipmaps(&cmdb, &texture);
 
@@ -787,6 +789,7 @@ check_copy_pass_invalid_copy_noops(GPUDevice *device) {
   badBufferRegion            = fullBufferRegion;
   badBufferRegion.sizeBytes  = 0u;
   GPUCopyBufferToBuffer(copyPass, sourceBuffer, protectedBuffer, &badBufferRegion);
+
   badBufferRegion           = fullBufferRegion;
   badBufferRegion.dstOffset = sizeof(protectedBytes) - 4u;
   badBufferRegion.sizeBytes = 8u;
@@ -803,9 +806,11 @@ check_copy_pass_invalid_copy_noops(GPUDevice *device) {
   badTextureRegion             = fullTextureRegion;
   badTextureRegion.bytesPerRow = 0u;
   GPUCopyBufferToTexture(copyPass, sourceBuffer, protectedTexture, &badTextureRegion);
+
   badTextureRegion              = fullTextureRegion;
   badTextureRegion.rowsPerImage = 3u;
   GPUCopyBufferToTexture(copyPass, sourceBuffer, protectedTexture, &badTextureRegion);
+
   badTextureRegion               = fullTextureRegion;
   badTextureRegion.texture.width = 5u;
   GPUCopyBufferToTexture(copyPass, sourceBuffer, protectedTexture, &badTextureRegion);
@@ -823,6 +828,7 @@ check_copy_pass_invalid_copy_noops(GPUDevice *device) {
   badTextureCopy             = fullTextureCopy;
   badTextureCopy.width       = 5u;
   GPUCopyTextureToTexture(copyPass, sourceTexture, protectedTexture, &badTextureCopy);
+
   badTextureCopy       = fullTextureCopy;
   badTextureCopy.dst.x = 1u;
   GPUCopyTextureToTexture(copyPass, sourceTexture, protectedTexture, &badTextureCopy);
@@ -1061,6 +1067,7 @@ check_compressed_texture_copies(GPUDevice *device) {
   bufferRegion.texture.layerCount = 1u;
   GPUCopyTextureToBuffer(copyPass, textureB, readback, &bufferRegion);
   GPUCopyBufferToTexture(copyPass, upload, textureA, &bufferRegion);
+
   bufferRegion.bufferOffset = 512u;
   GPUCopyTextureToBuffer(copyPass, textureA, readback, &bufferRegion);
   GPUEndTransferPass(copyPass);
@@ -1261,6 +1268,7 @@ run_texture_blit(GPUQueue                 *queue,
   }
 
   GPUBlit(cmdb, blitInfo);
+
   textureBarrier.texture           = destination;
   textureBarrier.srcAccess         = GPU_ACCESS_COLOR_WRITE |
                                      GPU_ACCESS_TRANSFER_WRITE;
@@ -1764,6 +1772,7 @@ check_texture_generate_mipmaps(GPUDevice *device) {
     }
 
     GPUGenerateMipmaps(cmdb, texture);
+
     commandBuffers[0] = cmdb;
     ok                = GPUQueueSubmit(queue, &submitInfo) == GPU_OK
                         && GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
@@ -2146,6 +2155,7 @@ check_texture_blit(GPUDevice *device) {
     }
 
     GPUBlit(cmdb, &blitInfo);
+
     commandBuffers[0] = cmdb;
     ok                = GPUQueueSubmit(queue, &submitInfo) == GPU_OK
                         && GPUWaitFence(fence, UINT64_MAX) == GPU_OK;

@@ -328,6 +328,7 @@ gpu_test_execution_graph(GPUAdapter *adapter, const char *bytecodePath) {
 
   GPUBindExecutionGraphEXT(pass, graph);
   GPUBindComputeGroup(pass, 0u, group, 0u, NULL);
+
   input.entry       = entry;
   input.recordCount = 1u;
   GPUDispatchExecutionGraphEXT(pass, instance, 1u, &input);
@@ -384,6 +385,7 @@ gpu_test_execution_graph(GPUAdapter *adapter, const char *bytecodePath) {
 
   GPUBindExecutionGraphEXT(pass, graph);
   GPUBindComputeGroup(pass, 0u, group, 0u, NULL);
+
   bufferInput.records     = inputBuffer;
   bufferInput.entry       = entry;
   bufferInput.recordCount = 1u;

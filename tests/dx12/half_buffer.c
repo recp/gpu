@@ -118,6 +118,7 @@ check_dynamic_order(GPUDevice *device) {
     goto cleanup;
 
   puts("dynamic descriptor order passed");
+
   ok = 1;
 cleanup:
   if (!ok)
@@ -211,6 +212,7 @@ check_raw_alignment(GPUDevice *device) {
   }
 
   printf("raw root/table alignment: %u cases passed\n", checked);
+
   ok = 1;
 cleanup:
   GPUDestroyBindGroup(group);
@@ -359,6 +361,7 @@ run_range(GPUDevice          *device,
   REQUIRE(GPUQueueReadBuffer(queue, buffers[3], 0u, output, sizeof(output)) == GPU_OK);
   REQUIRE(GPUQueueReadBuffer(queue, buffers[0], size, actual, 1u) == GPU_ERROR_INVALID_ARGUMENT);
   REQUIRE(GPUQueueWriteBuffer(queue, buffers[0], size, actual, 1u) == GPU_ERROR_INVALID_ARGUMENT);
+
   ok = 1;
 
   if (output[0] != 1.0f || output[1] != 2.0f) {
@@ -529,6 +532,7 @@ main(int argc, char **argv) {
 
   printf("half reflected stride=%u minimum=%llu descriptors=%u\n", entries[0].buffer.strideBytes,
          (unsigned long long)entries[0].buffer.minBindingSize, entries[0].arrayCount);
+
   pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   pipelineInfo.chain.structSize = sizeof(pipelineInfo);
   pipelineInfo.layout           = layout->pipelineLayout;

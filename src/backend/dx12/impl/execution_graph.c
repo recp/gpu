@@ -251,6 +251,7 @@ dx12_createExecutionGraph(GPUDevice                            *device,
   native->graphProperties->lpVtbl->GetWorkGraphMemoryRequirements(native->graphProperties,
                                                                   native->graphIndex,
                                                                   &requirements);
+
   graph->memoryRequirements.minSizeBytes         = requirements.MinSizeInBytes;
   graph->memoryRequirements.maxSizeBytes         = requirements.MaxSizeInBytes;
   graph->memoryRequirements.sizeGranularityBytes = requirements.SizeGranularityInBytes;
@@ -425,6 +426,7 @@ dx12_reserveGraphInput(GPUComputePassEncoder     *pass,
   chunk->next               = command->graphInputChunks;
   command->graphInputChunks = chunk;
   gpuDeviceRecordHotPathAlloc(device, sizeof(*chunk) + capacity);
+
   *outMapped  = chunk->mapped + offset;
   *outAddress = chunk->address + offset;
 

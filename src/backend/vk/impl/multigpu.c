@@ -192,6 +192,7 @@ vk_bufferMemoryRequirements(VkDevice              device,
   requirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
   requirements.pNext = &dedicated;
   vkGetBufferMemoryRequirements2(device, &info, &requirements);
+
   *outRequirements = requirements.memoryRequirements;
 
   if (outDedicated
@@ -216,6 +217,7 @@ vk_imageMemoryRequirements(VkDevice              device,
   requirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
   requirements.pNext = &dedicated;
   vkGetImageMemoryRequirements2(device, &info, &requirements);
+
   *outRequirements = requirements.memoryRequirements;
 
   if (outDedicated

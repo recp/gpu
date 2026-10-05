@@ -770,6 +770,7 @@ vk_prepareExecutionGraphInstance(GPUComputePassEncoder        *pass,
                                                    graph->pipeline,
                                                    native->scratchAddress,
                                                    instance->memorySizeBytes);
+
     barrier.sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
     barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;

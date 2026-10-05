@@ -1026,6 +1026,7 @@ vk_finishTexture(GPUDevice                  *device,
     vkGetPhysicalDeviceFormatProperties(adapterVk->physicalDevice,
                                         imageInfo->format,
                                         &properties);
+
     state->blitSrc    = (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) != 0u;
     state->blitDst    = (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT) != 0u;
     state->linearBlit = (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0u;
@@ -1104,6 +1105,7 @@ vk_finishTexture(GPUDevice                  *device,
                   VK_OBJECT_TYPE_IMAGE,
                   (uint64_t)native->image,
                   info->label);
+
   *outTexture = texture;
 
   return GPU_OK;

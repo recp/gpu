@@ -551,6 +551,7 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
   GPUSetViewport(renderPass, &viewport);
   GPUSetScissor(renderPass, &scissor);
   GPUDraw(renderPass, 6u, 1u, 0u, 0u);
+
   scissor.x      = (int32_t)(width / 2u);
   scissor.y      = 0;
   scissor.width  = width - width / 2u;
@@ -582,14 +583,17 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
   scissor.height = height + 3u;
   GPUSetViewport(renderPass, &viewport);
   GPUSetScissor(renderPass, &scissor);
+
   vertexBinding.buffer = nearVertices;
   GPUBindRenderPipeline(renderPass, redPipeline);
   GPUBindVertexBuffers(renderPass, 0u, 1u, &vertexBinding);
   GPUDraw(renderPass, 3u, 1u, 0u, 0u);
+
   vertexBinding.buffer = clippedVertices;
   GPUBindRenderPipeline(renderPass, bluePipeline);
   GPUBindVertexBuffers(renderPass, 0u, 1u, &vertexBinding);
   GPUDraw(renderPass, 3u, 1u, 0u, 0u);
+
   vertexBinding.buffer = farVertices;
   GPUBindRenderPipeline(renderPass, greenPipeline);
   GPUBindVertexBuffers(renderPass, 0u, 1u, &vertexBinding);
@@ -634,16 +638,19 @@ gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath) {
                          textureTarget,
                          readbackBuffer,
                          &copyRegion);
+
   copyRegion.bufferOffset = imageBytes;
   GPUCopyTextureToBuffer(copyPass,
                          repeatTarget,
                          readbackBuffer,
                          &copyRegion);
+
   copyRegion.bufferOffset       = 2u * imageBytes;
   GPUCopyTextureToBuffer(copyPass,
                          depthTarget,
                          readbackBuffer,
                          &copyRegion);
+
   copyRegion.bufferOffset   = 3u * imageBytes;
   copyRegion.bytesPerRow    = rowPitch;
   copyRegion.rowsPerImage   = 2u;

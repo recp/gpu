@@ -54,6 +54,7 @@ dx12__newLibrary(GPUDevice  *device,
   native->binary     = binary;
 
   InitializeSRWLock(&native->cacheLock);
+
   library->_priv = native;
 
   return library;

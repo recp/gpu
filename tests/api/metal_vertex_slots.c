@@ -154,6 +154,7 @@ check_direct_msl_slots(GPUDevice *device) {
   }
 
   GPUDestroyRenderPipeline(pipeline);
+
   pipeline = (GPURenderPipeline *)(uintptr_t)1u;
 
   vertexLayouts[MT_VERTEX_BUFFER_COUNT - 1u] = vertexLayout;
@@ -300,6 +301,7 @@ check_usl_slot_plan(GPUDevice *device, const char *bytecodePath) {
   }
 
   GPUDestroyRenderPipeline(pipeline);
+
   pipeline = (GPURenderPipeline *)(uintptr_t)1u;
 
   vertexLayouts[MT_VERTEX_BUFFER_COUNT - 1u] = (GPUVertexBufferLayout){0};

@@ -86,6 +86,7 @@ submit_empty(GPUQueue        *queue,
   }
 
   GPUSetCommandBufferCompletionHandler(cmdb, probe, on_complete);
+
   buffers[0] = cmdb;
   memset(&submitInfo, 0, sizeof(submitInfo));
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
@@ -284,6 +285,7 @@ submit_error_propagates(GPUQueue *queue) {
   }
 
   GPUSetCommandBufferCompletionHandler(cmdb, &probe, on_complete);
+
   buffers[0] = cmdb;
   memset(&submitInfo, 0, sizeof(submitInfo));
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;

@@ -331,6 +331,7 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   bufferBatch.bufferBarrierCount = 2u;
   bufferBatch.pBufferBarriers    = bufferBarriers;
   GPUEncodeBarriers(cmdb, &bufferBatch);
+
   nativeVertex   = vertexBuffer->_priv;
   nativeIndirect = indirectBuffer->_priv;
 
@@ -346,6 +347,7 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   bufferBarriers[0].sizeBytes    = indexBufferSize;
   bufferBatch.bufferBarrierCount = 1u;
   GPUEncodeBarriers(cmdb, &bufferBatch);
+
   nativeIndex = indexBuffer->_priv;
 
   if (!nativeIndex || nativeIndex->state != D3D12_RESOURCE_STATE_INDEX_BUFFER) {

@@ -200,6 +200,7 @@ bench_renderFrame(BenchRender        *bench,
   }
 
   GPUEndRenderPass(pass);
+
   cmdb->_recordsGPUFrameTime = bench->device->runtimeConfig.enableStats;
 
   buffers[0]                    = cmdb;

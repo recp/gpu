@@ -171,6 +171,7 @@ create_depth_target(WebGPUIndexedDepth *state,
   GPUDestroyBindGroup(state->depthGroup);
   GPUDestroyTextureView(state->depthView);
   GPUDestroyTexture(state->depthTexture);
+
   state->depthTexture = texture;
   state->depthView    = view;
   state->depthGroup   = group;

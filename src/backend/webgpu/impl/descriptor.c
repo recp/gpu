@@ -351,6 +351,7 @@ webgpu_createPipelineLayout(GPUDevice *device, GPUPipelineLayout *layout) {
   GPUResult               result;
 
   gpuGetPipelineLayoutGroups(layout, &groupCount);
+
   requiredGroupMask = groupCount > 0u ? (1u << groupCount) - 1u : 0u;
   result            = gpu_webgpuCreatePipelineLayout(device,
                                                      layout,

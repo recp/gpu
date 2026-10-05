@@ -344,6 +344,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   GPUBindRenderPipeline(renderPass, pipeline);
   GPUBindVertexBuffers(renderPass, 0u, 1u, &vertexBinding);
   GPUBindRenderGroup(renderPass, 0u, fragmentGroup, 0u, NULL);
+
   viewport.width    = (float)width;
   viewport.height   = (float)height;
   viewport.maxDepth = 1.0f;

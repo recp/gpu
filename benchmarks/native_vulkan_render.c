@@ -1140,6 +1140,7 @@ native_encode(NativeVulkanBench        *bench,
         memset(&viewport, 0, sizeof(viewport));
         memset(&scissor, 0, sizeof(scissor));
         native_bindPipeline(bench, stateIndex);
+
         viewport.x        = stateIndex == 0u ? 0.0f : 1.0f;
         viewport.y        = stateIndex == 0u ? 0.0f : 1.0f;
         viewport.width    = stateIndex == 0u ? NATIVE_STATE_TARGET : NATIVE_STATE_TARGET - 2u;
@@ -1173,6 +1174,7 @@ native_encode(NativeVulkanBench        *bench,
 
   if (bench->mode == NativeVulkanModeBinding) {
     native_bindPipeline(bench, 0u);
+
     previousGroup = UINT32_MAX;
 
     for (draw = 0u; draw < config->drawCount; draw++) {
@@ -1294,6 +1296,7 @@ native_frame(NativeVulkanBench        *bench,
   vkCmdBeginRenderPass(bench->commandBuffer,
                        &renderPassInfo,
                        VK_SUBPASS_CONTENTS_INLINE);
+
   viewport.width    = (float)bench->targetSize;
   viewport.height   = (float)bench->targetSize;
   viewport.minDepth = 0.0f;

@@ -662,6 +662,7 @@ native_encodeBinding(NativeMetalBench           *bench,
   uint32_t groupIndex;
 
   native_bindPipeline(bench, encoder, 0u);
+
   previousGroup = UINT32_MAX;
 
   for (draw = 0u; draw < drawCount; draw++) {
@@ -823,6 +824,7 @@ native_encodeBinding4(NativeMetalBench            *bench,
   uint32_t groupIndex;
 
   native_bindPipeline4(bench, encoder, 0u);
+
   previousGroup = UINT32_MAX;
 
   for (draw = 0u; draw < drawCount; draw++) {

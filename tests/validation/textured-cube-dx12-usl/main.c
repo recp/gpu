@@ -162,6 +162,7 @@ textured_cube_createDepthTarget(TexturedCubeApp *app,
 
   GPUDestroyTextureView(app->depthView);
   GPUDestroyTexture(app->depthTexture);
+
   app->depthTexture = texture;
   app->depthView    = view;
 
@@ -284,6 +285,7 @@ textured_cube_createMaterial(TexturedCubeApp *app) {
   GPUBindGroupCreateInfo   samplerGroupInfo   = {0};
 
   CubeFillChecker(pixels);
+
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "textured-cube-checker";

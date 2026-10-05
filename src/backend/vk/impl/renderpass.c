@@ -649,6 +649,7 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
     vk_transitionView(command->command,
                       colorView,
                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
     nativeAttachment              = &native->colorAttachments[i];
     nativeAttachment->sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
     nativeAttachment->imageView   = colorView->view;
@@ -660,6 +661,7 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
       vk_transitionView(command->command,
                         resolveView,
                         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
       nativeAttachment->resolveMode        = VK_RESOLVE_MODE_AVERAGE_BIT;
       nativeAttachment->resolveImageView   = resolveView->view;
       nativeAttachment->resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -754,6 +756,7 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
     vk_transitionView(command->command,
                       shadingView,
                       VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR);
+
     native->shadingRateView                   = shadingView;
     native->shadingRateAttachment.sType       = VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR;
     native->shadingRateAttachment.imageView   = shadingView->view;
@@ -1582,6 +1585,7 @@ vk_transitionView(VkCommandBuffer command, GPUTextureViewVk *view, VkImageLayout
   vk__layoutAccess(nextLayout,
                    &dstStage,
                    &dstAccess);
+
   barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
   barrier.srcAccessMask                   = srcAccess;
   barrier.dstAccessMask                   = dstAccess;

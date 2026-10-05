@@ -624,6 +624,7 @@ asset_load(AssetCallback callback,
 
   memset(&loadJob, 0, sizeof(loadJob));
   asset_reset(&loadJob.asset);
+
   loadJob.callback = callback;
   loadJob.userData = userData;
   loadJob.active   = true;

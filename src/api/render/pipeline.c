@@ -895,6 +895,7 @@ GPUCreateRenderPipeline(GPUDevice                         *__restrict device,
 
     if (pipeline) {
       gpuPipelineCacheReleaseKey(&cacheKey);
+
       *outPipeline = pipeline;
       return GPU_OK;
     }

@@ -269,6 +269,7 @@ vk_rayEnsureInstanceBuffer(GPUDevice                  *device,
   }
 
   vk_destroyBuffer(native->instanceBuffer);
+
   native->instanceBuffer   = buffer;
   native->instanceCapacity = capacity;
 
@@ -705,6 +706,7 @@ vk_createRayTracingPipeline(GPUDevice                                *device,
                   VK_OBJECT_TYPE_PIPELINE,
                   (uint64_t)native->pipeline,
                   info->label);
+
   pipeline->_priv = native;
 
   return GPU_OK;
@@ -1043,6 +1045,7 @@ vk_createShaderTable(GPUDevice                         *device,
                   VK_OBJECT_TYPE_BUFFER,
                   (uint64_t)native->buffer,
                   info->label);
+
   table->_priv = native;
 
   return GPU_OK;
@@ -1209,6 +1212,7 @@ vk_getAccelerationStructureSizes(GPUDevice                                  *dev
     }
   } else {
     vk_rayFillInstances(&geometries[0], 0u);
+
     counts[0] = info->topLevel.instanceCount;
   }
 
@@ -1348,6 +1352,7 @@ vk_createAccelerationStructure(GPUDevice                                   *devi
                   VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR,
                   (uint64_t)native->structure,
                   info->label);
+
   structure->_priv = native;
 
   return GPU_OK;

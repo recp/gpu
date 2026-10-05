@@ -784,6 +784,7 @@ vk_resizeSwapchain(GPUSwapchain *swapchainObj, GPUExtent2D size) {
   }
 
   vk__destroyResources(swapchain);
+
   *swapchain = replacement;
   for (i = 0u; i < swapchain->imageCount; i++) {
     swapchain->frameSync[i].swapchain   = swapchain;

@@ -153,6 +153,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   GPUDestroyTextureView(_depthView);
   GPUDestroyTexture(_depthTexture);
+
   _depthTexture = texture;
   _depthView    = view;
 
@@ -271,6 +272,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUBindGroupCreateInfo   samplerGroupInfo   = {0};
 
   CubeFillChecker(pixels);
+
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "textured-cube-checker";

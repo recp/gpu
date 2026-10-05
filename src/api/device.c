@@ -1715,6 +1715,7 @@ GPUGetAdapterCapabilities(const GPUAdapter       *adapter,
 
   memset(outCaps, 0, sizeof(*outCaps));
   gpu_ensureAdapterFeatureSet((GPUAdapter *)adapter);
+
   outCaps->supported = adapter->supportedFeatures;
   gpu_fillAdapterLimits(adapter, &outCaps->limits);
 
@@ -1868,6 +1869,7 @@ GPUConfigureTransientAllocator(GPUDevice                         *device,
   }
 
   gpu_destroyTransientAllocator(device);
+
   device->transientBuffer      = buffer;
   device->transientFrameFences = frameFences;
   device->transientCpuPtr      = cpuPtr;

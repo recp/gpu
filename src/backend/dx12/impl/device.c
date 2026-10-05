@@ -1154,6 +1154,7 @@ dx12_getAvailableAdapters(GPUInstance *__restrict inst,
     InitializeSRWLock(&adapterDX12->formatCapsLock);
     InitializeSRWLock(&adapterDX12->subgroupMatrixLock);
     snprintf(adapterDX12->name, sizeof(adapterDX12->name), "WARP");
+
     adapter->_priv                = adapterDX12;
     adapter->inst                 = inst;
     adapter->separatePresentQueue = 1; /* builtin */

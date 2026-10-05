@@ -535,6 +535,7 @@ vk__ensureTransferBuffer(GPUQueueVk        *queue,
   }
 
   vk_destroyBuffer(*slot);
+
   *slot            = staging;
   *currentCapacity = capacity;
 

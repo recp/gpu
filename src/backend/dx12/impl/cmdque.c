@@ -831,6 +831,7 @@ dx12__flushTransfers(GPUQueue *queue, bool wait) {
     native->commandQueue->lpVtbl->ExecuteCommandLists(native->commandQueue,
                                                       1u,
                                                       commandLists);
+
     fenceValue = ++native->transferFenceValue;
     result     = native->commandQueue->lpVtbl->Signal(native->commandQueue,
                                                       native->transferFence,

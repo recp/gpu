@@ -183,6 +183,7 @@ webgpu_copyBufferTexture(GPUTransferPassEncoder           *pass,
   webgpu_fillTextureCopy(&textureCopy,
                          texture,
                          &textureRegion->texture);
+
   extent.width              = textureRegion->width;
   extent.height             = textureRegion->height;
   extent.depthOrArrayLayers = imageCount;
@@ -415,6 +416,7 @@ webgpu_copyTextureToTexture(GPUTransferPassEncoder              *pass,
 
   webgpu_fillTextureCopy(&source, src, &region->src);
   webgpu_fillTextureCopy(&destination, dst, &region->dst);
+
   extent.width              = region->width;
   extent.height             = region->height;
   extent.depthOrArrayLayers = src->dimension == GPU_TEXTURE_DIMENSION_3D

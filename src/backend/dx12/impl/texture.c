@@ -345,6 +345,7 @@ dx12__sparseTextureRequirements(GPUDevice                    *device,
                                                    &subresourceTilingCount,
                                                    0u,
                                                    NULL);
+
   arrayLayerCount = desc->Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ? 1u : desc->DepthOrArraySize;
 
   if (tileCount == 0u || arrayLayerCount == 0u

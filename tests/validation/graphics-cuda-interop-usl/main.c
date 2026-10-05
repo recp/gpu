@@ -2225,6 +2225,7 @@ run_texture_roundtrip(RoundtripState *state, uint32_t sequence) {
                        &outputBits,
                        &inputValue,
                        &outputValue);
+
       texel      = component / format->channelCount;
       channel    = component % format->channelCount;
       cudaIndex  = base + texel * 4u + channel;

@@ -758,6 +758,7 @@ vk_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
   vkGetPhysicalDeviceFormatProperties(adapterVk->physicalDevice,
                                       nativeFormat,
                                       &properties);
+
   features = properties.optimalTilingFeatures;
   memset(outCaps, 0, sizeof(*outCaps));
   outCaps->sampled         = (features & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0u;
@@ -1646,6 +1647,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       floatControls2Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
       floatControls2Features2.pNext = &floatControls2Features;
       getFeatures2(raw, &floatControls2Features2);
+
       adapterVk->floatControls2 = floatControls2Features.shaderFloatControls2 == VK_TRUE;
 
       if (adapterVk->floatControls2 && !core
@@ -1673,6 +1675,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     float16Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     float16Features2.pNext = &float16Features;
     getFeatures2(raw, &float16Features2);
+
     adapterVk->shaderFloat16 = float16Features.shaderFloat16;
   }
 
@@ -1681,6 +1684,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     storage16Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     storage16Features2.pNext = &storage16Features;
     getFeatures2(raw, &storage16Features2);
+
     adapterVk->storageBuffer16BitAccess = storage16Features.storageBuffer16BitAccess;
 
     if (adapterVk->storageBuffer16BitAccess && !storage16Core
@@ -1695,6 +1699,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     memoryModelFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     memoryModelFeatures2.pNext = &memoryModelFeatures;
     getFeatures2(raw, &memoryModelFeatures2);
+
     adapterVk->vulkanMemoryModel = memoryModelFeatures.vulkanMemoryModel;
 
     if (adapterVk->vulkanMemoryModel && !memoryModelCore
@@ -1730,6 +1735,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
         pipelineBinaryProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         pipelineBinaryProperties2.pNext = &pipelineBinaryProperties;
         getBinaryProperties(raw, &pipelineBinaryProperties2);
+
         adapterVk->pipelineBinaryInternalCache        = pipelineBinaryProperties.pipelineBinaryInternalCache;
         adapterVk->pipelineBinaryPrefersInternalCache = pipelineBinaryProperties.pipelineBinaryPrefersInternalCache;
 
@@ -1805,6 +1811,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     derivativeFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     derivativeFeatures2.pNext = &derivativeFeatures;
     getFeatures2(raw, &derivativeFeatures2);
+
     adapterVk->computeDerivativeQuads  = derivativeFeatures.computeDerivativeGroupQuads == VK_TRUE;
     adapterVk->computeDerivativeLinear = derivativeFeatures.computeDerivativeGroupLinear == VK_TRUE;
 
@@ -1838,6 +1845,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     untypedPointerFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     untypedPointerFeatures2.pNext = &untypedPointerFeatures;
     getFeatures2(raw, &untypedPointerFeatures2);
+
     adapterVk->shaderUntypedPointers = untypedPointerFeatures.shaderUntypedPointers == VK_TRUE;
 
     if (adapterVk->shaderUntypedPointers
@@ -1852,6 +1860,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     bufferAddressFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     bufferAddressFeatures2.pNext = &bufferAddressFeatures;
     getFeatures2(raw, &bufferAddressFeatures2);
+
     adapterVk->bufferDeviceAddress = bufferAddressFeatures.bufferDeviceAddress == VK_TRUE;
 #ifdef VK_KHR_buffer_device_address
     if (adapterVk->bufferDeviceAddress && !bufferAddressCore
@@ -2038,6 +2047,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       cooperativeProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
       cooperativeProperties2.pNext = &cooperativeProperties;
       getMatrixProperties(raw, &cooperativeProperties2);
+
       adapterVk->subgroupMatrixStages = cooperativeProperties.cooperativeMatrixSupportedStages;
 
       if ((adapterVk->subgroupMatrixStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0u
@@ -2054,6 +2064,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     timelineFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     timelineFeatures2.pNext = &timelineFeatures;
     getFeatures2(raw, &timelineFeatures2);
+
     adapterVk->timelineSemaphore = timelineFeatures.timelineSemaphore;
   }
 
@@ -2176,6 +2187,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
         rayPipelineProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         rayPipelineProperties2.pNext = &rayPipelineProperties;
         getPipelineProperties(raw, &rayPipelineProperties2);
+
         adapterVk->rayTracingShaderGroupHandleSize      = rayPipelineProperties.shaderGroupHandleSize;
         adapterVk->rayTracingShaderGroupHandleAlignment = rayPipelineProperties.shaderGroupHandleAlignment;
         adapterVk->rayTracingShaderGroupBaseAlignment   = rayPipelineProperties.shaderGroupBaseAlignment;
@@ -2227,6 +2239,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     vrsFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     vrsFeatures2.pNext = &vrsFeatures;
     getFeatures2(raw, &vrsFeatures2);
+
     adapterVk->vrsDrawRate   = vrsFeatures.pipelineFragmentShadingRate;
     adapterVk->vrsAttachment = vrsFeatures.attachmentFragmentShadingRate
                                && adapterVk->dynamicRendering;
@@ -2250,6 +2263,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
         vrsProps2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         vrsProps2.pNext = &vrsProps;
         getRateProperties(raw, &vrsProps2);
+
         adapterVk->minVRSTexelSize        = vrsProps.minFragmentShadingRateAttachmentTexelSize;
         adapterVk->maxVRSTexelSize        = vrsProps.maxFragmentShadingRateAttachmentTexelSize;
         adapterVk->maxVRSTexelAspectRatio = vrsProps.maxFragmentShadingRateAttachmentTexelSizeAspectRatio;

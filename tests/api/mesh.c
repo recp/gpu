@@ -299,6 +299,7 @@ test_mesh_draw(GPUDevice  *device,
   cachedPipeline     = NULL;
   pipelineInfo.cache = NULL;
   GPUDestroyRenderPipeline(pipeline);
+
   pipeline      = asyncPipeline;
   asyncPipeline = NULL;
 

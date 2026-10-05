@@ -487,6 +487,7 @@ run_frame(void *userData) {
   }
 
   snapshot_stats(state, samples);
+
   scale = 1000.0 / WEBGPU_RENDER_BATCH_SIZE;
 
   samples->total[samples->sampleCount]   = times.total * scale;

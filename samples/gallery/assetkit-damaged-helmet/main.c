@@ -195,6 +195,7 @@ create_depth_target(AssetSample *state,
 
   GPUDestroyTextureView(state->depthView);
   GPUDestroyTexture(state->depthTexture);
+
   state->depthTexture = texture;
   state->depthView    = view;
 

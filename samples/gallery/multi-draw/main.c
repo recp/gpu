@@ -225,6 +225,7 @@ render_frame(void *userData) {
   }
 
   GPUBindRenderPipeline(pass, state->pipeline);
+
   vertexBuffer.buffer = state->instanceBuffer;
   GPUBindVertexBuffers(pass, 0u, 1u, &vertexBuffer);
   GPUMultiDrawIndirect(pass, state->indirectBuffer, 0u, 2u, 16u);

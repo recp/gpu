@@ -79,10 +79,12 @@ submit_source_sampler_draw(GPUQueue                *queue,
 
   GPUBindRenderPipeline(renderPass, pipeline);
   GPUBindRenderPipeline(renderPass, pipeline);
+
   vertexBinding.buffer = vertexBuffer;
   GPUBindVertexBuffers(renderPass, 0u, 1u, &vertexBinding);
   GPUBindRenderGroup(renderPass, 1u, group, 0u, NULL);
   GPUBindRenderGroup(renderPass, 1u, group, 0u, NULL);
+
   dynamicState.chain.sType       = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
   dynamicState.chain.structSize  = sizeof(dynamicState);
   dynamicState.mask              = GPU_DYNAMIC_STATE_VIEWPORT_BIT |
@@ -603,11 +605,13 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   }
 
   GPUBindRenderGroup(renderPass, 1u, group, 0u, NULL);
+
   leftScissor.width  = width / 2u;
   leftScissor.height = height;
   GPUSetScissor(renderPass, &leftScissor);
   GPUDraw(renderPass, 6u, 1u, 0u, 0u);
   GPUBindRenderPipeline(renderPass, pipelineSwitch);
+
   rightScissor.x      = (int32_t)(width / 2u);
   rightScissor.width  = width - width / 2u;
   rightScissor.height = height;

@@ -194,6 +194,7 @@ validate_texture_plans(void) {
   CHECK(plan.desc.Format == CU_AD_FORMAT_UNSIGNED_INT32
         && plan.desc.NumChannels == 1u
         && plan.desc.Flags == CUDA_ARRAY3D_SURFACE_LDST);
+
   info.usage = GPU_TEXTURE_USAGE_SAMPLED;
   CHECK(!cuda_texturePlan(&info, &limitedFormat, &plan));
 
@@ -302,6 +303,7 @@ validate_view_plans(void) {
         && plan.desc.firstMipmapLevel == 1u
         && plan.desc.lastMipmapLevel == 2u
         && plan.desc.firstLayer == 0u && plan.desc.lastLayer == 0u);
+
   texture.height = 32u;
   info           = view_info(GPU_TEXTURE_VIEW_CUBE, 0u, 1u, 0u, 6u);
   CHECK(!cuda_textureViewPlan(&texture, &info, &plan));

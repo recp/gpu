@@ -1402,6 +1402,7 @@ GPUCreateShaderTableEXT(GPUDevice                         *device,
   }
 
   gpuRetainRayTracingPipeline(info->pipeline);
+
   *outTable = table;
 
   return GPU_OK;

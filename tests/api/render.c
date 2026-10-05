@@ -236,6 +236,7 @@ check_pipeline_disk_cache(GPUDevice                   *device,
   remove(metadataPath);
   remove(metadataTemporaryPath);
   remove(lockPath);
+
   cacheInfo.cachePath = path;
   cache               = NULL;
   result              = GPUCreatePipelineCache(device, &cacheInfo, &cache);
@@ -633,6 +634,7 @@ check_pipeline_cache_validation(GPUDevice                   *device,
   }
 
   GPUResetStats(device);
+
   cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
   cacheInfo.chain.structSize = sizeof(cacheInfo);
   cacheInfo.label            = "api-render-cache";
@@ -2778,15 +2780,19 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
   invalidViewport       = info.viewport;
   invalidViewport.width = 0.0f;
   GPUSetViewport(&pass, &invalidViewport);
+
   invalidViewport        = info.viewport;
   invalidViewport.height = -1.0f;
   GPUSetViewport(&pass, &invalidViewport);
+
   invalidViewport          = info.viewport;
   invalidViewport.minDepth = -0.1f;
   GPUSetViewport(&pass, &invalidViewport);
+
   invalidViewport          = info.viewport;
   invalidViewport.maxDepth = 1.1f;
   GPUSetViewport(&pass, &invalidViewport);
+
   invalidViewport   = info.viewport;
   invalidViewport.x = NAN;
   GPUSetViewport(&pass, &invalidViewport);

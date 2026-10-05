@@ -113,6 +113,7 @@ validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
                   &api,
                   featureMask,
                   70u);
+
   api.device.supportsSubgroupOperations = supports_subgroups;
 
   library = NULL;

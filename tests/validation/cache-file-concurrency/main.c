@@ -272,6 +272,7 @@ cache_spawn(const char        *executable,
   }
 
   CloseHandle(process.hThread);
+
   child->handle = process.hProcess;
   return true;
 #else
@@ -306,6 +307,7 @@ cache_spawnChild(const char   *executable,
   char        writerText[16];
 
   snprintf(writerText, sizeof(writerText), "%u", writer);
+
   arguments[0] = executable;
   arguments[1] = "--child";
   arguments[2] = path;

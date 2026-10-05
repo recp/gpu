@@ -149,6 +149,7 @@ validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
                   &api,
                   featureMask,
                   70u);
+
   api.device.getSubgroupMatrixProperties = get_matrix_properties;
   api.device.supportsSubgroupOperations  = supports_subgroups;
 

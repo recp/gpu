@@ -112,6 +112,7 @@ dx12_rayFillTriangle(D3D12_RAYTRACING_GEOMETRY_DESC                    *dst,
 
   vertex = src->vertexBuffer->_priv;
   index  = src->indexBuffer ? src->indexBuffer->_priv : NULL;
+
   memset(dst, 0, sizeof(*dst));
 
   dst->Type  = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
@@ -138,6 +139,7 @@ dx12_rayFillAABB(D3D12_RAYTRACING_GEOMETRY_DESC                *dst,
   GPUBufferDX12 *buffer;
 
   buffer = src->buffer->_priv;
+
   memset(dst, 0, sizeof(*dst));
 
   dst->Type  = D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS;
@@ -722,6 +724,7 @@ dx12_createRayTracingPipeline(GPUDevice                                *device,
   free(hitGroups);
   dx12_rayFreeHitNames(hitNames, hitCount);
   dx12_freeShaderCode(&libraryCode);
+
   pipeline->_priv = native;
 
   return GPU_OK;
@@ -973,6 +976,7 @@ dx12_createShaderTable(GPUDevice                         *device,
   }
 
   dx12_raySetName(native->resource, info->label);
+
   table->_priv = native;
 
   return GPU_OK;
@@ -1222,6 +1226,7 @@ dx12_createAccelerationStructure(GPUDevice                                   *de
   }
 
   dx12_raySetName(native->resource, info->label);
+
   structure->_priv = native;
 
   return GPU_OK;

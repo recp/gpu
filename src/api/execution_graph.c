@@ -439,6 +439,7 @@ GPUCreateExecutionGraphInstanceEXT(GPUDevice                                    
   }
 
   gpuRetainExecutionGraph(info->graph);
+
   *outInstance = instance;
 
   return GPU_OK;

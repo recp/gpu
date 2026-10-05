@@ -100,6 +100,7 @@ GPUBeginFrame(GPUSwapchain *swapchain) {
 
   if (frame) {
     gpuDeviceActivateFrame(device, frameIndex);
+
     frame->device = device;
 
     if (frame->target) {

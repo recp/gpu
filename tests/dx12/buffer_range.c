@@ -151,16 +151,19 @@ check_dynamic_ranges(void) {
                                         4u,
                                         2u,
                                         &ranges[0]));
+
   ranges[1]  = ranges[0];
   offsets[0] = 16u;
   offsets[1] = 2u;
   CHECK_DYNAMIC(!dx12_dynamicOffsetsValid(ranges, 2u, 2u, offsets));
+
   offsets[1] = 16u;
   CHECK_DYNAMIC(dx12_dynamicOffsetsValid(ranges, 2u, 2u, offsets));
   CHECK_DYNAMIC(!dx12_dynamicOffsetsValid(ranges, 2u, 1u, offsets));
   CHECK_DYNAMIC(!dx12_dynamicOffsetsValid(ranges, 2u, 3u, offsets));
   CHECK_DYNAMIC(!dx12_dynamicOffsetsValid(ranges, 2u, 2u, NULL));
   CHECK_DYNAMIC(!dx12_dynamicOffsetsValid(NULL, 2u, 2u, offsets));
+
   previous = ranges[0];
   CHECK_DYNAMIC(!dx12_dynamicBufferRange(65536u,
                                          6u,

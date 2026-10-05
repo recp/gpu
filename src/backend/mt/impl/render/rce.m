@@ -250,6 +250,7 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       nativeState->modern = [commandState->modern renderCommandEncoderWithDescriptor:nativePass->modern];
       mt_applyPendingBarrier(cmdb, nativeState->modern);
+
       nativeState->vertexArguments   = &commandState->vertexArguments;
       nativeState->fragmentArguments = &commandState->fragmentArguments;
       [nativeState->modern setArgumentTable:nativeState->vertexArguments->table

@@ -306,6 +306,7 @@ mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
     if (@available(macOS 26.0, iOS 26.0, *)) {
       nativeState->modern = [commandState->modern computeCommandEncoder];
       mt_applyPendingBarrier(cmdb, nativeState->modern);
+
       nativeState->arguments = &commandState->computeArguments;
       [nativeState->modern setArgumentTable:nativeState->arguments->table];
     }

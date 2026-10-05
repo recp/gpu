@@ -95,6 +95,7 @@ create_depth_target(WebGPUTexturedCube *state,
 
   GPUDestroyTextureView(state->depthView);
   GPUDestroyTexture(state->depthTexture);
+
   state->depthTexture = texture;
   state->depthView    = view;
 

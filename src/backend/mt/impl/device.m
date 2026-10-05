@@ -416,6 +416,7 @@ mt_getSubgroupMatrixProperties(const GPUAdapter               *__restrict adapte
   }
 
   mt_probeSubgroupMatrices(adapterMT);
+
   capacity = *inoutPropertyCount;
   count    = 0u;
   written  = 0u;
@@ -466,6 +467,7 @@ mt_getLimits(const GPUAdapter *__restrict adapter,
   }
 
   mt_probeSubgroups(adapterMT);
+
   threads                             = device.maxThreadsPerThreadgroup;
   outLimits->maxComputeWorkgroupSizeX = (uint32_t)threads.width;
   outLimits->maxComputeWorkgroupSizeY = (uint32_t)threads.height;

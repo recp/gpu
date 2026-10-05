@@ -593,6 +593,7 @@ check_array_mip_transfers(GPUDevice *device) {
   bufferRegion.texture.layerCount             = 2u;
   GPUCopyTextureToBuffer(copyPass, textureB, readback, &bufferRegion);
   GPUCopyBufferToTexture(copyPass, upload, textureA, &bufferRegion);
+
   bufferRegion.bufferOffset = TRANSFER_SECOND_COPY;
   GPUCopyTextureToBuffer(copyPass, textureA, readback, &bufferRegion);
   GPUEndTransferPass(copyPass);
@@ -758,6 +759,7 @@ check_3d_texture_transfers(GPUDevice *device) {
   bufferRegion.texture.texture.z = 1u;
   GPUCopyBufferToTexture(copyPass, upload, textureA, &bufferRegion);
   GPUCopyTextureToTexture(copyPass, textureA, textureB, &textureRegion);
+
   bufferRegion.bufferOffset      = TRANSFER_SECOND_COPY;
   bufferRegion.texture.texture.z = 0u;
   GPUCopyTextureToBuffer(copyPass, textureB, readback, &bufferRegion);
@@ -1047,6 +1049,7 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
     memcpy(&destinationDepthValue,
            &destinationValue,
            sizeof(destinationDepthValue));
+
     depthMask = UINT32_MAX;
   }
 
@@ -1198,11 +1201,13 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
   bufferRegion.bytesPerRow        = TRANSFER_DS_ROW_PITCH;
   bufferRegion.rowsPerImage       = TRANSFER_HEIGHT;
   GPUCopyTextureToBuffer(copyPass, destination, readback, &bufferRegion);
+
   bufferRegion.texture.texture.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
   bufferRegion.bufferOffset           = DS_STENCIL_AFTER_DEPTH_OFFSET;
   GPUCopyTextureToBuffer(copyPass, destination, readback, &bufferRegion);
 
   GPUResetStats(device);
+
   textureRegion.src.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
   textureRegion.dst.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
   GPUCopyTextureToTexture(copyPass, source, destination, &textureRegion);
@@ -1216,6 +1221,7 @@ check_depth_stencil_plane_copies(GPUDevice *device, GPUFormat format) {
   bufferRegion.texture.texture.aspect = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
   bufferRegion.bufferOffset           = DS_DEPTH_AFTER_STENCIL_OFFSET;
   GPUCopyTextureToBuffer(copyPass, destination, readback, &bufferRegion);
+
   bufferRegion.texture.texture.aspect = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
   bufferRegion.bufferOffset           = DS_STENCIL_AFTER_STENCIL_OFFSET;
   GPUCopyTextureToBuffer(copyPass, destination, readback, &bufferRegion);

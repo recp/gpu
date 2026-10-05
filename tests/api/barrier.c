@@ -43,7 +43,9 @@ check_barrier_forwarding(GPUDevice *device) {
   GPUApi              *api;
   GPUBuffer           *buffer  = NULL;
   GPUTexture          *texture = NULL;
+
   void (*savedEncodeBarriers)(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers);
+
   GPUQueue             fakeQueue      = {0};
   GPUCommandBuffer     fakeCmdb       = {0};
   GPUBufferCreateInfo  bufferInfo     = {0};
@@ -132,9 +134,11 @@ check_barrier_forwarding(GPUDevice *device) {
 
   batch.srcStages = 0u;
   GPUEncodeBarriers(&fakeCmdb, &batch);
+
   batch.srcStages         = GPU_STAGE_TRANSFER;
   bufferBarrier.sizeBytes = 0u;
   GPUEncodeBarriers(&fakeCmdb, &batch);
+
   bufferBarrier.sizeBytes = 256u;
   bufferBarrier.offset    = 240u;
   bufferBarrier.sizeBytes = 32u;
@@ -152,9 +156,11 @@ check_barrier_forwarding(GPUDevice *device) {
   textureBarrier.baseLayer = 0u;
   textureBarrier.dstAccess = GPU_ACCESS_INDIRECT_READ;
   GPUEncodeBarriers(&fakeCmdb, &batch);
+
   textureBarrier.dstAccess = GPU_ACCESS_SHADER_READ;
   textureBarrier.srcAccess = GPU_ACCESS_COLOR_WRITE;
   GPUEncodeBarriers(&fakeCmdb, &batch);
+
   textureBarrier.srcAccess = GPU_ACCESS_TRANSFER_WRITE;
 
   if (gBarrierForwardCount != 1u

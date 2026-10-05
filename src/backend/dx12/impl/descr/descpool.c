@@ -226,6 +226,7 @@ dx12__recordCommandDescriptorAllocation(GPUCommandBufferDX12 *command,
 
     device = command->owner && command->owner->queue ? command->owner->queue->_device : NULL;
     gpuDeviceRecordHotPathAlloc(device, sizeof(*chunk));
+
     tail = command->descriptorAllocationChunks;
 
     if (!tail) {
@@ -282,6 +283,7 @@ dx12__takeCommandSamplerHeap(GPUCommandBufferDX12 *command,
     }
 
     gpuDeviceRecordHotPathAlloc(device, sizeof(*node));
+
     *link = node;
   }
 
@@ -3017,6 +3019,7 @@ dx12_allocateDescriptors(GPUDeviceDX12             *device,
       }
 
       dx12__markDescriptorRange(heap, offset, count, true);
+
       *outOffset         = offset;
       heap->searchOffset = offset + count < heap->capacity ? offset + count : 0u;
       result             = GPU_OK;
@@ -3031,6 +3034,7 @@ dx12_allocateDescriptors(GPUDeviceDX12             *device,
       }
 
       dx12__markDescriptorRange(heap, wrappedOffset, count, true);
+
       *outOffset         = wrappedOffset;
       heap->searchOffset = wrappedOffset + count < heap->capacity ? wrappedOffset + count : 0u;
       result             = GPU_OK;
@@ -3343,6 +3347,7 @@ dx12_createShaderRootSignature(GPUDevice              *device,
 
     if (selectedSamplerCount == 0u) {
       base->rootSignature->lpVtbl->AddRef(base->rootSignature);
+
       *outRootSignature = base->rootSignature;
       memcpy(outKey, base->rootSignatureKey, sizeof(base->rootSignatureKey));
 

@@ -501,6 +501,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   rpd4 = nativePass->modern;
 #endif
   mt_prepareRenderPass(nativePass, info->colorAttachmentCount);
+
   occlusion = info->occlusionQuerySet ? info->occlusionQuerySet->_priv : NULL;
 
   if (info->occlusionQuerySet && (!occlusion || !occlusion->visibility)) {
