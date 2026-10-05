@@ -1010,6 +1010,17 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
       return adapterMT->subgroupMatrixProfiles != 0u;
     case GPU_FEATURE_TIMESTAMPS:
       device = adapterMT->device;
+#if MT_HAS_METAL4
+      mode = getenv("GPU_METAL_MODE");
+
+      if ((!mode || strcmp(mode, "classic") != 0)
+          && mt_supportsMetal4(device)) {
+        if (@available(macOS 26.0, iOS 26.0, *)) {
+          return [device queryTimestampFrequency] != 0u;
+        }
+      }
+#endif
+
       return mt_hasCounterSet(device, MTLCommonCounterSetTimestamp)
              && mt_supportsBlitCounterSampling(device);
     default:
