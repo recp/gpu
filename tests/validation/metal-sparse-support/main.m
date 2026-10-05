@@ -25,6 +25,12 @@
 #define IFT_FEATURES      (RAY_FEATURE | (UINT64_C(1) << GPU_FEATURE_INTERSECTION_FUNCTION_TABLE))
 #define TIMESTAMP_FEATURE (UINT64_C(1) << GPU_FEATURE_TIMESTAMPS)
 
+#if defined(__MAC_27_0) && defined(__IPHONE_27_0)
+#define LAST_APPLE_FAMILY MTLGPUFamilyApple11
+#else
+#define LAST_APPLE_FAMILY MTLGPUFamilyApple9
+#endif
+
 enum {
   METAL4_QUEUE   = 1u,
   METAL4_ALLOC   = 2u,
@@ -83,6 +89,12 @@ static const SparseCase cases[] = {
   {"query-no-apple7", "auto", MTLGPUFamilyApple7, METAL4_ALL, 0u, 7u, false, false},
   {"query-yes-apple8", "auto", MTLGPUFamilyApple8, METAL4_ALL, 7u, 7u, true, false},
   {"query-yes-apple7", "auto", MTLGPUFamilyApple7, METAL4_ALL, 7u, 7u, true, false},
+#if defined(__MAC_27_0) && defined(__IPHONE_27_0)
+  {"query-no-apple10", "auto", MTLGPUFamilyApple10, METAL4_ALL, 0u, 7u, false, false},
+  {"query-no-apple11", "auto", MTLGPUFamilyApple11, METAL4_ALL, 0u, 7u, false, false},
+  {"query-yes-apple10", "auto", MTLGPUFamilyApple10, METAL4_ALL, 7u, 7u, true, false},
+  {"query-yes-apple11", "auto", MTLGPUFamilyApple11, METAL4_ALL, 7u, 7u, true, false},
+#endif
   {"query-yes-other", "auto", MTLGPUFamilyMetal3, METAL4_ALL, 7u, 0u, true, false},
   {"query-no-forced", "metal4", MTLGPUFamilyApple8, METAL4_ALL, 0u, 7u, false, false},
   {"query-yes-forced", "metal4", MTLGPUFamilyApple8, METAL4_ALL, 7u, 7u, true, false},
@@ -135,6 +147,16 @@ static const ModeCase modeCases[] = {
   {"ray-metal4-apple9", "metal4", RAY_FEATURE, MTLGPUFamilyApple9, METAL4_ALL, MTCommandMode4},
   {"both-metal4-apple7", "metal4", RAY_FEATURE | SPARSE_PLACEMENT, MTLGPUFamilyApple7, METAL4_ALL, -1},
   {"both-metal4-apple9", "metal4", RAY_FEATURE | SPARSE_PLACEMENT, MTLGPUFamilyApple9, METAL4_ALL, MTCommandMode4},
+#if defined(__MAC_27_0) && defined(__IPHONE_27_0)
+  {"both-auto-apple10", "auto", RAY_FEATURE | SPARSE_PLACEMENT, MTLGPUFamilyApple10, METAL4_ALL, MTCommandMode4},
+  {"both-auto-apple11", "auto", RAY_FEATURE | SPARSE_PLACEMENT, MTLGPUFamilyApple11, METAL4_ALL, MTCommandMode4},
+  {"both-metal4-apple10", "metal4", RAY_FEATURE | SPARSE_PLACEMENT, MTLGPUFamilyApple10, METAL4_ALL, MTCommandMode4},
+  {"both-metal4-apple11", "metal4", RAY_FEATURE | SPARSE_PLACEMENT, MTLGPUFamilyApple11, METAL4_ALL, MTCommandMode4},
+  {"both-classic-apple10", "classic", RAY_FEATURE | SPARSE_PLACEMENT, MTLGPUFamilyApple10, METAL4_ALL, -1},
+  {"both-classic-apple11", "classic", RAY_FEATURE | SPARSE_PLACEMENT, MTLGPUFamilyApple11, METAL4_ALL, -1},
+  {"both-missing-compiler10", "auto", RAY_FEATURE | SPARSE_PLACEMENT, MTLGPUFamilyApple10, 7u, -1},
+  {"both-missing-compiler11", "auto", RAY_FEATURE | SPARSE_PLACEMENT, MTLGPUFamilyApple11, 7u, -1},
+#endif
   {"ray-old-api", "auto", RAY_FEATURE, MTLGPUFamilyApple7, 0u, MTCommandModeClassic},
   {"sparse-old-api", "auto", SPARSE_PLACEMENT, MTLGPUFamilyApple7, 0u, -1},
   {"both-old-api", "auto", RAY_FEATURE | SPARSE_PLACEMENT, MTLGPUFamilyApple7, 0u, -1},
@@ -155,6 +177,16 @@ static const TimestampCase timestampCases[] = {
    MTLGPUFamilyApple7, METAL4_ALL, MTCommandMode4, false, false, true},
   {"ray-apple9", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
    MTLGPUFamilyApple9, METAL4_ALL, MTCommandMode4, false, false, true},
+#if defined(__MAC_27_0) && defined(__IPHONE_27_0)
+  {"ray-apple10", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple10, METAL4_ALL, MTCommandMode4, false, false, true},
+  {"ray-apple11", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple11, METAL4_ALL, MTCommandMode4, false, false, true},
+  {"classic-missing-apple10", "classic", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple10, METAL4_ALL, -1, false, false, false},
+  {"classic-missing-apple11", "classic", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
+   MTLGPUFamilyApple11, METAL4_ALL, -1, false, false, false},
+#endif
   {"ray-classic-counter7", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
    MTLGPUFamilyApple7, METAL4_ALL, MTCommandModeClassic, true, true, true},
   {"ray-classic-counter8", "auto", RAY_FEATURE | TIMESTAMP_FEATURE, 24000000u,
@@ -228,7 +260,7 @@ mt_createDevice(GPUAdapter               *adapter,
 }
 
 - (BOOL)supportsFamily:(MTLGPUFamily)value {
-  return family >= MTLGPUFamilyApple1 && family <= MTLGPUFamilyApple9
+  return family >= MTLGPUFamilyApple1 && family <= LAST_APPLE_FAMILY
          && value >= MTLGPUFamilyApple1 && value <= family;
 }
 
