@@ -79,14 +79,27 @@ gpu_validTextureAccess(const GPUTexture *texture, GPUAccessMask access) {
     return false;
   }
 
-  if ((access & GPU_ACCESS_TRANSFER_READ) != 0u
-      && (usage & GPU_TEXTURE_USAGE_COPY_SRC) == 0u) {
-    return false;
-  }
+  /* mip generation uses sampled/color plus transfer access without copy usages. */
+  if (((access & GPU_ACCESS_TRANSFER_READ) != 0u
+       && (usage & GPU_TEXTURE_USAGE_COPY_SRC) == 0u)
+      || ((access & GPU_ACCESS_TRANSFER_WRITE) != 0u
+          && (usage & GPU_TEXTURE_USAGE_COPY_DST) == 0u)) {
+    if (texture->dimension != GPU_TEXTURE_DIMENSION_2D
+        || texture->sampleCount != 1u
+        || texture->mipLevelCount <= 1u
+        || (usage & (GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COLOR_TARGET))
+           != (GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COLOR_TARGET)) {
+      return false;
+    }
 
-  if ((access & GPU_ACCESS_TRANSFER_WRITE) != 0u
-      && (usage & GPU_TEXTURE_USAGE_COPY_DST) == 0u) {
-    return false;
+    if (((access & GPU_ACCESS_TRANSFER_READ) != 0u
+         && (usage & GPU_TEXTURE_USAGE_COPY_SRC) == 0u
+         && (access & GPU_ACCESS_SHADER_READ) == 0u)
+        || ((access & GPU_ACCESS_TRANSFER_WRITE) != 0u
+            && (usage & GPU_TEXTURE_USAGE_COPY_DST) == 0u
+            && (access & GPU_ACCESS_COLOR_WRITE) == 0u)) {
+      return false;
+    }
   }
 
   return true;

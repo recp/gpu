@@ -18,6 +18,7 @@
 #include "../../src/backend/api/gpudef.h"
 #include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/device_internal.h"
+#include "../../src/api/texture_internal.h"
 
 static GPUCommandBuffer       *gLastBarrierCmdb;
 static const GPUBarrierBatch  *gLastBarrierBatch;
@@ -231,7 +232,89 @@ done:
   return ok;
 }
 
+static int
+check_mipmap_barrier(GPUDevice *device) {
+  GPUTexture        texture = {0};
+  GPUQueue          queue   = {0};
+  GPUCommandBuffer  cmdb    = {0};
+  GPUTextureBarrier barrier = {0};
+  GPUBarrierBatch   batch   = {0};
+  GPUApi           *api;
+
+  void (*saved)(GPUCommandBuffer *, const GPUBarrierBatch *);
+
+  uint32_t          invalid;
+  int               ok;
+
+  api = gpuDeviceApi(device);
+
+  if (!api)
+    return 0;
+
+  saved                         = api->renderPass.encodeBarriers;
+  api->renderPass.encodeBarriers = count_barriers;
+  gBarrierForwardCount          = 0u;
+  queue._device                 = device;
+  cmdb._queue                   = &queue;
+
+  texture.device                = device;
+  texture.dimension             = GPU_TEXTURE_DIMENSION_2D;
+  texture.sampleCount           = 1u;
+  texture.mipLevelCount         = 3u;
+  texture.depthOrLayers         = 2u;
+  texture.usage                 = GPU_TEXTURE_USAGE_SAMPLED |
+                                  GPU_TEXTURE_USAGE_COLOR_TARGET;
+
+  barrier.texture               = &texture;
+  barrier.srcAccess             = GPU_ACCESS_COLOR_WRITE | GPU_ACCESS_TRANSFER_WRITE;
+  barrier.dstAccess             = GPU_ACCESS_SHADER_READ | GPU_ACCESS_TRANSFER_READ;
+  barrier.mipCount              = 1u;
+  barrier.layerCount            = 1u;
+
+  batch.pTextureBarriers        = &barrier;
+  batch.textureBarrierCount     = 1u;
+  batch.srcStages               = GPU_STAGE_FRAGMENT | GPU_STAGE_TRANSFER;
+  batch.dstStages               = GPU_STAGE_FRAGMENT | GPU_STAGE_TRANSFER;
+
+  GPUEncodeBarriers(&cmdb, &batch);
+  GPUTransitionTexture(&cmdb, &texture, barrier.srcAccess, barrier.dstAccess);
+
+  ok = gBarrierForwardCount == 2u;
+
+  for (invalid = 0u; invalid < 7u; invalid++) {
+    texture.dimension     = GPU_TEXTURE_DIMENSION_2D;
+    texture.sampleCount   = 1u;
+    texture.mipLevelCount = 3u;
+    texture.usage         = GPU_TEXTURE_USAGE_SAMPLED |
+                            GPU_TEXTURE_USAGE_COLOR_TARGET;
+
+    barrier.srcAccess     = GPU_ACCESS_COLOR_WRITE | GPU_ACCESS_TRANSFER_WRITE;
+    barrier.dstAccess     = GPU_ACCESS_SHADER_READ | GPU_ACCESS_TRANSFER_READ;
+
+    switch (invalid) {
+      case 0u: texture.usage &= ~GPU_TEXTURE_USAGE_COLOR_TARGET; break;
+      case 1u: texture.usage &= ~GPU_TEXTURE_USAGE_SAMPLED; break;
+      case 2u: texture.sampleCount = 4u; break;
+      case 3u: texture.dimension = GPU_TEXTURE_DIMENSION_3D; break;
+      case 4u: texture.mipLevelCount = 1u; break;
+      case 5u: barrier.srcAccess = GPU_ACCESS_TRANSFER_WRITE; break;
+      case 6u: barrier.dstAccess = GPU_ACCESS_TRANSFER_READ; break;
+    }
+
+    GPUEncodeBarriers(&cmdb, &batch);
+
+    ok = ok && gBarrierForwardCount == 2u;
+  }
+
+  api->renderPass.encodeBarriers = saved;
+
+  if (!ok)
+    fprintf(stderr, "mipmap barrier access contract mismatch\n");
+
+  return ok;
+}
+
 int
 gpu_test_barrier(GPUDevice *device) {
-  return check_barrier_forwarding(device);
+  return check_barrier_forwarding(device) && check_mipmap_barrier(device);
 }

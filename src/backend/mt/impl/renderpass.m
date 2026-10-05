@@ -365,18 +365,6 @@ mt_generateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
   MTCopyEncoder          *native;
   GPUAdapterMT           *adapter;
   id<MTLTexture>          nativeTexture;
-#if MT_HAS_METAL4
-  MTCommandBuffer        *command;
-#endif
-
-#if MT_HAS_METAL4
-  command = mt_commandBuffer(cmdb);
-
-  if (command && command->mode == MTCommandMode4) {
-    gpuGenerateMipmapsFallback(cmdb, texture, mt_blitTexture);
-    return;
-  }
-#endif
 
   adapter = texture && texture->device && texture->device->adapter ? texture->device->adapter->_priv : NULL;
 
