@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <AppKit/AppKit.h>
 #import <dispatch/dispatch.h>
 #include <math.h>
@@ -18,6 +34,41 @@ typedef struct FragmentUniforms {
   float tint[4];
 } FragmentUniforms;
 
+@interface TexturedQuadApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
+@private
+  NSWindow *_window;
+  NSView   *_view;
+
+  GPUInstance       *_instance;
+  GPUAdapter        *_adapter;
+  GPUDevice         *_device;
+  GPUQueue          *_queue;
+  GPUSurface        *_surface;
+  GPUSwapchain      *_swapchain;
+  GPUShaderLibrary  *_library;
+  GPUShaderLayout   *_shaderLayout;
+  GPURenderPipeline *_pipeline;
+  GPUBuffer         *_vertexBuffer;
+  GPUBuffer         *_fragmentUniformBuffer;
+  GPUTexture        *_texture;
+  GPUTextureView    *_textureView;
+  GPUSampler        *_sampler;
+  GPUBindGroup      *_fragmentGroup;
+  GPUBindGroup      *_samplerGroup;
+  NSTimer           *_timer;
+  NSTimeInterval     _animationStart;
+  NSInteger          _exitAfterFrames;
+  NSInteger          _submittedFrames;
+  NSInteger          _completedFrames;
+  BOOL               _assertZeroAlloc;
+  BOOL               _statsFailed;
+  BOOL               _terminating;
+}
+
+- (void)frameCompleted;
+- (BOOL)statsFailed;
+@end
+
 static const QuadVertex kQuadVertices[] = {
   { { -0.8f, -0.8f, 0.0f, 1.0f }, { 0.0f, 1.0f } },
   { {  0.8f, -0.8f, 0.0f, 1.0f }, { 1.0f, 1.0f } },
@@ -32,44 +83,12 @@ static const uint8_t kCheckerPixels[] = {
     0,   0, 255, 255,  255, 255, 255, 255,
 };
 
-@interface TexturedQuadApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
-@private
-  NSWindow *_window;
-  NSView *_view;
-
-  GPUInstance *_instance;
-  GPUAdapter *_adapter;
-  GPUDevice *_device;
-  GPUQueue        *_queue;
-  GPUSurface *_surface;
-  GPUSwapchain *_swapchain;
-  GPUShaderLibrary *_library;
-  GPUShaderLayout *_shaderLayout;
-  GPURenderPipeline *_pipeline;
-  GPUBuffer *_vertexBuffer;
-  GPUBuffer *_fragmentUniformBuffer;
-  GPUTexture *_texture;
-  GPUTextureView *_textureView;
-  GPUSampler *_sampler;
-  GPUBindGroup *_fragmentGroup;
-  GPUBindGroup *_samplerGroup;
-  NSTimer *_timer;
-  NSTimeInterval _animationStart;
-  NSInteger _exitAfterFrames;
-  NSInteger _submittedFrames;
-  NSInteger _completedFrames;
-  BOOL _assertZeroAlloc;
-  BOOL _statsFailed;
-  BOOL _terminating;
-}
-- (void)frameCompleted;
-- (BOOL)statsFailed;
-@end
-
 static void
 TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
+  TexturedQuadApp *app;
+
   (void)cmdb;
-  TexturedQuadApp *app = (__bridge TexturedQuadApp *)sender;
+  app = (__bridge TexturedQuadApp *)sender;
   [app frameCompleted];
 }
 
@@ -83,7 +102,7 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (BOOL)setupTexture {
-  GPUTextureCreateInfo textureInfo = {
+  GPUTextureCreateInfo     textureInfo = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO,
                .structSize = sizeof(GPUTextureCreateInfo) },
     .label = "checker-texture",
@@ -96,7 +115,7 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .sampleCount = 1,
     .usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST
   };
-  GPUTextureWriteRegion writeRegion = {
+  GPUTextureWriteRegion    writeRegion = {
     .width = 2,
     .height = 2,
     .depth = 1,
@@ -117,7 +136,7 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .baseArrayLayer = 0,
     .arrayLayerCount = 1
   };
-  GPUSamplerCreateInfo samplerInfo = {
+  GPUSamplerCreateInfo     samplerInfo = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
                .structSize = sizeof(GPUSamplerCreateInfo) },
     .label = "checker-sampler",
@@ -179,11 +198,12 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                         &_shaderLayout)) {
     return NO;
   }
-  if (!_shaderLayout ||
-      _shaderLayout->bindGroupLayoutCount != 2u ||
-      !_shaderLayout->bindGroupLayouts ||
-      !_shaderLayout->bindGroupLayouts[0] ||
-      !_shaderLayout->bindGroupLayouts[1]) {
+
+  if (!_shaderLayout
+      || _shaderLayout->bindGroupLayoutCount != 2u
+      || !_shaderLayout->bindGroupLayouts
+      || !_shaderLayout->bindGroupLayouts[0]
+      || !_shaderLayout->bindGroupLayouts[1]) {
     NSLog(@"GPU: unexpected textured quad shader layout");
     return NO;
   }
@@ -236,6 +256,7 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .frontFace = GPU_FRONT_FACE_CCW,
     .multisample = multisample
   };
+
   if (GPUCreateRenderPipeline(_device, &pipelineInfo, &_pipeline) != GPU_OK) {
     NSLog(@"GPU: failed to create render pipeline");
     return NO;
@@ -248,6 +269,7 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .sizeBytes = sizeof(kQuadVertices),
     .usage = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST
   };
+
   if (GPUCreateBuffer(_device, &vertexBufferInfo, &_vertexBuffer) != GPU_OK) {
     NSLog(@"GPU: failed to create vertex buffer");
     return NO;
@@ -269,6 +291,7 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .sizeBytes = sizeof(FragmentUniforms),
     .usage = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST
   };
+
   if (GPUCreateBuffer(_device, &uniformBufferInfo, &_fragmentUniformBuffer) != GPU_OK) {
     NSLog(@"GPU: failed to create fragment uniform buffer");
     return NO;
@@ -278,14 +301,14 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
-  groupEntries[0].binding = 0;
-  groupEntries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
-  groupEntries[0].textureView = _textureView;
-  groupEntries[1].binding = 1;
-  groupEntries[1].bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntries[0].binding       = 0;
+  groupEntries[0].bindingType   = GPU_BINDING_SAMPLED_TEXTURE;
+  groupEntries[0].textureView   = _textureView;
+  groupEntries[1].binding       = 1;
+  groupEntries[1].bindingType   = GPU_BINDING_UNIFORM_BUFFER;
   groupEntries[1].buffer.buffer = _fragmentUniformBuffer;
   groupEntries[1].buffer.offset = 0;
-  groupEntries[1].buffer.size = sizeof(FragmentUniforms);
+  groupEntries[1].buffer.size   = sizeof(FragmentUniforms);
 
   GPUBindGroupCreateInfo group0Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
@@ -295,6 +318,7 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .entryCount = 2,
     .pEntries = groupEntries
   };
+
   if (GPUCreateBindGroup(_device, &group0Info, &_fragmentGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create fragment bind group");
     return NO;
@@ -313,6 +337,7 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .entryCount = 1,
     .pEntries = &samplerEntry
   };
+
   if (GPUCreateBindGroup(_device, &group1Info, &_samplerGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create sampler bind group");
     return NO;
@@ -323,9 +348,9 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
 - (void)updateFragmentUniforms {
   FragmentUniforms uniforms;
-  float time;
+  float            time;
 
-  time = (float)(CACurrentMediaTime() - _animationStart);
+  time             = (float)(CACurrentMediaTime() - _animationStart);
   uniforms.tint[0] = 0.75f + 0.25f * sinf(time * 1.1f);
   uniforms.tint[1] = 0.75f + 0.25f * sinf(time * 1.5f + 1.0f);
   uniforms.tint[2] = 0.75f + 0.25f * sinf(time * 1.9f + 2.0f);
@@ -338,22 +363,24 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (void)renderFrame {
-  GPUFrame *frame = NULL;
-  GPUCommandBuffer *cmdb = NULL;
-  GPUResult submitResult = GPU_OK;
-  GPURenderPassEncoder *encoder = NULL;
-  GPURenderPassColorAttachment color = {0};
-  GPURenderPassCreateInfo rp = {0};
-  GPUBufferBinding vertexBuffer = {0};
+  GPURenderPassColorAttachment color        = {0};
+  GPURenderPassCreateInfo      rp           = {0};
+  GPUBufferBinding             vertexBuffer = {0};
+  GPUFrame                    *frame        = NULL;
+  GPUCommandBuffer            *cmdb         = NULL;
+  GPURenderPassEncoder        *encoder      = NULL;
+  GPUResult                    submitResult = GPU_OK;
 
   if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
     return;
   }
+
   if (!GPUSampleRecoverSwapchain(_swapchain, _view)) {
     return;
   }
 
   frame = GPUBeginFrame(_swapchain);
+
   if (!frame) {
     (void)GPUSampleRecoverSwapchain(_swapchain, _view);
     return;
@@ -362,25 +389,27 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (GPUAcquireCommandBuffer(_queue, "main-frame", &cmdb) != GPU_OK || !cmdb) {
     goto cleanup;
   }
+
   if (_exitAfterFrames > 0) {
     GPUSetCommandBufferCompletionHandler(cmdb,
                                          (__bridge void *)self,
                                          TexturedQuadFrameComplete);
   }
 
-  color.view = GPUFrameGetTargetView(frame);
-  color.loadOp = GPU_LOAD_OP_CLEAR;
-  color.storeOp = GPU_STORE_OP_STORE;
+  color.view                  = GPUFrameGetTargetView(frame);
+  color.loadOp                = GPU_LOAD_OP_CLEAR;
+  color.storeOp               = GPU_STORE_OP_STORE;
   color.clearColor.float32[0] = 0.0f;
   color.clearColor.float32[1] = 0.0f;
   color.clearColor.float32[2] = 0.0f;
   color.clearColor.float32[3] = 1.0f;
 
-  rp.label = "textured-quad-usl-pass";
+  rp.label                = "textured-quad-usl-pass";
   rp.colorAttachmentCount = 1;
-  rp.pColorAttachments = &color;
+  rp.pColorAttachments    = &color;
 
   encoder = GPUBeginRenderPass(cmdb, &rp);
+
   if (!encoder) {
     goto cleanup;
   }
@@ -396,13 +425,15 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUBindRenderGroup(encoder, 1, _samplerGroup, 0, NULL);
   GPUDraw(encoder, 6, 1, 0, 0);
   GPUEndRenderPass(encoder);
-  encoder = NULL;
+  encoder      = NULL;
   submitResult = GPUFinishFrame(_queue, cmdb, frame);
-  frame = NULL;
+  frame        = NULL;
+
   if (submitResult != GPU_OK) {
     NSLog(@"GPUFinishFrame failed: %d", submitResult);
   } else {
     _submittedFrames++;
+
     if (!GPUSampleCheckZeroAlloc(_device,
                                  (uint32_t)_submittedFrames,
                                  _assertZeroAlloc,
@@ -414,6 +445,7 @@ TexturedQuadFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
       [NSApp terminate:nil];
       return;
     }
+
     if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
       [_timer invalidate];
       _timer = nil;
@@ -424,15 +456,17 @@ cleanup:
   if (encoder) {
     GPUEndRenderPass(encoder);
   }
+
   GPUEndFrame(frame);
 }
 
 - (void)frameCompleted {
   dispatch_async(dispatch_get_main_queue(), ^{
     self->_completedFrames++;
-    if (self->_exitAfterFrames > 0 &&
-        self->_completedFrames >= self->_exitAfterFrames &&
-        !self->_terminating) {
+
+    if (self->_exitAfterFrames > 0
+        && self->_completedFrames >= self->_exitAfterFrames
+        && !self->_terminating) {
       self->_terminating = YES;
       [self->_timer invalidate];
       self->_timer = nil;
@@ -443,9 +477,11 @@ cleanup:
 
 - (void)tick:(NSTimer *)timer {
   (void)timer;
+
   if (_terminating) {
     return;
   }
+
   [self renderFrame];
 }
 
@@ -454,63 +490,78 @@ cleanup:
     GPUDestroyBindGroup(_samplerGroup);
     _samplerGroup = NULL;
   }
+
   if (_fragmentGroup) {
     GPUDestroyBindGroup(_fragmentGroup);
     _fragmentGroup = NULL;
   }
+
   if (_pipeline) {
     GPUDestroyRenderPipeline(_pipeline);
     _pipeline = NULL;
   }
+
   if (_sampler) {
     GPUDestroySampler(_sampler);
     _sampler = NULL;
   }
+
   if (_textureView) {
     GPUDestroyTextureView(_textureView);
     _textureView = NULL;
   }
+
   if (_texture) {
     GPUDestroyTexture(_texture);
     _texture = NULL;
   }
+
   if (_fragmentUniformBuffer) {
     GPUDestroyBuffer(_fragmentUniformBuffer);
     _fragmentUniformBuffer = NULL;
   }
+
   if (_vertexBuffer) {
     GPUDestroyBuffer(_vertexBuffer);
     _vertexBuffer = NULL;
   }
+
   if (_shaderLayout) {
     GPUDestroyShaderLayout(_shaderLayout);
     _shaderLayout = NULL;
   }
+
   if (_library) {
     GPUDestroyShaderLibrary(_library);
     _library = NULL;
   }
+
   if (_swapchain) {
     GPUDestroySwapchain(_swapchain);
     _swapchain = NULL;
   }
+
   if (_surface) {
     GPUDestroySurface(_surface);
     _surface = NULL;
   }
+
   if (_device) {
     GPUDestroyDevice(_device);
     _device = NULL;
-    _queue = NULL;
+    _queue  = NULL;
   }
+
   if (_instance) {
     GPUDestroyInstance(_instance);
     _instance = NULL;
-    _adapter = NULL;
+    _adapter  = NULL;
   }
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
+  const char *exitAfterFrames;
+
   (void)notification;
 
   if (![self setupWindow]) {
@@ -523,17 +574,20 @@ cleanup:
     return;
   }
 
-  const char *exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+  exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+
   if (exitAfterFrames && exitAfterFrames[0] != '\0') {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
+
     if (_exitAfterFrames < 1) {
       _exitAfterFrames = 1;
     }
   }
+
   _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
 
   _animationStart = CACurrentMediaTime();
-  _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
+  _timer          = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
                                    target:self
                                  selector:@selector(tick:)
                                  userInfo:nil
@@ -564,14 +618,16 @@ cleanup:
   uint32_t height;
 
   (void)notification;
+
   if (!_swapchain || _terminating) {
     return;
   }
 
   width  = (uint32_t)_view.bounds.size.width;
   height = (uint32_t)_view.bounds.size.height;
-  if (width > 0u && height > 0u &&
-      GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
+
+  if (width > 0u && height > 0u
+      && GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
     [self renderFrame];
   }
 }
@@ -585,10 +641,12 @@ cleanup:
 
 @end
 
-int main(int argc, const char * argv[]) {
+int
+main(int argc, const char * argv[]) {
   int result;
 
   result = 0;
+
   @autoreleasepool {
     TexturedQuadApp *delegate;
 
@@ -602,5 +660,6 @@ int main(int argc, const char * argv[]) {
     [NSApp run];
     result = [delegate statsFailed] ? 1 : 0;
   }
+
   return result;
 }

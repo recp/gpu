@@ -20,17 +20,16 @@
 #include "common.h"
 
 struct GPURasterizationRateMapEXT {
-  void        *_priv;
-  GPUDevice   *device;
-  GPUExtent2D  screenSize;
-  uint32_t     layerCount;
+  void       *_priv;
+  GPUDevice  *device;
+  GPUExtent2D screenSize;
+  uint32_t    layerCount;
 };
 
 static inline bool
-gpuRenderPassVRSExtensions(
-  const GPURenderPassCreateInfo               *info,
-  const GPUShadingRateAttachmentEXT          **outAttachment,
-  const GPURasterizationRateMapRenderPassEXT **outRateMap) {
+gpuRenderPassVRSExtensions(const GPURenderPassCreateInfo               *info,
+                           const GPUShadingRateAttachmentEXT          **outAttachment,
+                           const GPURasterizationRateMapRenderPassEXT **outRateMap) {
   const GPUChainedStruct *chain;
 
   if (!info || !outAttachment || !outRateMap) {
@@ -38,31 +37,35 @@ gpuRenderPassVRSExtensions(
   }
 
   *outAttachment = NULL;
-  *outRateMap     = NULL;
-  chain           = info->chain.pNext;
+  *outRateMap    = NULL;
+  chain          = info->chain.pNext;
+
   while (chain) {
     switch (chain->sType) {
       case GPU_STRUCTURE_TYPE_SHADING_RATE_ATTACHMENT_EXT:
-        if (*outAttachment ||
-            (chain->structSize != 0u &&
-             chain->structSize < sizeof(GPUShadingRateAttachmentEXT))) {
+        if (*outAttachment
+            || (chain->structSize != 0u
+                && chain->structSize < sizeof(GPUShadingRateAttachmentEXT))) {
           return false;
         }
+
         *outAttachment = (const GPUShadingRateAttachmentEXT *)chain;
         break;
+
       case GPU_STRUCTURE_TYPE_RASTERIZATION_RATE_MAP_RENDER_PASS_EXT:
-        if (*outRateMap ||
-            (chain->structSize != 0u &&
-             chain->structSize <
-               sizeof(GPURasterizationRateMapRenderPassEXT))) {
+        if (*outRateMap
+            || (chain->structSize != 0u
+                && chain->structSize < sizeof(GPURasterizationRateMapRenderPassEXT))) {
           return false;
         }
-        *outRateMap =
-          (const GPURasterizationRateMapRenderPassEXT *)chain;
+
+        *outRateMap = (const GPURasterizationRateMapRenderPassEXT *)chain;
         break;
+
       default:
         return false;
     }
+
     chain = chain->pNext;
   }
 

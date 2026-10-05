@@ -75,9 +75,6 @@ typedef enum BenchAllocPath {
   BENCH_ALLOC_COUNT
 } BenchAllocPath;
 
-static GPUApi * volatile benchApi;
-static volatile uint64_t benchSink;
-
 #if GPU_BACKEND_METAL_ONLY
 #  define BENCH_BACKEND_MODE "metal-only"
 #elif GPU_BACKEND_VULKAN_ONLY
@@ -88,6 +85,9 @@ static volatile uint64_t benchSink;
 #  define BENCH_BACKEND_MODE "multi"
 #endif
 
+static GPUApi *volatile  benchApi;
+static volatile uint64_t benchSink;
+
 static BENCH_NOINLINE void
 bench_draw(GPURenderPassEncoder *pass,
            GPUPrimitiveType      type,
@@ -95,12 +95,8 @@ bench_draw(GPURenderPassEncoder *pass,
            size_t                count,
            uint32_t              instanceCount,
            uint32_t              firstInstance) {
-  benchSink += (uint64_t)(pass != NULL) +
-               (uint64_t)type +
-               (uint64_t)start +
-               (uint64_t)count +
-               instanceCount +
-               firstInstance;
+  benchSink += (uint64_t)(pass != NULL) + (uint64_t)type + (uint64_t)start + (uint64_t)count + instanceCount
+               + firstInstance;
 }
 
 static BENCH_NOINLINE bool
@@ -110,12 +106,9 @@ bench_bind(GPURenderPassEncoder *pass,
            GPUBindGroup         *group,
            uint32_t              dynamicOffsetCount,
            const uint32_t       *dynamicOffsets) {
-  benchSink += (uint64_t)(pass != NULL) +
-               (uint64_t)(pipelineLayout != NULL) +
-               groupIndex +
-               (uint64_t)(group != NULL) +
-               dynamicOffsetCount +
-               (uint64_t)(dynamicOffsets != NULL);
+  benchSink += (uint64_t)(pass != NULL) + (uint64_t)(pipelineLayout != NULL) + groupIndex + (uint64_t)(group != NULL)
+               + dynamicOffsetCount + (uint64_t)(dynamicOffsets != NULL);
+
   return true;
 }
 
@@ -124,178 +117,202 @@ bench_vertex(GPURenderPassEncoder *pass,
              GPUBuffer            *buffer,
              uint64_t              offset,
              uint32_t              index) {
-  benchSink += (uint64_t)(pass != NULL) +
-               (uint64_t)(buffer != NULL) +
-               offset +
-               index;
+  benchSink += (uint64_t)(pass != NULL) + (uint64_t)(buffer != NULL) + offset + index;
 }
 
 static BENCH_NOINLINE void
-bench_state(GPURenderPassEncoder          *pass,
+bench_state(GPURenderPassEncoder           *pass,
             GPUDynamicStateMask             mask,
             const GPUDynamicStateApplyInfo *info) {
-  benchSink += (uint64_t)(pass != NULL) +
-               mask +
-               info->stencilReference;
+  benchSink += (uint64_t)(pass != NULL) + mask + info->stencilReference;
 }
 
 static BENCH_NOINLINE void
-bench_alloc(GPUDevice                *device,
+bench_alloc(GPUDevice               *device,
             GPUTransientBufferSlice *slice) {
   uint64_t offset;
 
-  offset                       = device->transientFrameOffset++;
-  slice->buffer                = device->transientBuffer;
-  slice->cpuPtr                = (uint8_t *)device->transientCpuPtr + offset;
-  slice->offset                = offset;
-  slice->sizeBytes             = 1u;
+  offset           = device->transientFrameOffset++;
+  slice->buffer    = device->transientBuffer;
+  slice->cpuPtr    = (uint8_t *)device->transientCpuPtr + offset;
+  slice->offset    = offset;
+  slice->sizeBytes = 1u;
 }
 
 static double
 bench_runDraw(BenchDrawPath         path,
               GPURenderPassEncoder *pass,
               uint64_t              iterations) {
-  double begin;
-  double end;
+  double   begin;
+  double   end;
+  uint64_t i;
 
   begin = bench_now();
+
   switch (path) {
-    case BENCH_DRAW_DIRECT:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        bench_draw(pass, GPUPrimitiveTypeTriangle, 0u, 3u, 1u, 0u);
-      }
-      break;
-    case BENCH_DRAW_VTABLE:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        benchApi->rce.drawPrimitives(
-          pass,
-          GPUPrimitiveTypeTriangle,
-          0u,
-          3u,
-          1u,
-          0u
-        );
-      }
-      break;
-    case BENCH_DRAW_PUBLIC:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        GPUDraw(pass, 3u, 1u, 0u, 0u);
-      }
-      break;
-    default:
-      return 0.0;
+  case BENCH_DRAW_DIRECT:
+    for (i = 0u; i < iterations; i++) {
+      bench_draw(pass, GPUPrimitiveTypeTriangle, 0u, 3u, 1u, 0u);
+    }
+    break;
+
+  case BENCH_DRAW_VTABLE:
+    for (i = 0u; i < iterations; i++) {
+      benchApi->rce.drawPrimitives(pass,
+                                   GPUPrimitiveTypeTriangle,
+                                   0u,
+                                   3u,
+                                   1u,
+                                   0u);
+    }
+    break;
+
+  case BENCH_DRAW_PUBLIC:
+    for (i = 0u; i < iterations; i++) {
+      GPUDraw(pass, 3u, 1u, 0u, 0u);
+    }
+    break;
+
+  default:
+    return 0.0;
   }
+
   end = bench_now();
+
   return (end - begin) * 1e9 / (double)iterations;
 }
 
 static double
 bench_runBind(BenchBindPath         path,
               GPURenderPassEncoder *pass,
-              GPUBindGroup          *groups[2],
-              uint64_t               iterations) {
+              GPUBindGroup         *groups[2],
+              uint64_t              iterations) {
   uint32_t offsets[2] = {0u, 256u};
-  double begin;
-  double end;
+  double   begin;
+  double   end;
+  uint64_t i;
 
   pass->_boundGroups[0]              = NULL;
   pass->_boundDynamicOffsetCounts[0] = 0u;
+
   begin = bench_now();
+
   switch (path) {
-    case BENCH_BIND_DIRECT:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        bench_bind(pass,
-                   pass->_pipelineLayout,
-                   0u,
-                   groups[i & 1u],
-                   0u,
-                   NULL);
-      }
-      break;
-    case BENCH_BIND_VTABLE:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        benchApi->descriptor.bindRenderGroup(pass,
-                                             pass->_pipelineLayout,
-                                             0u,
-                                             groups[i & 1u],
-                                             0u,
-                                             NULL);
-      }
-      break;
-    case BENCH_BIND_PUBLIC_EMIT:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        GPUBindRenderGroup(pass, 0u, groups[i & 1u], 0u, NULL);
-      }
-      break;
-    case BENCH_BIND_PUBLIC_SHADOW:
-      pass->_boundGroups[0] = groups[0];
-      for (uint64_t i = 0u; i < iterations; i++) {
-        GPUBindRenderGroup(pass, 0u, groups[0], 0u, NULL);
-      }
-      break;
-    case BENCH_BIND_PUBLIC_DYNAMIC_EMIT:
-      pass->_boundGroups[0] = groups[0];
-      for (uint64_t i = 0u; i < iterations; i++) {
-        GPUBindRenderGroup(pass, 0u, groups[0], 1u, &offsets[i & 1u]);
-      }
-      break;
-    case BENCH_BIND_PUBLIC_DYNAMIC_SHADOW:
-      pass->_boundGroups[0]              = groups[0];
-      pass->_boundDynamicOffsetCounts[0] = 1u;
-      pass->_boundDynamicOffsets[0][0]   = offsets[0];
-      for (uint64_t i = 0u; i < iterations; i++) {
-        GPUBindRenderGroup(pass, 0u, groups[0], 1u, &offsets[0]);
-      }
-      break;
-    default:
-      return 0.0;
+  case BENCH_BIND_DIRECT:
+    for (i = 0u; i < iterations; i++) {
+      bench_bind(pass,
+                 pass->_pipelineLayout,
+                 0u,
+                 groups[i & 1u],
+                 0u,
+                 NULL);
+    }
+    break;
+
+  case BENCH_BIND_VTABLE:
+    for (i = 0u; i < iterations; i++) {
+      benchApi->descriptor.bindRenderGroup(pass,
+                                           pass->_pipelineLayout,
+                                           0u,
+                                           groups[i & 1u],
+                                           0u,
+                                           NULL);
+    }
+    break;
+
+  case BENCH_BIND_PUBLIC_EMIT:
+    for (i = 0u; i < iterations; i++) {
+      GPUBindRenderGroup(pass, 0u, groups[i & 1u], 0u, NULL);
+    }
+    break;
+
+  case BENCH_BIND_PUBLIC_SHADOW:
+    pass->_boundGroups[0] = groups[0];
+
+    for (i = 0u; i < iterations; i++) {
+      GPUBindRenderGroup(pass, 0u, groups[0], 0u, NULL);
+    }
+    break;
+
+  case BENCH_BIND_PUBLIC_DYNAMIC_EMIT:
+    pass->_boundGroups[0] = groups[0];
+
+    for (i = 0u; i < iterations; i++) {
+      GPUBindRenderGroup(pass, 0u, groups[0], 1u, &offsets[i & 1u]);
+    }
+    break;
+
+  case BENCH_BIND_PUBLIC_DYNAMIC_SHADOW:
+    pass->_boundGroups[0]              = groups[0];
+    pass->_boundDynamicOffsetCounts[0] = 1u;
+    pass->_boundDynamicOffsets[0][0]   = offsets[0];
+
+    for (i = 0u; i < iterations; i++) {
+      GPUBindRenderGroup(pass, 0u, groups[0], 1u, &offsets[0]);
+    }
+    break;
+
+  default:
+    return 0.0;
   }
+
   end = bench_now();
+
   return (end - begin) * 1e9 / (double)iterations;
 }
 
 static double
-bench_runVertex(BenchVertexPath      path,
+bench_runVertex(BenchVertexPath       path,
                 GPURenderPassEncoder *pass,
                 GPUBuffer            *buffer,
                 uint64_t              iterations) {
   GPUBufferBinding binding;
   double           begin;
   double           end;
+  uint64_t         i;
 
   memset(&binding, 0, sizeof(binding));
-  binding.buffer = buffer;
+  binding.buffer          = buffer;
   pass->_vertexBufferMask = 0u;
+
   begin = bench_now();
+
   switch (path) {
-    case BENCH_VERTEX_DIRECT:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        bench_vertex(pass, buffer, i & 1u, 0u);
-      }
-      break;
-    case BENCH_VERTEX_VTABLE:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        benchApi->rce.vertexInputBuffer(pass, buffer, i & 1u, 0u);
-      }
-      break;
-    case BENCH_VERTEX_PUBLIC_EMIT:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        binding.offset = i & 1u;
-        GPUBindVertexBuffers(pass, 0u, 1u, &binding);
-      }
-      break;
-    case BENCH_VERTEX_PUBLIC_SHADOW:
-      pass->_vertexBuffers[0]       = buffer;
-      pass->_vertexBufferOffsets[0] = 0u;
-      pass->_vertexBufferMask       = 1u;
-      for (uint64_t i = 0u; i < iterations; i++) {
-        GPUBindVertexBuffers(pass, 0u, 1u, &binding);
-      }
-      break;
-    default:
-      return 0.0;
+  case BENCH_VERTEX_DIRECT:
+    for (i = 0u; i < iterations; i++) {
+      bench_vertex(pass, buffer, i & 1u, 0u);
+    }
+    break;
+
+  case BENCH_VERTEX_VTABLE:
+    for (i = 0u; i < iterations; i++) {
+      benchApi->rce.vertexInputBuffer(pass, buffer, i & 1u, 0u);
+    }
+    break;
+
+  case BENCH_VERTEX_PUBLIC_EMIT:
+    for (i = 0u; i < iterations; i++) {
+      binding.offset = i & 1u;
+      GPUBindVertexBuffers(pass, 0u, 1u, &binding);
+    }
+    break;
+
+  case BENCH_VERTEX_PUBLIC_SHADOW:
+    pass->_vertexBuffers[0]       = buffer;
+    pass->_vertexBufferOffsets[0] = 0u;
+    pass->_vertexBufferMask       = 1u;
+
+    for (i = 0u; i < iterations; i++) {
+      GPUBindVertexBuffers(pass, 0u, 1u, &binding);
+    }
+    break;
+
+  default:
+    return 0.0;
   }
+
   end = bench_now();
+
   return (end - begin) * 1e9 / (double)iterations;
 }
 
@@ -304,45 +321,55 @@ bench_runState(BenchStatePath                 path,
                GPURenderPassEncoder          *pass,
                const GPUDynamicStateApplyInfo states[2],
                uint64_t                       iterations) {
-  GPUDynamicStateMask mask;
   double              begin;
   double              end;
+  uint64_t            i;
+  GPUDynamicStateMask mask;
 
   mask                    = states[0].mask;
   pass->_dynamicStateMask = 0u;
+
   begin = bench_now();
+
   switch (path) {
-    case BENCH_STATE_DIRECT:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        bench_state(pass, mask, &states[i & 1u]);
-      }
-      break;
-    case BENCH_STATE_VTABLE:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        benchApi->rce.applyDynamicState(pass, mask, &states[i & 1u]);
-      }
-      break;
-    case BENCH_STATE_PUBLIC_EMIT:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        GPUApplyDynamicState(pass, &states[i & 1u]);
-      }
-      break;
-    case BENCH_STATE_PUBLIC_SHADOW:
-      pass->_dynamicStateMask  = mask;
-      pass->_viewport          = states[0].viewport;
-      pass->_scissor           = states[0].scissor;
-      pass->_stencilReference  = states[0].stencilReference;
-      memcpy(pass->_blendConstant,
-             states[0].blendConstant,
-             sizeof(pass->_blendConstant));
-      for (uint64_t i = 0u; i < iterations; i++) {
-        GPUApplyDynamicState(pass, &states[0]);
-      }
-      break;
-    default:
-      return 0.0;
+  case BENCH_STATE_DIRECT:
+    for (i = 0u; i < iterations; i++) {
+      bench_state(pass, mask, &states[i & 1u]);
+    }
+    break;
+
+  case BENCH_STATE_VTABLE:
+    for (i = 0u; i < iterations; i++) {
+      benchApi->rce.applyDynamicState(pass, mask, &states[i & 1u]);
+    }
+    break;
+
+  case BENCH_STATE_PUBLIC_EMIT:
+    for (i = 0u; i < iterations; i++) {
+      GPUApplyDynamicState(pass, &states[i & 1u]);
+    }
+    break;
+
+  case BENCH_STATE_PUBLIC_SHADOW:
+    pass->_dynamicStateMask = mask;
+    pass->_viewport         = states[0].viewport;
+    pass->_scissor          = states[0].scissor;
+    pass->_stencilReference = states[0].stencilReference;
+    memcpy(pass->_blendConstant,
+           states[0].blendConstant,
+           sizeof(pass->_blendConstant));
+
+    for (i = 0u; i < iterations; i++) {
+      GPUApplyDynamicState(pass, &states[0]);
+    }
+    break;
+
+  default:
+    return 0.0;
   }
+
   end = bench_now();
+
   return (end - begin) * 1e9 / (double)iterations;
 }
 
@@ -353,82 +380,97 @@ bench_runAlloc(BenchAllocPath path,
   GPUTransientBufferSlice slice;
   double                  begin;
   double                  end;
+  uint64_t                i;
 
   memset(&slice, 0, sizeof(slice));
   device->transientFrameOffset = 0u;
+
   begin = bench_now();
+
   switch (path) {
-    case BENCH_ALLOC_DIRECT:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        bench_alloc(device, &slice);
-      }
-      break;
-    case BENCH_ALLOC_PUBLIC:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        GPUAllocateTransientBuffer(device,
-                                   GPU_BUFFER_USAGE_UNIFORM,
-                                   1u,
-                                   1u,
-                                   &slice);
-      }
-      break;
-    default:
-      return 0.0;
+  case BENCH_ALLOC_DIRECT:
+    for (i = 0u; i < iterations; i++) {
+      bench_alloc(device, &slice);
+    }
+    break;
+
+  case BENCH_ALLOC_PUBLIC:
+    for (i = 0u; i < iterations; i++) {
+      GPUAllocateTransientBuffer(device,
+                                 GPU_BUFFER_USAGE_UNIFORM,
+                                 1u,
+                                 1u,
+                                 &slice);
+    }
+    break;
+
+  default:
+    return 0.0;
   }
+
   end = bench_now();
   benchSink += slice.offset;
+
   return (end - begin) * 1e9 / (double)iterations;
 }
 
 static int
 bench_parseIterations(const char *value, uint64_t *outIterations) {
-  unsigned long long parsed;
   char              *end;
+  unsigned long long parsed;
 
   if (!value || !outIterations) {
     return 0;
   }
+
   errno  = 0;
   parsed = strtoull(value, &end, 10);
+
   if (errno != 0 || end == value || *end != '\0' || parsed < 10000u) {
     return 0;
   }
+
   *outIterations = (uint64_t)parsed;
+
   return 1;
 }
 
 int
 main(int argc, char *argv[]) {
-  GPUBindGroupLayoutEntry layoutEntry;
-  GPUBindGroupLayoutPriv  bindGroupLayoutPriv;
-  GPUPipelineLayoutPriv   pipelineLayoutPriv;
-  GPUBindGroupPriv        bindGroupPriv[2];
-  GPUBindGroupLayout     *pipelineLayouts[1];
-  GPUBindGroup           *bindGroups[2];
-  GPUBindGroupLayout      bindGroupLayout;
-  GPUPipelineLayout       pipelineLayout;
-  GPUBindGroup            bindGroup[2];
+  GPUBindGroupLayoutEntry  layoutEntry;
+  GPUBindGroupLayoutPriv   bindGroupLayoutPriv;
+  GPUPipelineLayoutPriv    pipelineLayoutPriv;
+  GPUBindGroupPriv         bindGroupPriv[2];
+  GPUBindGroupLayout      *pipelineLayouts[1];
+  GPUBindGroup            *bindGroups[2];
+  GPUBindGroupLayout       bindGroupLayout;
+  GPUPipelineLayout        pipelineLayout;
+  GPUBindGroup             bindGroup[2];
   GPUDynamicStateApplyInfo states[2];
-  GPUBuffer               buffer;
-  void                   *transientBytes;
-  GPURenderPassEncoder   pass;
-  GPUCommandBuffer       cmdb;
-  GPUQueue               queue;
-  GPUDevice              device;
-  GPUApi                 api;
-  double                 drawSamples[BENCH_DRAW_COUNT][BENCH_REPEATS];
-  double                 bindSamples[BENCH_BIND_COUNT][BENCH_REPEATS];
-  double                 vertexSamples[BENCH_VERTEX_COUNT][BENCH_REPEATS];
-  double                 stateSamples[BENCH_STATE_COUNT][BENCH_REPEATS];
-  double                 allocSamples[BENCH_ALLOC_COUNT][BENCH_REPEATS];
-  double                 drawMedian[BENCH_DRAW_COUNT];
-  double                 bindMedian[BENCH_BIND_COUNT];
-  double                 vertexMedian[BENCH_VERTEX_COUNT];
-  double                 stateMedian[BENCH_STATE_COUNT];
-  double                 allocMedian[BENCH_ALLOC_COUNT];
-  uint64_t               iterations;
+  GPUBuffer                buffer;
+  GPURenderPassEncoder     pass;
+  GPUCommandBuffer         cmdb;
+  GPUQueue                 queue;
+  GPUDevice                device;
+  GPUApi                   api;
+  double                   drawSamples[BENCH_DRAW_COUNT][BENCH_REPEATS];
+  double                   bindSamples[BENCH_BIND_COUNT][BENCH_REPEATS];
+  double                   vertexSamples[BENCH_VERTEX_COUNT][BENCH_REPEATS];
+  double                   stateSamples[BENCH_STATE_COUNT][BENCH_REPEATS];
+  double                   allocSamples[BENCH_ALLOC_COUNT][BENCH_REPEATS];
+  double                   drawMedian[BENCH_DRAW_COUNT];
+  double                   bindMedian[BENCH_BIND_COUNT];
+  double                   vertexMedian[BENCH_VERTEX_COUNT];
+  double                   stateMedian[BENCH_STATE_COUNT];
+  double                   allocMedian[BENCH_ALLOC_COUNT];
+  void                    *transientBytes;
+  uint64_t                 iterations;
+  uint32_t                 i;
+  uint32_t                 path;
+  uint32_t                 repeat;
 
   iterations = 20000000u;
+
   if (argc > 2 || (argc == 2 && !bench_parseIterations(argv[1], &iterations))) {
     fprintf(stderr, "usage: %s [iterations >= 10000]\n", argv[0]);
     return EXIT_FAILURE;
@@ -450,61 +492,64 @@ main(int argc, char *argv[]) {
   memset(&buffer, 0, sizeof(buffer));
   transientBytes = NULL;
 
-  if (iterations == UINT64_MAX || iterations > SIZE_MAX ||
-      !(transientBytes = malloc((size_t)iterations + 1u))) {
+  if (iterations == UINT64_MAX || iterations > SIZE_MAX
+      || !(transientBytes = malloc((size_t)iterations + 1u))) {
     fprintf(stderr, "failed to allocate transient benchmark storage\n");
     return EXIT_FAILURE;
   }
 
-  layoutEntry.binding                       = 0u;
-  layoutEntry.bindingType                   = GPU_BINDING_UNIFORM_BUFFER;
-  layoutEntry.visibility                    = GPU_SHADER_STAGE_FRAGMENT_BIT;
-  layoutEntry.arrayCount                    = 1u;
-  bindGroupLayoutPriv.entries               = &layoutEntry;
-  bindGroupLayoutPriv.count                 = 1u;
-  bindGroupLayout._priv                     = &bindGroupLayoutPriv;
-  pipelineLayouts[0]                        = &bindGroupLayout;
+  layoutEntry.binding                     = 0u;
+  layoutEntry.bindingType                 = GPU_BINDING_UNIFORM_BUFFER;
+  layoutEntry.visibility                  = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  layoutEntry.arrayCount                  = 1u;
+  bindGroupLayoutPriv.entries             = &layoutEntry;
+  bindGroupLayoutPriv.count               = 1u;
+  bindGroupLayout._priv                   = &bindGroupLayoutPriv;
+  pipelineLayouts[0]                      = &bindGroupLayout;
   pipelineLayoutPriv.bindGroupLayouts     = pipelineLayouts;
   pipelineLayoutPriv.bindGroupLayoutCount = 1u;
-  pipelineLayout._priv                   = &pipelineLayoutPriv;
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(bindGroup); i++) {
+  pipelineLayout._priv                    = &pipelineLayoutPriv;
+
+  for (i = 0u; i < GPU_ARRAY_LEN(bindGroup); i++) {
     bindGroupPriv[i].layout = &bindGroupLayout;
     bindGroup[i]._priv      = &bindGroupPriv[i];
     bindGroups[i]           = &bindGroup[i];
   }
 
-  api.rce.drawPrimitives             = bench_draw;
-  api.rce.vertexInputBuffer          = bench_vertex;
-  api.rce.applyDynamicState          = bench_state;
-  api.descriptor.bindRenderGroup     = bench_bind;
-  device._api                        = &api;
-  device.transientBuffer             = &buffer;
-  device.transientCpuPtr             = transientBytes;
-  device.transientBufferUsage        = GPU_BUFFER_USAGE_UNIFORM;
-  device.transientConfig.ringBytesPerFrame = iterations + 1u;
-  device.transientFrameStride             = iterations + 1u;
-  device.transientConfigured              = true;
-  queue._device                      = &device;
-  cmdb._queue                        = &queue;
-  pass._api                          = &api;
-  pass._device                       = &device;
-  pass._cmdb                         = &cmdb;
-  pass._pipelineLayout               = &pipelineLayout;
-  pass._drawPrimitives               = bench_draw;
-  pass._vertexInputBuffer            = bench_vertex;
-  pass._bindRenderGroup              = bench_bind;
-  pass._primitiveType                = GPUPrimitiveTypeTriangle;
-  pass._hasPipeline                  = true;
-  pass._boundGroupLayouts[0]         = &bindGroupLayout;
-  benchApi                           = &api;
+  api.rce.drawPrimitives         = bench_draw;
+  api.rce.vertexInputBuffer      = bench_vertex;
+  api.rce.applyDynamicState      = bench_state;
+  api.descriptor.bindRenderGroup = bench_bind;
+  device._api                    = &api;
+  device.transientBuffer         = &buffer;
+  device.transientCpuPtr         = transientBytes;
+  device.transientBufferUsage    = GPU_BUFFER_USAGE_UNIFORM;
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(states); i++) {
+  device.transientConfig.ringBytesPerFrame = iterations + 1u;
+  device.transientFrameStride              = iterations + 1u;
+  device.transientConfigured               = true;
+
+  queue._device = &device;
+  cmdb._queue   = &queue;
+
+  pass._api                  = &api;
+  pass._device               = &device;
+  pass._cmdb                 = &cmdb;
+  pass._pipelineLayout       = &pipelineLayout;
+  pass._drawPrimitives       = bench_draw;
+  pass._vertexInputBuffer    = bench_vertex;
+  pass._bindRenderGroup      = bench_bind;
+  pass._primitiveType        = GPUPrimitiveTypeTriangle;
+  pass._hasPipeline          = true;
+  pass._boundGroupLayouts[0] = &bindGroupLayout;
+
+  benchApi = &api;
+
+  for (i = 0u; i < GPU_ARRAY_LEN(states); i++) {
     states[i].chain.sType      = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
     states[i].chain.structSize = sizeof(states[i]);
-    states[i].mask             = GPU_DYNAMIC_STATE_VIEWPORT_BIT |
-                                 GPU_DYNAMIC_STATE_SCISSOR_BIT |
-                                 GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT |
-                                 GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+    states[i].mask             = GPU_DYNAMIC_STATE_VIEWPORT_BIT | GPU_DYNAMIC_STATE_SCISSOR_BIT |
+                                 GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT | GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
     states[i].viewport.width    = 64.0f - (float)i;
     states[i].viewport.height   = 64.0f - (float)i;
     states[i].viewport.maxDepth = 1.0f;
@@ -514,96 +559,97 @@ main(int argc, char *argv[]) {
     states[i].stencilReference  = i;
   }
 
-  for (uint32_t path = 0u; path < BENCH_DRAW_COUNT; path++) {
+  for (path = 0u; path < BENCH_DRAW_COUNT; path++) {
     bench_runDraw((BenchDrawPath)path, &pass, BENCH_WARMUP_ITERATIONS);
   }
-  for (uint32_t path = 0u; path < BENCH_BIND_COUNT; path++) {
+
+  for (path = 0u; path < BENCH_BIND_COUNT; path++) {
     bench_runBind((BenchBindPath)path,
                   &pass,
                   bindGroups,
                   BENCH_WARMUP_ITERATIONS);
   }
-  for (uint32_t path = 0u; path < BENCH_VERTEX_COUNT; path++) {
+
+  for (path = 0u; path < BENCH_VERTEX_COUNT; path++) {
     bench_runVertex((BenchVertexPath)path,
                     &pass,
                     &buffer,
                     BENCH_WARMUP_ITERATIONS);
   }
-  for (uint32_t path = 0u; path < BENCH_STATE_COUNT; path++) {
+
+  for (path = 0u; path < BENCH_STATE_COUNT; path++) {
     bench_runState((BenchStatePath)path,
                    &pass,
                    states,
                    BENCH_WARMUP_ITERATIONS);
   }
-  for (uint32_t path = 0u; path < BENCH_ALLOC_COUNT; path++) {
+
+  for (path = 0u; path < BENCH_ALLOC_COUNT; path++) {
     bench_runAlloc((BenchAllocPath)path, &device, BENCH_WARMUP_ITERATIONS);
   }
 
-  for (uint32_t repeat = 0u; repeat < BENCH_REPEATS; repeat++) {
+  for (repeat = 0u; repeat < BENCH_REPEATS; repeat++) {
     if ((repeat & 1u) == 0u) {
-      for (uint32_t path = 0u; path < BENCH_DRAW_COUNT; path++) {
-        drawSamples[path][repeat] =
-          bench_runDraw((BenchDrawPath)path, &pass, iterations);
+      for (path = 0u; path < BENCH_DRAW_COUNT; path++) {
+        drawSamples[path][repeat] = bench_runDraw((BenchDrawPath)path, &pass, iterations);
       }
-      for (uint32_t path = 0u; path < BENCH_BIND_COUNT; path++) {
-        bindSamples[path][repeat] =
-          bench_runBind((BenchBindPath)path, &pass, bindGroups, iterations);
+
+      for (path = 0u; path < BENCH_BIND_COUNT; path++) {
+        bindSamples[path][repeat] = bench_runBind((BenchBindPath)path, &pass, bindGroups, iterations);
       }
-      for (uint32_t path = 0u; path < BENCH_VERTEX_COUNT; path++) {
-        vertexSamples[path][repeat] =
-          bench_runVertex((BenchVertexPath)path, &pass, &buffer, iterations);
+
+      for (path = 0u; path < BENCH_VERTEX_COUNT; path++) {
+        vertexSamples[path][repeat] = bench_runVertex((BenchVertexPath)path, &pass, &buffer, iterations);
       }
-      for (uint32_t path = 0u; path < BENCH_STATE_COUNT; path++) {
-        stateSamples[path][repeat] =
-          bench_runState((BenchStatePath)path, &pass, states, iterations);
+
+      for (path = 0u; path < BENCH_STATE_COUNT; path++) {
+        stateSamples[path][repeat] = bench_runState((BenchStatePath)path, &pass, states, iterations);
       }
-      for (uint32_t path = 0u; path < BENCH_ALLOC_COUNT; path++) {
-        allocSamples[path][repeat] =
-          bench_runAlloc((BenchAllocPath)path, &device, iterations);
+
+      for (path = 0u; path < BENCH_ALLOC_COUNT; path++) {
+        allocSamples[path][repeat] = bench_runAlloc((BenchAllocPath)path, &device, iterations);
       }
     } else {
-      for (uint32_t path = BENCH_ALLOC_COUNT; path-- > 0u;) {
-        allocSamples[path][repeat] =
-          bench_runAlloc((BenchAllocPath)path, &device, iterations);
+      for (path = BENCH_ALLOC_COUNT; path-- > 0u;) {
+        allocSamples[path][repeat] = bench_runAlloc((BenchAllocPath)path, &device, iterations);
       }
-      for (uint32_t path = BENCH_STATE_COUNT; path-- > 0u;) {
-        stateSamples[path][repeat] =
-          bench_runState((BenchStatePath)path, &pass, states, iterations);
+
+      for (path = BENCH_STATE_COUNT; path-- > 0u;) {
+        stateSamples[path][repeat] = bench_runState((BenchStatePath)path, &pass, states, iterations);
       }
-      for (uint32_t path = BENCH_VERTEX_COUNT; path-- > 0u;) {
-        vertexSamples[path][repeat] =
-          bench_runVertex((BenchVertexPath)path, &pass, &buffer, iterations);
+
+      for (path = BENCH_VERTEX_COUNT; path-- > 0u;) {
+        vertexSamples[path][repeat] = bench_runVertex((BenchVertexPath)path, &pass, &buffer, iterations);
       }
-      for (uint32_t path = BENCH_BIND_COUNT; path-- > 0u;) {
-        bindSamples[path][repeat] =
-          bench_runBind((BenchBindPath)path, &pass, bindGroups, iterations);
+
+      for (path = BENCH_BIND_COUNT; path-- > 0u;) {
+        bindSamples[path][repeat] = bench_runBind((BenchBindPath)path, &pass, bindGroups, iterations);
       }
-      for (uint32_t path = BENCH_DRAW_COUNT; path-- > 0u;) {
-        drawSamples[path][repeat] =
-          bench_runDraw((BenchDrawPath)path, &pass, iterations);
+
+      for (path = BENCH_DRAW_COUNT; path-- > 0u;) {
+        drawSamples[path][repeat] = bench_runDraw((BenchDrawPath)path, &pass, iterations);
       }
     }
   }
 
-  for (uint32_t path = 0u; path < BENCH_DRAW_COUNT; path++) {
-    drawMedian[path] =
-      bench_percentile(drawSamples[path], BENCH_REPEATS, 0.5);
+  for (path = 0u; path < BENCH_DRAW_COUNT; path++) {
+    drawMedian[path] = bench_percentile(drawSamples[path], BENCH_REPEATS, 0.5);
   }
-  for (uint32_t path = 0u; path < BENCH_BIND_COUNT; path++) {
-    bindMedian[path] =
-      bench_percentile(bindSamples[path], BENCH_REPEATS, 0.5);
+
+  for (path = 0u; path < BENCH_BIND_COUNT; path++) {
+    bindMedian[path] = bench_percentile(bindSamples[path], BENCH_REPEATS, 0.5);
   }
-  for (uint32_t path = 0u; path < BENCH_VERTEX_COUNT; path++) {
-    vertexMedian[path] =
-      bench_percentile(vertexSamples[path], BENCH_REPEATS, 0.5);
+
+  for (path = 0u; path < BENCH_VERTEX_COUNT; path++) {
+    vertexMedian[path] = bench_percentile(vertexSamples[path], BENCH_REPEATS, 0.5);
   }
-  for (uint32_t path = 0u; path < BENCH_STATE_COUNT; path++) {
-    stateMedian[path] =
-      bench_percentile(stateSamples[path], BENCH_REPEATS, 0.5);
+
+  for (path = 0u; path < BENCH_STATE_COUNT; path++) {
+    stateMedian[path] = bench_percentile(stateSamples[path], BENCH_REPEATS, 0.5);
   }
-  for (uint32_t path = 0u; path < BENCH_ALLOC_COUNT; path++) {
-    allocMedian[path] =
-      bench_percentile(allocSamples[path], BENCH_REPEATS, 0.5);
+
+  for (path = 0u; path < BENCH_ALLOC_COUNT; path++) {
+    allocMedian[path] = bench_percentile(allocSamples[path], BENCH_REPEATS, 0.5);
   }
 
   printf("GPU dispatch microbenchmark\n");
@@ -628,8 +674,7 @@ main(int argc, char *argv[]) {
          bindMedian[BENCH_BIND_VTABLE] - bindMedian[BENCH_BIND_DIRECT]);
   printf("public bind emission : %8.3f ns/call  delta %+7.3f ns vs vtable\n",
          bindMedian[BENCH_BIND_PUBLIC_EMIT],
-         bindMedian[BENCH_BIND_PUBLIC_EMIT] -
-           bindMedian[BENCH_BIND_VTABLE]);
+         bindMedian[BENCH_BIND_PUBLIC_EMIT] - bindMedian[BENCH_BIND_VTABLE]);
   printf("public bind shadow   : %8.3f ns/call\n",
          bindMedian[BENCH_BIND_PUBLIC_SHADOW]);
   printf("dynamic bind emission: %8.3f ns/call\n",
@@ -643,8 +688,7 @@ main(int argc, char *argv[]) {
          vertexMedian[BENCH_VERTEX_VTABLE] - vertexMedian[BENCH_VERTEX_DIRECT]);
   printf("public vertex emission: %8.3f ns/call  delta %+7.3f ns vs vtable\n",
          vertexMedian[BENCH_VERTEX_PUBLIC_EMIT],
-         vertexMedian[BENCH_VERTEX_PUBLIC_EMIT] -
-           vertexMedian[BENCH_VERTEX_VTABLE]);
+         vertexMedian[BENCH_VERTEX_PUBLIC_EMIT] - vertexMedian[BENCH_VERTEX_VTABLE]);
   printf("public vertex shadow  : %8.3f ns/call\n",
          vertexMedian[BENCH_VERTEX_PUBLIC_SHADOW]);
   printf("direct state callback : %8.3f ns/call\n",
@@ -654,8 +698,7 @@ main(int argc, char *argv[]) {
          stateMedian[BENCH_STATE_VTABLE] - stateMedian[BENCH_STATE_DIRECT]);
   printf("public state emission : %8.3f ns/call  delta %+7.3f ns vs vtable\n",
          stateMedian[BENCH_STATE_PUBLIC_EMIT],
-         stateMedian[BENCH_STATE_PUBLIC_EMIT] -
-           stateMedian[BENCH_STATE_VTABLE]);
+         stateMedian[BENCH_STATE_PUBLIC_EMIT] - stateMedian[BENCH_STATE_VTABLE]);
   printf("public state shadow   : %8.3f ns/call\n",
          stateMedian[BENCH_STATE_PUBLIC_SHADOW]);
   printf("direct transient alloc: %8.3f ns/call\n",
@@ -665,5 +708,6 @@ main(int argc, char *argv[]) {
          allocMedian[BENCH_ALLOC_PUBLIC] - allocMedian[BENCH_ALLOC_DIRECT]);
   printf("sink: %" PRIu64 "\n", benchSink);
   free(transientBytes);
+
   return EXIT_SUCCESS;
 }

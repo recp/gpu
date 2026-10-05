@@ -3,28 +3,39 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "../common.h"
 #include "../impl.h"
 
-static GPUInstance *
-webgpu_createInstance(GPUApi                     *api,
+static GPUInstance*
+webgpu_createInstance(GPUApi                      *api,
                       const GPUInstanceCreateInfo *info) {
-  WGPUInstanceDescriptor descriptor = WGPU_INSTANCE_DESCRIPTOR_INIT;
+  WGPUInstanceDescriptor  descriptor     = WGPU_INSTANCE_DESCRIPTOR_INIT;
 #if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
-  WGPUInstanceFeatureName requiredFeature =
-    WGPUInstanceFeatureName_TimedWaitAny;
   WGPUInstanceLimits      requiredLimits = WGPU_INSTANCE_LIMITS_INIT;
 #endif
-  GPUInstanceWebGPU     *native;
-  GPUInstance           *instance;
+  GPUInstanceWebGPU      *native;
+  GPUInstance            *instance;
+#if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
+  WGPUInstanceFeatureName requiredFeature = WGPUInstanceFeatureName_TimedWaitAny;
+#endif
 
   GPU__UNUSED(api);
   GPU__UNUSED(info);
 
   instance = calloc(1, sizeof(*instance));
   native   = calloc(1, sizeof(*native));
+
   if (!instance || !native) {
     free(native);
     free(instance);
@@ -32,14 +43,15 @@ webgpu_createInstance(GPUApi                     *api,
   }
 
 #if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
-  native->timedWaitAny =
-    wgpuHasInstanceFeature(WGPUInstanceFeatureName_TimedWaitAny);
+  native->timedWaitAny = wgpuHasInstanceFeature(WGPUInstanceFeatureName_TimedWaitAny);
+
   if (native->timedWaitAny) {
     requiredLimits.timedWaitAnyMaxCount = 1u;
-    descriptor.requiredFeatureCount    = 1u;
-    descriptor.requiredFeatures        = &requiredFeature;
-    descriptor.requiredLimits          = &requiredLimits;
+    descriptor.requiredFeatureCount     = 1u;
+    descriptor.requiredFeatures         = &requiredFeature;
+    descriptor.requiredLimits           = &requiredLimits;
   }
+
   native->instance = wgpuCreateInstance(&descriptor);
 #else
   native->instance = wgpuCreateInstance(&descriptor);
@@ -50,8 +62,9 @@ webgpu_createInstance(GPUApi                     *api,
     return NULL;
   }
 
-  instance->_priv = native;
+  instance->_priv      = native;
   instance->createInfo = *info;
+
   return instance;
 }
 
@@ -61,12 +74,15 @@ webgpu_destroyInstance(GPUApi *api, GPUInstance *instance) {
 
   GPU__UNUSED(api);
   native = gpu_webgpuInstance(instance);
+
   if (native) {
     if (native->instance) {
       wgpuInstanceRelease(native->instance);
     }
+
     free(native);
   }
+
   free(instance);
 }
 

@@ -17,39 +17,123 @@
 #ifndef vk_apis_h
 #define vk_apis_h
 
-GPU_HIDE void vk_initInstance(GPUApiInstance *api);
-GPU_HIDE void vk_initDevice(GPUApiDevice *api);
-GPU_HIDE void vk_initBuff(GPUApiBuffer *api);
-GPU_HIDE void vk_initMemory(GPUApiMemory *api);
-GPU_HIDE void vk_initMultiGPU(GPUApiMultiGPU *api);
-GPU_HIDE void vk_initTexture(GPUApiTexture *api);
-GPU_HIDE void vk_initSampler(GPUApiSampler *api);
-GPU_HIDE void vk_initCmdQue(GPUApiCommandQueue *api);
-GPU_HIDE void vk_initCmdbuf(GPUApiCommandBuffer *api);
-GPU_HIDE void vk_initQuery(GPUApiCommandBuffer *api);
-GPU_HIDE void vk_initSwapchain(GPUApiSwapchain *api);
-GPU_HIDE void vk_initFrame(GPUApiFrame *api);
-GPU_HIDE void vk_initDescriptor(GPUApiDescriptor *api);
-GPU_HIDE void vk_initSurface(GPUApiSurface *api);
-GPU_HIDE void vk_initLibrary(GPUApiLibrary *api);
-GPU_HIDE void vk_initRenderPipeline(GPUApiRender *api);
-GPU_HIDE void vk_initRenderPass(GPUApiRenderPass *api);
-GPU_HIDE void vk_encodeBarriers(GPUCommandBuffer       *cmdb,
-                                const GPUBarrierBatch *barriers);
-GPU_HIDE void vk_blitTextureRenderFallback(
-  GPUCommandBuffer         *cmdb,
-  const GPUTextureBlitInfo *info
-);
-GPU_HIDE void vk_initRCE(GPUApiRCE *api);
-GPU_HIDE void vk_initCompute(GPUApiCompute *api);
-GPU_HIDE void vk_initPipelineCache(GPUApiPipelineCache *api);
-GPU_HIDE void vk_initVRS(GPUApiVRS *api);
-GPU_HIDE void vk_initRayQuery(GPUApiRayQuery *api);
-GPU_HIDE void vk_initRayTracing(GPUApiRayTracing *api);
-GPU_HIDE void vk_initExecutionGraph(GPUApiExecutionGraph *api);
-GPU_HIDE void vk_resetGraphInitializations(GPUCommandBufferVk *command);
-GPU_HIDE void vk_submitGraphInitializations(GPUCommandBufferVk *command);
-GPU_HIDE void vk_destroyGraphInputScratch(GPUCommandBufferVk *command);
+GPU_HIDE
+void
+vk_initInstance(GPUApiInstance *api);
+
+GPU_HIDE
+void
+vk_initDevice(GPUApiDevice *api);
+
+GPU_HIDE
+void
+vk_initBuff(GPUApiBuffer *api);
+
+GPU_HIDE
+void
+vk_initMemory(GPUApiMemory *api);
+
+GPU_HIDE
+void
+vk_initMultiGPU(GPUApiMultiGPU *api);
+
+GPU_HIDE
+void
+vk_initTexture(GPUApiTexture *api);
+
+GPU_HIDE
+void
+vk_initSampler(GPUApiSampler *api);
+
+GPU_HIDE
+void
+vk_initCmdQue(GPUApiCommandQueue *api);
+
+GPU_HIDE
+void
+vk_initCmdbuf(GPUApiCommandBuffer *api);
+
+GPU_HIDE
+void
+vk_initQuery(GPUApiCommandBuffer *api);
+
+GPU_HIDE
+void
+vk_initSwapchain(GPUApiSwapchain *api);
+
+GPU_HIDE
+void
+vk_initFrame(GPUApiFrame *api);
+
+GPU_HIDE
+void
+vk_initDescriptor(GPUApiDescriptor *api);
+
+GPU_HIDE
+void
+vk_initSurface(GPUApiSurface *api);
+
+GPU_HIDE
+void
+vk_initLibrary(GPUApiLibrary *api);
+
+GPU_HIDE
+void
+vk_initRenderPipeline(GPUApiRender *api);
+
+GPU_HIDE
+void
+vk_initRenderPass(GPUApiRenderPass *api);
+
+GPU_HIDE
+void
+vk_encodeBarriers(GPUCommandBuffer      *cmdb,
+                  const GPUBarrierBatch *barriers);
+
+GPU_HIDE
+void
+vk_blitTextureRenderFallback(GPUCommandBuffer         *cmdb,
+                             const GPUTextureBlitInfo *info);
+
+GPU_HIDE
+void
+vk_initRCE(GPUApiRCE *api);
+
+GPU_HIDE
+void
+vk_initCompute(GPUApiCompute *api);
+
+GPU_HIDE
+void
+vk_initPipelineCache(GPUApiPipelineCache *api);
+
+GPU_HIDE
+void
+vk_initVRS(GPUApiVRS *api);
+
+GPU_HIDE
+void
+vk_initRayQuery(GPUApiRayQuery *api);
+
+GPU_HIDE
+void
+vk_initRayTracing(GPUApiRayTracing *api);
+
+GPU_HIDE
+void
+vk_initExecutionGraph(GPUApiExecutionGraph *api);
+
+GPU_HIDE
+void
+vk_resetGraphInitializations(GPUCommandBufferVk *command);
+
+GPU_HIDE
+void
+vk_submitGraphInitializations(GPUCommandBufferVk *command);
+
+GPU_HIDE
+void
+vk_destroyGraphInputScratch(GPUCommandBufferVk *command);
 
 GPU_HIDE
 bool
@@ -73,7 +157,7 @@ vk_destroyCommandQueue(GPUQueue *queue);
 
 GPU_HIDE
 GPUResult
-vk_waitDeviceIdle(GPUDevice * __restrict device);
+vk_waitDeviceIdle(GPUDevice *__restrict device);
 
 GPU_HIDE
 GPUResult
@@ -81,9 +165,9 @@ vk_waitCommandQueueIdle(GPUQueue *queue);
 
 GPU_HIDE
 GPUResult
-vk_createBuffer(GPUDevice                 * __restrict device,
-                const GPUBufferCreateInfo * __restrict info,
-                GPUBuffer                ** __restrict outBuffer);
+vk_createBuffer(GPUDevice                 *__restrict device,
+                const GPUBufferCreateInfo *__restrict info,
+                GPUBuffer                **__restrict outBuffer);
 
 GPU_HIDE
 GPUResult
@@ -101,9 +185,9 @@ vk_wrapBuffer(GPUDevice                 *device,
 
 GPU_HIDE
 GPUResult
-vk_createHostBuffer(GPUDevice                 * __restrict device,
-                    const GPUBufferCreateInfo * __restrict info,
-                    GPUBuffer                ** __restrict outBuffer);
+vk_createHostBuffer(GPUDevice                 *__restrict device,
+                    const GPUBufferCreateInfo *__restrict info,
+                    GPUBuffer                **__restrict outBuffer);
 
 GPU_HIDE
 GPUResult
@@ -113,11 +197,9 @@ vk_getBufferMemoryRequirements(GPUDevice                 *device,
 
 GPU_HIDE
 GPUResult
-vk_getSparseBufferRequirements(
-  GPUDevice                   *device,
-  const GPUBufferCreateInfo   *info,
-  GPUSparseBufferRequirements *outRequirements
-);
+vk_getSparseBufferRequirements(GPUDevice                   *device,
+                               const GPUBufferCreateInfo   *info,
+                               GPUSparseBufferRequirements *outRequirements);
 
 GPU_HIDE
 GPUResult
@@ -165,11 +247,9 @@ vk_createPlacedTexture(GPUDevice                  *device,
 
 GPU_HIDE
 GPUResult
-vk_getSparseTextureRequirements(
-  GPUDevice                    *device,
-  const GPUTextureCreateInfo   *info,
-  GPUSparseTextureRequirements *outRequirements
-);
+vk_getSparseTextureRequirements(GPUDevice                    *device,
+                                const GPUTextureCreateInfo   *info,
+                                GPUSparseTextureRequirements *outRequirements);
 
 GPU_HIDE
 GPUResult
@@ -184,14 +264,14 @@ vk_flushTransfers(GPUQueue *queue);
 
 GPU_HIDE
 void
-vk_destroyBuffer(GPUBuffer * __restrict buffer);
+vk_destroyBuffer(GPUBuffer *__restrict buffer);
 
 GPU_HIDE
 GPUResult
-vk_writeBuffer(GPUQueue * __restrict queue,
-               GPUBuffer       * __restrict buffer,
-               uint64_t                     dstOffset,
-               const void      * __restrict data,
-               uint64_t                     sizeBytes);
+vk_writeBuffer(GPUQueue   *__restrict queue,
+               GPUBuffer  *__restrict buffer,
+               uint64_t               dstOffset,
+               const void *__restrict data,
+               uint64_t               sizeBytes);
 
 #endif /* vk_apis_h */

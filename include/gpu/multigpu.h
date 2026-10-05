@@ -28,23 +28,23 @@ extern "C" {
 typedef struct GPUDeviceInteropEXT GPUDeviceInteropEXT;
 
 typedef struct GPUSharedBufferBarrierEXT {
-  GPUBuffer     *sourceBuffer;
-  GPUBuffer     *destinationBuffer;
-  uint64_t       offset;
-  uint64_t       sizeBytes;
-  GPUAccessMask  srcAccess;
-  GPUAccessMask  dstAccess;
+  GPUBuffer    *sourceBuffer;
+  GPUBuffer    *destinationBuffer;
+  uint64_t      offset;
+  uint64_t      sizeBytes;
+  GPUAccessMask srcAccess;
+  GPUAccessMask dstAccess;
 } GPUSharedBufferBarrierEXT;
 
 typedef struct GPUSharedTextureBarrierEXT {
-  GPUTexture    *sourceTexture;
-  GPUTexture    *destinationTexture;
-  GPUAccessMask  srcAccess;
-  GPUAccessMask  dstAccess;
-  uint32_t       baseMip;
-  uint32_t       mipCount;
-  uint32_t       baseLayer;
-  uint32_t       layerCount;
+  GPUTexture   *sourceTexture;
+  GPUTexture   *destinationTexture;
+  GPUAccessMask srcAccess;
+  GPUAccessMask dstAccess;
+  uint32_t      baseMip;
+  uint32_t      mipCount;
+  uint32_t      baseLayer;
+  uint32_t      layerCount;
 } GPUSharedTextureBarrierEXT;
 
 typedef struct GPUSharedBarrierBatchEXT {
@@ -56,7 +56,7 @@ typedef struct GPUSharedBarrierBatchEXT {
   uint32_t                          textureBarrierCount;
 } GPUSharedBarrierBatchEXT;
 
-/* Devices outlive the zero-copy bridge and every handle created from it. */
+/* devices outlive the zero-copy bridge and every handle created from it. */
 GPU_EXPORT
 GPUResult
 GPUCreateDeviceInteropEXT(GPUDevice            *firstDevice,
@@ -74,7 +74,7 @@ GPUGetSharedBufferMemoryRequirementsEXT(GPUDeviceInteropEXT       *interop,
                                         const GPUBufferCreateInfo *secondInfo,
                                         GPUMemoryRequirements     *outRequirements);
 
-/* Returns ordinary device-owned handles over one native allocation. */
+/* returns ordinary device-owned handles over one native allocation. */
 GPU_EXPORT
 GPUResult
 GPUCreateSharedBufferEXT(GPUDeviceInteropEXT       *interop,
@@ -105,17 +105,17 @@ GPUCreateSharedSemaphoreEXT(GPUDeviceInteropEXT          *interop,
                             GPUSemaphore                **outFirstSemaphore,
                             GPUSemaphore                **outSecondSemaphore);
 
-/* Record release before signaling the source device's shared semaphore. */
+/* record release before signaling the source device's shared semaphore. */
 GPU_EXPORT
 GPUResult
-GPUEncodeSharedReleaseEXT(GPUDeviceInteropEXT           *interop,
+GPUEncodeSharedReleaseEXT(GPUDeviceInteropEXT            *interop,
                           GPUCommandBuffer               *cmdb,
                           const GPUSharedBarrierBatchEXT *barriers);
 
-/* Record acquire after the destination waits on its shared semaphore. */
+/* record acquire after the destination waits on its shared semaphore. */
 GPU_EXPORT
 GPUResult
-GPUEncodeSharedAcquireEXT(GPUDeviceInteropEXT           *interop,
+GPUEncodeSharedAcquireEXT(GPUDeviceInteropEXT            *interop,
                           GPUCommandBuffer               *cmdb,
                           const GPUSharedBarrierBatchEXT *barriers);
 

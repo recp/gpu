@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 
 typedef enum GPUClockDerivativeTestKind {
@@ -30,69 +46,78 @@ gpu_test_clockDerivativeCase(GPUAdapter                       *adapter,
   GPUBindGroupEntry            entry         = {0};
   GPUCommandBuffer            *submitList[1] = {0};
   GPUClockDerivativeOutput     output;
-  GPUDevice                   *disabledDevice = NULL;
-  GPUDevice                   *device         = NULL;
-  GPUQueue                    *queue          = NULL;
+  GPUDevice                   *disabledDevice  = NULL;
+  GPUDevice                   *device          = NULL;
+  GPUQueue                    *queue           = NULL;
   GPUShaderLibrary            *disabledLibrary = NULL;
-  GPUShaderLibrary            *library        = NULL;
-  GPUShaderLayout             *shaderLayout   = NULL;
-  GPUComputePipeline          *pipeline       = NULL;
-  GPUBuffer                   *buffer         = NULL;
-  GPUBindGroup                *group          = NULL;
-  GPUCommandBuffer            *cmdb           = NULL;
-  GPUComputePassEncoder       *pass           = NULL;
-  GPUFence                    *fence          = NULL;
-  void                        *bytecode       = NULL;
-  uint64_t                     bytecodeSize   = 0u;
-  int                          ok             = 0;
+  GPUShaderLibrary            *library         = NULL;
+  GPUShaderLayout             *shaderLayout    = NULL;
+  GPUComputePipeline          *pipeline        = NULL;
+  GPUBuffer                   *buffer          = NULL;
+  GPUBindGroup                *group           = NULL;
+  GPUCommandBuffer            *cmdb            = NULL;
+  GPUComputePassEncoder       *pass            = NULL;
+  GPUFence                    *fence           = NULL;
+  void                        *bytecode        = NULL;
+  uint64_t                     bytecodeSize    = 0u;
+  int                          ok              = 0;
+  uint32_t                     initIndex;
+  float                        expected;
+  uint32_t                     resultIndex;
 
   if (!GPUIsFeatureSupported(adapter, test->feature)) {
     printf("%s execution skipped: unsupported adapter\n", test->label);
     return 1;
   }
-  if (!test->path ||
-      !(bytecode = gpu_test_read_file(test->path, &bytecodeSize))) {
+
+  if (!test->path
+      || !(bytecode = gpu_test_read_file(test->path, &bytecodeSize))) {
     fprintf(stderr, "%s fixture is unavailable\n", test->label);
     goto cleanup;
   }
 
   deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize = sizeof(deviceInfo);
-  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
-      !disabledDevice) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK
+      || !disabledDevice) {
     fprintf(stderr, "%s disabled-device setup failed\n", test->label);
     goto cleanup;
   }
+
   if (GPUCreateShaderLibraryFromUSL(disabledDevice,
                                     bytecode,
                                     bytecodeSize,
-                                    &disabledLibrary) == GPU_OK ||
-      disabledLibrary) {
+                                    &disabledLibrary) == GPU_OK
+      || disabledLibrary) {
     fprintf(stderr, "%s was accepted without feature enablement\n",
             test->label);
     goto cleanup;
   }
+
   GPUDestroyDevice(disabledDevice);
   disabledDevice = NULL;
 
   deviceInfo.required.pFeatures    = &test->feature;
   deviceInfo.required.featureCount = 1u;
-  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
-      !GPUIsFeatureEnabled(device, test->feature)) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device
+      || !GPUIsFeatureEnabled(device, test->feature)) {
     fprintf(stderr, "%s device feature enablement failed\n", test->label);
     goto cleanup;
   }
 
   queue = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
-  if (!queue ||
-      GPUCreateShaderLibraryFromUSL(device,
-                                    bytecode,
-                                    bytecodeSize,
-                                    &library) != GPU_OK ||
-      !library ||
-      GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !shaderLayout || !shaderLayout->pipelineLayout ||
-      shaderLayout->bindGroupLayoutCount != 1u) {
+
+  if (!queue
+      || GPUCreateShaderLibraryFromUSL(device,
+                                       bytecode,
+                                       bytecodeSize,
+                                       &library) != GPU_OK
+      || !library
+      || GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK
+      || !shaderLayout || !shaderLayout->pipelineLayout
+      || shaderLayout->bindGroupLayoutCount != 1u) {
     fprintf(stderr, "%s shader setup failed\n", test->label);
     goto cleanup;
   }
@@ -102,8 +127,9 @@ gpu_test_clockDerivativeCase(GPUAdapter                       *adapter,
   pipelineInfo.layout           = shaderLayout->pipelineLayout;
   pipelineInfo.library          = library;
   pipelineInfo.entryPoint       = test->entryPoint;
-  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
+
+  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK
+      || !pipeline) {
     fprintf(stderr, "%s pipeline creation failed\n", test->label);
     goto cleanup;
   }
@@ -114,17 +140,20 @@ gpu_test_clockDerivativeCase(GPUAdapter                       *adapter,
   bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
                                 GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     fprintf(stderr, "%s output buffer creation failed\n", test->label);
     goto cleanup;
   }
 
   memset(&output, 0xff, sizeof(output));
+
   if (test->kind != GPU_CLOCK_DERIVATIVE_TEST_CLOCK) {
-    for (uint32_t i = 0u; i < GPU_ARRAY_LEN(output.derivative); i++) {
-      output.derivative[i] = -12345.0f;
+    for (initIndex = 0u; initIndex < GPU_ARRAY_LEN(output.derivative); initIndex++) {
+      output.derivative[initIndex] = -12345.0f;
     }
   }
+
   if (GPUQueueWriteBuffer(queue,
                           buffer,
                           0u,
@@ -134,18 +163,19 @@ gpu_test_clockDerivativeCase(GPUAdapter                       *adapter,
     goto cleanup;
   }
 
-  entry.binding       = 0u;
-  entry.bindingType   = GPU_BINDING_STORAGE_BUFFER;
-  entry.buffer.buffer = buffer;
-  entry.buffer.size   = sizeof(output);
+  entry.binding              = 0u;
+  entry.bindingType          = GPU_BINDING_STORAGE_BUFFER;
+  entry.buffer.buffer        = buffer;
+  entry.buffer.size          = sizeof(output);
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
   groupInfo.pEntries         = &entry;
   groupInfo.entryCount       = 1u;
-  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group ||
-      GPUAcquireCommandBuffer(queue, test->label, &cmdb) != GPU_OK || !cmdb ||
-      !(pass = GPUBeginComputePass(cmdb, test->label))) {
+
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group
+      || GPUAcquireCommandBuffer(queue, test->label, &cmdb) != GPU_OK || !cmdb
+      || !(pass = GPUBeginComputePass(cmdb, test->label))) {
     fprintf(stderr, "%s command setup failed\n", test->label);
     goto cleanup;
   }
@@ -160,18 +190,21 @@ gpu_test_clockDerivativeCase(GPUAdapter                       *adapter,
     fprintf(stderr, "%s fence creation failed\n", test->label);
     goto cleanup;
   }
-  submitList[0]                  = cmdb;
+
+  submitList[0]                 = cmdb;
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.ppCommandBuffers   = submitList;
   submitInfo.commandBufferCount = 1u;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     cmdb = NULL;
     fprintf(stderr, "%s submit failed\n", test->label);
     goto cleanup;
   }
+
   cmdb = NULL;
 
   if (GPUQueueReadBuffer(queue,
@@ -182,6 +215,7 @@ gpu_test_clockDerivativeCase(GPUAdapter                       *adapter,
     fprintf(stderr, "%s readback failed\n", test->label);
     goto cleanup;
   }
+
   if (test->kind == GPU_CLOCK_DERIVATIVE_TEST_CLOCK) {
     if (output.clock[0] == UINT64_MAX || output.clock[1] != 123456789u) {
       fprintf(stderr,
@@ -192,28 +226,30 @@ gpu_test_clockDerivativeCase(GPUAdapter                       *adapter,
       goto cleanup;
     }
   } else {
-    float expected = test->kind == GPU_CLOCK_DERIVATIVE_TEST_QUADS
-                   ? 2.0f
-                   : 3.0f;
+    expected = test->kind == GPU_CLOCK_DERIVATIVE_TEST_QUADS
+                 ? 2.0f
+                 : 3.0f;
 
-    for (uint32_t i = 0u; i < GPU_ARRAY_LEN(output.derivative); i++) {
-      if (output.derivative[i] != expected) {
+    for (resultIndex = 0u; resultIndex < GPU_ARRAY_LEN(output.derivative); resultIndex++) {
+      if (output.derivative[resultIndex] != expected) {
         fprintf(stderr,
                 "%s output mismatch at %u: %.9g, expected %.9g\n",
                 test->label,
-                i,
-                output.derivative[i],
+                resultIndex,
+                output.derivative[resultIndex],
                 expected);
         goto cleanup;
       }
     }
   }
+
   ok = 1;
 
 cleanup:
   if (pass) {
     GPUEndComputePass(pass);
   }
+
   free(bytecode);
   GPUDestroyShaderLibrary(disabledLibrary);
   GPUDestroyDevice(disabledDevice);
@@ -264,10 +300,13 @@ gpu_test_clock_derivatives(GPUAdapter *adapter,
     }
   };
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(tests); i++) {
+  uint32_t                   i;
+
+  for (i = 0u; i < GPU_ARRAY_LEN(tests); i++) {
     if (!gpu_test_clockDerivativeCase(adapter, &tests[i])) {
       return 0;
     }
   }
+
   return 1;
 }

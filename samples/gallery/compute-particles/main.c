@@ -1,12 +1,28 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 #include <math.h>
 #include <stdio.h>
 
 enum {
-  PARTICLE_COUNT = 256u,
+  PARTICLE_COUNT          = 256u,
   PARTICLE_WORKGROUP_SIZE = 64u,
-  WARM_FRAME_COUNT = 8u
+  WARM_FRAME_COUNT        = 8u
 };
 
 typedef struct Particle {
@@ -47,12 +63,17 @@ typedef struct WebGPUParticles {
 
 static WebGPUParticles app;
 
+static const uint32_t drawArgs[] = {
+  6u, PARTICLE_COUNT, 0u, 0u
+};
+
 static uint32_t
 particle_hash(uint32_t value) {
   value ^= value >> 16u;
   value *= 0x7feb352du;
   value ^= value >> 15u;
   value *= 0x846ca68bu;
+
   return value ^ (value >> 16u);
 }
 
@@ -70,49 +91,50 @@ resize_canvas(WebGPUParticles *state) {
 
 static int
 create_resources(WebGPUParticles *state) {
-  static const uint32_t drawArgs[] = {
-    6u, PARTICLE_COUNT, 0u, 0u
-  };
-  GPUComputePipelineCreateInfo computeInfo = {0};
-  GPURenderPipelineCreateInfo  renderInfo = {0};
-  GPUColorTargetState          color = {0};
-  GPUBufferCreateInfo          bufferInfo = {0};
-  GPUBindGroupEntry            groupEntry = {0};
-  GPUBindGroupCreateInfo       groupInfo = {0};
-  GPUShaderReflection          reflection = {0};
   Particle                     particles[PARTICLE_COUNT];
+  GPUComputePipelineCreateInfo computeInfo = {0};
+  GPURenderPipelineCreateInfo  renderInfo  = {0};
+  GPUColorTargetState          color       = {0};
+  GPUBufferCreateInfo          bufferInfo  = {0};
+  GPUBindGroupEntry            groupEntry  = {0};
+  GPUBindGroupCreateInfo       groupInfo   = {0};
+  GPUShaderReflection          reflection  = {0};
   void                        *artifact;
   uint64_t                     artifactSize;
+  float                        angle, speed, radius;
   uint32_t                     i;
   GPUResult                    result;
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/particles.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read particles.us", 1);
     return 0;
   }
+
   result = GPUCreateShaderLibraryFromUSL(state->device,
                                          artifact,
                                          artifactSize,
                                          &state->library);
   free(artifact);
-  if (result != GPU_OK || !state->library ||
-      GPUGetShaderReflection(state->library, &reflection) != GPU_OK ||
-      reflection.pushConstantSizeBytes != sizeof(Simulation) ||
-      reflection.pushConstantStages !=
-        (GPU_SHADER_STAGE_VERTEX_BIT | GPU_SHADER_STAGE_COMPUTE_BIT)) {
+
+  if (result != GPU_OK || !state->library
+      || GPUGetShaderReflection(state->library, &reflection) != GPU_OK
+      || reflection.pushConstantSizeBytes != sizeof(Simulation)
+      || reflection.pushConstantStages != (GPU_SHADER_STAGE_VERTEX_BIT | GPU_SHADER_STAGE_COMPUTE_BIT)) {
     GPUFreeShaderReflection(&reflection);
     set_status("GPU: unexpected particles reflection", 1);
     return 0;
   }
+
   GPUFreeShaderReflection(&reflection);
 
   if (GPUCreateShaderLayout(state->device,
                             state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 2u) {
+                            &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 2u) {
     set_status("GPU: failed to create particles shader layout", 1);
     return 0;
   }
@@ -123,6 +145,7 @@ create_resources(WebGPUParticles *state) {
   computeInfo.layout           = state->shaderLayout->pipelineLayout;
   computeInfo.library          = state->library;
   computeInfo.entryPoint       = "simulate_particles";
+
   if (GPUCreateComputePipeline(state->device,
                                &computeInfo,
                                &state->computePipeline) != GPU_OK) {
@@ -130,29 +153,31 @@ create_resources(WebGPUParticles *state) {
     return 0;
   }
 
-  color.format                 = GPUGetSwapchainFormat(state->swapchain);
-  color.blend.enabled          = true;
-  color.blend.color.srcFactor  = GPU_BLEND_FACTOR_SRC_ALPHA;
-  color.blend.color.dstFactor  = GPU_BLEND_FACTOR_ONE;
-  color.blend.color.op         = GPU_BLEND_OP_ADD;
-  color.blend.alpha.srcFactor  = GPU_BLEND_FACTOR_ONE;
-  color.blend.alpha.dstFactor  = GPU_BLEND_FACTOR_ONE;
-  color.blend.alpha.op         = GPU_BLEND_OP_ADD;
-  color.blend.writeMask        = GPU_COLOR_WRITE_ALL;
-  renderInfo.chain.sType       = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  renderInfo.chain.structSize  = sizeof(renderInfo);
-  renderInfo.label             = "webgpu-particle-render";
-  renderInfo.layout            = state->shaderLayout->pipelineLayout;
-  renderInfo.library           = state->library;
-  renderInfo.vertexEntry       = "particle_vs";
-  renderInfo.fragmentEntry     = "particle_fs";
-  renderInfo.pColorTargets     = &color;
-  renderInfo.colorTargetCount  = 1u;
-  renderInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  renderInfo.cullMode          = GPU_CULL_MODE_NONE;
-  renderInfo.frontFace         = GPU_FRONT_FACE_CCW;
+  color.format                = GPUGetSwapchainFormat(state->swapchain);
+  color.blend.enabled         = true;
+  color.blend.color.srcFactor = GPU_BLEND_FACTOR_SRC_ALPHA;
+  color.blend.color.dstFactor = GPU_BLEND_FACTOR_ONE;
+  color.blend.color.op        = GPU_BLEND_OP_ADD;
+  color.blend.alpha.srcFactor = GPU_BLEND_FACTOR_ONE;
+  color.blend.alpha.dstFactor = GPU_BLEND_FACTOR_ONE;
+  color.blend.alpha.op        = GPU_BLEND_OP_ADD;
+  color.blend.writeMask       = GPU_COLOR_WRITE_ALL;
+
+  renderInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  renderInfo.chain.structSize        = sizeof(renderInfo);
+  renderInfo.label                   = "webgpu-particle-render";
+  renderInfo.layout                  = state->shaderLayout->pipelineLayout;
+  renderInfo.library                 = state->library;
+  renderInfo.vertexEntry             = "particle_vs";
+  renderInfo.fragmentEntry           = "particle_fs";
+  renderInfo.pColorTargets           = &color;
+  renderInfo.colorTargetCount        = 1u;
+  renderInfo.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  renderInfo.cullMode                = GPU_CULL_MODE_NONE;
+  renderInfo.frontFace               = GPU_FRONT_FACE_CCW;
   renderInfo.multisample.sampleCount = 1u;
   renderInfo.multisample.sampleMask  = UINT32_MAX;
+
   if (GPUCreateRenderPipeline(state->device,
                               &renderInfo,
                               &state->renderPipeline) != GPU_OK) {
@@ -161,13 +186,10 @@ create_resources(WebGPUParticles *state) {
   }
 
   for (i = 0u; i < PARTICLE_COUNT; i++) {
-    float angle;
-    float speed;
-    float radius;
-
     angle  = particle_unit(i * 7u + 1u) * 6.28318530718f;
     radius = 0.08f + 0.82f * particle_unit(i * 7u + 2u);
     speed  = 0.08f + 0.22f * particle_unit(i * 7u + 3u);
+
     particles[i].position[0] = cosf(angle) * radius;
     particles[i].position[1] = sinf(angle) * radius;
     particles[i].velocity[0] = -sinf(angle) * speed;
@@ -182,32 +204,32 @@ create_resources(WebGPUParticles *state) {
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "webgpu-particles";
   bufferInfo.sizeBytes        = sizeof(particles);
-  bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
-                                GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(state->device,
                       &bufferInfo,
-                      &state->particleBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->particleBuffer,
-                          0u,
-                          particles,
-                          sizeof(particles)) != GPU_OK) {
+                      &state->particleBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->particleBuffer,
+                             0u,
+                             particles,
+                             sizeof(particles)) != GPU_OK) {
     set_status("GPU: failed to upload particles", 1);
     return 0;
   }
 
   bufferInfo.label     = "webgpu-particle-draw";
   bufferInfo.sizeBytes = sizeof(drawArgs);
-  bufferInfo.usage     = GPU_BUFFER_USAGE_INDIRECT |
-                         GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage     = GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(state->device,
                       &bufferInfo,
-                      &state->drawBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->drawBuffer,
-                          0u,
-                          drawArgs,
-                          sizeof(drawArgs)) != GPU_OK) {
+                      &state->drawBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->drawBuffer,
+                             0u,
+                             drawArgs,
+                             sizeof(drawArgs)) != GPU_OK) {
     set_status("GPU: failed to upload particle draw command", 1);
     return 0;
   }
@@ -216,12 +238,14 @@ create_resources(WebGPUParticles *state) {
   groupEntry.bindingType   = GPU_BINDING_STORAGE_BUFFER;
   groupEntry.buffer.buffer = state->particleBuffer;
   groupEntry.buffer.size   = sizeof(particles);
+
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "webgpu-particle-group";
   groupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
   groupInfo.pEntries         = &groupEntry;
   groupInfo.entryCount       = 1u;
+
   if (GPUCreateBindGroup(state->device,
                          &groupInfo,
                          &state->computeGroup) != GPU_OK) {
@@ -232,38 +256,40 @@ create_resources(WebGPUParticles *state) {
   groupEntry.bindingType = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
   groupInfo.label        = "webgpu-particle-render-group";
   groupInfo.layout       = state->shaderLayout->bindGroupLayouts[1];
+
   if (GPUCreateBindGroup(state->device,
                          &groupInfo,
                          &state->renderGroup) != GPU_OK) {
     set_status("GPU: failed to create particle render group", 1);
     return 0;
   }
+
   return 1;
 }
 
 static void
 render_frame(void *userData) {
+  GPURenderPassCreateInfo      passInfo = {0};
+  GPUBarrierBatch              barriers = {0};
+  GPURenderPassColorAttachment color    = {0};
+  GPUBufferBarrier             barrier  = {0};
+  Simulation                   simulation;
   WebGPUParticles             *state;
   GPUFrame                    *frame;
   GPUCommandBuffer            *cmdb;
   GPUComputePassEncoder       *compute;
   GPURenderPassEncoder        *render;
-  GPURenderPassColorAttachment color = {0};
-  GPURenderPassCreateInfo      passInfo = {0};
-  GPUBufferBarrier             barrier = {0};
-  GPUBarrierBatch              barriers = {0};
-  Simulation                   simulation;
   double                       now;
 
   state = userData;
+
   if (!resize_canvas(state)) {
     return;
   }
 
   now = gpu_sample_elapsed_seconds(&state->startTime);
-  simulation.deltaTime = state->previousTime > 0.0
-                           ? (float)(now - state->previousTime)
-                           : 1.0f / 60.0f;
+
+  simulation.deltaTime = state->previousTime > 0.0 ? (float)(now - state->previousTime) : 1.0f / 60.0f;
   simulation.deltaTime = fminf(simulation.deltaTime, 1.0f / 30.0f);
   simulation.time      = (float)now;
   simulation.aspect    = gpu_sample_aspect_ratio(state->width, state->height);
@@ -272,21 +298,22 @@ render_frame(void *userData) {
 
   frame = GPUBeginFrame(state->swapchain);
   cmdb  = NULL;
-  if (!frame ||
-      GPUAcquireCommandBuffer(state->queue,
-                              "webgpu-particle-frame",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+
+  if (!frame
+      || GPUAcquireCommandBuffer(state->queue,
+                                 "webgpu-particle-frame",
+                                 &cmdb) != GPU_OK
+      || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
 
-  compute = GPUBeginComputePass(cmdb, "webgpu-particle-simulation");
-  if (!compute) {
+  if (!(compute = GPUBeginComputePass(cmdb, "webgpu-particle-simulation"))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
   }
+
   GPUBindComputePipeline(compute, state->computePipeline);
   GPUBindComputeGroup(compute, 0u, state->computeGroup, 0u, NULL);
   GPUSetComputePushConstants(compute,
@@ -294,8 +321,7 @@ render_frame(void *userData) {
                              (uint32_t)sizeof(simulation),
                              &simulation);
   GPUDispatch(compute,
-              (PARTICLE_COUNT + PARTICLE_WORKGROUP_SIZE - 1u) /
-                PARTICLE_WORKGROUP_SIZE,
+              (PARTICLE_COUNT + PARTICLE_WORKGROUP_SIZE - 1u) / PARTICLE_WORKGROUP_SIZE,
               1u,
               1u);
   GPUEndComputePass(compute);
@@ -304,6 +330,7 @@ render_frame(void *userData) {
   barrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
   barrier.dstAccess = GPU_ACCESS_SHADER_READ;
   barrier.sizeBytes = sizeof(Particle) * PARTICLE_COUNT;
+
   barriers.srcStages          = GPU_STAGE_COMPUTE;
   barriers.dstStages          = GPU_STAGE_VERTEX;
   barriers.pBufferBarriers    = &barrier;
@@ -317,15 +344,17 @@ render_frame(void *userData) {
   color.clearColor.float32[1] = 0.014f;
   color.clearColor.float32[2] = 0.034f;
   color.clearColor.float32[3] = 1.0f;
+
   passInfo.label                = "webgpu-particle-render";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  render = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!render) {
+
+  if (!(render = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
   }
+
   GPUBindRenderPipeline(render, state->renderPipeline);
   GPUBindRenderGroup(render, 1u, state->renderGroup, 0u, NULL);
   GPUSetRenderPushConstants(render,
@@ -341,13 +370,14 @@ render_frame(void *userData) {
   }
 
   state->frameCount++;
+
   if (state->frameCount > WARM_FRAME_COUNT) {
     GPUFrameStats stats;
 
-    if (GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.drawCalls != 1u ||
-         stats.hotPathAllocCount != 0u ||
-         stats.hotPathFreeCount != 0u)) {
+    if (GPUGetLastFrameStats(state->device, &stats) == GPU_OK
+        && (stats.drawCalls != 1u
+         || stats.hotPathAllocCount != 0u
+         || stats.hotPathFreeCount != 0u)) {
       set_status("GPU: particle warm path regression", 1);
       emscripten_cancel_main_loop();
     }
@@ -355,14 +385,15 @@ render_frame(void *userData) {
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
-  WebGPUParticles *state;
   GPURuntimeConfig runtime = {0};
+  WebGPUParticles *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status("GPU: failed to request WebGPU device", 1);
     return;
@@ -371,29 +402,33 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (!state->queue || GPUConfigureRuntime(device, &runtime) != GPU_OK) {
     set_status("GPU: failed to configure particle runtime", 1);
     return;
   }
 
   state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
+                                              adapter,
+                                              (void *)"#canvas",
+                                              GPU_SURFACE_WEB_CANVAS,
+                                              1.0f);
+
   if (!state->surface || !resize_canvas(state)) {
     set_status("GPU: failed to create particle canvas surface", 1);
     return;
   }
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain || !create_resources(state)) {
+
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))
+      || !create_resources(state)) {
     return;
   }
 
@@ -412,7 +447,9 @@ main(void) {
   info.label            = "compute-particles-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create WebGPU instance", 1);
     return 1;
@@ -423,5 +460,6 @@ main(void) {
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   return result == GPU_OK ? 0 : 1;
 }

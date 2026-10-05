@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "ShadowCompare.h"
 
 #include <string.h>
@@ -9,15 +25,17 @@ create_shadow_group(GPUSampleShadowCompare *state,
   GPUBindGroupEntry      entry = {0};
   GPUBindGroupCreateInfo info  = {0};
 
-  entry.textureView      = view;
-  entry.binding          = 0u;
-  entry.bindingType      = GPU_BINDING_SAMPLED_TEXTURE;
-  info.chain.sType       = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
-  info.chain.structSize  = sizeof(info);
-  info.label             = "shadow-compare-texture-group";
-  info.layout            = state->shaderLayout->bindGroupLayouts[0];
-  info.pEntries          = &entry;
-  info.entryCount        = 1u;
+  entry.textureView = view;
+  entry.binding     = 0u;
+  entry.bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.label            = "shadow-compare-texture-group";
+  info.layout           = state->shaderLayout->bindGroupLayouts[0];
+  info.pEntries         = &entry;
+  info.entryCount       = 1u;
+
   return GPUCreateBindGroup(state->device, &info, outGroup);
 }
 
@@ -35,6 +53,7 @@ create_depth_target(GPUSampleShadowCompare *state,
   texture = NULL;
   view    = NULL;
   group   = NULL;
+
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "shadow-compare-depth";
@@ -47,7 +66,9 @@ create_depth_target(GPUSampleShadowCompare *state,
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL |
                                  GPU_TEXTURE_USAGE_SAMPLED;
+
   result = GPUCreateTexture(state->device, &textureInfo, &texture);
+
   if (result != GPU_OK) {
     return result;
   }
@@ -59,10 +80,13 @@ create_depth_target(GPUSampleShadowCompare *state,
   viewInfo.format           = GPU_FORMAT_DEPTH32_FLOAT;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   result = GPUCreateTextureView(texture, &viewInfo, &view);
+
   if (result == GPU_OK) {
     result = create_shadow_group(state, view, &group);
   }
+
   if (result != GPU_OK) {
     GPUDestroyBindGroup(group);
     GPUDestroyTextureView(view);
@@ -78,6 +102,7 @@ create_depth_target(GPUSampleShadowCompare *state,
   state->depthTexture = texture;
   state->width        = width;
   state->height       = height;
+
   return GPU_OK;
 }
 
@@ -90,6 +115,7 @@ create_pipelines(GPUSampleShadowCompare *state) {
 
   color.format          = GPUGetSwapchainFormat(state->swapchain);
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
+
   depth.depthCompare     = GPU_COMPARE_LESS;
   depth.depthTestEnable  = true;
   depth.depthWriteEnable = true;
@@ -110,9 +136,11 @@ create_pipelines(GPUSampleShadowCompare *state) {
   info.frontFace               = GPU_FRONT_FACE_CCW;
   info.multisample.sampleCount = 1u;
   info.multisample.sampleMask  = UINT32_MAX;
+
   result = GPUCreateRenderPipeline(state->device,
                                    &info,
                                    &state->depthPipeline);
+
   if (result != GPU_OK) {
     return result;
   }
@@ -122,79 +150,21 @@ create_pipelines(GPUSampleShadowCompare *state) {
   info.fragmentEntry      = "shadow_preview_fs";
   info.pDepthStencilState = NULL;
   info.depthStencilFormat = GPU_FORMAT_UNDEFINED;
+
   result = GPUCreateRenderPipeline(state->device,
                                    &info,
                                    &state->previewPipeline);
+
   if (result != GPU_OK) {
     return result;
   }
 
   info.label         = "shadow-compare-preview-cool-pipeline";
   info.fragmentEntry = "shadow_preview_cool_fs";
+
   return GPUCreateRenderPipeline(state->device,
                                  &info,
                                  &state->previewCoolPipeline);
-}
-
-GPUResult
-GPUSampleShadowCompareInit(GPUSampleShadowCompare *state,
-                           GPUDevice               *device,
-                           GPUQueue                *queue,
-                           GPUSwapchain            *swapchain,
-                           GPUShaderLibrary        *library,
-                           GPUShaderLayout         *shaderLayout,
-                           uint32_t                 width,
-                           uint32_t                 height) {
-  const GPUBindGroupLayoutEntry *entries;
-  uint32_t                       entryCount;
-  GPUResult                      result;
-
-  if (!state || !device || !queue || !swapchain || !library || !shaderLayout ||
-      !shaderLayout->pipelineLayout ||
-      shaderLayout->bindGroupLayoutCount != 1u ||
-      !shaderLayout->bindGroupLayouts || !shaderLayout->bindGroupLayouts[0] ||
-      width == 0u || height == 0u) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  memset(state, 0, sizeof(*state));
-  state->device       = device;
-  state->queue        = queue;
-  state->swapchain    = swapchain;
-  state->library      = library;
-  state->shaderLayout = shaderLayout;
-
-  entries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[0],
-                                         &entryCount);
-  if (!entries || entryCount != 1u || entries[0].binding != 0u ||
-      entries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      entries[0].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_DEPTH ||
-      entries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
-    GPUSampleShadowCompareDestroy(state);
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  result = create_pipelines(state);
-  if (result == GPU_OK) {
-    result = create_depth_target(state, width, height);
-  }
-  if (result != GPU_OK) {
-    GPUSampleShadowCompareDestroy(state);
-  }
-  return result;
-}
-
-GPUResult
-GPUSampleShadowCompareResize(GPUSampleShadowCompare *state,
-                             uint32_t                 width,
-                             uint32_t                 height) {
-  if (!state || width == 0u || height == 0u) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if (state->width == width && state->height == height) {
-    return GPU_OK;
-  }
-  return create_depth_target(state, width, height);
 }
 
 static void
@@ -210,6 +180,7 @@ render_preview(GPURenderPassEncoder *pass, GPUSampleShadowCompare *state) {
   viewport.maxDepth = 1.0f;
   scissor.width     = leftWidth;
   scissor.height    = state->height;
+
   GPUSetViewport(pass, &viewport);
   GPUSetScissor(pass, &scissor);
   GPUBindRenderPipeline(pass, state->previewPipeline);
@@ -220,6 +191,7 @@ render_preview(GPURenderPassEncoder *pass, GPUSampleShadowCompare *state) {
   viewport.width = (float)(state->width - leftWidth);
   scissor.x      = (int32_t)leftWidth;
   scissor.width  = state->width - leftWidth;
+
   GPUSetViewport(pass, &viewport);
   GPUSetScissor(pass, &scissor);
   GPUBindRenderPipeline(pass, state->previewCoolPipeline);
@@ -227,35 +199,105 @@ render_preview(GPURenderPassEncoder *pass, GPUSampleShadowCompare *state) {
 }
 
 GPUResult
-GPUSampleShadowCompareRender(GPUSampleShadowCompare        *state,
-                             void                          *completionSender,
-                             GPUCommandBufferCompletionFn   completion) {
-  GPUFrame                            *frame;
-  GPUCommandBuffer                    *cmdb;
-  GPURenderPassEncoder                *pass;
-  GPURenderPassColorAttachment         color = {0};
-  GPURenderPassDepthStencilAttachment  depth = {0};
-  GPURenderPassCreateInfo              passInfo     = {0};
-  GPUTextureBarrier                    depthBarrier = {0};
-  GPUBarrierBatch                      barriers     = {0};
-  GPUResult                            result;
+GPUSampleShadowCompareInit(GPUSampleShadowCompare *state,
+                           GPUDevice              *device,
+                           GPUQueue               *queue,
+                           GPUSwapchain           *swapchain,
+                           GPUShaderLibrary       *library,
+                           GPUShaderLayout        *shaderLayout,
+                           uint32_t                width,
+                           uint32_t                height) {
+  const GPUBindGroupLayoutEntry *entries;
+  uint32_t                       entryCount;
+  GPUResult                      result;
 
-  if (!state || !state->swapchain || !state->depthPipeline ||
-      !state->previewPipeline || !state->previewCoolPipeline ||
-      !state->shadowGroup) {
+  if (!state || !device || !queue || !swapchain || !library || !shaderLayout
+      || !shaderLayout->pipelineLayout
+      || shaderLayout->bindGroupLayoutCount != 1u
+      || !shaderLayout->bindGroupLayouts || !shaderLayout->bindGroupLayouts[0]
+      || width == 0u || height == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) {
+  memset(state, 0, sizeof(*state));
+
+  state->device       = device;
+  state->queue        = queue;
+  state->swapchain    = swapchain;
+  state->library      = library;
+  state->shaderLayout = shaderLayout;
+
+  entries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[0],
+                                         &entryCount);
+
+  if (!entries || entryCount != 1u || entries[0].binding != 0u
+      || entries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || entries[0].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_DEPTH
+      || entries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
+    GPUSampleShadowCompareDestroy(state);
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = create_pipelines(state);
+
+  if (result == GPU_OK) {
+    result = create_depth_target(state, width, height);
+  }
+
+  if (result != GPU_OK) {
+    GPUSampleShadowCompareDestroy(state);
+  }
+
+  return result;
+}
+
+GPUResult
+GPUSampleShadowCompareResize(GPUSampleShadowCompare *state,
+                             uint32_t                width,
+                             uint32_t                height) {
+  if (!state || width == 0u || height == 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (state->width == width && state->height == height) {
+    return GPU_OK;
+  }
+
+  return create_depth_target(state, width, height);
+}
+
+GPUResult
+GPUSampleShadowCompareRender(GPUSampleShadowCompare      *state,
+                             void                        *completionSender,
+                             GPUCommandBufferCompletionFn completion) {
+  GPUCommandBuffer                   *cmdb;
+  GPURenderPassColorAttachment        color        = {0};
+  GPURenderPassDepthStencilAttachment depth        = {0};
+  GPURenderPassCreateInfo             passInfo     = {0};
+  GPUTextureBarrier                   depthBarrier = {0};
+  GPUBarrierBatch                     barriers     = {0};
+  GPUFrame                           *frame;
+  GPURenderPassEncoder               *pass;
+  GPUResult                           result;
+
+  if (!state || !state->swapchain || !state->depthPipeline
+      || !state->previewPipeline || !state->previewCoolPipeline
+      || !state->shadowGroup) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!(frame = GPUBeginFrame(state->swapchain))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   cmdb   = NULL;
   result = GPUAcquireCommandBuffer(state->queue, "shadow-compare-frame", &cmdb);
+
   if (result != GPU_OK || !cmdb) {
     GPUEndFrame(frame);
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
+
   if (completion) {
     GPUSetCommandBufferCompletionHandler(cmdb, completionSender, completion);
   }
@@ -267,24 +309,27 @@ GPUSampleShadowCompareRender(GPUSampleShadowCompare        *state,
   color.clearColor.float32[1] = 0.07f;
   color.clearColor.float32[2] = 0.12f;
   color.clearColor.float32[3] = 1.0f;
-  depth.view                  = state->depthView;
-  depth.depthLoadOp           = GPU_LOAD_OP_CLEAR;
-  depth.depthStoreOp          = GPU_STORE_OP_STORE;
-  depth.stencilLoadOp         = GPU_LOAD_OP_DONT_CARE;
-  depth.stencilStoreOp        = GPU_STORE_OP_DONT_CARE;
-  depth.clearDepth            = 1.0f;
+
+  depth.view           = state->depthView;
+  depth.depthLoadOp    = GPU_LOAD_OP_CLEAR;
+  depth.depthStoreOp   = GPU_STORE_OP_STORE;
+  depth.stencilLoadOp  = GPU_LOAD_OP_DONT_CARE;
+  depth.stencilStoreOp = GPU_STORE_OP_DONT_CARE;
+  depth.clearDepth     = 1.0f;
+
   passInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize        = sizeof(passInfo);
   passInfo.label                   = "shadow-compare-depth-pass";
   passInfo.pColorAttachments       = &color;
   passInfo.pDepthStencilAttachment = &depth;
   passInfo.colorAttachmentCount    = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   GPUBindRenderPipeline(pass, state->depthPipeline);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
@@ -294,28 +339,33 @@ GPUSampleShadowCompareRender(GPUSampleShadowCompare        *state,
   depthBarrier.dstAccess  = GPU_ACCESS_SHADER_READ;
   depthBarrier.mipCount   = 1u;
   depthBarrier.layerCount = 1u;
+
   barriers.pTextureBarriers    = &depthBarrier;
   barriers.srcStages           = GPU_STAGE_FRAGMENT;
   barriers.dstStages           = GPU_STAGE_FRAGMENT;
   barriers.textureBarrierCount = 1u;
+
   GPUEncodeBarriers(cmdb, &barriers);
 
   color.loadOp                     = GPU_LOAD_OP_LOAD;
   passInfo.label                   = "shadow-compare-preview-pass";
   passInfo.pDepthStencilAttachment = NULL;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   render_preview(pass, state);
   GPUEndRenderPass(pass);
 
   result = GPUFinishFrame(state->queue, cmdb, frame);
+
   if (result == GPU_OK) {
     state->frameCount++;
   }
+
   return result;
 }
 

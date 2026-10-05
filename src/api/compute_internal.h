@@ -58,9 +58,8 @@ gpuSetComputeSampler(GPUComputePassEncoder *pass,
 
 GPU_HIDE
 void
-gpuSetComputeAccelerationStructure(
-  GPUComputePassEncoder      *pass,
-  GPUAccelerationStructureEXT *structure,
-  uint32_t                     index);
+gpuSetComputeAccelerationStructure(GPUComputePassEncoder       *pass,
+                                   GPUAccelerationStructureEXT *structure,
+                                   uint32_t                     index);
 
 #endif /* gpu_compute_internal_h */

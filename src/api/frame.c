@@ -31,9 +31,9 @@ gpu_frameClockStart(uint64_t *ticks, uint64_t *frequency) {
   LARGE_INTEGER counter;
   LARGE_INTEGER timerFrequency;
 
-  if (!QueryPerformanceFrequency(&timerFrequency) ||
-      !QueryPerformanceCounter(&counter) ||
-      timerFrequency.QuadPart <= 0 || counter.QuadPart < 0) {
+  if (!QueryPerformanceFrequency(&timerFrequency)
+      || !QueryPerformanceCounter(&counter)
+      || timerFrequency.QuadPart <= 0 || counter.QuadPart < 0) {
     return false;
   }
 
@@ -46,10 +46,10 @@ gpu_frameClockStart(uint64_t *ticks, uint64_t *frequency) {
     return false;
   }
 
-  *ticks     = (uint64_t)now.tv_sec * 1000000000ull +
-               (uint64_t)now.tv_nsec;
+  *ticks     = (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
   *frequency = 1000000000ull;
 #endif
+
   return true;
 }
 
@@ -59,22 +59,24 @@ gpu_frameClockElapsedMs(const GPUFrame *frame) {
   uint64_t start;
   uint64_t end;
 
-  if (!frame || frame->cpuEncodeFrequency == 0u ||
-      !gpu_frameClockStart(&end, &frequency) ||
-      frequency != frame->cpuEncodeFrequency) {
+  if (!frame || frame->cpuEncodeFrequency == 0u
+      || !gpu_frameClockStart(&end, &frequency)
+      || frequency != frame->cpuEncodeFrequency) {
     return 0.0;
   }
 
   start = frame->cpuEncodeStartTicks;
+
   if (end < start) {
     return 0.0;
   }
+
   return (double)(end - start) * 1000.0 / (double)frequency;
 }
 
 GPU_EXPORT
 GPUFrame*
-GPUBeginFrame(GPUSwapchain* swapchain) {
+GPUBeginFrame(GPUSwapchain *swapchain) {
   GPUApi    *api;
   GPUDevice *device;
   GPUFrame  *frame;
@@ -82,29 +84,38 @@ GPUBeginFrame(GPUSwapchain* swapchain) {
 
   if (!swapchain)
     return NULL;
+
   device = swapchain->device;
+
   if (!(api = gpuDeviceApi(device)))
     return NULL;
+
   if (!api->frame.beginFrame)
     return NULL;
+
   if (gpuDevicePrepareFrame(device, &frameIndex) != GPU_OK)
     return NULL;
 
   frame = api->frame.beginFrame(api, swapchain);
+
   if (frame) {
     gpuDeviceActivateFrame(device, frameIndex);
     frame->device = device;
+
     if (frame->target) {
       frame->target->device = frame->device;
     }
+
     if (frame->targetView && frame->target) {
       frame->targetView->_texture = frame->target;
     }
+
     frame->transientFrameIndex  = device->transientFrameIndex;
     frame->transientFrameActive = device->transientConfigured;
-    if (!device->runtimeConfig.enableStats ||
-        !gpu_frameClockStart(&frame->cpuEncodeStartTicks,
-                             &frame->cpuEncodeFrequency)) {
+
+    if (!device->runtimeConfig.enableStats
+        || !gpu_frameClockStart(&frame->cpuEncodeStartTicks,
+                                &frame->cpuEncodeFrequency)) {
       frame->cpuEncodeStartTicks = 0u;
       frame->cpuEncodeFrequency  = 0u;
     }
@@ -127,39 +138,42 @@ GPUFrameGetTargetView(GPUFrame *frame) {
 
 GPU_EXPORT
 void
-GPUEndFrame(GPUFrame* frame) {
+GPUEndFrame(GPUFrame *frame) {
   GPUApi *api;
 
   if (!frame)
     return;
+
   if (!(api = gpuDeviceApi(frame->device)))
     return;
+
   if (!api->frame.endFrame)
     return;
 
   frame->transientFrameActive = false;
+
   if (frame->device->runtimeConfig.enableStats) {
-    frame->device->currentFrameStats.cpuEncodeMs =
-      gpu_frameClockElapsedMs(frame);
+    frame->device->currentFrameStats.cpuEncodeMs = gpu_frameClockElapsedMs(frame);
   }
+
   gpuDeviceEndFrame(frame->device);
   api->frame.endFrame(api, frame);
 }
 
 GPU_EXPORT
 GPUResult
-GPUFinishFrame(GPUQueue         * __restrict cmdq,
-               GPUCommandBuffer * __restrict cmdb,
-               GPUFrame         * __restrict frame) {
-  GPUCommandBuffer *buffers[1];
+GPUFinishFrame(GPUQueue         *__restrict cmdq,
+               GPUCommandBuffer *__restrict cmdb,
+               GPUFrame         *__restrict frame) {
   GPUQueueSubmitInfo submitInfo = {0};
-  GPUResult result;
+  GPUCommandBuffer  *buffers[1];
+  GPUResult          result;
 
   if (!cmdq || !cmdb || !frame)
     return GPU_ERROR_INVALID_ARGUMENT;
 
-  if (cmdb->_submitted || cmdb->_activeEncoder || cmdb->_queue != cmdq ||
-      gpuCommandQueueDevice(cmdq) != frame->device) {
+  if (cmdb->_submitted || cmdb->_activeEncoder || cmdb->_queue != cmdq
+      || gpuCommandQueueDevice(cmdq) != frame->device) {
     GPUEndFrame(frame);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -171,10 +185,12 @@ GPUFinishFrame(GPUQueue         * __restrict cmdq,
   }
 
   buffers[0] = cmdb;
-  submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
-  submitInfo.chain.structSize = sizeof(submitInfo);
+
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1;
-  submitInfo.ppCommandBuffers = buffers;
+  submitInfo.ppCommandBuffers   = buffers;
+
   result = GPUQueueSubmit(cmdq, &submitInfo);
 
   GPUEndFrame(frame);

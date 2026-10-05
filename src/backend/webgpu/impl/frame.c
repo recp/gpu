@@ -3,28 +3,40 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "../common.h"
 #include "../impl.h"
 
-static GPUFrame *
+static GPUFrame*
 webgpu_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
-  WGPUSurfaceTexture   surfaceTexture = WGPU_SURFACE_TEXTURE_INIT;
+  WGPUSurfaceTexture  surfaceTexture = WGPU_SURFACE_TEXTURE_INIT;
   GPUSwapchainWebGPU *native;
 
   GPU__UNUSED(api);
   native = gpu_webgpuSwapchain(swapchain);
+
   if (!native || native->acquired) {
     return NULL;
   }
 
   wgpuSurfaceGetCurrentTexture(native->surface, &surfaceTexture);
-  if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
-      surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal) {
+
+  if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal
+      && surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal) {
     if (surfaceTexture.texture) {
       wgpuTextureRelease(surfaceTexture.texture);
     }
+
     switch (surfaceTexture.status) {
       case WGPUSurfaceGetCurrentTextureStatus_Outdated:
         gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_OUT_OF_DATE);
@@ -36,12 +48,13 @@ webgpu_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
         gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
         break;
     }
+
     return NULL;
   }
 
   native->currentTexture = surfaceTexture.texture;
-  native->currentView    = wgpuTextureCreateView(native->currentTexture, NULL);
-  if (!native->currentView) {
+
+  if (!(native->currentView = wgpuTextureCreateView(native->currentTexture, NULL))) {
     wgpuTextureRelease(native->currentTexture);
     native->currentTexture = NULL;
     return NULL;
@@ -73,9 +86,11 @@ webgpu_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
   native->frame.targetView = &native->view;
   native->frame.drawable   = native->currentTexture;
   native->acquired         = true;
+
   if (surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal) {
     gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SUBOPTIMAL);
   }
+
   return &native->frame;
 }
 
@@ -85,15 +100,19 @@ webgpu_endFrame(GPUApi *api, GPUFrame *frame) {
 
   GPU__UNUSED(api);
   native = frame ? frame->_priv : NULL;
+
   if (!native) {
     return;
   }
+
   if (native->currentView) {
     wgpuTextureViewRelease(native->currentView);
   }
+
   if (native->currentTexture) {
     wgpuTextureRelease(native->currentTexture);
   }
+
   native->currentView    = NULL;
   native->currentTexture = NULL;
   native->acquired       = false;

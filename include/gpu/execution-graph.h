@@ -74,9 +74,9 @@ typedef struct GPUExecutionGraphBufferInputEXT {
 
 GPU_EXPORT
 GPUResult
-GPUCreateExecutionGraphEXT(GPUDevice                              *device,
-                           const GPUExecutionGraphCreateInfoEXT   *info,
-                           GPUExecutionGraphEXT                  **outGraph);
+GPUCreateExecutionGraphEXT(GPUDevice                            *device,
+                           const GPUExecutionGraphCreateInfoEXT *info,
+                           GPUExecutionGraphEXT                **outGraph);
 
 GPU_EXPORT
 void
@@ -110,10 +110,10 @@ GPUBindExecutionGraphEXT(GPUComputePassEncoder *pass,
 
 GPU_EXPORT
 void
-GPUDispatchExecutionGraphEXT(GPUComputePassEncoder             *pass,
-                             GPUExecutionGraphInstanceEXT      *instance,
-                             uint32_t                           inputCount,
-                             const GPUExecutionGraphInputEXT   *pInputs);
+GPUDispatchExecutionGraphEXT(GPUComputePassEncoder           *pass,
+                             GPUExecutionGraphInstanceEXT    *instance,
+                             uint32_t                         inputCount,
+                             const GPUExecutionGraphInputEXT *pInputs);
 
 GPU_EXPORT
 void

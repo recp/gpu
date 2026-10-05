@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "apple.h"
 #include "asset_io.h"
 
@@ -13,25 +29,35 @@ typedef void
 (*GPUAppleRenderCallback)(void *userData);
 
 struct GPUAppleSample {
-  NSView                  *view;
-  GPUInstance             *instance;
-  GPUAdapter              *adapter;
-  GPUDevice               *device;
-  GPUQueue                *queue;
-  GPUSurface              *surface;
-  GPUSwapchain            *swapchain;
-  GPUAppleRenderCallback   render;
-  void                    *renderData;
-  const char              *name;
-  char                     status[256];
-  uint64_t                 renderedFrameCount;
-  uint32_t                 width;
-  uint32_t                 height;
-  uint32_t                 surfaceWidth;
-  uint32_t                 surfaceHeight;
-  float                    contentScale;
-  bool                     canceled;
-  bool                     failed;
+  NSView                *view;
+  GPUInstance           *instance;
+  GPUAdapter            *adapter;
+  GPUDevice             *device;
+  GPUQueue              *queue;
+  GPUSurface            *surface;
+  GPUSwapchain          *swapchain;
+  GPUAppleRenderCallback render;
+  void                  *renderData;
+  const char            *name;
+  char                   status[256];
+  uint64_t               renderedFrameCount;
+  uint32_t               width;
+  uint32_t               height;
+  uint32_t               surfaceWidth;
+  uint32_t               surfaceHeight;
+  float                  contentScale;
+  bool                   canceled;
+  bool                   failed;
+};
+
+static const GPUFeature optionalFeatures[] = {
+  GPU_FEATURE_COMPUTE,
+  GPU_FEATURE_INDIRECT_DRAW,
+  GPU_FEATURE_MULTI_DRAW,
+  GPU_FEATURE_DESCRIPTOR_INDEXING,
+  GPU_FEATURE_SUBGROUPS,
+  GPU_FEATURE_SHADER_F16,
+  GPU_FEATURE_TIMESTAMPS
 };
 
 static GPUAppleSample *activeSample;
@@ -52,6 +78,7 @@ asset_path(const char *path) {
 
   name      = [NSString stringWithUTF8String:asset_name(path)];
   directory = NSBundle.mainBundle.executableURL.URLByDeletingLastPathComponent;
+
   return [directory.path stringByAppendingPathComponent:name];
 }
 
@@ -67,32 +94,33 @@ decode_image(CGImageSourceRef source, uint32_t *width, uint32_t *height) {
     return NULL;
   }
 
-  image = CGImageSourceCreateImageAtIndex(source, 0u, NULL);
-  if (!image) {
+  if (!(image = CGImageSourceCreateImageAtIndex(source, 0u, NULL))) {
     return NULL;
   }
 
   imageWidth  = CGImageGetWidth(image);
   imageHeight = CGImageGetHeight(image);
   rowBytes    = imageWidth * 4u;
-  pixels      = imageWidth > 0u && imageHeight > 0u
-                  ? malloc(rowBytes * imageHeight)
-                  : NULL;
+  pixels      = imageWidth > 0u && imageHeight > 0u ? malloc(rowBytes * imageHeight) : NULL;
   colorSpace  = pixels ? CGColorSpaceCreateWithName(kCGColorSpaceSRGB) : NULL;
-  context     = colorSpace
-                  ? CGBitmapContextCreate(pixels,
-                                          imageWidth,
-                                          imageHeight,
-                                          8u,
-                                          rowBytes,
-                                          colorSpace,
-                                          kCGImageAlphaPremultipliedLast |
-                                            kCGBitmapByteOrder32Big)
-                  : NULL;
+
+  if (colorSpace) {
+    context = CGBitmapContextCreate(pixels,
+                                    imageWidth,
+                                    imageHeight,
+                                    8u,
+                                    rowBytes,
+                                    colorSpace,
+                                    kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+  } else {
+    context = NULL;
+  }
+
   if (context) {
     CGContextDrawImage(context,
                        CGRectMake(0.0, 0.0, imageWidth, imageHeight),
                        image);
+
     *width  = (uint32_t)imageWidth;
     *height = (uint32_t)imageHeight;
   } else {
@@ -103,10 +131,13 @@ decode_image(CGImageSourceRef source, uint32_t *width, uint32_t *height) {
   if (context) {
     CGContextRelease(context);
   }
+
   if (colorSpace) {
     CGColorSpaceRelease(colorSpace);
   }
+
   CGImageRelease(image);
+
   return pixels;
 }
 
@@ -127,16 +158,18 @@ resize_surface(GPUAppleSample *sample,
   nextSurfaceHeight = (uint32_t)bounds.size.height;
   nextWidth         = (uint32_t)(bounds.size.width * sample->contentScale);
   nextHeight        = (uint32_t)(bounds.size.height * sample->contentScale);
-  if (nextSurfaceWidth == 0u || nextSurfaceHeight == 0u ||
-      nextWidth == 0u || nextHeight == 0u) {
+
+  if (nextSurfaceWidth == 0u || nextSurfaceHeight == 0u
+      || nextWidth == 0u || nextHeight == 0u) {
     return false;
   }
-  if ((nextSurfaceWidth != sample->surfaceWidth ||
-       nextSurfaceHeight != sample->surfaceHeight) &&
-      swapchain &&
-      GPUResizeSwapchain(swapchain,
-                         nextSurfaceWidth,
-                         nextSurfaceHeight) != GPU_OK) {
+
+  if ((nextSurfaceWidth != sample->surfaceWidth
+       || nextSurfaceHeight != sample->surfaceHeight)
+      && swapchain
+      && GPUResizeSwapchain(swapchain,
+                            nextSurfaceWidth,
+                            nextSurfaceHeight) != GPU_OK) {
     return false;
   }
 
@@ -146,41 +179,33 @@ resize_surface(GPUAppleSample *sample,
   sample->surfaceHeight = nextSurfaceHeight;
   *width                = nextWidth;
   *height               = nextHeight;
+
   return true;
 }
 
 GPUAppleSample*
-GPUSampleAppleCreate(void                *nativeView,
-                     const char          *name,
-                     float                contentScale,
-                     GPUAppleSampleStart  start) {
-  static const GPUFeature optionalFeatures[] = {
-    GPU_FEATURE_COMPUTE,
-    GPU_FEATURE_INDIRECT_DRAW,
-    GPU_FEATURE_MULTI_DRAW,
-    GPU_FEATURE_DESCRIPTOR_INDEXING,
-    GPU_FEATURE_SUBGROUPS,
-    GPU_FEATURE_SHADER_F16,
-    GPU_FEATURE_TIMESTAMPS
-  };
+GPUSampleAppleCreate(void               *nativeView,
+                     const char         *name,
+                     float               contentScale,
+                     GPUAppleSampleStart start) {
   GPUInstanceCreateInfo instanceInfo = {0};
   GPUDeviceCreateInfo   deviceInfo   = {0};
   GPURuntimeConfig      runtimeInfo  = {0};
   GPUAppleSample       *sample;
 
-  if (!nativeView || !name || contentScale <= 0.0f || !start ||
-      activeSample) {
+  if (!nativeView || !name || contentScale <= 0.0f || !start
+      || activeSample) {
     return NULL;
   }
 
-  sample = calloc(1, sizeof(*sample));
-  if (!sample) {
+  if (!(sample = calloc(1, sizeof(*sample)))) {
     return NULL;
   }
 
   sample->view         = (__bridge NSView *)nativeView;
   sample->name         = name;
   sample->contentScale = contentScale;
+
   snprintf(sample->status, sizeof(sample->status), "GPU: starting %s", name);
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -188,13 +213,13 @@ GPUSampleAppleCreate(void                *nativeView,
   instanceInfo.label            = name;
   instanceInfo.preferredBackend = GPU_BACKEND_METAL;
   instanceInfo.enableValidation = true;
-  if (GPUCreateInstance(&instanceInfo, &sample->instance) != GPU_OK ||
-      !sample->instance) {
+
+  if (GPUCreateInstance(&instanceInfo, &sample->instance) != GPU_OK
+      || !sample->instance) {
     goto fail;
   }
 
-  sample->adapter = GPUGetAutoSelectedAdapter(sample->instance);
-  if (!sample->adapter) {
+  if (!(sample->adapter = GPUGetAutoSelectedAdapter(sample->instance))) {
     goto fail;
   }
 
@@ -202,15 +227,15 @@ GPUSampleAppleCreate(void                *nativeView,
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.optional.pFeatures    = optionalFeatures;
   deviceInfo.optional.featureCount = GPU_ARRAY_LEN(optionalFeatures);
+
   if (GPUCreateDevice(sample->adapter,
                       &deviceInfo,
-                      &sample->device) != GPU_OK ||
-      !sample->device) {
+                      &sample->device) != GPU_OK
+      || !sample->device) {
     goto fail;
   }
 
-  sample->queue = GPUGetQueue(sample->device, GPU_QUEUE_GRAPHICS, 0u);
-  if (!sample->queue) {
+  if (!(sample->queue = GPUGetQueue(sample->device, GPU_QUEUE_GRAPHICS, 0u))) {
     goto fail;
   }
 
@@ -218,39 +243,42 @@ GPUSampleAppleCreate(void                *nativeView,
   runtimeInfo.chain.structSize = sizeof(runtimeInfo);
   runtimeInfo.validationMode   = GPU_VALIDATION_FULL;
   runtimeInfo.enableStats      = true;
+
   if (GPUConfigureRuntime(sample->device, &runtimeInfo) != GPU_OK) {
     goto fail;
   }
 
-  sample->surface = GPUCreateSurfaceFromNative(sample->instance,
-                                               sample->adapter,
-                                               nativeView,
-                                               GPU_SURFACE_APPLE_NSVIEW,
-                                               contentScale);
-  if (!sample->surface ||
-      !resize_surface(sample, NULL, &sample->width, &sample->height)) {
+  if (!(sample->surface = GPUCreateSurfaceFromNative(sample->instance,
+                                                     sample->adapter,
+                                                     nativeView,
+                                                     GPU_SURFACE_APPLE_NSVIEW,
+                                                     contentScale))
+      || !resize_surface(sample, NULL, &sample->width, &sample->height)) {
     goto fail;
   }
 
-  sample->swapchain = GPUCreateSwapchainDefault(sample->device,
-                                                sample->surface,
-                                                sample->surfaceWidth,
-                                                sample->surfaceHeight);
-  if (!sample->swapchain) {
+  if (!(sample->swapchain = GPUCreateSwapchainDefault(sample->device,
+                                                      sample->surface,
+                                                      sample->surfaceWidth,
+                                                      sample->surfaceHeight))) {
     goto fail;
   }
 
   activeSample = sample;
+
   if (start() != 0 || sample->failed) {
     goto fail;
   }
+
   return sample;
 
 fail:
   if (activeSample == sample) {
     activeSample = NULL;
   }
+
   sample->failed = true;
+
   if (sample->status[0] == '\0') {
     snprintf(sample->status,
              sizeof(sample->status),
@@ -262,8 +290,8 @@ fail:
 
 bool
 GPUSampleAppleRender(GPUAppleSample *sample) {
-  if (!sample || sample != activeSample || sample->failed ||
-      sample->canceled) {
+  if (!sample || sample != activeSample || sample->failed
+      || sample->canceled) {
     return false;
   }
 
@@ -271,10 +299,12 @@ GPUSampleAppleRender(GPUAppleSample *sample) {
     @autoreleasepool {
       sample->render(sample->renderData);
     }
+
     if (!sample->failed && !sample->canceled) {
       sample->renderedFrameCount++;
     }
   }
+
   return !sample->failed && !sample->canceled;
 }
 
@@ -290,6 +320,7 @@ GPUSampleAppleStop(GPUAppleSample *sample) {
   }
 
   sample->canceled = true;
+
   if (activeSample == sample) {
     activeSample = NULL;
   }
@@ -337,13 +368,16 @@ read_file(const char *path, void **outData, uint64_t *outSize) {
   *outSize = 0u;
   data     = [NSData dataWithContentsOfFile:asset_path(path)];
   bytes    = data.length > 0u ? malloc(data.length) : NULL;
+
   if (!bytes) {
     return 0;
   }
 
   memcpy(bytes, data.bytes, data.length);
+
   *outData = bytes;
   *outSize = (uint64_t)data.length;
+
   return 1;
 }
 
@@ -369,6 +403,7 @@ request_webgpu_device_features(GPUInstance        *instance,
                                uint32_t            optionalFeatureCount) {
   (void)optionalFeatures;
   (void)optionalFeatureCount;
+
   if (!activeSample || !instance || !request || !callback) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -378,10 +413,12 @@ request_webgpu_device_features(GPUInstance        *instance,
   request->userData  = userData;
   request->result    = GPU_OK;
   request->completed = true;
+
   callback(GPU_OK,
            activeSample->adapter,
            activeSample->device,
            userData);
+
   return activeSample->failed ? GPU_ERROR_BACKEND_FAILURE : GPU_OK;
 }
 
@@ -399,6 +436,7 @@ gpu_apple_set_main_loop(void (*callback)(void *),
                         bool   simulateInfiniteLoop) {
   (void)fps;
   (void)simulateInfiniteLoop;
+
   if (!activeSample) {
     return;
   }
@@ -429,20 +467,22 @@ gpu_apple_load_image(const char *path, int *width, int *height) {
     return NULL;
   }
 
-  source = CGImageSourceCreateWithURL(
-    (__bridge CFURLRef)[NSURL fileURLWithPath:asset_path(path)],
-    NULL
-  );
+  source = CGImageSourceCreateWithURL((__bridge CFURLRef)[NSURL fileURLWithPath:asset_path(path)],
+                                      NULL);
+
   imageWidth  = 0u;
   imageHeight = 0u;
   pixels      = decode_image(source, &imageWidth, &imageHeight);
+
   if (source) {
     CFRelease(source);
   }
+
   if (pixels) {
     *width  = (int)imageWidth;
     *height = (int)imageHeight;
   }
+
   return pixels;
 }
 
@@ -450,11 +490,13 @@ GPUResult
 gpu_apple_sample_create_instance(const GPUInstanceCreateInfo *info,
                                  GPUInstance                **outInstance) {
   (void)info;
+
   if (!activeSample || !outInstance) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   *outInstance = activeSample->instance;
+
   return GPU_OK;
 }
 
@@ -494,23 +536,23 @@ sample_fetch_url(const char         *url,
     return 0;
   }
 
-  nativeURL = [NSURL URLWithString:[NSString stringWithUTF8String:url]];
-  if (!nativeURL) {
+  if (!(nativeURL = [NSURL URLWithString:[NSString stringWithUTF8String:url]])) {
     return 0;
   }
 
-  [[[NSURLSession sharedSession]
-    dataTaskWithURL:nativeURL
-  completionHandler:^(NSData *data,
-                      NSURLResponse *response,
-                      NSError *error) {
+  [[[NSURLSession sharedSession] dataTaskWithURL:nativeURL
+                               completionHandler:^(NSData        *data,
+                                                   NSURLResponse *response,
+                                                   NSError       *error) {
     void *bytes;
 
     (void)response;
     bytes = !error && data.length > 0u ? malloc(data.length) : NULL;
+
     if (bytes) {
       memcpy(bytes, data.bytes, data.length);
     }
+
     dispatch_async(dispatch_get_main_queue(), ^{
       callback(bytes,
                bytes ? (uint64_t)data.length : 0u,
@@ -518,6 +560,7 @@ sample_fetch_url(const char         *url,
                userData);
     });
   }] resume];
+
   return 1;
 }
 
@@ -539,23 +582,25 @@ sample_decode_image(const void         *bytes,
                                           bytes,
                                           (size_t)byteCount,
                                           NULL);
-  source   = provider
-               ? CGImageSourceCreateWithDataProvider(provider, NULL)
-               : NULL;
+  source   = provider ? CGImageSourceCreateWithDataProvider(provider, NULL) : NULL;
   width    = 0u;
   height   = 0u;
   pixels   = decode_image(source, &width, &height);
+
   callback(pixels,
            width,
            height,
            pixels ? NULL : "sample: Apple image decode failed",
            userData);
+
   if (source) {
     CFRelease(source);
   }
+
   if (provider) {
     CGDataProviderRelease(provider);
   }
+
   return pixels != NULL;
 }
 
@@ -570,8 +615,8 @@ sample_temporary_path(const char *name, char *path, size_t capacity) {
   }
 
   temporary = NSTemporaryDirectory();
-  fullPath  = [temporary
-    stringByAppendingPathComponent:[NSString stringWithUTF8String:name]];
-  length = snprintf(path, capacity, "%s", fullPath.fileSystemRepresentation);
+  fullPath  = [temporary stringByAppendingPathComponent:[NSString stringWithUTF8String:name]];
+  length    = snprintf(path, capacity, "%s", fullPath.fileSystemRepresentation);
+
   return length > 0 && (size_t)length < capacity;
 }

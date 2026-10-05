@@ -20,24 +20,24 @@
 #include "../common.h"
 
 struct GPUTexture {
-  void                         *_priv;
-  GPUDevice                    *device;
-  GPUHeap                      *_heap;
-  GPUTexture                   *_sharedPeer;
-  void                         *_blitViews;
-  uint64_t                      _heapOffset;
-  uint64_t                      _allocationSize;
+  void                        *_priv;
+  GPUDevice                   *device;
+  GPUHeap                     *_heap;
+  GPUTexture                  *_sharedPeer;
+  void                        *_blitViews;
+  uint64_t                     _heapOffset;
+  uint64_t                     _allocationSize;
   GPUSparseTextureRequirements _sparseRequirements;
-  GPUFormat                     format;
-  GPUTextureDimension           dimension;
-  uint32_t                      width;
-  uint32_t                      height;
-  uint32_t                      depthOrLayers;
-  uint32_t                      mipLevelCount;
-  uint32_t                      sampleCount;
-  GPUTextureUsageFlags          usage;
-  bool                          _sparse;
-  bool                          _ownsNative;
+  GPUFormat                    format;
+  GPUTextureDimension          dimension;
+  uint32_t                     width;
+  uint32_t                     height;
+  uint32_t                     depthOrLayers;
+  uint32_t                     mipLevelCount;
+  uint32_t                     sampleCount;
+  GPUTextureUsageFlags         usage;
+  bool                         _sparse;
+  bool                         _ownsNative;
 };
 
 struct GPUTextureView {
@@ -77,15 +77,16 @@ gpuTextureSubresourceRangeValid(const GPUTexture *texture,
                                 uint32_t          layerCount) {
   uint32_t arrayLayerCount;
 
-  if (!texture || mipCount == 0u || layerCount == 0u ||
-      baseMip >= texture->mipLevelCount ||
-      mipCount > texture->mipLevelCount - baseMip) {
+  if (!texture || mipCount == 0u || layerCount == 0u
+      || baseMip >= texture->mipLevelCount
+      || mipCount > texture->mipLevelCount - baseMip) {
     return false;
   }
 
   arrayLayerCount = gpuTextureArrayLayerCount(texture);
-  return baseLayer < arrayLayerCount &&
-         layerCount <= arrayLayerCount - baseLayer;
+
+  return baseLayer < arrayLayerCount
+         && layerCount <= arrayLayerCount - baseLayer;
 }
 
 #endif /* gpu_texture_internal_h */

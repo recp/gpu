@@ -17,32 +17,106 @@
 #ifndef mt_apis_h
 #define mt_apis_h
 
-GPU_HIDE void mt_initDevice(GPUApiDevice *apiDevice);
-GPU_HIDE void mt_initRenderPipeline(GPUApiRender *api);
-GPU_HIDE void mt_initRCE(GPUApiRCE *api);
-GPU_HIDE void mt_initCompute(GPUApiCompute *api);
-GPU_HIDE void mt_initCmdBuff(GPUApiCommandBuffer *api);
-GPU_HIDE void mt_initCmdQue(GPUApiCommandQueue *api);
-GPU_HIDE void mt_initBuff(GPUApiBuffer *api);
-GPU_HIDE void mt_initMemory(GPUApiMemory *api);
-GPU_HIDE void mt_initMultiGPU(GPUApiMultiGPU *api);
-GPU_HIDE void mt_initTexture(GPUApiTexture *api);
-GPU_HIDE void mt_initRenderPass(GPUApiRenderPass *api);
-GPU_HIDE void mt_encodeBarriers(GPUCommandBuffer       *cmdb,
-                                const GPUBarrierBatch *barriers);
-GPU_HIDE void mt_initDepthStencil(GPUApiDepthStencil *api);
-GPU_HIDE void mt_initVertex(GPUApiVertex *api);
-GPU_HIDE void mt_initLibrary(GPUApiLibrary *api);
-GPU_HIDE void mt_initSampler(GPUApiSampler *api);
-GPU_HIDE void mt_initSwapchain(GPUApiSwapchain *api);
-GPU_HIDE void mt_initFrame(GPUApiFrame *api);
-GPU_HIDE void mt_initInstance(GPUApiInstance *api);
-GPU_HIDE void mt_initSurface(GPUApiSurface * apiDevice);
-GPU_HIDE void mt_initPipelineCache(GPUApiPipelineCache *api);
-GPU_HIDE void mt_initVRS(GPUApiVRS *api);
-GPU_HIDE void mt_initRayQuery(GPUApiRayQuery *api);
-GPU_HIDE void mt_initDescriptor(GPUApiDescriptor *api);
-GPU_HIDE void mt_blitTexture(GPUCommandBuffer         *cmdb,
-                             const GPUTextureBlitInfo *info);
+GPU_HIDE
+void
+mt_initDevice(GPUApiDevice *apiDevice);
+
+GPU_HIDE
+void
+mt_initRenderPipeline(GPUApiRender *api);
+
+GPU_HIDE
+void
+mt_initRCE(GPUApiRCE *api);
+
+GPU_HIDE
+void
+mt_initCompute(GPUApiCompute *api);
+
+GPU_HIDE
+void
+mt_initCmdBuff(GPUApiCommandBuffer *api);
+
+GPU_HIDE
+void
+mt_initCmdQue(GPUApiCommandQueue *api);
+
+GPU_HIDE
+void
+mt_initBuff(GPUApiBuffer *api);
+
+GPU_HIDE
+void
+mt_initMemory(GPUApiMemory *api);
+
+GPU_HIDE
+void
+mt_initMultiGPU(GPUApiMultiGPU *api);
+
+GPU_HIDE
+void
+mt_initTexture(GPUApiTexture *api);
+
+GPU_HIDE
+void
+mt_initRenderPass(GPUApiRenderPass *api);
+
+GPU_HIDE
+void
+mt_encodeBarriers(GPUCommandBuffer      *cmdb,
+                  const GPUBarrierBatch *barriers);
+
+GPU_HIDE
+void
+mt_initDepthStencil(GPUApiDepthStencil *api);
+
+GPU_HIDE
+void
+mt_initVertex(GPUApiVertex *api);
+
+GPU_HIDE
+void
+mt_initLibrary(GPUApiLibrary *api);
+
+GPU_HIDE
+void
+mt_initSampler(GPUApiSampler *api);
+
+GPU_HIDE
+void
+mt_initSwapchain(GPUApiSwapchain *api);
+
+GPU_HIDE
+void
+mt_initFrame(GPUApiFrame *api);
+
+GPU_HIDE
+void
+mt_initInstance(GPUApiInstance *api);
+
+GPU_HIDE
+void
+mt_initSurface(GPUApiSurface *apiDevice);
+
+GPU_HIDE
+void
+mt_initPipelineCache(GPUApiPipelineCache *api);
+
+GPU_HIDE
+void
+mt_initVRS(GPUApiVRS *api);
+
+GPU_HIDE
+void
+mt_initRayQuery(GPUApiRayQuery *api);
+
+GPU_HIDE
+void
+mt_initDescriptor(GPUApiDescriptor *api);
+
+GPU_HIDE
+void
+mt_blitTexture(GPUCommandBuffer         *cmdb,
+               const GPUTextureBlitInfo *info);
 
 #endif /* mt_apis_h */

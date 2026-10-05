@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef gpu_sample_win32_h
 #define gpu_sample_win32_h
 
@@ -11,7 +27,7 @@
 
 typedef struct GPUWin32Sample GPUWin32Sample;
 typedef int (*GPUWin32SampleStart)(void);
-typedef void (*WebGPUReadyCallback)(GPUResult  result,
+typedef void (*WebGPUReadyCallback)(GPUResult   result,
                                     GPUAdapter *adapter,
                                     GPUDevice  *device,
                                     void       *userData);
@@ -34,9 +50,9 @@ typedef struct WebGPURequest {
 } WebGPURequest;
 
 GPUWin32Sample*
-GPUSampleWin32Create(GPUWin32Window      *window,
-                     const char          *name,
-                     GPUWin32SampleStart  start);
+GPUSampleWin32Create(GPUWin32Window     *window,
+                     const char         *name,
+                     GPUWin32SampleStart start);
 
 bool
 GPUSampleWin32Render(GPUWin32Sample *sample);
@@ -80,9 +96,9 @@ resize_webgpu_canvas(GPUSwapchain *swapchain,
 
 void
 gpu_win32_set_main_loop(void (*callback)(void *),
-                        void  *userData,
-                        int    fps,
-                        bool   simulateInfiniteLoop);
+                       void  *userData,
+                       int    fps,
+                       bool   simulateInfiniteLoop);
 
 void
 gpu_win32_cancel_main_loop(void);

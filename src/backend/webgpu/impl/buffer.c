@@ -3,6 +3,15 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "../common.h"
@@ -32,22 +41,36 @@ webgpu_bufferUsage(GPUBufferUsageFlags usage) {
   WGPUBufferUsage result;
 
   result = WGPUBufferUsage_None;
-  if (usage & GPU_BUFFER_USAGE_VERTEX)   result |= WGPUBufferUsage_Vertex;
-  if (usage & GPU_BUFFER_USAGE_INDEX)    result |= WGPUBufferUsage_Index;
-  if (usage & GPU_BUFFER_USAGE_UNIFORM)  result |= WGPUBufferUsage_Uniform;
-  if (usage & GPU_BUFFER_USAGE_STORAGE)  result |= WGPUBufferUsage_Storage;
-  if (usage & GPU_BUFFER_USAGE_COPY_SRC) result |= WGPUBufferUsage_CopySrc;
+
+  if (usage & GPU_BUFFER_USAGE_VERTEX)
+    result |= WGPUBufferUsage_Vertex;
+
+  if (usage & GPU_BUFFER_USAGE_INDEX)
+    result |= WGPUBufferUsage_Index;
+
+  if (usage & GPU_BUFFER_USAGE_UNIFORM)
+    result |= WGPUBufferUsage_Uniform;
+
+  if (usage & GPU_BUFFER_USAGE_STORAGE)
+    result |= WGPUBufferUsage_Storage;
+
+  if (usage & GPU_BUFFER_USAGE_COPY_SRC)
+    result |= WGPUBufferUsage_CopySrc;
+
   if (usage & GPU_BUFFER_USAGE_COPY_DST) {
     result |= WGPUBufferUsage_CopyDst | WGPUBufferUsage_QueryResolve;
   }
-  if (usage & GPU_BUFFER_USAGE_INDIRECT) result |= WGPUBufferUsage_Indirect;
+
+  if (usage & GPU_BUFFER_USAGE_INDIRECT)
+    result |= WGPUBufferUsage_Indirect;
+
   return result;
 }
 
 static GPUResult
-webgpu_createBuffer(GPUDevice                 * __restrict device,
-                    const GPUBufferCreateInfo * __restrict info,
-                    GPUBuffer                ** __restrict outBuffer) {
+webgpu_createBuffer(GPUDevice                 *__restrict device,
+                    const GPUBufferCreateInfo *__restrict info,
+                    GPUBuffer                **__restrict outBuffer) {
   WGPUBufferDescriptor descriptor = WGPU_BUFFER_DESCRIPTOR_INIT;
   GPUDeviceWebGPU     *native;
   GPUBuffer           *buffer;
@@ -55,80 +78,91 @@ webgpu_createBuffer(GPUDevice                 * __restrict device,
   uint64_t             nativeSize;
 
   native = gpu_webgpuDevice(device);
+
   if (!native || !native->device || !info || !outBuffer) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (info->usage &
       (GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
        GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT |
        GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
   if (info->sizeBytes > native->limits.maxBufferSize) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   usage = webgpu_bufferUsage(info->usage);
+
   if (usage == WGPUBufferUsage_None) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
   nativeSize = (info->sizeBytes + 3u) & ~UINT64_C(3);
+
   if (nativeSize < info->sizeBytes || nativeSize > native->limits.maxBufferSize) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  buffer = calloc(1, sizeof(*buffer));
-  if (!buffer) {
+  if (!(buffer = calloc(1, sizeof(*buffer)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
   descriptor.label = gpu_webgpuString(info->label);
   descriptor.usage = usage;
   descriptor.size  = nativeSize;
-  buffer->_priv    = wgpuDeviceCreateBuffer(native->device, &descriptor);
-  if (!buffer->_priv) {
+
+  if (!(buffer->_priv = wgpuDeviceCreateBuffer(native->device, &descriptor))) {
     free(buffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   *outBuffer = buffer;
+
   return GPU_OK;
 }
 
 static void
-webgpu_destroyBuffer(GPUBuffer * __restrict buffer) {
+webgpu_destroyBuffer(GPUBuffer *__restrict buffer) {
   if (!buffer) {
     return;
   }
+
   if (buffer->_priv) {
     wgpuBufferDestroy(buffer->_priv);
     wgpuBufferRelease(buffer->_priv);
   }
+
   free(buffer);
 }
 
 static GPUResult
-webgpu_writeBuffer(GPUQueue  * __restrict queue,
-                   GPUBuffer * __restrict buffer,
+webgpu_writeBuffer(GPUQueue   *__restrict queue,
+                   GPUBuffer  *__restrict buffer,
                    uint64_t               dstOffset,
-                   const void * __restrict data,
+                   const void *__restrict data,
                    uint64_t               sizeBytes) {
   GPUDeviceWebGPU *native;
-  uint32_t         tail;
   uint64_t         alignedSize;
+  uint32_t         tail;
   uint32_t         tailSize;
 
   native = gpu_webgpuDevice(gpuCommandQueueDevice(queue));
-  if (!native || !native->queue || !buffer || !buffer->_priv || !data ||
-      sizeBytes > SIZE_MAX) {
+
+  if (!native || !native->queue || !buffer || !buffer->_priv || !data
+      || sizeBytes > SIZE_MAX) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if ((dstOffset & 3u) != 0u) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   alignedSize = sizeBytes & ~UINT64_C(3);
   tailSize    = (uint32_t)(sizeBytes - alignedSize);
+
   if (tailSize != 0u && dstOffset + sizeBytes != buffer->sizeBytes) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -140,6 +174,7 @@ webgpu_writeBuffer(GPUQueue  * __restrict queue,
                          data,
                          (size_t)alignedSize);
   }
+
   if (tailSize != 0u) {
     tail = 0u;
     memcpy(&tail, (const uint8_t *)data + alignedSize, tailSize);
@@ -149,51 +184,56 @@ webgpu_writeBuffer(GPUQueue  * __restrict queue,
                          &tail,
                          sizeof(tail));
   }
+
   return GPU_OK;
 }
 
 static GPUResult
-webgpu_readBuffer(GPUQueue  * __restrict queue,
-                  GPUBuffer * __restrict buffer,
-                  uint64_t               srcOffset,
-                  void      * __restrict outData,
-                  uint64_t               sizeBytes) {
+webgpu_readBuffer(GPUQueue  *__restrict queue,
+                  GPUBuffer *__restrict buffer,
+                  uint64_t              srcOffset,
+                  void      *__restrict outData,
+                  uint64_t              sizeBytes) {
 #if !defined(__EMSCRIPTEN__)
-  WGPUBufferDescriptor         bufferInfo = WGPU_BUFFER_DESCRIPTOR_INIT;
-  WGPUCommandEncoderDescriptor encoderInfo =
-    WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
-  WGPUCommandBufferDescriptor commandInfo =
-    WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT;
-  WGPUBufferMapCallbackInfo callbackInfo =
-    WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
-  WebGPUBufferMapRequest mapRequest = {0};
-  GPUDevice             *device;
-  GPUDeviceWebGPU       *native;
-  WGPUCommandEncoder     encoder;
-  WGPUCommandBuffer      command;
-  WGPUBuffer             staging;
-#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  WGPUSubmissionIndex    submission;
-#else
-  GPUInstanceWebGPU     *instance;
-  WGPUFutureWaitInfo     waitInfo = WGPU_FUTURE_WAIT_INFO_INIT;
-  WGPUWaitStatus         waitStatus;
+  WGPUBufferDescriptor         bufferInfo   = WGPU_BUFFER_DESCRIPTOR_INIT;
+  WGPUCommandEncoderDescriptor encoderInfo  = WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
+  WGPUCommandBufferDescriptor  commandInfo  = WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT;
+  WGPUBufferMapCallbackInfo    callbackInfo = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
+#if !GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  WGPUFutureWaitInfo           waitInfo = WGPU_FUTURE_WAIT_INFO_INIT;
 #endif
-  const uint8_t         *mapped;
-  uint64_t               copyOffset;
-  uint64_t               copySize;
-  uint64_t               prefix;
-  GPUResult              result;
-  int                    mapStatus;
+  WebGPUBufferMapRequest       mapRequest = {0};
+  GPUDevice                   *device;
+  GPUDeviceWebGPU             *native;
+  WGPUCommandEncoder           encoder;
+  WGPUCommandBuffer            command;
+  WGPUBuffer                   staging;
+#if !GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  GPUInstanceWebGPU           *instance;
+#endif
+  const uint8_t               *mapped;
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  WGPUSubmissionIndex          submission;
+#endif
+  uint64_t                     copyOffset;
+  uint64_t                     copySize;
+  uint64_t                     prefix;
+#if !GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  WGPUWaitStatus               waitStatus;
+#endif
+  GPUResult                    result;
+  int                          mapStatus;
 
   device = gpuCommandQueueDevice(queue);
   native = gpu_webgpuDevice(device);
-  if (!native || !native->device || !native->queue ||
-      !buffer || !buffer->_priv || !outData || sizeBytes > SIZE_MAX) {
+
+  if (!native || !native->device || !native->queue
+      || !buffer || !buffer->_priv || !outData || sizeBytes > SIZE_MAX) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 #if GPU_WEBGPU_PROVIDER_DAWN
   instance = gpu_webgpuInstance(device->inst);
+
   if (!instance || !instance->instance || !instance->timedWaitAny) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -202,6 +242,7 @@ webgpu_readBuffer(GPUQueue  * __restrict queue,
   copyOffset = srcOffset & ~UINT64_C(3);
   prefix     = srcOffset - copyOffset;
   copySize   = (prefix + sizeBytes + 3u) & ~UINT64_C(3);
+
   if (copySize < sizeBytes || copySize > SIZE_MAX) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -209,16 +250,17 @@ webgpu_readBuffer(GPUQueue  * __restrict queue,
   bufferInfo.label = gpu_webgpuString("gpu-readback");
   bufferInfo.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
   bufferInfo.size  = copySize;
-  staging = wgpuDeviceCreateBuffer(native->device, &bufferInfo);
-  if (!staging) {
+
+  if (!(staging = wgpuDeviceCreateBuffer(native->device, &bufferInfo))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  result  = GPU_ERROR_BACKEND_FAILURE;
-  encoder = wgpuDeviceCreateCommandEncoder(native->device, &encoderInfo);
-  if (!encoder) {
+  result = GPU_ERROR_BACKEND_FAILURE;
+
+  if (!(encoder = wgpuDeviceCreateCommandEncoder(native->device, &encoderInfo))) {
     goto cleanup_staging;
   }
+
   wgpuCommandEncoderCopyBufferToBuffer(encoder,
                                        buffer->_priv,
                                        copyOffset,
@@ -227,6 +269,7 @@ webgpu_readBuffer(GPUQueue  * __restrict queue,
                                        copySize);
   command = wgpuCommandEncoderFinish(encoder, &commandInfo);
   wgpuCommandEncoderRelease(encoder);
+
   if (!command) {
     goto cleanup_staging;
   }
@@ -258,15 +301,16 @@ webgpu_readBuffer(GPUQueue  * __restrict queue,
   } while (mapStatus == 0);
 #else
   waitInfo.future = wgpuBufferMapAsync(staging,
-                                      WGPUMapMode_Read,
-                                      0u,
-                                      (size_t)copySize,
-                                      callbackInfo);
+                                       WGPUMapMode_Read,
+                                       0u,
+                                       (size_t)copySize,
+                                       callbackInfo);
   waitStatus = wgpuInstanceWaitAny(instance->instance,
                                    1u,
                                    &waitInfo,
                                    UINT64_MAX);
   mapStatus = atomic_load_explicit(&mapRequest.status, memory_order_acquire);
+
   if (waitStatus != WGPUWaitStatus_Success || !waitInfo.completed) {
     goto cleanup_staging;
   }
@@ -275,10 +319,11 @@ webgpu_readBuffer(GPUQueue  * __restrict queue,
   if (mapStatus != WGPUMapAsyncStatus_Success) {
     goto cleanup_staging;
   }
-  mapped = wgpuBufferGetConstMappedRange(staging, 0u, (size_t)copySize);
-  if (!mapped) {
+
+  if (!(mapped = wgpuBufferGetConstMappedRange(staging, 0u, (size_t)copySize))) {
     goto cleanup_unmap;
   }
+
   memcpy(outData, mapped + prefix, (size_t)sizeBytes);
   result = GPU_OK;
 
@@ -298,8 +343,8 @@ cleanup_staging:
 #endif
 }
 
-static void *
-webgpu_bufferContents(GPUBuffer * __restrict buffer) {
+static void*
+webgpu_bufferContents(GPUBuffer *__restrict buffer) {
   GPU__UNUSED(buffer);
   return NULL;
 }

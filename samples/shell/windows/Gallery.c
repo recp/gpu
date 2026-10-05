@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #define WIN32_LEAN_AND_MEAN
 
 #include "NativeSamples.h"
@@ -73,6 +89,8 @@ typedef struct GPUGalleryAdapters {
   uint32_t   count;
 } GPUGalleryAdapters;
 
+static const wchar_t className[] = L"GPUUSLGalleryWindow";
+
 static COLORREF
 rgb(uint8_t red, uint8_t green, uint8_t blue) {
   return RGB(red, green, blue);
@@ -87,69 +105,74 @@ read_file(const char *path, void **outData, size_t *outSize) {
   if (!path || !outData || !outSize) {
     return false;
   }
+
   *outData = NULL;
   *outSize = 0u;
-  file     = fopen(path, "rb");
-  if (!file) {
+
+  if (!(file = fopen(path, "rb"))) {
     return false;
   }
-  if (_fseeki64(file, 0, SEEK_END) != 0 ||
-      (length = _ftelli64(file)) <= 0 ||
-      (uint64_t)length > SIZE_MAX ||
-      _fseeki64(file, 0, SEEK_SET) != 0) {
+
+  if (_fseeki64(file, 0, SEEK_END) != 0
+      || (length = _ftelli64(file)) <= 0
+      || (uint64_t)length > SIZE_MAX
+      || _fseeki64(file, 0, SEEK_SET) != 0) {
     fclose(file);
     return false;
   }
-  data = malloc((size_t)length);
-  if (!data || fread(data, (size_t)length, 1u, file) != 1u) {
+
+  if (!(data = malloc((size_t)length)) || fread(data, (size_t)length, 1u, file) != 1u) {
     free(data);
     fclose(file);
     return false;
   }
+
   fclose(file);
   *outData = data;
   *outSize = (size_t)length;
+
   return true;
 }
 
 static void
 load_previews(GPUGallery *gallery) {
+  GPUGalleryPreview *preview;
+  void              *bytes;
+  size_t             byteCount, i, pixel;
+  uint8_t            red;
+
   if (!gallery || gallery->previews) {
     return;
   }
-  gallery->previews = calloc(gpuNativeSampleCount,
-                             sizeof(*gallery->previews));
-  if (!gallery->previews) {
+
+  if (!(gallery->previews = calloc(gpuNativeSampleCount,
+                                   sizeof(*gallery->previews)))) {
     return;
   }
 
-  for (size_t i = 0u; i < gpuNativeSampleCount; i++) {
-    GPUGalleryPreview *preview;
-    void              *bytes;
-    size_t             byteCount;
-
+  for (i = 0u; i < gpuNativeSampleCount; i++) {
     bytes     = NULL;
     byteCount = 0u;
     preview   = &gallery->previews[i];
+
     if (!read_file(gpuNativeSamples[i].preview, &bytes, &byteCount)) {
       continue;
     }
+
     preview->pixels = GPUSampleWin32DecodeImage(bytes,
-                                               byteCount,
-                                               &preview->width,
-                                               &preview->height);
+                                                byteCount,
+                                                &preview->width,
+                                                &preview->height);
     free(bytes);
+
     if (!preview->pixels) {
       continue;
     }
-    for (size_t pixel = 0u;
-         pixel < (size_t)preview->width * preview->height;
-         pixel++) {
-      uint8_t red;
 
+    for (pixel = 0u; pixel < (size_t)preview->width * preview->height; pixel++) {
       red = preview->pixels[pixel * 4u];
-      preview->pixels[pixel * 4u] =
-        preview->pixels[pixel * 4u + 2u];
+
+      preview->pixels[pixel * 4u]      = preview->pixels[pixel * 4u + 2u];
       preview->pixels[pixel * 4u + 2u] = red;
     }
   }
@@ -157,10 +180,13 @@ load_previews(GPUGallery *gallery) {
 
 static void
 free_previews(GPUGallery *gallery) {
+  size_t i;
+
   if (!gallery || !gallery->previews) {
     return;
   }
-  for (size_t i = 0u; i < gpuNativeSampleCount; i++) {
+
+  for (i = 0u; i < gpuNativeSampleCount; i++) {
     free(gallery->previews[i].pixels);
   }
   free(gallery->previews);
@@ -175,23 +201,29 @@ scaled(const GPUGallery *gallery, int value) {
 static bool
 monitor_work_area(HWND window, RECT *work) {
   MONITORINFO monitorInfo = {0};
-  HMONITOR    monitor;
   POINT       origin = {0};
+  HMONITOR    monitor;
 
   if (!work) {
     return false;
   }
+
   monitor = window
               ? MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST)
               : MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+
   if (!monitor) {
     return false;
   }
+
   monitorInfo.cbSize = sizeof(monitorInfo);
+
   if (!GetMonitorInfoW(monitor, &monitorInfo)) {
     return false;
   }
+
   *work = monitorInfo.rcWork;
+
   return true;
 }
 
@@ -201,22 +233,27 @@ display_scale(HWND window, UINT dpi) {
   float dpiScale, resolutionScaleX, resolutionScaleY, resolutionScale;
 
   dpiScale = (float)dpi / 96.0f;
+
   if (!monitor_work_area(window, &work)) {
     return dpiScale;
   }
+
   resolutionScaleX = (float)(work.right - work.left) / 1920.0f;
   resolutionScaleY = (float)(work.bottom - work.top) / 1080.0f;
   resolutionScale  = resolutionScaleX < resolutionScaleY
                        ? resolutionScaleX
                        : resolutionScaleY;
+
   if (resolutionScale > dpiScale) {
     dpiScale = resolutionScale;
   }
+
   if (dpiScale < 1.0f) {
     dpiScale = 1.0f;
   } else if (dpiScale > 2.0f) {
     dpiScale = 2.0f;
   }
+
   return dpiScale;
 }
 
@@ -227,6 +264,7 @@ create_fonts(GPUGallery *gallery) {
   if (!gallery) {
     return false;
   }
+
   titleFont = CreateFontW(-scaled(gallery, 28),
                           0,
                           0,
@@ -255,6 +293,7 @@ create_fonts(GPUGallery *gallery) {
                          CLEARTYPE_QUALITY,
                          DEFAULT_PITCH,
                          L"Segoe UI");
+
   if (!titleFont || !bodyFont) {
     DeleteObject(bodyFont);
     DeleteObject(titleFont);
@@ -264,12 +303,14 @@ create_fonts(GPUGallery *gallery) {
   DeleteObject(gallery->titleFont);
   gallery->titleFont = titleFont;
   gallery->bodyFont  = bodyFont;
+
   if (gallery->adapterSelector) {
     SendMessageW(gallery->adapterSelector,
                  WM_SETFONT,
                  (WPARAM)gallery->bodyFont,
                  TRUE);
   }
+
   return true;
 }
 
@@ -282,18 +323,23 @@ adapter_selector_rect(const GPUGallery *gallery,
   margin    = scaled(gallery, 28);
   available = client->right - margin * 2;
   width     = scaled(gallery, 292);
+
   if (width > client->right - scaled(gallery, 360)) {
     width = client->right - scaled(gallery, 360);
   }
+
   if (width < scaled(gallery, 180)) {
     width = scaled(gallery, 180);
   }
+
   if (width > available) {
     width = available;
   }
+
   if (width < 1) {
     width = 1;
   }
+
   selector->right  = client->right - margin;
   selector->left   = selector->right - width;
   selector->top    = scaled(gallery, 28);
@@ -304,10 +350,11 @@ static void
 position_adapter_selector(GPUGallery *gallery) {
   RECT client, selector;
 
-  if (!gallery || !gallery->adapterSelector ||
-      !GetClientRect(gallery->window, &client)) {
+  if (!gallery || !gallery->adapterSelector
+      || !GetClientRect(gallery->window, &client)) {
     return;
   }
+
   adapter_selector_rect(gallery, &client, &selector);
   MoveWindow(gallery->adapterSelector,
              selector.left,
@@ -323,6 +370,7 @@ adapter_label(const GPUAdapterProperties *properties,
   if (!properties || !properties->name || !label) {
     return false;
   }
+
   if (MultiByteToWideChar(CP_UTF8,
                           MB_ERR_INVALID_CHARS,
                           properties->name,
@@ -331,6 +379,7 @@ adapter_label(const GPUAdapterProperties *properties,
                           256) > 0) {
     return true;
   }
+
   return MultiByteToWideChar(CP_ACP,
                              0u,
                              properties->name,
@@ -344,27 +393,28 @@ add_adapter_option(HWND selector, const wchar_t *label, uint32_t value) {
   LRESULT item;
 
   item = SendMessageW(selector, CB_ADDSTRING, 0u, (LPARAM)label);
+
   if (item != CB_ERR && item != CB_ERRSPACE) {
     SendMessageW(selector, CB_SETITEMDATA, (WPARAM)item, (LPARAM)value);
   }
 }
 
 static void
-draw_adapter_option(const GPUGallery    *gallery,
+draw_adapter_option(const GPUGallery     *gallery,
                     const DRAWITEMSTRUCT *item) {
-  HFONT oldFont;
-  RECT  text;
   wchar_t label[256];
-  bool selected;
+  RECT    text;
+  HFONT   oldFont;
+  bool    selected;
 
   if (!gallery || !item || item->itemID == (UINT)-1) {
     return;
   }
-  selected  = (item->itemState & ODS_SELECTED) != 0u;
+
+  selected = (item->itemState & ODS_SELECTED) != 0u;
   FillRect(item->hDC,
            &item->rcItem,
-           selected ? gallery->adapterSelectedBrush
-                    : gallery->adapterBrush);
+           selected ? gallery->adapterSelectedBrush : gallery->adapterBrush);
 
   if (SendMessageW(item->hwndItem,
                    CB_GETLBTEXT,
@@ -372,70 +422,74 @@ draw_adapter_option(const GPUGallery    *gallery,
                    (LPARAM)label) == CB_ERR) {
     return;
   }
-  text       = item->rcItem;
+
+  text = item->rcItem;
   text.left += scaled(gallery, 10);
   SetBkMode(item->hDC, TRANSPARENT);
   SetTextColor(item->hDC,
-               (item->itemState & ODS_DISABLED)
-                 ? rgb(105u, 105u, 102u)
-                 : rgb(243u, 241u, 235u));
+               (item->itemState & ODS_DISABLED) ? rgb(105u, 105u, 102u) : rgb(243u, 241u, 235u));
   oldFont = SelectObject(item->hDC, gallery->bodyFont);
   DrawTextW(item->hDC,
             label,
             -1,
             &text,
-            DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS |
-              DT_NOPREFIX);
+            DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
   SelectObject(item->hDC, oldFont);
 }
 
 static unsigned __stdcall
 discover_adapters(void *userData) {
   GPUInstanceCreateInfo instanceInfo = {0};
+  GPUAdapterProperties  properties;
   GPUGalleryAdapters   *result;
   GPUInstance          *instance;
   GPUAdapter          **adapters;
   HWND                  window;
-  uint32_t              adapterCount;
+  uint32_t              adapterCount, i;
 
-  window                         = userData;
+  window                        = userData;
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.label            = "windows-gallery-adapters";
   instanceInfo.preferredBackend = GPU_BACKEND_DX12;
-  result                         = NULL;
-  instance                       = NULL;
+  result                        = NULL;
+  instance                      = NULL;
+
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
     return 0u;
   }
 
   adapterCount = 0u;
   adapters     = NULL;
-  if (GPUEnumerateAdapters(instance, &adapterCount, NULL) == GPU_OK &&
-      adapterCount > 0u &&
-      (result = calloc(1u, sizeof(*result))) &&
-      (result->labels = calloc(adapterCount, sizeof(*result->labels))) &&
-      (result->indices = calloc(adapterCount, sizeof(*result->indices))) &&
-      (adapters = calloc(adapterCount, sizeof(*adapters))) &&
-      GPUEnumerateAdapters(instance, &adapterCount, adapters) == GPU_OK) {
-    for (uint32_t i = 0u; i < adapterCount; i++) {
-      GPUAdapterProperties properties = {0};
+
+  if (GPUEnumerateAdapters(instance, &adapterCount, NULL) == GPU_OK
+      && adapterCount > 0u
+      && (result = calloc(1u, sizeof(*result)))
+      && (result->labels = calloc(adapterCount, sizeof(*result->labels)))
+      && (result->indices = calloc(adapterCount, sizeof(*result->indices)))
+      && (adapters = calloc(adapterCount, sizeof(*adapters)))
+      && GPUEnumerateAdapters(instance, &adapterCount, adapters) == GPU_OK) {
+    for (i = 0u; i < adapterCount; i++) {
+      properties = (GPUAdapterProperties){0};
 
       if (GPUGetAdapterProperties(adapters[i], &properties) != GPU_OK) {
         continue;
       }
+
       if (!adapter_label(&properties, result->labels[result->count])) {
         swprintf(result->labels[result->count],
                  256u,
                  L"Adapter %u",
                  i + 1u);
       }
+
       result->indices[result->count] = i;
       result->count++;
     }
   }
   free(adapters);
   GPUDestroyInstance(instance);
+
   if (!result || !PostMessageW(window,
                                GPU_GALLERY_ADAPTERS_READY,
                                0u,
@@ -459,6 +513,7 @@ start_adapter_discovery(HWND window) {
                           window,
                           0u,
                           NULL);
+
   if (thread) {
     CloseHandle((HANDLE)thread);
   }
@@ -469,24 +524,23 @@ create_adapter_selector(GPUGallery *gallery) {
   if (!gallery || !gallery->window) {
     return false;
   }
-  gallery->adapterSelector =
-    CreateWindowExW(0u,
-                    L"COMBOBOX",
-                    NULL,
-                    WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL |
-                      CBS_DROPDOWNLIST | CBS_HASSTRINGS |
-                      CBS_OWNERDRAWFIXED,
-                    0,
-                    0,
-                    0,
-                    0,
-                    gallery->window,
-                    (HMENU)(UINT_PTR)GPU_GALLERY_ADAPTER_SELECTOR_ID,
-                    GetModuleHandleW(NULL),
-                    NULL);
-  if (!gallery->adapterSelector) {
+
+  if (!(gallery->adapterSelector = CreateWindowExW(0u,
+                                                   L"COMBOBOX",
+                                                   NULL,
+                                                   WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL
+                                                     | CBS_DROPDOWNLIST | CBS_HASSTRINGS | CBS_OWNERDRAWFIXED,
+                                                   0,
+                                                   0,
+                                                   0,
+                                                   0,
+                                                   gallery->window,
+                                                   (HMENU)(UINT_PTR)GPU_GALLERY_ADAPTER_SELECTOR_ID,
+                                                   GetModuleHandleW(NULL),
+                                                   NULL))) {
     return false;
   }
+
   SetWindowTheme(gallery->adapterSelector, L"DarkMode_Explorer", NULL);
   SendMessageW(gallery->adapterSelector,
                WM_SETFONT,
@@ -503,6 +557,7 @@ create_adapter_selector(GPUGallery *gallery) {
                      GPU_GALLERY_ADAPTER_HIGH_POWER);
   SendMessageW(gallery->adapterSelector, CB_SETCURSEL, 0u, 0u);
   position_adapter_selector(gallery);
+
   return true;
 }
 
@@ -513,32 +568,36 @@ gallery_layout(const GPUGallery *gallery,
   int available;
   int minimumWidth;
 
-  layout->margin = scaled(gallery, 28);
-  layout->gap    = scaled(gallery, 18);
-  available     = client->right - client->left - layout->margin * 2;
-  minimumWidth  = scaled(gallery, 280);
+  layout->margin  = scaled(gallery, 28);
+  layout->gap     = scaled(gallery, 18);
+  available       = client->right - client->left - layout->margin * 2;
+  minimumWidth    = scaled(gallery, 280);
   layout->columns = 3;
+
   while (layout->columns > 1) {
-    layout->cardWidth =
-      (available - layout->gap * (layout->columns - 1)) / layout->columns;
+    layout->cardWidth = (available - layout->gap * (layout->columns - 1)) / layout->columns;
+
     if (layout->cardWidth >= minimumWidth) {
       break;
     }
+
     layout->columns--;
   }
-  layout->cardWidth =
-    (available - layout->gap * (layout->columns - 1)) / layout->columns;
+
+  layout->cardWidth = (available - layout->gap * (layout->columns - 1)) / layout->columns;
+
   if (layout->cardWidth < 1) {
     layout->cardWidth = 1;
   }
-  layout->previewHeight =
-    (layout->cardWidth - scaled(gallery, 24)) * 9 / 16;
+
+  layout->previewHeight = (layout->cardWidth - scaled(gallery, 24)) * 9 / 16;
+
   if (layout->previewHeight < scaled(gallery, 96)) {
     layout->previewHeight = scaled(gallery, 96);
   }
-  layout->cardHeight =
-    layout->previewHeight + scaled(gallery, 66);
-  layout->offset = scaled(gallery, 92) - gallery->scroll;
+
+  layout->cardHeight = layout->previewHeight + scaled(gallery, 66);
+  layout->offset     = scaled(gallery, 92) - gallery->scroll;
 }
 
 static void
@@ -553,10 +612,8 @@ card_rect(const GPUGallery *gallery,
   column = (int)(index % (size_t)layout.columns);
   row    = (int)(index / (size_t)layout.columns);
 
-  outRect->left = layout.margin +
-                  column * (layout.cardWidth + layout.gap);
-  outRect->top    = layout.offset +
-                    row * (layout.cardHeight + layout.gap);
+  outRect->left   = layout.margin + column * (layout.cardWidth + layout.gap);
+  outRect->top    = layout.offset + row * (layout.cardHeight + layout.gap);
   outRect->right  = outRect->left + layout.cardWidth;
   outRect->bottom = outRect->top + layout.cardHeight;
 }
@@ -569,6 +626,7 @@ content_height(const GPUGallery *gallery, const RECT *client) {
   gallery_layout(gallery, client, &layout);
   rows = (gpuNativeSampleCount + (size_t)layout.columns - 1u) /
          (size_t)layout.columns;
+
   return scaled(gallery, 92 + 28) +
          (int)rows * layout.cardHeight +
          (rows > 0u ? (int)(rows - 1u) * layout.gap : 0);
@@ -579,14 +637,17 @@ update_scroll(GPUGallery *gallery) {
   SCROLLINFO info = {0};
   RECT       client;
 
-  if (!gallery || !gallery->window ||
-      !GetClientRect(gallery->window, &client)) {
+  if (!gallery || !gallery->window
+      || !GetClientRect(gallery->window, &client)) {
     return;
   }
+
   gallery->scrollMax = content_height(gallery, &client) - client.bottom;
+
   if (gallery->scrollMax < 0) {
     gallery->scrollMax = 0;
   }
+
   if (gallery->scroll > gallery->scrollMax) {
     gallery->scroll = gallery->scrollMax;
   }
@@ -605,14 +666,17 @@ set_scroll(GPUGallery *gallery, int value) {
   if (!gallery) {
     return;
   }
+
   if (value < 0) {
     value = 0;
   } else if (value > gallery->scrollMax) {
     value = gallery->scrollMax;
   }
+
   if (value == gallery->scroll) {
     return;
   }
+
   gallery->scroll = value;
   update_scroll(gallery);
   InvalidateRect(gallery->window, NULL, FALSE);
@@ -623,14 +687,15 @@ draw_preview(HDC                      context,
              const GPUGalleryPreview *preview,
              const RECT              *target) {
   BITMAPINFO bitmap = {0};
+  double     sourceAspect, targetAspect;
   int        sourceX, sourceY, sourceWidth, sourceHeight;
   int        targetX, targetY, targetWidth, targetHeight;
-  double     sourceAspect, targetAspect;
 
-  if (!preview || !preview->pixels || preview->width == 0u ||
-      preview->height == 0u) {
+  if (!preview || !preview->pixels || preview->width == 0u
+      || preview->height == 0u) {
     return;
   }
+
   sourceX      = preview->width > 4u ? 2 : 0;
   sourceY      = preview->height > 4u ? 2 : 0;
   sourceWidth  = (int)preview->width - sourceX * 2;
@@ -639,11 +704,13 @@ draw_preview(HDC                      context,
   targetHeight = target->bottom - target->top;
   sourceAspect = (double)sourceWidth / (double)sourceHeight;
   targetAspect = (double)targetWidth / (double)targetHeight;
+
   if (sourceAspect > targetAspect) {
     targetHeight = (int)((double)targetWidth / sourceAspect + 0.5);
   } else {
     targetWidth = (int)((double)targetHeight * sourceAspect + 0.5);
   }
+
   targetX = target->left +
             ((target->right - target->left) - targetWidth) / 2;
   targetY = target->top +
@@ -673,21 +740,26 @@ draw_preview(HDC                      context,
 
 static void
 sample_title(const char *id, char *title, size_t capacity) {
-  size_t length;
+  size_t length, i;
 
   if (!id || !title || capacity == 0u) {
     return;
   }
+
   length = strlen(id);
+
   if (length >= capacity) {
     length = capacity - 1u;
   }
+
   memcpy(title, id, length);
   title[length] = '\0';
+
   if (length > 0u && title[0] >= 'a' && title[0] <= 'z') {
     title[0] = (char)(title[0] - 'a' + 'A');
   }
-  for (size_t i = 1u; i < length; i++) {
+
+  for (i = 1u; i < length; i++) {
     if (title[i] == '-') {
       title[i] = ' ';
     }
@@ -696,18 +768,21 @@ sample_title(const char *id, char *title, size_t capacity) {
 
 static void
 paint_gallery(GPUGallery *gallery, HDC context) {
+  RECT   client, header, selector, card, preview, titleRect;
   HBRUSH background, cardBrush, previewBrush;
   HPEN   borderPen, hoverPen, oldPen;
   HFONT  oldFont;
-  RECT   client, header, selector, card, preview, titleRect;
+  size_t i;
 
   GetClientRect(gallery->window, &client);
   background   = CreateSolidBrush(rgb(7u, 9u, 13u));
   cardBrush    = CreateSolidBrush(rgb(14u, 18u, 26u));
   previewBrush = CreateSolidBrush(rgb(4u, 9u, 22u));
-  borderPen    = CreatePen(PS_SOLID, scaled(gallery, 1),
+  borderPen    = CreatePen(PS_SOLID,
+                           scaled(gallery, 1),
                            rgb(47u, 52u, 61u));
-  hoverPen     = CreatePen(PS_SOLID, scaled(gallery, 2),
+  hoverPen     = CreatePen(PS_SOLID,
+                           scaled(gallery, 2),
                            rgb(255u, 112u, 20u));
 
   FillRect(context, &client, background);
@@ -718,7 +793,7 @@ paint_gallery(GPUGallery *gallery, HDC context) {
   header.left   += scaled(gallery, 30);
   header.top    += scaled(gallery, 26);
   header.right  -= scaled(gallery, 30);
-  header.bottom  = header.top + scaled(gallery, 42);
+  header.bottom = header.top + scaled(gallery, 42);
   DrawTextA(context,
             "GPU | Universal Shading (USL)",
             -1,
@@ -735,13 +810,15 @@ paint_gallery(GPUGallery *gallery, HDC context) {
             &header,
             DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
 
-  for (size_t i = 0u; i < gpuNativeSampleCount; i++) {
+  for (i = 0u; i < gpuNativeSampleCount; i++) {
     char title[96];
 
     card_rect(gallery, &client, i, &card);
+
     if (card.bottom < 0 || card.top > client.bottom) {
       continue;
     }
+
     oldPen = SelectObject(context,
                           gallery->hovered == (int)i ? hoverPen : borderPen);
     SelectObject(context, cardBrush);
@@ -759,11 +836,12 @@ paint_gallery(GPUGallery *gallery, HDC context) {
     preview.bottom = preview.top +
                      (preview.right - preview.left) * 9 / 16;
     FillRect(context, &preview, previewBrush);
+
     if (gallery->previews) {
       draw_preview(context, &gallery->previews[i], &preview);
     }
 
-    titleRect        = card;
+    titleRect = card;
     titleRect.left  += scaled(gallery, 14);
     titleRect.right -= scaled(gallery, 14);
     titleRect.top    = preview.bottom + scaled(gallery, 8);
@@ -795,21 +873,24 @@ ensure_backbuffer(GPUGallery *gallery,
   if (!gallery || !reference || width <= 0 || height <= 0) {
     return false;
   }
-  if (gallery->backContext && gallery->backBitmap &&
-      gallery->backWidth == width && gallery->backHeight == height) {
+
+  if (gallery->backContext && gallery->backBitmap
+      && gallery->backWidth == width && gallery->backHeight == height) {
     return true;
   }
+
   if (!gallery->backContext) {
-    gallery->backContext = CreateCompatibleDC(reference);
-    if (!gallery->backContext) {
+    if (!(gallery->backContext = CreateCompatibleDC(reference))) {
       return false;
     }
   }
-  bitmap = CreateCompatibleBitmap(reference, width, height);
-  if (!bitmap) {
+
+  if (!(bitmap = CreateCompatibleBitmap(reference, width, height))) {
     return false;
   }
+
   replaced = SelectObject(gallery->backContext, bitmap);
+
   if (!gallery->backDefaultBitmap) {
     gallery->backDefaultBitmap = replaced;
   }
@@ -817,6 +898,7 @@ ensure_backbuffer(GPUGallery *gallery,
   gallery->backBitmap = bitmap;
   gallery->backWidth  = width;
   gallery->backHeight = height;
+
   return true;
 }
 
@@ -825,6 +907,7 @@ free_backbuffer(GPUGallery *gallery) {
   if (!gallery || !gallery->backContext) {
     return;
   }
+
   if (gallery->backDefaultBitmap) {
     SelectObject(gallery->backContext, gallery->backDefaultBitmap);
   }
@@ -839,20 +922,25 @@ free_backbuffer(GPUGallery *gallery) {
 
 static int
 sample_at_point(const GPUGallery *gallery, int x, int y) {
-  RECT client, card;
-  POINT point;
+  RECT   client, card;
+  POINT  point;
+  size_t i;
 
   if (!gallery || !GetClientRect(gallery->window, &client)) {
     return -1;
   }
+
   point.x = x;
   point.y = y;
-  for (size_t i = 0u; i < gpuNativeSampleCount; i++) {
+
+  for (i = 0u; i < gpuNativeSampleCount; i++) {
     card_rect(gallery, &client, i, &card);
+
     if (PtInRect(&card, point)) {
       return (int)i;
     }
   }
+
   return -1;
 }
 
@@ -865,18 +953,25 @@ working_directory(const char *executable,
   if (!executable || !directory) {
     return false;
   }
+
   length = snprintf(directory, MAX_PATH, "%s", executable);
+
   if (length <= 0 || length >= MAX_PATH) {
     return false;
   }
+
   slash = strrchr(directory, '\\');
+
   if (!slash) {
     slash = strrchr(directory, '/');
   }
+
   if (!slash) {
     return false;
   }
+
   *slash = '\0';
+
   return true;
 }
 
@@ -886,16 +981,20 @@ adapter_environment_value(const GPUGallery *gallery,
   uint32_t selection;
 
   selection = gallery ? gallery->adapterSelection : 0u;
+
   switch (selection) {
     case GPU_GALLERY_ADAPTER_LOW_POWER:
       snprintf(value, 32u, "low");
       break;
+
     case GPU_GALLERY_ADAPTER_HIGH_POWER:
       snprintf(value, 32u, "high");
       break;
+
     case GPU_GALLERY_ADAPTER_AUTO:
       snprintf(value, 32u, "auto");
       break;
+
     default:
       snprintf(value,
                32u,
@@ -907,39 +1006,44 @@ adapter_environment_value(const GPUGallery *gallery,
 
 static char*
 save_environment_value(const char *name) {
-  char  *value;
-  DWORD  length;
+  char *value;
+  DWORD length;
 
   length = GetEnvironmentVariableA(name, NULL, 0u);
+
   if (length == 0u || !(value = malloc(length))) {
     return NULL;
   }
+
   if (GetEnvironmentVariableA(name, value, length) == 0u) {
     free(value);
     return NULL;
   }
+
   return value;
 }
 
 static void
 start_sample(GPUGallery *gallery, size_t index) {
-  STARTUPINFOA        startup = {0};
-  PROCESS_INFORMATION process = {0};
   char                command[MAX_PATH * 2u];
   char                directory[MAX_PATH];
+  STARTUPINFOA        startup = {0};
   char                adapterValue[32];
+  PROCESS_INFORMATION process = {0};
   char               *previousAdapterValue;
   int                 length;
   BOOL                created;
 
-  if (!gallery || gallery->child || index >= gpuNativeSampleCount ||
-      !working_directory(gpuNativeSamples[index].executable, directory)) {
+  if (!gallery || gallery->child || index >= gpuNativeSampleCount
+      || !working_directory(gpuNativeSamples[index].executable, directory)) {
     return;
   }
+
   length = snprintf(command,
                     sizeof(command),
                     "\"%s\"",
                     gpuNativeSamples[index].executable);
+
   if (length <= 0 || (size_t)length >= sizeof(command)) {
     gallery->status = "Sample path is too long";
     InvalidateRect(gallery->window, NULL, FALSE);
@@ -949,12 +1053,14 @@ start_sample(GPUGallery *gallery, size_t index) {
   startup.cb = sizeof(startup);
   adapter_environment_value(gallery, adapterValue);
   previousAdapterValue = save_environment_value("GPU_SAMPLE_ADAPTER");
+
   if (!SetEnvironmentVariableA("GPU_SAMPLE_ADAPTER", adapterValue)) {
     free(previousAdapterValue);
     gallery->status = "Adapter selection failed";
     InvalidateRect(gallery->window, NULL, FALSE);
     return;
   }
+
   created = CreateProcessA(gpuNativeSamples[index].executable,
                            command,
                            NULL,
@@ -967,6 +1073,7 @@ start_sample(GPUGallery *gallery, size_t index) {
                            &process);
   SetEnvironmentVariableA("GPU_SAMPLE_ADAPTER", previousAdapterValue);
   free(previousAdapterValue);
+
   if (!created) {
     gallery->status = "Sample launch failed";
     InvalidateRect(gallery->window, NULL, FALSE);
@@ -975,9 +1082,11 @@ start_sample(GPUGallery *gallery, size_t index) {
   CloseHandle(process.hThread);
   gallery->child  = process.hProcess;
   gallery->status = gpuNativeSamples[index].id;
+
   if (gallery->job) {
     AssignProcessToJobObject(gallery->job, process.hProcess);
   }
+
   EnableWindow(gallery->window, FALSE);
   SetTimer(gallery->window, GPU_GALLERY_TIMER_CHILD, 100u, NULL);
   InvalidateRect(gallery->window, NULL, FALSE);
@@ -987,10 +1096,11 @@ static void
 poll_child(GPUGallery *gallery) {
   DWORD exitCode;
 
-  if (!gallery || !gallery->child ||
-      WaitForSingleObject(gallery->child, 0u) != WAIT_OBJECT_0) {
+  if (!gallery || !gallery->child
+      || WaitForSingleObject(gallery->child, 0u) != WAIT_OBJECT_0) {
     return;
   }
+
   exitCode = 1u;
   GetExitCodeProcess(gallery->child, &exitCode);
   CloseHandle(gallery->child);
@@ -1004,25 +1114,35 @@ poll_child(GPUGallery *gallery) {
 
 static LRESULT CALLBACK
 window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
-  GPUGallery *gallery;
+  PAINTSTRUCT         paint;
+  TRACKMOUSEEVENT     tracking;
+  RECT                client;
+  GPUGalleryAdapters *adapters;
+  MEASUREITEMSTRUCT  *measureItem;
+  CREATESTRUCTW      *create;
+  GPUGallery         *gallery;
+  const RECT         *suggested;
+  HDC                 context;
+  LRESULT             item, selection;
+  uint32_t            i;
+  int                 value, hovered, index;
+  BOOL                darkMode;
 
   gallery = (GPUGallery *)GetWindowLongPtrW(window, GWLP_USERDATA);
-  if (message == WM_NCCREATE) {
-    CREATESTRUCTW *create;
 
-    create  = (CREATESTRUCTW *)lParam;
-    gallery = create->lpCreateParams;
+  if (message == WM_NCCREATE) {
+    create          = (CREATESTRUCTW *)lParam;
+    gallery         = create->lpCreateParams;
     gallery->window = window;
     SetWindowLongPtrW(window, GWLP_USERDATA, (LONG_PTR)gallery);
   }
+
   if (!gallery) {
     return DefWindowProcW(window, message, wParam, lParam);
   }
 
   switch (message) {
     case WM_CREATE: {
-      BOOL darkMode;
-
       darkMode = TRUE;
       DwmSetWindowAttribute(window,
                             DWMWA_USE_IMMERSIVE_DARK_MODE,
@@ -1034,14 +1154,14 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
       update_scroll(gallery);
       return 0;
     }
+
     case WM_SIZE:
       position_adapter_selector(gallery);
       update_scroll(gallery);
       InvalidateRect(window, NULL, FALSE);
       return 0;
-    case WM_DPICHANGED: {
-      const RECT *suggested;
 
+    case WM_DPICHANGED: {
       suggested = (const RECT *)lParam;
       SetWindowPos(window,
                    NULL,
@@ -1057,11 +1177,10 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
       InvalidateRect(window, NULL, FALSE);
       return 0;
     }
-    case WM_COMMAND:
-      if (LOWORD(wParam) == GPU_GALLERY_ADAPTER_SELECTOR_ID &&
-          HIWORD(wParam) == CBN_SELCHANGE) {
-        LRESULT item, selection;
 
+    case WM_COMMAND:
+      if (LOWORD(wParam) == GPU_GALLERY_ADAPTER_SELECTOR_ID
+          && HIWORD(wParam) == CBN_SELCHANGE) {
         item = SendMessageW(gallery->adapterSelector,
                             CB_GETCURSEL,
                             0u,
@@ -1072,41 +1191,42 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
                                      CB_GETITEMDATA,
                                      (WPARAM)item,
                                      0u);
+
         if (selection != CB_ERR) {
           gallery->adapterSelection = (uint32_t)selection;
         }
         return 0;
       }
       return DefWindowProcW(window, message, wParam, lParam);
+
     case WM_DRAWITEM:
       if (wParam == GPU_GALLERY_ADAPTER_SELECTOR_ID) {
         draw_adapter_option(gallery, (const DRAWITEMSTRUCT *)lParam);
         return TRUE;
       }
       return DefWindowProcW(window, message, wParam, lParam);
+
     case WM_MEASUREITEM:
       if (wParam == GPU_GALLERY_ADAPTER_SELECTOR_ID) {
-        MEASUREITEMSTRUCT *item;
-
-        item             = (MEASUREITEMSTRUCT *)lParam;
-        item->itemHeight = (UINT)scaled(gallery, 32);
+        measureItem             = (MEASUREITEMSTRUCT *)lParam;
+        measureItem->itemHeight = (UINT)scaled(gallery, 32);
         return TRUE;
       }
       return DefWindowProcW(window, message, wParam, lParam);
+
     case WM_CTLCOLORLISTBOX:
       SetBkColor((HDC)wParam, rgb(14u, 18u, 26u));
       SetTextColor((HDC)wParam, rgb(243u, 241u, 235u));
       return (LRESULT)gallery->adapterBrush;
-    case GPU_GALLERY_ADAPTERS_READY: {
-      GPUGalleryAdapters *adapters;
 
+    case GPU_GALLERY_ADAPTERS_READY: {
       adapters = (GPUGalleryAdapters *)lParam;
+
       if (adapters) {
-        for (uint32_t i = 0u; i < adapters->count; i++) {
+        for (i = 0u; i < adapters->count; i++) {
           add_adapter_option(gallery->adapterSelector,
                              adapters->labels[i],
-                             GPU_GALLERY_ADAPTER_FIRST +
-                               adapters->indices[i]);
+                             GPU_GALLERY_ADAPTER_FIRST + adapters->indices[i]);
         }
         free(adapters->labels);
         free(adapters->indices);
@@ -1114,54 +1234,62 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
       }
       return 0;
     }
+
     case WM_VSCROLL: {
       SCROLLINFO info = {0};
-      int        value;
 
       info.cbSize = sizeof(info);
       info.fMask  = SIF_ALL;
       GetScrollInfo(window, SB_VERT, &info);
       value = gallery->scroll;
+
       switch (LOWORD(wParam)) {
         case SB_LINEUP:
           value -= scaled(gallery, 42);
           break;
+
         case SB_LINEDOWN:
           value += scaled(gallery, 42);
           break;
+
         case SB_PAGEUP:
           value -= (int)info.nPage;
           break;
+
         case SB_PAGEDOWN:
           value += (int)info.nPage;
           break;
+
         case SB_THUMBPOSITION:
         case SB_THUMBTRACK:
           value = info.nTrackPos;
           break;
+
         default:
           break;
       }
+
       set_scroll(gallery, value);
       return 0;
     }
+
     case WM_MOUSEWHEEL:
       set_scroll(gallery,
-                 gallery->scroll -
-                   GET_WHEEL_DELTA_WPARAM(wParam) *
-                     scaled(gallery, 84) / WHEEL_DELTA);
+                 gallery->scroll - GET_WHEEL_DELTA_WPARAM(wParam) * scaled(gallery, 84) / WHEEL_DELTA);
       return 0;
+
     case WM_MOUSEMOVE: {
-      TRACKMOUSEEVENT tracking = {0};
-      int             hovered;
+      tracking = (TRACKMOUSEEVENT){0};
 
       hovered = sample_at_point(gallery,
                                 GET_X_LPARAM(lParam),
                                 GET_Y_LPARAM(lParam));
+
       if (hovered != gallery->hovered) {
         gallery->hovered = hovered;
         InvalidateRect(window, NULL, FALSE);
       }
+
       tracking.cbSize      = sizeof(tracking);
       tracking.dwFlags     = TME_LEAVE;
       tracking.hwndTrack   = window;
@@ -1169,33 +1297,33 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
       TrackMouseEvent(&tracking);
       return 0;
     }
+
     case WM_MOUSELEAVE:
       gallery->hovered = -1;
       InvalidateRect(window, NULL, FALSE);
       return 0;
-    case WM_LBUTTONUP: {
-      int index;
 
+    case WM_LBUTTONUP: {
       index = sample_at_point(gallery,
                               GET_X_LPARAM(lParam),
                               GET_Y_LPARAM(lParam));
+
       if (index >= 0) {
         start_sample(gallery, (size_t)index);
       }
       return 0;
     }
+
     case WM_TIMER:
       if (wParam == GPU_GALLERY_TIMER_CHILD) {
         poll_child(gallery);
       }
       return 0;
-    case WM_PAINT: {
-      PAINTSTRUCT paint;
-      HDC         context;
-      RECT        client;
 
+    case WM_PAINT: {
       context = BeginPaint(window, &paint);
       GetClientRect(window, &client);
+
       if (ensure_backbuffer(gallery,
                             context,
                             client.right,
@@ -1213,22 +1341,28 @@ window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
       } else {
         paint_gallery(gallery, context);
       }
+
       EndPaint(window, &paint);
       return 0;
     }
+
     case WM_ERASEBKGND:
       return 1;
+
     case WM_KEYDOWN:
       if (wParam == VK_ESCAPE && !gallery->child) {
         DestroyWindow(window);
       }
       return 0;
+
     case WM_CLOSE:
       DestroyWindow(window);
       return 0;
+
     case WM_DESTROY:
       PostQuitMessage(0);
       return 0;
+
     default:
       return DefWindowProcW(window, message, wParam, lParam);
   }
@@ -1239,12 +1373,12 @@ create_child_job(void) {
   JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = {0};
   HANDLE                               job;
 
-  job = CreateJobObjectW(NULL, NULL);
-  if (!job) {
+  if (!(job = CreateJobObjectW(NULL, NULL))) {
     return NULL;
   }
-  limits.BasicLimitInformation.LimitFlags =
-    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+  limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
   if (!SetInformationJobObject(job,
                                JobObjectExtendedLimitInformation,
                                &limits,
@@ -1252,6 +1386,7 @@ create_child_job(void) {
     CloseHandle(job);
     return NULL;
   }
+
   return job;
 }
 
@@ -1264,20 +1399,24 @@ initial_window_bounds(DWORD style, RECT *bounds) {
   if (!bounds) {
     return;
   }
+
   if (!monitor_work_area(NULL, &work)) {
     work.left   = 0;
     work.top    = 0;
     work.right  = GetSystemMetrics(SM_CXSCREEN);
     work.bottom = GetSystemMetrics(SM_CYSCREEN);
   }
+
   dpi            = GetDpiForSystem();
   bounds->left   = 0;
   bounds->top    = 0;
   bounds->right  = (work.right - work.left) * 84 / 100;
   bounds->bottom = (work.bottom - work.top) * 86 / 100;
+
   if (!AdjustWindowRectExForDpi(bounds, style, FALSE, 0u, dpi)) {
     AdjustWindowRectEx(bounds, style, FALSE, 0u);
   }
+
   width          = bounds->right - bounds->left;
   height         = bounds->bottom - bounds->top;
   bounds->left   = work.left + ((work.right - work.left) - width) / 2;
@@ -1287,34 +1426,35 @@ initial_window_bounds(DWORD style, RECT *bounds) {
 }
 
 int WINAPI
-wWinMain(HINSTANCE instance,
-         HINSTANCE previousInstance,
-         wchar_t  *commandLine,
-         int       showCommand) {
-  static const wchar_t className[] = L"GPUUSLGalleryWindow";
-  WNDCLASSEXW          windowClass = {0};
-  GPUGallery           gallery = {0};
-  RECT                 bounds;
-  HWND                 window;
-  MSG                  message;
-  DWORD                style;
-  UINT                 dpi;
+wWinMain(HINSTANCE  instance,
+         HINSTANCE  previousInstance,
+         wchar_t   *commandLine,
+         int        showCommand) {
+  GPUGallery  gallery = {0};
+  WNDCLASSEXW windowClass = {0};
+  MSG         message;
+  RECT        bounds;
+  HWND        window;
+  DWORD       style;
+  UINT        dpi;
 
   (void)previousInstance;
   (void)commandLine;
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-  dpi             = GetDpiForSystem();
-  gallery.scale   = display_scale(NULL, dpi);
-  gallery.hovered = -1;
-  gallery.status  = "Direct3D 12";
-  gallery.adapterSelection = GPU_GALLERY_ADAPTER_AUTO;
+  dpi                          = GetDpiForSystem();
+  gallery.scale                = display_scale(NULL, dpi);
+  gallery.hovered              = -1;
+  gallery.status               = "Direct3D 12";
+  gallery.adapterSelection     = GPU_GALLERY_ADAPTER_AUTO;
   gallery.adapterBrush         = CreateSolidBrush(rgb(14u, 18u, 26u));
   gallery.adapterSelectedBrush = CreateSolidBrush(rgb(38u, 43u, 53u));
   gallery.job                  = create_child_job();
-  if (!gallery.adapterBrush || !gallery.adapterSelectedBrush ||
-      !create_fonts(&gallery)) {
+
+  if (!gallery.adapterBrush || !gallery.adapterSelectedBrush
+      || !create_fonts(&gallery)) {
     DeleteObject(gallery.adapterSelectedBrush);
     DeleteObject(gallery.adapterBrush);
+
     if (gallery.job) {
       CloseHandle(gallery.job);
     }
@@ -1326,11 +1466,12 @@ wWinMain(HINSTANCE instance,
   windowClass.lpfnWndProc   = window_proc;
   windowClass.hInstance     = instance;
   windowClass.hCursor       = LoadCursorW(NULL,
-                                         MAKEINTRESOURCEW(32512));
+                                          MAKEINTRESOURCEW(32512));
   windowClass.hbrBackground = NULL;
   windowClass.lpszClassName = className;
-  if (!RegisterClassExW(&windowClass) &&
-      GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+
+  if (!RegisterClassExW(&windowClass)
+      && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
     if (gallery.job) {
       CloseHandle(gallery.job);
     }
@@ -1341,19 +1482,19 @@ wWinMain(HINSTANCE instance,
 
   style = WS_OVERLAPPEDWINDOW | WS_VSCROLL;
   initial_window_bounds(style, &bounds);
-  window = CreateWindowExW(0u,
-                           className,
-                           L"GPU + USL Samples",
-                           style,
-                           bounds.left,
-                           bounds.top,
-                           bounds.right - bounds.left,
-                           bounds.bottom - bounds.top,
-                           NULL,
-                           NULL,
-                           instance,
-                           &gallery);
-  if (!window) {
+
+  if (!(window = CreateWindowExW(0u,
+                                 className,
+                                 L"GPU + USL Samples",
+                                 style,
+                                 bounds.left,
+                                 bounds.top,
+                                 bounds.right - bounds.left,
+                                 bounds.bottom - bounds.top,
+                                 NULL,
+                                 NULL,
+                                 instance,
+                                 &gallery))) {
     if (gallery.job) {
       CloseHandle(gallery.job);
     }
@@ -1361,6 +1502,7 @@ wWinMain(HINSTANCE instance,
     DeleteObject(gallery.titleFont);
     return 1;
   }
+
   gallery.scale = display_scale(window, GetDpiForWindow(window));
   create_fonts(&gallery);
   update_scroll(&gallery);
@@ -1376,6 +1518,7 @@ wWinMain(HINSTANCE instance,
   if (gallery.child) {
     CloseHandle(gallery.child);
   }
+
   if (gallery.job) {
     CloseHandle(gallery.job);
   }

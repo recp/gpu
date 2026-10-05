@@ -30,15 +30,15 @@ struct GPUQuerySet {
 static GPU_INLINE bool
 gpuValidPassTimestampWrites(const GPUPassTimestampWrites *writes,
                             const GPUDevice              *device) {
-  return !writes ||
-         (device &&
-          GPUIsFeatureEnabled(device, GPU_FEATURE_TIMESTAMPS) &&
-          writes->querySet &&
-          writes->querySet->device == device &&
-          writes->querySet->type == GPU_QUERY_TIMESTAMP &&
-          writes->beginIndex < writes->querySet->count &&
-          writes->endIndex < writes->querySet->count &&
-          writes->beginIndex != writes->endIndex);
+  return !writes
+         || (device
+             && GPUIsFeatureEnabled(device, GPU_FEATURE_TIMESTAMPS)
+             && writes->querySet
+             && writes->querySet->device == device
+             && writes->querySet->type == GPU_QUERY_TIMESTAMP
+             && writes->beginIndex < writes->querySet->count
+             && writes->endIndex < writes->querySet->count
+             && writes->beginIndex != writes->endIndex);
 }
 
 #endif /* gpu_query_internal_h */

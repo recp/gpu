@@ -1,16 +1,32 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 
 static int
 gpu_test_buffer_device_address(GPUAdapter *adapter) {
-  GPUFeature          feature        = GPU_FEATURE_BUFFER_DEVICE_ADDRESS;
   GPUDeviceCreateInfo deviceInfo     = {0};
   GPUBufferCreateInfo bufferInfo     = {0};
   GPUDevice          *disabledDevice = NULL;
   GPUDevice          *device         = NULL;
   GPUBuffer          *buffer         = NULL;
   GPUBuffer          *plainBuffer    = NULL;
+  GPUFeature          feature        = GPU_FEATURE_BUFFER_DEVICE_ADDRESS;
   GPUResult           result;
-  int                 ok             = 0;
+  int                 ok = 0;
 
   if (!adapter) {
     return 0;
@@ -20,6 +36,7 @@ gpu_test_buffer_device_address(GPUAdapter *adapter) {
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
+
   if (!GPUIsFeatureSupported(adapter, feature)) {
     result = gpu_test_create_device(adapter, &deviceInfo, &device);
     GPUDestroyDevice(device);
@@ -28,8 +45,9 @@ gpu_test_buffer_device_address(GPUAdapter *adapter) {
 
   deviceInfo.required.pFeatures    = NULL;
   deviceInfo.required.featureCount = 0u;
-  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
-      !disabledDevice) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK
+      || !disabledDevice) {
     fprintf(stderr, "device-address disabled-device setup failed\n");
     goto cleanup;
   }
@@ -40,36 +58,42 @@ gpu_test_buffer_device_address(GPUAdapter *adapter) {
   bufferInfo.sizeBytes        = 256u;
   bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
                                 GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
-  result = GPUCreateBuffer(disabledDevice, &bufferInfo, &buffer);
+  result                      = GPUCreateBuffer(disabledDevice, &bufferInfo, &buffer);
+
   if (result != GPU_ERROR_UNSUPPORTED || buffer) {
     fprintf(stderr, "device-address usage accepted without feature\n");
     goto cleanup;
   }
+
   GPUDestroyDevice(disabledDevice);
   disabledDevice = NULL;
 
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
-  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
-      !GPUIsFeatureEnabled(device, feature)) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device
+      || !GPUIsFeatureEnabled(device, feature)) {
     fprintf(stderr, "device-address feature enablement failed\n");
     goto cleanup;
   }
 
   bufferInfo.usage = GPU_BUFFER_USAGE_STORAGE;
-  if (GPUCreateBuffer(device, &bufferInfo, &plainBuffer) != GPU_OK ||
-      !plainBuffer || GPUGetBufferDeviceAddressEXT(plainBuffer) != 0u) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &plainBuffer) != GPU_OK
+      || !plainBuffer || GPUGetBufferDeviceAddressEXT(plainBuffer) != 0u) {
     fprintf(stderr, "plain buffer exposed a device address\n");
     goto cleanup;
   }
 
   bufferInfo.usage = GPU_BUFFER_USAGE_STORAGE |
                      GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
-  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer ||
-      GPUGetBufferDeviceAddressEXT(buffer) == 0u) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer
+      || GPUGetBufferDeviceAddressEXT(buffer) == 0u) {
     fprintf(stderr, "device-address buffer did not expose an address\n");
     goto cleanup;
   }
+
   ok = 1;
 
 cleanup:
@@ -82,34 +106,34 @@ cleanup:
 
 static int
 gpu_test_placed_memory(GPUAdapter *adapter) {
-  GPUFeature                feature         = GPU_FEATURE_PLACED_RESOURCES;
-  GPUDeviceCreateInfo       deviceInfo      = {0};
-  GPUBufferCreateInfo       bufferInfo      = {0};
-  GPUTextureCreateInfo      textureInfo     = {0};
-  GPUMemoryRequirements     bufferMemory    = {0};
-  GPUMemoryRequirements     textureMemory   = {0};
-  GPUHeapCreateInfo         heapInfo        = {0};
-  GPUAliasingBarrier        aliasingBarrier = {0};
-  GPUBarrierBatch           barrierBatch    = {0};
-  GPUQueueSubmitInfo        submitInfo      = {0};
-  GPUCommandBuffer         *submitList[1]   = {0};
-  uint32_t                  input[4]        = {1u, 2u, 3u, 4u};
-  uint32_t                  output[4]       = {0};
-  GPUDevice                *disabledDevice  = NULL;
-  GPUDevice                *device          = NULL;
-  GPUQueue                 *queue           = NULL;
-  GPUHeap                  *heap            = NULL;
-  GPUHeap                  *textureHeap     = NULL;
-  GPUBuffer                *buffer          = NULL;
-  GPUBuffer                *aliasBuffer     = NULL;
-  GPUBuffer                *invalidBuffer   = NULL;
-  GPUTexture               *texture         = NULL;
-  GPUCommandBuffer         *cmdb            = NULL;
-  GPUFence                 *fence           = NULL;
-  uint64_t                  compatibility;
-  uint64_t                  heapSize;
-  GPUResult                 result;
-  int                       ok              = 0;
+  GPUDeviceCreateInfo   deviceInfo      = {0};
+  GPUBufferCreateInfo   bufferInfo      = {0};
+  GPUTextureCreateInfo  textureInfo     = {0};
+  GPUMemoryRequirements bufferMemory    = {0};
+  GPUMemoryRequirements textureMemory   = {0};
+  GPUHeapCreateInfo     heapInfo        = {0};
+  GPUAliasingBarrier    aliasingBarrier = {0};
+  GPUBarrierBatch       barrierBatch    = {0};
+  GPUQueueSubmitInfo    submitInfo      = {0};
+  GPUCommandBuffer     *submitList[1]   = {0};
+  uint32_t              input[4]        = {1u, 2u, 3u, 4u};
+  uint32_t              output[4]       = {0};
+  GPUDevice            *disabledDevice  = NULL;
+  GPUDevice            *device          = NULL;
+  GPUQueue             *queue           = NULL;
+  GPUHeap              *heap            = NULL;
+  GPUHeap              *textureHeap     = NULL;
+  GPUBuffer            *buffer          = NULL;
+  GPUBuffer            *aliasBuffer     = NULL;
+  GPUBuffer            *invalidBuffer   = NULL;
+  GPUTexture           *texture         = NULL;
+  GPUCommandBuffer     *cmdb            = NULL;
+  GPUFence             *fence           = NULL;
+  uint64_t              compatibility;
+  uint64_t              heapSize;
+  GPUFeature            feature = GPU_FEATURE_PLACED_RESOURCES;
+  GPUResult             result;
+  int                   ok = 0;
 
   if (!adapter) {
     return 0;
@@ -119,6 +143,7 @@ gpu_test_placed_memory(GPUAdapter *adapter) {
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
+
   if (!GPUIsFeatureSupported(adapter, feature)) {
     result = gpu_test_create_device(adapter, &deviceInfo, &device);
     GPUDestroyDevice(device);
@@ -127,8 +152,9 @@ gpu_test_placed_memory(GPUAdapter *adapter) {
 
   deviceInfo.required.pFeatures    = NULL;
   deviceInfo.required.featureCount = 0u;
-  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
-      !disabledDevice) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK
+      || !disabledDevice) {
     fprintf(stderr, "placed memory disabled-device setup failed\n");
     goto cleanup;
   }
@@ -139,25 +165,28 @@ gpu_test_placed_memory(GPUAdapter *adapter) {
   bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
                                 GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  result = GPUGetBufferMemoryRequirements(disabledDevice,
-                                          &bufferInfo,
-                                          &bufferMemory);
+  result                      = GPUGetBufferMemoryRequirements(disabledDevice,
+                                                               &bufferInfo,
+                                                               &bufferMemory);
+
   if (result != GPU_ERROR_UNSUPPORTED || bufferMemory.sizeBytes != 0u) {
     fprintf(stderr, "placed memory accepted without feature enablement\n");
     goto cleanup;
   }
+
   GPUDestroyDevice(disabledDevice);
   disabledDevice = NULL;
 
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
-  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
-      !GPUIsFeatureEnabled(device, feature)) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device
+      || !GPUIsFeatureEnabled(device, feature)) {
     fprintf(stderr, "placed memory feature enablement failed\n");
     goto cleanup;
   }
-  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
-  if (!queue) {
+
+  if (!(queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u))) {
     fprintf(stderr, "placed memory queue unavailable\n");
     goto cleanup;
   }
@@ -176,17 +205,18 @@ gpu_test_placed_memory(GPUAdapter *adapter) {
 
   if (GPUGetBufferMemoryRequirements(device,
                                      &bufferInfo,
-                                     &bufferMemory) != GPU_OK ||
-      GPUGetTextureMemoryRequirements(device,
-                                      &textureInfo,
-                                      &textureMemory) != GPU_OK) {
+                                     &bufferMemory) != GPU_OK
+      || GPUGetTextureMemoryRequirements(device,
+                                         &textureInfo,
+                                         &textureMemory) != GPU_OK) {
     fprintf(stderr, "placed memory requirements query failed\n");
     goto cleanup;
   }
+
   compatibility = bufferMemory.compatibilityMask &
                   textureMemory.compatibilityMask;
-  heapSize      = compatibility != 0u &&
-                  bufferMemory.sizeBytes < textureMemory.sizeBytes
+  heapSize      = compatibility != 0u
+                  && bufferMemory.sizeBytes < textureMemory.sizeBytes
                     ? textureMemory.sizeBytes
                     : bufferMemory.sizeBytes;
 
@@ -197,19 +227,22 @@ gpu_test_placed_memory(GPUAdapter *adapter) {
   heapInfo.compatibilityMask = compatibility != 0u
                                  ? compatibility
                                  : bufferMemory.compatibilityMask;
+
   if (GPUCreateHeap(device, &heapInfo, &heap) != GPU_OK || !heap) {
     fprintf(stderr, "placed heap creation failed\n");
     goto cleanup;
   }
+
   if (GPUCreatePlacedBuffer(device,
                             &bufferInfo,
                             heap,
                             heapSize,
-                            &invalidBuffer) != GPU_ERROR_INVALID_ARGUMENT ||
-      invalidBuffer) {
+                            &invalidBuffer) != GPU_ERROR_INVALID_ARGUMENT
+      || invalidBuffer) {
     fprintf(stderr, "placed buffer accepted an out-of-range offset\n");
     goto cleanup;
   }
+
   if (GPUCreatePlacedBuffer(device,
                             &bufferInfo,
                             heap,
@@ -218,6 +251,7 @@ gpu_test_placed_memory(GPUAdapter *adapter) {
     fprintf(stderr, "placed resource creation failed\n");
     goto cleanup;
   }
+
   if (compatibility != 0u) {
     if (GPUCreatePlacedTexture(device,
                                &textureInfo,
@@ -236,15 +270,17 @@ gpu_test_placed_memory(GPUAdapter *adapter) {
       fprintf(stderr, "placed buffer alias creation failed\n");
       goto cleanup;
     }
+
     heapInfo.sizeBytes         = textureMemory.sizeBytes;
     heapInfo.compatibilityMask = textureMemory.compatibilityMask;
-    if (GPUCreateHeap(device, &heapInfo, &textureHeap) != GPU_OK ||
-        !textureHeap ||
-        GPUCreatePlacedTexture(device,
-                               &textureInfo,
-                               textureHeap,
-                               0u,
-                               &texture) != GPU_OK || !texture) {
+
+    if (GPUCreateHeap(device, &heapInfo, &textureHeap) != GPU_OK
+        || !textureHeap
+        || GPUCreatePlacedTexture(device,
+                                  &textureInfo,
+                                  textureHeap,
+                                  0u,
+                                  &texture) != GPU_OK || !texture) {
       fprintf(stderr, "separate placed texture creation failed\n");
       goto cleanup;
     }
@@ -254,46 +290,51 @@ gpu_test_placed_memory(GPUAdapter *adapter) {
                           buffer,
                           0u,
                           input,
-                          sizeof(input)) != GPU_OK ||
-      GPUQueueReadBuffer(queue,
-                         buffer,
-                         0u,
-                         output,
-                         sizeof(output)) != GPU_OK ||
-      memcmp(input, output, sizeof(input)) != 0) {
+                          sizeof(input)) != GPU_OK
+      || GPUQueueReadBuffer(queue,
+                            buffer,
+                            0u,
+                            output,
+                            sizeof(output)) != GPU_OK
+      || memcmp(input, output, sizeof(input)) != 0) {
     fprintf(stderr, "placed buffer upload/readback failed\n");
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "api-placed-alias", &cmdb) != GPU_OK ||
-      !cmdb || GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
+  if (GPUAcquireCommandBuffer(queue, "api-placed-alias", &cmdb) != GPU_OK
+      || !cmdb || GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
     fprintf(stderr, "placed alias command setup failed\n");
     goto cleanup;
   }
+
   aliasingBarrier.beforeBuffer = buffer;
+
   if (aliasBuffer) {
     aliasingBarrier.afterBuffer = aliasBuffer;
   } else {
     aliasingBarrier.afterTexture = texture;
   }
+
   barrierBatch.pAliasingBarriers    = &aliasingBarrier;
   barrierBatch.srcStages            = GPU_STAGE_TRANSFER;
   barrierBatch.dstStages            = GPU_STAGE_FRAGMENT;
   barrierBatch.aliasingBarrierCount = 1u;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  submitList[0]                  = cmdb;
+  submitList[0]                 = cmdb;
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.ppCommandBuffers   = submitList;
   submitInfo.commandBufferCount = 1u;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     cmdb = NULL;
     fprintf(stderr, "placed alias submit failed\n");
     goto cleanup;
   }
+
   cmdb = NULL;
   ok   = 1;
 
@@ -312,52 +353,62 @@ cleanup:
 
 static int
 gpu_test_sparse_memory(GPUAdapter *adapter) {
-  GPUDevice                    *device          = NULL;
-  GPUDevice                    *disabledDevice  = NULL;
-  GPUQueue                     *queue           = NULL;
-  GPUHeap                      *heap            = NULL;
-  GPUHeap                      *bufferHeap      = NULL;
-  GPUTexture                   *texture         = NULL;
-  GPUBuffer                    *sparseBuffer    = NULL;
-  GPUBuffer                    *readback        = NULL;
-  GPUFence                     *fence           = NULL;
-  GPUSemaphore                 *semaphore       = NULL;
-  GPUCommandBuffer             *cmdb            = NULL;
-  GPUTransferPassEncoder           *copyPass        = NULL;
-  uint8_t                      *pixels          = NULL;
-  GPUCommandBuffer             *submitList[1]   = {0};
-  uint32_t                      bufferInput[4]     = {1u, 3u, 5u, 7u};
-  uint32_t                      bufferOutput[4]    = {0};
-  GPUSparseTextureRequirements  requirements       = {0};
-  GPUSparseBufferRequirements   bufferRequirements = {0};
-  GPUDeviceCreateInfo           deviceInfo         = {0};
-  GPUTextureCreateInfo          textureInfo        = {0};
-  GPUBufferCreateInfo           bufferInfo         = {0};
-  GPUBufferCreateInfo           sparseBufferInfo   = {0};
-  GPUHeapCreateInfo             heapInfo           = {0};
-  GPUHeapCreateInfo             bufferHeapInfo     = {0};
-  GPUSparseTextureMapping       mappings[3]        = {0};
-  GPUSparseBufferMapping        bufferMapping      = {0};
-  GPUBufferTextureCopyRegion    copyRegion         = {0};
-  GPUQueueSemaphoreWait         wait               = {0};
-  GPUQueueSemaphoreSignal       signal             = {0};
-  GPUQueueSparseSubmitInfo      submitInfo         = {0};
-  GPUQueueSubmitInfo            copySubmitInfo     = {0};
-  GPUTextureWriteRegion         writeRegion        = {0};
-  uint64_t                      heapTileCount;
-  uint64_t                      heapSize;
-  uint64_t                      pixelSize;
-  uint32_t                      mappingCount;
-  GPUFeature                    feature         = GPU_FEATURE_SPARSE_TEXTURES;
-  GPUFeature                    bufferFeature   = GPU_FEATURE_SPARSE_BUFFERS;
-  GPUResult                     result;
-  bool                          explicitPlacement;
-  int                           ok              = 0;
+  GPUCommandBuffer            *submitList[1]      = {0};
+  uint32_t                     bufferInput[4]     = {1u, 3u, 5u, 7u};
+  uint32_t                     bufferOutput[4]    = {0};
+  GPUSparseTextureRequirements requirements       = {0};
+  GPUSparseBufferRequirements  bufferRequirements = {0};
+  GPUDeviceCreateInfo          deviceInfo         = {0};
+  GPUTextureCreateInfo         textureInfo        = {0};
+  GPUBufferCreateInfo          bufferInfo         = {0};
+  GPUBufferCreateInfo          sparseBufferInfo   = {0};
+  GPUHeapCreateInfo            heapInfo           = {0};
+  GPUHeapCreateInfo            bufferHeapInfo     = {0};
+  GPUSparseTextureMapping      mappings[3]        = {0};
+  GPUSparseBufferMapping       bufferMapping      = {0};
+  GPUBufferTextureCopyRegion   copyRegion         = {0};
+  GPUQueueSemaphoreWait        wait               = {0};
+  GPUQueueSemaphoreSignal      signal             = {0};
+  GPUQueueSparseSubmitInfo     submitInfo         = {0};
+  GPUQueueSubmitInfo           copySubmitInfo     = {0};
+  GPUTextureWriteRegion        writeRegion        = {0};
+  GPUDevice                   *device             = NULL;
+  GPUDevice                   *disabledDevice     = NULL;
+  GPUQueue                    *queue              = NULL;
+  GPUHeap                     *heap               = NULL;
+  GPUHeap                     *bufferHeap         = NULL;
+  GPUTexture                  *texture            = NULL;
+  GPUBuffer                   *sparseBuffer       = NULL;
+  GPUBuffer                   *readback           = NULL;
+  GPUFence                    *fence              = NULL;
+  GPUSemaphore                *semaphore          = NULL;
+  GPUCommandBuffer            *cmdb               = NULL;
+  GPUTransferPassEncoder      *copyPass           = NULL;
+  uint8_t                     *pixels             = NULL;
+  GPUSparseTextureMapping     *baseMapping;
+  GPUSparseTextureMapping     *tailMapping;
+  uint64_t                     heapTileCount;
+  uint64_t                     heapSize;
+  uint64_t                     pixelSize;
+  uint64_t                     tileCount;
+  uint64_t                     fillIndex;
+  uint64_t                     readbackIndex;
+  uint32_t                     mappingCount;
+  GPUFeature                   feature       = GPU_FEATURE_SPARSE_TEXTURES;
+  GPUFeature                   bufferFeature = GPU_FEATURE_SPARSE_BUFFERS;
+  GPUResult                    result;
+  int                          ok = 0;
+  uint32_t                     tailCount;
+  uint32_t                     tailIndex;
+  uint32_t                     mappingIndex;
+  uint32_t                     unmapIndex;
+  bool                         explicitPlacement;
 
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
+
   if (!GPUIsFeatureSupported(adapter, feature)) {
     result = gpu_test_create_device(adapter, &deviceInfo, &device);
     GPUDestroyDevice(device);
@@ -366,8 +417,9 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
 
   deviceInfo.required.pFeatures    = NULL;
   deviceInfo.required.featureCount = 0u;
-  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
-      !disabledDevice) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK
+      || !disabledDevice) {
     fprintf(stderr, "sparse disabled-device setup failed\n");
     goto cleanup;
   }
@@ -385,13 +437,15 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_SRC |
                                  GPU_TEXTURE_USAGE_COPY_DST;
-  result = GPUGetSparseTextureRequirements(disabledDevice,
-                                            &textureInfo,
-                                            &requirements);
+  result                       = GPUGetSparseTextureRequirements(disabledDevice,
+                                                                 &textureInfo,
+                                                                 &requirements);
+
   if (result != GPU_ERROR_UNSUPPORTED || requirements.pageSizeBytes != 0u) {
     fprintf(stderr, "sparse query accepted without feature enablement\n");
     goto cleanup;
   }
+
   GPUDestroyDevice(disabledDevice);
   disabledDevice = NULL;
 
@@ -399,80 +453,86 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   deviceInfo.required.featureCount = 1u;
   deviceInfo.optional.pFeatures    = &bufferFeature;
   deviceInfo.optional.featureCount = 1u;
-  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
-      !GPUIsFeatureEnabled(device, feature)) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device
+      || !GPUIsFeatureEnabled(device, feature)) {
     fprintf(stderr, "sparse feature enablement failed\n");
     goto cleanup;
   }
-  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
-  if (!queue) {
+
+  if (!(queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u))) {
     fprintf(stderr, "sparse queue unavailable\n");
     goto cleanup;
   }
+
   result = GPUGetSparseTextureRequirements(device,
-                                            &textureInfo,
-                                            &requirements);
+                                           &textureInfo,
+                                           &requirements);
+
   if (result == GPU_ERROR_UNSUPPORTED && textureInfo.depthOrLayers > 1u) {
     textureInfo.depthOrLayers = 1u;
-    result = GPUGetSparseTextureRequirements(device,
-                                              &textureInfo,
-                                              &requirements);
+    result                    = GPUGetSparseTextureRequirements(device,
+                                                                &textureInfo,
+                                                                &requirements);
   }
+
   if (result != GPU_OK) {
     fprintf(stderr, "sparse texture requirements query failed\n");
     goto cleanup;
   }
 
-  mappingCount = 0u;
+  mappingCount  = 0u;
   heapTileCount = 0u;
-  if (requirements.firstMipInTail > 0u) {
-    GPUSparseTextureMapping *mapping;
 
-    mapping = &mappings[mappingCount++];
-    mapping->tileWidth =
+  if (requirements.firstMipInTail > 0u) {
+    baseMapping = &mappings[mappingCount++];
+    baseMapping->tileWidth =
       textureInfo.width / requirements.tileWidth +
       (textureInfo.width % requirements.tileWidth != 0u);
-    mapping->tileHeight =
+    baseMapping->tileHeight =
       textureInfo.height / requirements.tileHeight +
       (textureInfo.height % requirements.tileHeight != 0u);
-    mapping->tileDepth  = 1u;
-    mapping->arrayLayer = textureInfo.depthOrLayers > 1u ? 1u : 0u;
-    heapTileCount = (uint64_t)mapping->tileWidth *
-                    mapping->tileHeight * mapping->tileDepth;
+    baseMapping->tileDepth  = 1u;
+    baseMapping->arrayLayer = textureInfo.depthOrLayers > 1u ? 1u : 0u;
+    heapTileCount           = (uint64_t)baseMapping->tileWidth *
+                    baseMapping->tileHeight * baseMapping->tileDepth;
   }
-  if (requirements.firstMipInTail < textureInfo.mipLevelCount) {
-    uint32_t tailCount;
 
+  if (requirements.firstMipInTail < textureInfo.mipLevelCount) {
     tailCount = requirements.mipTailLayerStrideTiles != 0u
                   ? textureInfo.depthOrLayers
                   : 1u;
-    if (tailCount > GPU_ARRAY_LEN(mappings) - mappingCount ||
-        requirements.mipTailTileCount == 0u ||
-        requirements.mipTailTileCount > UINT32_MAX) {
+
+    if (tailCount > GPU_ARRAY_LEN(mappings) - mappingCount
+        || requirements.mipTailTileCount == 0u
+        || requirements.mipTailTileCount > UINT32_MAX) {
       fprintf(stderr, "sparse mip-tail layout is invalid\n");
       goto cleanup;
     }
-    for (uint32_t i = 0u; i < tailCount; i++) {
-      GPUSparseTextureMapping *mapping;
 
-      mapping = &mappings[mappingCount++];
-      mapping->tileWidth  = (uint32_t)requirements.mipTailTileCount;
-      mapping->tileHeight = 1u;
-      mapping->tileDepth  = 1u;
-      mapping->mipLevel   = requirements.firstMipInTail;
-      mapping->arrayLayer = i;
+    for (tailIndex = 0u; tailIndex < tailCount; tailIndex++) {
+      tailMapping             = &mappings[mappingCount++];
+      tailMapping->tileWidth  = (uint32_t)requirements.mipTailTileCount;
+      tailMapping->tileHeight = 1u;
+      tailMapping->tileDepth  = 1u;
+      tailMapping->mipLevel   = requirements.firstMipInTail;
+      tailMapping->arrayLayer = tailIndex;
+
       if (heapTileCount > UINT64_MAX - requirements.mipTailTileCount) {
         fprintf(stderr, "sparse mip-tail size overflow\n");
         goto cleanup;
       }
+
       heapTileCount += requirements.mipTailTileCount;
     }
   }
-  if (mappingCount == 0u || heapTileCount == 0u ||
-      heapTileCount > UINT64_MAX / requirements.pageSizeBytes) {
+
+  if (mappingCount == 0u || heapTileCount == 0u
+      || heapTileCount > UINT64_MAX / requirements.pageSizeBytes) {
     fprintf(stderr, "sparse mapping size is invalid\n");
     goto cleanup;
   }
+
   heapSize = heapTileCount * requirements.pageSizeBytes;
 
   heapInfo.chain.sType       = GPU_STRUCTURE_TYPE_HEAP_CREATE_INFO;
@@ -482,13 +542,14 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   heapInfo.compatibilityMask = requirements.compatibilityMask;
   heapInfo.pageSizeBytes     = requirements.pageSizeBytes;
   heapInfo.usage             = GPU_HEAP_USAGE_SPARSE;
-  if (GPUCreateHeap(device, &heapInfo, &heap) != GPU_OK || !heap ||
-      GPUCreateSparseTexture(device,
-                             &textureInfo,
-                             heap,
-                             &texture) != GPU_OK || !texture ||
-      GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence ||
-      GPUCreateSemaphore(device, NULL, &semaphore) != GPU_OK || !semaphore) {
+
+  if (GPUCreateHeap(device, &heapInfo, &heap) != GPU_OK || !heap
+      || GPUCreateSparseTexture(device,
+                                &textureInfo,
+                                heap,
+                                &texture) != GPU_OK || !texture
+      || GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence
+      || GPUCreateSemaphore(device, NULL, &semaphore) != GPU_OK || !semaphore) {
     fprintf(stderr, "sparse resource setup failed\n");
     goto cleanup;
   }
@@ -500,12 +561,13 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
     sparseBufferInfo.sizeBytes        = sizeof(bufferInput);
     sparseBufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
                                         GPU_BUFFER_USAGE_COPY_DST;
+
     if (GPUGetSparseBufferRequirements(device,
                                        &sparseBufferInfo,
-                                       &bufferRequirements) != GPU_OK ||
-        bufferRequirements.pageSizeBytes == 0u ||
-        bufferRequirements.tileCount == 0u ||
-        bufferRequirements.tileCount >
+                                       &bufferRequirements) != GPU_OK
+        || bufferRequirements.pageSizeBytes == 0u
+        || bufferRequirements.tileCount == 0u
+        || bufferRequirements.tileCount >
           UINT64_MAX / bufferRequirements.pageSizeBytes) {
       fprintf(stderr, "mixed sparse buffer requirements failed\n");
       goto cleanup;
@@ -519,13 +581,14 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
     bufferHeapInfo.compatibilityMask = bufferRequirements.compatibilityMask;
     bufferHeapInfo.pageSizeBytes     = bufferRequirements.pageSizeBytes;
     bufferHeapInfo.usage             = GPU_HEAP_USAGE_SPARSE;
-    if (GPUCreateHeap(device, &bufferHeapInfo, &bufferHeap) != GPU_OK ||
-        !bufferHeap ||
-        GPUCreateSparseBuffer(device,
-                              &sparseBufferInfo,
-                              bufferHeap,
-                              &sparseBuffer) != GPU_OK ||
-        !sparseBuffer) {
+
+    if (GPUCreateHeap(device, &bufferHeapInfo, &bufferHeap) != GPU_OK
+        || !bufferHeap
+        || GPUCreateSparseBuffer(device,
+                                 &sparseBufferInfo,
+                                 bufferHeap,
+                                 &sparseBuffer) != GPU_OK
+        || !sparseBuffer) {
       fprintf(stderr, "mixed sparse buffer setup failed\n");
       goto cleanup;
     }
@@ -538,80 +601,85 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
     submitInfo.bufferMappingCount = 1u;
   }
 
-  explicitPlacement      = GPUIsFeatureEnabled(
-    device,
-    GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT
-  );
-  heapTileCount = 0u;
-  for (uint32_t i = 0u; i < mappingCount; i++) {
-    uint64_t tileCount;
+  explicitPlacement = GPUIsFeatureEnabled(device,
+                                          GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT);
+  heapTileCount     = 0u;
 
-    tileCount = (uint64_t)mappings[i].tileWidth *
-                mappings[i].tileHeight * mappings[i].tileDepth;
-    mappings[i].texture        = texture;
-    mappings[i].heap           = heap;
-    mappings[i].heapTileOffset = explicitPlacement
-                                   ? heapTileCount
-                                   : GPU_SPARSE_HEAP_TILE_AUTO;
-    mappings[i].mode           = GPU_SPARSE_MAPPING_MAP;
+  for (mappingIndex = 0u; mappingIndex < mappingCount; mappingIndex++) {
+    tileCount = (uint64_t)mappings[mappingIndex].tileWidth *
+                mappings[mappingIndex].tileHeight * mappings[mappingIndex].tileDepth;
+    mappings[mappingIndex].texture        = texture;
+    mappings[mappingIndex].heap           = heap;
+    mappings[mappingIndex].heapTileOffset = explicitPlacement
+                                              ? heapTileCount
+                                              : GPU_SPARSE_HEAP_TILE_AUTO;
+    mappings[mappingIndex].mode           = GPU_SPARSE_MAPPING_MAP;
     heapTileCount += tileCount;
   }
-  signal.semaphore       = semaphore;
-  signal.value           = 1u;
-  submitInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SPARSE_SUBMIT_INFO;
+
+  signal.semaphore               = semaphore;
+  signal.value                   = 1u;
+  submitInfo.chain.sType         = GPU_STRUCTURE_TYPE_QUEUE_SPARSE_SUBMIT_INFO;
   submitInfo.chain.structSize    = sizeof(submitInfo);
   submitInfo.pTextureMappings    = mappings;
   submitInfo.pSignals            = &signal;
   submitInfo.fence               = fence;
   submitInfo.textureMappingCount = mappingCount;
   submitInfo.signalCount         = 1u;
-  mappings[0].heapTileOffset = explicitPlacement
+  mappings[0].heapTileOffset     = explicitPlacement
                                  ? GPU_SPARSE_HEAP_TILE_AUTO
                                  : 0u;
-  if (GPUQueueSubmitSparse(queue, &submitInfo) !=
-      GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "sparse placement mode validation failed\n");
     goto cleanup;
   }
+
   mappings[0].heapTileOffset = explicitPlacement
                                  ? 0u
                                  : GPU_SPARSE_HEAP_TILE_AUTO;
-  submitInfo.fence = NULL;
+  submitInfo.fence           = NULL;
+
   if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK) {
     fprintf(stderr, "fenceless sparse map submit failed\n");
     goto cleanup;
   }
-  signal.value      = 2u;
+
+  signal.value     = 2u;
   submitInfo.fence = fence;
-  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "sparse map submit failed\n");
     goto cleanup;
   }
-  if (sparseBuffer &&
-      (GPUQueueWriteBuffer(queue,
-                           sparseBuffer,
-                           0u,
-                           bufferInput,
-                           sizeof(bufferInput)) != GPU_OK ||
-       GPUQueueReadBuffer(queue,
-                          sparseBuffer,
-                          0u,
-                          bufferOutput,
-                          sizeof(bufferOutput)) != GPU_OK ||
-       memcmp(bufferInput, bufferOutput, sizeof(bufferInput)) != 0)) {
+
+  if (sparseBuffer
+      && (GPUQueueWriteBuffer(queue,
+                              sparseBuffer,
+                              0u,
+                              bufferInput,
+                              sizeof(bufferInput)) != GPU_OK
+          || GPUQueueReadBuffer(queue,
+                                sparseBuffer,
+                                0u,
+                                bufferOutput,
+                                sizeof(bufferOutput)) != GPU_OK
+          || memcmp(bufferInput, bufferOutput, sizeof(bufferInput)) != 0)) {
     fprintf(stderr, "mixed sparse buffer readback failed\n");
     goto cleanup;
   }
 
   pixelSize = (uint64_t)textureInfo.width * textureInfo.height * 4u;
-  pixels    = malloc((size_t)pixelSize);
-  if (!pixels) {
+
+  if (!(pixels = malloc((size_t)pixelSize))) {
     goto cleanup;
   }
-  for (uint64_t i = 0u; i < pixelSize; i++) {
-    pixels[i] = (uint8_t)(i * 17u + 3u);
+
+  for (fillIndex = 0u; fillIndex < pixelSize; fillIndex++) {
+    pixels[fillIndex] = (uint8_t)(fillIndex * 17u + 3u);
   }
+
   writeRegion.aspect         = GPU_TEXTURE_ASPECT_ALL;
   writeRegion.width          = textureInfo.width;
   writeRegion.height         = textureInfo.height;
@@ -620,6 +688,7 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   writeRegion.layerCount     = 1u;
   writeRegion.bytesPerRow    = textureInfo.width * 4u;
   writeRegion.rowsPerImage   = textureInfo.height;
+
   if (GPUQueueWriteTexture(queue,
                            texture,
                            &writeRegion,
@@ -635,15 +704,16 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   bufferInfo.sizeBytes        = pixelSize;
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK ||
-      !readback ||
-      GPUAcquireCommandBuffer(queue, "api-sparse-readback", &cmdb) != GPU_OK ||
-      !cmdb || !(copyPass = GPUBeginTransferPass(cmdb, "api-sparse-readback"))) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK
+      || !readback
+      || GPUAcquireCommandBuffer(queue, "api-sparse-readback", &cmdb) != GPU_OK
+      || !cmdb || !(copyPass = GPUBeginTransferPass(cmdb, "api-sparse-readback"))) {
     fprintf(stderr, "sparse texture readback setup failed\n");
     goto cleanup;
   }
-  copyRegion.texture.texture.baseArrayLayer =
-    textureInfo.depthOrLayers > 1u ? 1u : 0u;
+
+  copyRegion.texture.texture.baseArrayLayer = textureInfo.depthOrLayers > 1u ? 1u : 0u;
   copyRegion.texture.width                  = textureInfo.width;
   copyRegion.texture.height                 = textureInfo.height;
   copyRegion.texture.depth                  = 1u;
@@ -655,38 +725,45 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   copyPass = NULL;
 
   GPUResetFence(fence);
-  submitList[0]                      = cmdb;
+  submitList[0]                     = cmdb;
   copySubmitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   copySubmitInfo.chain.structSize   = sizeof(copySubmitInfo);
   copySubmitInfo.ppCommandBuffers   = submitList;
   copySubmitInfo.fence              = fence;
   copySubmitInfo.commandBufferCount = 1u;
-  if (GPUQueueSubmit(queue, &copySubmitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmit(queue, &copySubmitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     cmdb = NULL;
     fprintf(stderr, "sparse texture readback submit failed\n");
     goto cleanup;
   }
+
   cmdb = NULL;
   memset(pixels, 0, (size_t)pixelSize);
+
   if (GPUQueueReadBuffer(queue, readback, 0u, pixels, pixelSize) != GPU_OK) {
     fprintf(stderr, "sparse texture readback failed\n");
     goto cleanup;
   }
-  for (uint64_t i = 0u; i < pixelSize; i++) {
-    if (pixels[i] != (uint8_t)(i * 17u + 3u)) {
+
+  for (readbackIndex = 0u; readbackIndex < pixelSize; readbackIndex++) {
+    if (pixels[readbackIndex] != (uint8_t)(readbackIndex * 17u + 3u)) {
       fprintf(stderr, "sparse texture readback mismatch\n");
       goto cleanup;
     }
   }
 
   GPUResetFence(fence);
-  for (uint32_t i = 0u; i < mappingCount; i++) {
-    mappings[i].mode = GPU_SPARSE_MAPPING_UNMAP;
+
+  for (unmapIndex = 0u; unmapIndex < mappingCount; unmapIndex++) {
+    mappings[unmapIndex].mode = GPU_SPARSE_MAPPING_UNMAP;
   }
+
   if (sparseBuffer) {
     bufferMapping.mode = GPU_SPARSE_MAPPING_UNMAP;
   }
+
   wait.semaphore         = semaphore;
   wait.value             = 2u;
   wait.waitStages        = GPU_STAGE_TRANSFER;
@@ -694,11 +771,13 @@ gpu_test_sparse_memory(GPUAdapter *adapter) {
   submitInfo.pSignals    = NULL;
   submitInfo.waitCount   = 1u;
   submitInfo.signalCount = 0u;
-  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "sparse unmap submit failed\n");
     goto cleanup;
   }
+
   ok = 1;
 
 cleanup:
@@ -717,31 +796,33 @@ cleanup:
 
 static int
 gpu_test_sparse_buffer_memory(GPUAdapter *adapter) {
-  GPUDevice                    *device         = NULL;
-  GPUDevice                    *disabledDevice = NULL;
-  GPUQueue                     *queue          = NULL;
-  GPUHeap                      *heap           = NULL;
-  GPUBuffer                    *buffer         = NULL;
-  GPUFence                     *fence          = NULL;
-  uint8_t                      *input          = NULL;
-  uint8_t                      *output         = NULL;
-  GPUSparseBufferRequirements  requirements   = {0};
-  GPUDeviceCreateInfo          deviceInfo     = {0};
-  GPUBufferCreateInfo          bufferInfo     = {0};
-  GPUHeapCreateInfo            heapInfo       = {0};
-  GPUSparseBufferMapping       mapping        = {0};
-  GPUQueueSparseSubmitInfo     submitInfo     = {0};
-  GPUFeature                   feature        = GPU_FEATURE_SPARSE_BUFFERS;
-  GPUResult                    result;
-  uint64_t                     heapSize;
-  uint64_t                     partialByteOffset;
-  uint64_t                     partialByteSize;
-  int                          ok             = 0;
+  GPUSparseBufferRequirements requirements   = {0};
+  GPUDeviceCreateInfo         deviceInfo     = {0};
+  GPUBufferCreateInfo         bufferInfo     = {0};
+  GPUHeapCreateInfo           heapInfo       = {0};
+  GPUSparseBufferMapping      mapping        = {0};
+  GPUQueueSparseSubmitInfo    submitInfo     = {0};
+  GPUDevice                  *device         = NULL;
+  GPUDevice                  *disabledDevice = NULL;
+  GPUQueue                   *queue          = NULL;
+  GPUHeap                    *heap           = NULL;
+  GPUBuffer                  *buffer         = NULL;
+  GPUFence                   *fence          = NULL;
+  uint8_t                    *input          = NULL;
+  uint8_t                    *output         = NULL;
+  uint64_t                    heapSize;
+  uint64_t                    partialByteOffset;
+  uint64_t                    partialByteSize;
+  uint64_t                    i;
+  GPUFeature                  feature = GPU_FEATURE_SPARSE_BUFFERS;
+  GPUResult                   result;
+  int                         ok = 0;
 
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
+
   if (!GPUIsFeatureSupported(adapter, feature)) {
     result = gpu_test_create_device(adapter, &deviceInfo, &device);
     GPUDestroyDevice(device);
@@ -750,8 +831,9 @@ gpu_test_sparse_buffer_memory(GPUAdapter *adapter) {
 
   deviceInfo.required.pFeatures    = NULL;
   deviceInfo.required.featureCount = 0u;
-  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
-      !disabledDevice) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK
+      || !disabledDevice) {
     fprintf(stderr, "sparse buffer disabled-device setup failed\n");
     goto cleanup;
   }
@@ -762,38 +844,43 @@ gpu_test_sparse_buffer_memory(GPUAdapter *adapter) {
   bufferInfo.sizeBytes        = 257u * 1024u;
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  result = GPUGetSparseBufferRequirements(disabledDevice,
-                                           &bufferInfo,
-                                           &requirements);
+  result                      = GPUGetSparseBufferRequirements(disabledDevice,
+                                                               &bufferInfo,
+                                                               &requirements);
+
   if (result != GPU_ERROR_UNSUPPORTED || requirements.tileCount != 0u) {
     fprintf(stderr, "sparse buffer query accepted without feature\n");
     goto cleanup;
   }
+
   GPUDestroyDevice(disabledDevice);
   disabledDevice = NULL;
 
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
-  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
-      !GPUIsFeatureEnabled(device, feature) ||
-      !GPUIsFeatureEnabled(device,
-                           GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT)) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device
+      || !GPUIsFeatureEnabled(device, feature)
+      || !GPUIsFeatureEnabled(device,
+                              GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT)) {
     fprintf(stderr, "sparse buffer feature enablement failed\n");
     goto cleanup;
   }
+
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
-  if (!queue ||
-      GPUGetSparseBufferRequirements(device,
-                                     &bufferInfo,
-                                     &requirements) != GPU_OK ||
-      requirements.pageSizeBytes == 0u || requirements.tileCount == 0u ||
-      requirements.tileCount >
+
+  if (!queue
+      || GPUGetSparseBufferRequirements(device,
+                                        &bufferInfo,
+                                        &requirements) != GPU_OK
+      || requirements.pageSizeBytes == 0u || requirements.tileCount == 0u
+      || requirements.tileCount >
         UINT64_MAX / requirements.pageSizeBytes) {
     fprintf(stderr, "sparse buffer requirements query failed\n");
     goto cleanup;
   }
 
-  heapSize = requirements.tileCount * requirements.pageSizeBytes;
+  heapSize                   = requirements.tileCount * requirements.pageSizeBytes;
   heapInfo.chain.sType       = GPU_STRUCTURE_TYPE_HEAP_CREATE_INFO;
   heapInfo.chain.structSize  = sizeof(heapInfo);
   heapInfo.label             = "api-sparse-buffer-heap";
@@ -801,12 +888,13 @@ gpu_test_sparse_buffer_memory(GPUAdapter *adapter) {
   heapInfo.compatibilityMask = requirements.compatibilityMask;
   heapInfo.pageSizeBytes     = requirements.pageSizeBytes;
   heapInfo.usage             = GPU_HEAP_USAGE_SPARSE;
-  if (GPUCreateHeap(device, &heapInfo, &heap) != GPU_OK || !heap ||
-      GPUCreateSparseBuffer(device,
-                            &bufferInfo,
-                            heap,
-                            &buffer) != GPU_OK || !buffer ||
-      GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
+
+  if (GPUCreateHeap(device, &heapInfo, &heap) != GPU_OK || !heap
+      || GPUCreateSparseBuffer(device,
+                               &bufferInfo,
+                               heap,
+                               &buffer) != GPU_OK || !buffer
+      || GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
     fprintf(stderr, "sparse buffer resource setup failed\n");
     goto cleanup;
   }
@@ -821,54 +909,61 @@ gpu_test_sparse_buffer_memory(GPUAdapter *adapter) {
   submitInfo.pBufferMappings    = &mapping;
   submitInfo.fence              = fence;
   submitInfo.bufferMappingCount = 1u;
-  if (GPUQueueSubmitSparse(queue, &submitInfo) !=
-      GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "sparse buffer AUTO placement was accepted\n");
     goto cleanup;
   }
+
   mapping.heapTileOffset   = 0u;
   mapping.bufferTileOffset = requirements.tileCount;
   mapping.tileCount        = 1u;
-  if (GPUQueueSubmitSparse(queue, &submitInfo) !=
-      GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "sparse buffer range overflow was accepted\n");
     goto cleanup;
   }
+
   mapping.bufferTileOffset = 0u;
   mapping.tileCount        = requirements.tileCount;
-  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "sparse buffer map submit failed\n");
     goto cleanup;
   }
 
   input  = malloc((size_t)bufferInfo.sizeBytes);
   output = malloc((size_t)bufferInfo.sizeBytes);
+
   if (!input || !output) {
     goto cleanup;
   }
-  for (uint64_t i = 0u; i < bufferInfo.sizeBytes; i++) {
+
+  for (i = 0u; i < bufferInfo.sizeBytes; i++) {
     input[i] = (uint8_t)(i * 29u + 7u);
   }
+
   if (GPUQueueWriteBuffer(queue,
                           buffer,
                           0u,
                           input,
-                          bufferInfo.sizeBytes) != GPU_OK ||
-      GPUQueueReadBuffer(queue,
-                         buffer,
-                         0u,
-                         output,
-                         bufferInfo.sizeBytes) != GPU_OK ||
-      memcmp(input, output, (size_t)bufferInfo.sizeBytes) != 0) {
+                          bufferInfo.sizeBytes) != GPU_OK
+      || GPUQueueReadBuffer(queue,
+                            buffer,
+                            0u,
+                            output,
+                            bufferInfo.sizeBytes) != GPU_OK
+      || memcmp(input, output, (size_t)bufferInfo.sizeBytes) != 0) {
     fprintf(stderr, "sparse buffer upload/readback failed\n");
     goto cleanup;
   }
 
   GPUResetFence(fence);
   mapping.mode = GPU_SPARSE_MAPPING_UNMAP;
-  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "sparse buffer unmap submit failed\n");
     goto cleanup;
   }
@@ -882,40 +977,45 @@ gpu_test_sparse_buffer_memory(GPUAdapter *adapter) {
   partialByteOffset        = mapping.bufferTileOffset *
                              requirements.pageSizeBytes;
   partialByteSize          = mapping.tileCount * requirements.pageSizeBytes;
+
   if (partialByteOffset >= bufferInfo.sizeBytes) {
     fprintf(stderr, "sparse buffer partial range is invalid\n");
     goto cleanup;
   }
+
   if (partialByteSize > bufferInfo.sizeBytes - partialByteOffset) {
     partialByteSize = bufferInfo.sizeBytes - partialByteOffset;
   }
 
   memset(output, 0, (size_t)partialByteSize);
   GPUResetFence(fence);
-  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
-      GPUQueueWriteBuffer(queue,
-                          buffer,
-                          partialByteOffset,
-                          input,
-                          partialByteSize) != GPU_OK ||
-      GPUQueueReadBuffer(queue,
-                         buffer,
-                         partialByteOffset,
-                         output,
-                         partialByteSize) != GPU_OK ||
-      memcmp(input, output, (size_t)partialByteSize) != 0) {
+
+  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK
+      || GPUQueueWriteBuffer(queue,
+                             buffer,
+                             partialByteOffset,
+                             input,
+                             partialByteSize) != GPU_OK
+      || GPUQueueReadBuffer(queue,
+                            buffer,
+                            partialByteOffset,
+                            output,
+                            partialByteSize) != GPU_OK
+      || memcmp(input, output, (size_t)partialByteSize) != 0) {
     fprintf(stderr, "sparse buffer partial mapping failed\n");
     goto cleanup;
   }
 
   GPUResetFence(fence);
   mapping.mode = GPU_SPARSE_MAPPING_UNMAP;
-  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmitSparse(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "sparse buffer partial unmap failed\n");
     goto cleanup;
   }
+
   ok = 1;
 
 cleanup:
@@ -931,8 +1031,8 @@ cleanup:
 
 int
 gpu_test_memory(GPUAdapter *adapter) {
-  return gpu_test_buffer_device_address(adapter) &&
-         gpu_test_placed_memory(adapter) &&
-         gpu_test_sparse_memory(adapter) &&
-         gpu_test_sparse_buffer_memory(adapter);
+  return gpu_test_buffer_device_address(adapter)
+         && gpu_test_placed_memory(adapter)
+         && gpu_test_sparse_memory(adapter)
+         && gpu_test_sparse_buffer_memory(adapter);
 }

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef gpu_sample_platform_h
 #define gpu_sample_platform_h
 
@@ -10,7 +26,25 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-typedef void (*WebGPUReadyCallback)(GPUResult  result,
+#define emscripten_set_main_loop_arg(callback, userData, fps, simulate) \
+  gpu_android_set_main_loop((callback), (userData), (fps), (simulate))
+#define emscripten_cancel_main_loop() gpu_android_cancel_main_loop()
+#define emscripten_get_now() gpu_android_get_now()
+#define emscripten_get_preloaded_image_data(path, width, height) \
+  gpu_android_load_image((path), (width), (height))
+
+#define GPUCreateInstance gpu_android_sample_create_instance
+#define GPUCreateSurfaceFromNative gpu_android_sample_create_surface
+#define GPUCreateSwapchainDefault gpu_android_sample_create_swapchain
+#if !defined(GPU_SAMPLE_PLATFORM_IMPLEMENTATION)
+#  define GPUFrameGetTargetView gpu_android_frame_target_view
+#  define GPUBeginRenderPass gpu_android_begin_render_pass
+#  define GPUEndRenderPass gpu_android_end_render_pass
+#  define GPUSetViewport gpu_android_set_viewport
+#  define GPUSetScissor gpu_android_set_scissor
+#endif
+
+typedef void (*WebGPUReadyCallback)(GPUResult   result,
                                     GPUAdapter *adapter,
                                     GPUDevice  *device,
                                     void       *userData);
@@ -73,11 +107,11 @@ gpu_android_sample_create_instance(const GPUInstanceCreateInfo *info,
                                    GPUInstance                **outInstance);
 
 GPUSurface*
-gpu_android_sample_create_surface(GPUInstance          *instance,
-                                  GPUAdapter           *adapter,
-                                  void                 *nativeHandle,
-                                  GPUSurfaceType        nativeType,
-                                  float                 contentScale);
+gpu_android_sample_create_surface(GPUInstance   *instance,
+                                  GPUAdapter    *adapter,
+                                  void          *nativeHandle,
+                                  GPUSurfaceType nativeType,
+                                  float          contentScale);
 
 GPUSwapchain*
 gpu_android_sample_create_swapchain(GPUDevice  *device,
@@ -89,37 +123,19 @@ GPUTextureView*
 gpu_android_frame_target_view(GPUFrame *frame);
 
 GPURenderPassEncoder*
-gpu_android_begin_render_pass(GPUCommandBuffer               *cmdb,
-                              const GPURenderPassCreateInfo   *info);
+gpu_android_begin_render_pass(GPUCommandBuffer              *cmdb,
+                              const GPURenderPassCreateInfo *info);
 
 void
 gpu_android_end_render_pass(GPURenderPassEncoder *pass);
 
 void
 gpu_android_set_viewport(GPURenderPassEncoder *pass,
-                         const GPUViewport     *viewport);
+                         const GPUViewport    *viewport);
 
 void
 gpu_android_set_scissor(GPURenderPassEncoder *pass,
-                        const GPUScissorRect  *scissor);
-
-#define emscripten_set_main_loop_arg(callback, userData, fps, simulate) \
-  gpu_android_set_main_loop((callback), (userData), (fps), (simulate))
-#define emscripten_cancel_main_loop() gpu_android_cancel_main_loop()
-#define emscripten_get_now() gpu_android_get_now()
-#define emscripten_get_preloaded_image_data(path, width, height) \
-  gpu_android_load_image((path), (width), (height))
-
-#define GPUCreateInstance gpu_android_sample_create_instance
-#define GPUCreateSurfaceFromNative gpu_android_sample_create_surface
-#define GPUCreateSwapchainDefault gpu_android_sample_create_swapchain
-#if !defined(GPU_SAMPLE_PLATFORM_IMPLEMENTATION)
-#  define GPUFrameGetTargetView gpu_android_frame_target_view
-#  define GPUBeginRenderPass gpu_android_begin_render_pass
-#  define GPUEndRenderPass gpu_android_end_render_pass
-#  define GPUSetViewport gpu_android_set_viewport
-#  define GPUSetScissor gpu_android_set_scissor
-#endif
+                        const GPUScissorRect *scissor);
 
 #elif defined(GPU_SAMPLE_GALLERY_APPLE)
 
@@ -192,6 +208,7 @@ gpu_sample_aspect_ratio(uint32_t width, uint32_t height) {
 #if defined(__ANDROID__)
   (void)width;
   (void)height;
+
   return 16.0f / 10.0f;
 #else
   return height > 0u ? (float)width / (float)height : 1.0f;
@@ -203,9 +220,11 @@ gpu_sample_elapsed_seconds(double *origin) {
   double now;
 
   now = emscripten_get_now() * 0.001;
+
   if (*origin <= 0.0) {
     *origin = now;
   }
+
   return now - *origin;
 }
 

@@ -1,17 +1,42 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/apple.h"
 #include "../../common/sample_orbit.h"
 
 #import <AppKit/AppKit.h>
 
-extern int
-gpu_apple_sample_start(void);
-
 #ifndef GPU_APPLE_SAMPLE_NAME
 #  define GPU_APPLE_SAMPLE_NAME "GPU + USL Sample"
 #endif
 
-@interface GPUSampleView: NSView
+@interface GPUSampleView : NSView
 @end
+
+@interface GPUSampleHost : NSObject <NSApplicationDelegate, NSWindowDelegate> {
+  NSWindow            *_window;
+  NSView              *_view;
+  NSProgressIndicator *_progress;
+  NSTimer             *_timer;
+  GPUAppleSample      *_sample;
+}
+@end
+
+extern int
+gpu_apple_sample_start(void);
 
 @implementation GPUSampleView
 
@@ -48,15 +73,6 @@ gpu_apple_sample_start(void);
 
 @end
 
-@interface GPUSampleHost: NSObject <NSApplicationDelegate, NSWindowDelegate> {
-  NSWindow            *_window;
-  NSView              *_view;
-  NSProgressIndicator *_progress;
-  NSTimer             *_timer;
-  GPUAppleSample      *_sample;
-}
-@end
-
 @implementation GPUSampleHost
 
 - (void)installMainMenu {
@@ -75,7 +91,9 @@ gpu_apple_sample_start(void);
                                                action:@selector(terminate:)
                                         keyEquivalent:@"q"];
   quitItem.target = NSApp;
+
   quitItem.keyEquivalentModifierMask = NSEventModifierFlagCommand;
+
   [applicationMenu addItem:quitItem];
   applicationItem.submenu = applicationMenu;
   [mainMenu addItem:applicationItem];
@@ -101,6 +119,7 @@ gpu_apple_sample_start(void);
 
 - (void)stopSample {
   [self stopTimer];
+
   if (_sample) {
     GPUSampleAppleStop(_sample);
     _sample = NULL;
@@ -113,28 +132,32 @@ gpu_apple_sample_start(void);
 
   (void)notification;
   [self installMainMenu];
-  frame = NSMakeRect(0.0, 0.0, 1120.0, 720.0);
-  _window = [[NSWindow alloc]
-    initWithContentRect:frame
-              styleMask:NSWindowStyleMaskTitled |
-                        NSWindowStyleMaskClosable |
-                        NSWindowStyleMaskMiniaturizable |
-                        NSWindowStyleMaskResizable
-                backing:NSBackingStoreBuffered
-                  defer:NO];
+
+  frame   = NSMakeRect(0.0, 0.0, 1120.0, 720.0);
+  _window = [[NSWindow alloc] initWithContentRect:frame
+                                        styleMask:NSWindowStyleMaskTitled
+                                                  | NSWindowStyleMaskClosable
+                                                  | NSWindowStyleMaskMiniaturizable
+                                                  | NSWindowStyleMaskResizable
+                                          backing:NSBackingStoreBuffered
+                                            defer:NO];
+
   _window.title           = @GPU_APPLE_SAMPLE_NAME;
   _window.delegate        = self;
   _window.backgroundColor = NSColor.blackColor;
-  _view = [[GPUSampleView alloc] initWithFrame:frame];
-  _view.wantsLayer = YES;
-  _view.layer.backgroundColor = NSColor.blackColor.CGColor;
-  _view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  _window.contentView    = _view;
 
-  _progress = [NSProgressIndicator new];
-  _progress.style = NSProgressIndicatorStyleSpinning;
+  _view                       = [[GPUSampleView alloc] initWithFrame:frame];
+  _view.wantsLayer            = YES;
+  _view.layer.backgroundColor = NSColor.blackColor.CGColor;
+  _view.autoresizingMask      = NSViewWidthSizable | NSViewHeightSizable;
+  _window.contentView         = _view;
+
+  _progress             = [NSProgressIndicator new];
+  _progress.style       = NSProgressIndicatorStyleSpinning;
   _progress.controlSize = NSControlSizeRegular;
+
   _progress.translatesAutoresizingMaskIntoConstraints = NO;
+
   [_view addSubview:_progress];
   [NSLayoutConstraint activateConstraints:@[
     [_progress.centerXAnchor constraintEqualToAnchor:_view.centerXAnchor],
@@ -147,12 +170,13 @@ gpu_apple_sample_start(void);
   [_window makeFirstResponder:_view];
   [NSApp activateIgnoringOtherApps:YES];
 
-  scale   = (float)(_window.backingScaleFactor ?: 1.0);
-  _sample = GPUSampleAppleCreate((__bridge void *)_view,
-                                 GPU_APPLE_SAMPLE_NAME,
-                                 scale,
-                                 gpu_apple_sample_start);
-  if (!_sample || GPUSampleAppleFailed(_sample)) {
+  scale = (float)(_window.backingScaleFactor ?: 1.0);
+
+  if (!(_sample = GPUSampleAppleCreate((__bridge void *)_view,
+                                       GPU_APPLE_SAMPLE_NAME,
+                                       scale,
+                                       gpu_apple_sample_start))
+      || GPUSampleAppleFailed(_sample)) {
     NSLog(@"%s", GPUSampleAppleStatus(_sample));
     [NSApp terminate:nil];
     return;
@@ -163,10 +187,12 @@ gpu_apple_sample_start(void);
 
 - (void)render:(NSTimer *)timer {
   (void)timer;
+
   if (!GPUSampleAppleRender(_sample)) {
     [self stopTimer];
     return;
   }
+
   if (!_progress.hidden && GPUSampleAppleHasRenderedFrame(_sample)) {
     [_progress stopAnimation:nil];
     _progress.hidden = YES;
@@ -194,8 +220,7 @@ gpu_apple_sample_start(void);
   [NSApp terminate:nil];
 }
 
-- (BOOL)applicationShouldTerminateAfterLastWindowClosed:
-  (NSApplication *)sender {
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
   (void)sender;
   return YES;
 }
@@ -216,5 +241,6 @@ main(int argc, const char *argv[]) {
     [NSApp activateIgnoringOtherApps:YES];
     [NSApp run];
   }
+
   return 0;
 }

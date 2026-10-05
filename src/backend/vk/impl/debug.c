@@ -20,45 +20,52 @@
 #  include <android/log.h>
 #endif
 
-static const char *
+static const char*
 vk_debugSeverityName(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
   if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
     return "ERROR";
   }
+
   if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
     return "WARNING";
   }
+
   if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
     return "INFO";
   }
+
   return "VERBOSE";
 }
 
-static const char *
+static const char*
 vk_debugTypeName(VkDebugUtilsMessageTypeFlagsEXT type) {
-  if ((type & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) &&
-      (type & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)) {
+  if ((type & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
+      && (type & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)) {
     return "VALIDATION|PERFORMANCE";
   }
+
   if (type & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) {
     return "VALIDATION";
   }
+
   if (type & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) {
     return "PERFORMANCE";
   }
+
   return "GENERAL";
 }
 
 static void
 vk_debugLog(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-            const char                                *format,
+            const char                            *format,
             ...) {
   va_list args;
+#if defined(__ANDROID__)
+  int     priority;
+#endif
 
   va_start(args, format);
 #if defined(__ANDROID__)
-  int priority;
-
   if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
     priority = ANDROID_LOG_ERROR;
   } else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
@@ -68,6 +75,7 @@ vk_debugLog(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
   } else {
     priority = ANDROID_LOG_VERBOSE;
   }
+
   __android_log_vprint(priority, GPU_VK_APP_NAME, format, args);
 #else
   vfprintf(stderr, format, args);
@@ -83,7 +91,12 @@ vk__debug_messengercb(VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverit
                       VkDebugUtilsMessageTypeFlagsEXT             messageType,
                       const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
                       void                                       *pUserData) {
-  GPUInstance *inst;
+  GPUInstance                         *inst;
+  const VkDebugUtilsObjectNameInfoEXT *info;
+  const VkDebugUtilsLabelEXT          *label;
+  uint32_t                             object;
+  VkObjectType                         type;
+  uint32_t                             i;
 
   if (!(inst = pUserData) || !pCallbackData) {
     return false;
@@ -106,21 +119,20 @@ vk__debug_messengercb(VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverit
     vk_debugLog(messageSeverity,
                 "\n\tObjects - %u\n",
                 pCallbackData->objectCount);
-    for (uint32_t object = 0; object < pCallbackData->objectCount; ++object) {
-      const VkDebugUtilsObjectNameInfoEXT *info;
-      VkObjectType                         type;
 
+    for (object = 0; object < pCallbackData->objectCount; ++object) {
       info = &pCallbackData->pObjects[object];
       type = info->objectType;
       vk_debugLog(messageSeverity,
                   "\t\tObject[%u] - %s",
                   object,
                   string_VkObjectType(type));
-      if (type == VK_OBJECT_TYPE_INSTANCE ||
-          type == VK_OBJECT_TYPE_PHYSICAL_DEVICE ||
-          type == VK_OBJECT_TYPE_DEVICE ||
-          type == VK_OBJECT_TYPE_COMMAND_BUFFER ||
-          type == VK_OBJECT_TYPE_QUEUE) {
+
+      if (type == VK_OBJECT_TYPE_INSTANCE
+          || type == VK_OBJECT_TYPE_PHYSICAL_DEVICE
+          || type == VK_OBJECT_TYPE_DEVICE
+          || type == VK_OBJECT_TYPE_COMMAND_BUFFER
+          || type == VK_OBJECT_TYPE_QUEUE) {
         vk_debugLog(messageSeverity,
                     ", Handle %p",
                     (void *)(uintptr_t)info->objectHandle);
@@ -129,9 +141,11 @@ vk__debug_messengercb(VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverit
                     ", Handle 0x%" PRIx64,
                     info->objectHandle);
       }
+
       if (info->pObjectName && info->pObjectName[0] != '\0') {
         vk_debugLog(messageSeverity, ", Name \"%s\"", info->pObjectName);
       }
+
       vk_debugLog(messageSeverity, "\n");
     }
   }
@@ -140,9 +154,8 @@ vk__debug_messengercb(VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverit
     vk_debugLog(messageSeverity,
                 "\n\tCommand Buffer Labels - %u\n",
                 pCallbackData->cmdBufLabelCount);
-    for (uint32_t i = 0; i < pCallbackData->cmdBufLabelCount; ++i) {
-      const VkDebugUtilsLabelEXT *label;
 
+    for (i = 0; i < pCallbackData->cmdBufLabelCount; ++i) {
       label = &pCallbackData->pCmdBufLabels[i];
       vk_debugLog(messageSeverity,
                   "\t\tLabel[%u] - %s { %f, %f, %f, %f}\n",
@@ -154,5 +167,6 @@ vk__debug_messengercb(VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverit
                   label->color[3]);
     }
   }
+
   return false;
 }

@@ -42,15 +42,15 @@ typedef struct TextureUploadConfig {
 } TextureUploadConfig;
 
 typedef struct TextureUpload {
-  GPUInstance     *instance;
-  GPUAdapter      *adapter;
-  GPUDevice       *device;
-  GPUQueue        *queue;
-  GPUTexture      *texture;
-  GPUFence        *fence;
-  void            *bytes;
-  uint64_t         bytesPerWrite;
-  uint32_t         bytesPerRow;
+  GPUInstance *instance;
+  GPUAdapter  *adapter;
+  GPUDevice   *device;
+  GPUQueue    *queue;
+  GPUTexture  *texture;
+  GPUFence    *fence;
+  void        *bytes;
+  uint64_t     bytesPerWrite;
+  uint32_t     bytesPerRow;
 } TextureUpload;
 
 static bool
@@ -71,33 +71,36 @@ texture_uploadConfig(int argc, char *argv[], TextureUploadConfig *config) {
   config->width      = TEXTURE_UPLOAD_DEFAULT_WIDTH;
   config->height     = TEXTURE_UPLOAD_DEFAULT_HEIGHT;
   config->mode       = TEXTURE_UPLOAD_DEPTH;
-  if ((argc > 1 && !bench_parseBackend(argv[1], &config->backend)) ||
-      (argc > 2 && !bench_parseU32(argv[2], 1u, &config->writeCount)) ||
-      (argc > 3 && !bench_parseU32(argv[3], 1u, &config->width)) ||
-      (argc > 4 && !bench_parseU32(argv[4], 1u, &config->height)) ||
-      (argc > 5 && strcmp(argv[5], "color") != 0 &&
-       strcmp(argv[5], "depth") != 0)) {
+
+  if ((argc > 1 && !bench_parseBackend(argv[1], &config->backend))
+      || (argc > 2 && !bench_parseU32(argv[2], 1u, &config->writeCount))
+      || (argc > 3 && !bench_parseU32(argv[3], 1u, &config->width))
+      || (argc > 4 && !bench_parseU32(argv[4], 1u, &config->height))
+      || (argc > 5 && strcmp(argv[5], "color") != 0 && strcmp(argv[5], "depth") != 0)) {
     fprintf(stderr, "invalid texture-upload benchmark arguments\n");
     return false;
   }
+
   if (argc > 5 && strcmp(argv[5], "color") == 0) {
     config->mode = TEXTURE_UPLOAD_COLOR;
   }
+
   return true;
 }
 
 static bool
 texture_wait(TextureUpload *upload) {
-  GPUCommandBuffer  *cmdb;
-  GPUCommandBuffer  *buffers[1];
   GPUQueueSubmitInfo submitInfo;
+  GPUCommandBuffer  *buffers[1];
+  GPUCommandBuffer  *cmdb;
 
   memset(&submitInfo, 0, sizeof(submitInfo));
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(upload->queue,
                               "texture-upload-wait",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+                              &cmdb) != GPU_OK
+      || !cmdb) {
     return false;
   }
 
@@ -107,8 +110,9 @@ texture_wait(TextureUpload *upload) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = buffers;
   submitInfo.fence              = upload->fence;
-  return GPUQueueSubmit(upload->queue, &submitInfo) == GPU_OK &&
-         GPUWaitFence(upload->fence, UINT64_MAX) == GPU_OK;
+
+  return GPUQueueSubmit(upload->queue, &submitInfo) == GPU_OK
+         && GPUWaitFence(upload->fence, UINT64_MAX) == GPU_OK;
 }
 
 static bool
@@ -127,17 +131,20 @@ texture_uploadInit(TextureUpload             *upload,
   memset(&runtimeInfo, 0, sizeof(runtimeInfo));
 
   rowBytes = (uint64_t)config->width * sizeof(float);
+
   if (rowBytes > UINT32_MAX - (TEXTURE_UPLOAD_ROW_ALIGNMENT - 1u)) {
     return false;
   }
-  upload->bytesPerRow = (uint32_t)(
-    (rowBytes + TEXTURE_UPLOAD_ROW_ALIGNMENT - 1u) &
-    ~(uint64_t)(TEXTURE_UPLOAD_ROW_ALIGNMENT - 1u)
-  );
+
+  upload->bytesPerRow = (uint32_t)((rowBytes + TEXTURE_UPLOAD_ROW_ALIGNMENT - 1u)
+                                  & ~(uint64_t)(TEXTURE_UPLOAD_ROW_ALIGNMENT - 1u));
+
   if (config->height > UINT64_MAX / upload->bytesPerRow) {
     return false;
   }
+
   upload->bytesPerWrite = (uint64_t)upload->bytesPerRow * config->height;
+
   if (upload->bytesPerWrite > SIZE_MAX) {
     return false;
   }
@@ -145,21 +152,21 @@ texture_uploadInit(TextureUpload             *upload,
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = config->backend;
-  if (GPUCreateInstance(&instanceInfo, &upload->instance) != GPU_OK ||
-      !upload->instance) {
+
+  if (GPUCreateInstance(&instanceInfo, &upload->instance) != GPU_OK
+      || !upload->instance) {
     return false;
   }
 
-  upload->adapter = bench_createAdapter(upload->instance);
-  if (!upload->adapter) {
+  if (!(upload->adapter = bench_createAdapter(upload->instance))) {
     return false;
   }
-  upload->device = bench_createDevice(upload->adapter, NULL);
-  if (!upload->device) {
+
+  if (!(upload->device = bench_createDevice(upload->adapter, NULL))) {
     return false;
   }
-  upload->queue = GPUGetQueue(upload->device, GPU_QUEUE_GRAPHICS, 0u);
-  if (!upload->queue) {
+
+  if (!(upload->queue = GPUGetQueue(upload->device, GPU_QUEUE_GRAPHICS, 0u))) {
     return false;
   }
 
@@ -180,20 +187,21 @@ texture_uploadInit(TextureUpload             *upload,
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_COPY_DST;
-  upload->bytes                = malloc((size_t)upload->bytesPerWrite);
-  if (!upload->bytes ||
-      GPUConfigureRuntime(upload->device, &runtimeInfo) != GPU_OK ||
-      GPUGetAdapterProperties(upload->adapter, properties) != GPU_OK ||
-      GPUCreateTexture(upload->device,
-                       &textureInfo,
-                       &upload->texture) != GPU_OK ||
-      !upload->texture ||
-      GPUCreateFence(upload->device, NULL, &upload->fence) != GPU_OK ||
-      !upload->fence) {
+
+  if (!(upload->bytes = malloc((size_t)upload->bytesPerWrite))
+      || GPUConfigureRuntime(upload->device, &runtimeInfo) != GPU_OK
+      || GPUGetAdapterProperties(upload->adapter, properties) != GPU_OK
+      || GPUCreateTexture(upload->device,
+                          &textureInfo,
+                          &upload->texture) != GPU_OK
+      || !upload->texture
+      || GPUCreateFence(upload->device, NULL, &upload->fence) != GPU_OK
+      || !upload->fence) {
     return false;
   }
 
   memset(upload->bytes, 0x3f, (size_t)upload->bytesPerWrite);
+
   return true;
 }
 
@@ -224,6 +232,7 @@ texture_write(TextureUpload *upload, const TextureUploadConfig *config) {
   region.aspect       = config->mode == TEXTURE_UPLOAD_COLOR
                           ? GPU_TEXTURE_ASPECT_ALL
                           : GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+
   return GPUQueueWriteTexture(upload->queue,
                               upload->texture,
                               &region,
@@ -233,21 +242,23 @@ texture_write(TextureUpload *upload, const TextureUploadConfig *config) {
 
 int
 main(int argc, char *argv[]) {
-  TextureUploadConfig config;
-  TextureUpload       upload;
+  TextureUploadConfig  config;
+  TextureUpload        upload;
   GPUAdapterProperties properties;
-  GPUAllocatorStats   stats;
-  uint64_t            totalBytes;
-  double              elapsed;
-  double              begin;
-  bool                drained;
-  bool                ok;
+  GPUAllocatorStats    stats;
+  uint64_t             totalBytes;
+  double               elapsed;
+  double               begin;
+  uint32_t             i;
+  bool                 drained;
+  bool                 ok;
 
   memset(&upload, 0, sizeof(upload));
   memset(&properties, 0, sizeof(properties));
   memset(&stats, 0, sizeof(stats));
-  if (!texture_uploadConfig(argc, argv, &config) ||
-      !texture_uploadInit(&upload, &config, &properties)) {
+
+  if (!texture_uploadConfig(argc, argv, &config)
+      || !texture_uploadInit(&upload, &config, &properties)) {
     fprintf(stderr, "failed to initialize texture-upload benchmark\n");
     texture_uploadCleanup(&upload);
     return EXIT_FAILURE;
@@ -256,9 +267,11 @@ main(int argc, char *argv[]) {
   ok = texture_write(&upload, &config) == GPU_OK && texture_wait(&upload);
   GPUResetStats(upload.device);
   begin = bench_now();
-  for (uint32_t i = 0u; ok && i < config.writeCount; i++) {
+
+  for (i = 0u; ok && i < config.writeCount; i++) {
     ok = texture_write(&upload, &config) == GPU_OK;
   }
+
   drained = texture_wait(&upload);
   ok      = ok && drained;
   elapsed = bench_now() - begin;
@@ -289,9 +302,11 @@ main(int argc, char *argv[]) {
   }
 
   texture_uploadCleanup(&upload);
+
   if (!ok) {
     fprintf(stderr, "texture-upload benchmark failed\n");
     return EXIT_FAILURE;
   }
+
   return EXIT_SUCCESS;
 }

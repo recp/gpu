@@ -18,32 +18,34 @@
 
 GPU_HIDE
 GPUShaderLibrary*
-vk_newLibraryWithBinary(GPUDevice *device,
+vk_newLibraryWithBinary(GPUDevice  *device,
                         const void *data,
-                        uint64_t size) {
+                        uint64_t    size) {
   VkShaderModuleCreateInfo createInfo = {0};
-  GPUDeviceVk        *deviceVk;
-  GPUShaderLibraryVk *libraryVk;
-  GPUShaderLibrary   *library;
-  const uint32_t     *words;
-  uint32_t           *alignedWords;
-  VkResult            result;
+  GPUDeviceVk             *deviceVk;
+  GPUShaderLibraryVk      *libraryVk;
+  GPUShaderLibrary        *library;
+  const uint32_t          *words;
+  uint32_t                *alignedWords;
+  VkResult                 result;
 
-  if (!device || !device->_priv || !data || size < 20u ||
-      size > (uint64_t)SIZE_MAX || size % sizeof(uint32_t) != 0u) {
+  if (!device || !device->_priv || !data || size < 20u
+      || size > (uint64_t)SIZE_MAX || size % sizeof(uint32_t) != 0u) {
     return NULL;
   }
 
   words        = data;
   alignedWords = NULL;
+
   if ((uintptr_t)data % _Alignof(uint32_t) != 0u) {
-    alignedWords = malloc((size_t)size);
-    if (!alignedWords) {
+    if (!(alignedWords = malloc((size_t)size))) {
       return NULL;
     }
+
     memcpy(alignedWords, data, (size_t)size);
     words = alignedWords;
   }
+
   if (words[0] != 0x07230203u) {
     free(alignedWords);
     return NULL;
@@ -52,6 +54,7 @@ vk_newLibraryWithBinary(GPUDevice *device,
   deviceVk  = device->_priv;
   library   = calloc(1, sizeof(*library));
   libraryVk = calloc(1, sizeof(*libraryVk));
+
   if (!library || !libraryVk) {
     free(libraryVk);
     free(library);
@@ -62,11 +65,12 @@ vk_newLibraryWithBinary(GPUDevice *device,
   createInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
   createInfo.codeSize = (size_t)size;
   createInfo.pCode    = words;
-  result = vkCreateShaderModule(deviceVk->device,
-                                &createInfo,
-                                NULL,
-                                &libraryVk->module);
+  result              = vkCreateShaderModule(deviceVk->device,
+                                             &createInfo,
+                                             NULL,
+                                             &libraryVk->module);
   free(alignedWords);
+
   if (result != VK_SUCCESS) {
     free(libraryVk);
     free(library);
@@ -75,6 +79,7 @@ vk_newLibraryWithBinary(GPUDevice *device,
 
   libraryVk->device = deviceVk->device;
   library->_priv    = libraryVk;
+
   return library;
 }
 
@@ -88,12 +93,15 @@ vk_destroyLibrary(GPUShaderLibrary *library) {
   }
 
   libraryVk = library->_priv;
+
   if (libraryVk) {
     if (libraryVk->device && libraryVk->module) {
       vkDestroyShaderModule(libraryVk->device, libraryVk->module, NULL);
     }
+
     free(libraryVk);
   }
+
   free(library);
 }
 

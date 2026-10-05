@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <QuartzCore/QuartzCore.h>
 #import <UIKit/UIKit.h>
 
@@ -13,28 +29,6 @@ typedef struct TriangleVertex {
 typedef struct FragmentUniforms {
   float tint[4];
 } FragmentUniforms;
-
-static const TriangleVertex kTriangleVertices[] = {
-  { {  0.0f,  0.65f } },
-  { { -0.7f, -0.65f } },
-  { {  0.7f, -0.65f } }
-};
-
-static GPUAdapter *
-SelectAdapter(GPUInstance *instance) {
-  GPUAdapter *adapter;
-  uint32_t    count;
-  GPUResult   result;
-
-  adapter = NULL;
-  count   = 1u;
-  result  = GPUEnumerateAdapters(instance, &count, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
-    return NULL;
-  }
-  return adapter;
-}
 
 @interface TriangleViewController : UIViewController {
 @private
@@ -54,8 +48,38 @@ SelectAdapter(GPUInstance *instance) {
   uint32_t           _width;
   uint32_t           _height;
 }
+
 - (void)setRenderingPaused:(BOOL)paused;
 @end
+
+@interface TriangleAppDelegate : UIResponder <UIApplicationDelegate>
+@property(nonatomic, strong) UIWindow               *window;
+@property(nonatomic, strong) TriangleViewController *controller;
+@end
+
+static const TriangleVertex kTriangleVertices[] = {
+  { {  0.0f,  0.65f } },
+  { { -0.7f, -0.65f } },
+  { {  0.7f, -0.65f } }
+};
+
+static GPUAdapter*
+SelectAdapter(GPUInstance *instance) {
+  GPUAdapter *adapter;
+  uint32_t    count;
+  GPUResult   result;
+
+  adapter = NULL;
+  count   = 1u;
+  result  = GPUEnumerateAdapters(instance, &count, &adapter);
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !adapter) {
+    return NULL;
+  }
+
+  return adapter;
+}
 
 @implementation TriangleViewController
 
@@ -71,6 +95,7 @@ SelectAdapter(GPUInstance *instance) {
   _adapter = SelectAdapter(_instance);
   _device  = GPUCreateDeviceWithDefaultQueues(_adapter);
   _queue   = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0u);
+
   if (!_adapter || !_device || !_queue) {
     NSLog(@"GPU: failed to create the default device and queue");
     return NO;
@@ -81,6 +106,7 @@ SelectAdapter(GPUInstance *instance) {
                                         (__bridge void *)self.view,
                                         GPU_SURFACE_APPLE_UIVIEW,
                                         UIScreen.mainScreen.scale);
+
   if (!_surface) {
     NSLog(@"GPU: failed to create the UIKit surface");
     return NO;
@@ -92,6 +118,7 @@ SelectAdapter(GPUInstance *instance) {
                                          _surface,
                                          _width,
                                          _height);
+
   if (!_swapchain) {
     NSLog(@"GPU: failed to create swapchain");
     return NO;
@@ -99,18 +126,19 @@ SelectAdapter(GPUInstance *instance) {
 
   artifactURL = [NSBundle.mainBundle URLForResource:@"triangle"
                                       withExtension:@"us"];
-  artifact = artifactURL ? [NSData dataWithContentsOfURL:artifactURL] : nil;
-  if (!artifact ||
-      GPUCreateShaderLibraryFromUSL(_device,
-                                    artifact.bytes,
-                                    (uint64_t)artifact.length,
-                                    &_library) != GPU_OK ||
-      GPUCreateShaderLayout(_device,
-                            _library,
-                            &_shaderLayout) != GPU_OK ||
-      !_shaderLayout ||
-      _shaderLayout->bindGroupLayoutCount != 1u ||
-      !_shaderLayout->bindGroupLayouts[0]) {
+  artifact    = artifactURL ? [NSData dataWithContentsOfURL:artifactURL] : nil;
+
+  if (!artifact
+      || GPUCreateShaderLibraryFromUSL(_device,
+                                       artifact.bytes,
+                                       (uint64_t)artifact.length,
+                                       &_library) != GPU_OK
+      || GPUCreateShaderLayout(_device,
+                               _library,
+                               &_shaderLayout) != GPU_OK
+      || !_shaderLayout
+      || _shaderLayout->bindGroupLayoutCount != 1u
+      || !_shaderLayout->bindGroupLayouts[0]) {
     NSLog(@"GPU: failed to load triangle.us or its reflection");
     return NO;
   }
@@ -165,6 +193,7 @@ SelectAdapter(GPUInstance *instance) {
       .alphaToCoverageEnable = false
     }
   };
+
   if (GPUCreateRenderPipeline(_device,
                               &pipelineInfo,
                               &_pipeline) != GPU_OK) {
@@ -181,12 +210,13 @@ SelectAdapter(GPUInstance *instance) {
     .sizeBytes = sizeof(kTriangleVertices),
     .usage     = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST
   };
-  if (GPUCreateBuffer(_device, &vertexInfo, &_vertexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(_queue,
-                          _vertexBuffer,
-                          0u,
-                          kTriangleVertices,
-                          sizeof(kTriangleVertices)) != GPU_OK) {
+
+  if (GPUCreateBuffer(_device, &vertexInfo, &_vertexBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(_queue,
+                             _vertexBuffer,
+                             0u,
+                             kTriangleVertices,
+                             sizeof(kTriangleVertices)) != GPU_OK) {
     NSLog(@"GPU: failed to create the triangle vertex buffer");
     return NO;
   }
@@ -203,12 +233,13 @@ SelectAdapter(GPUInstance *instance) {
   FragmentUniforms uniforms = {
     .tint = {0.15f, 0.75f, 1.0f, 1.0f}
   };
-  if (GPUCreateBuffer(_device, &uniformInfo, &_uniformBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(_queue,
-                          _uniformBuffer,
-                          0u,
-                          &uniforms,
-                          sizeof(uniforms)) != GPU_OK) {
+
+  if (GPUCreateBuffer(_device, &uniformInfo, &_uniformBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(_queue,
+                             _uniformBuffer,
+                             0u,
+                             &uniforms,
+                             sizeof(uniforms)) != GPU_OK) {
     NSLog(@"GPU: failed to create the fragment uniform buffer");
     return NO;
   }
@@ -233,6 +264,7 @@ SelectAdapter(GPUInstance *instance) {
     .entryCount = 1u,
     .pEntries   = entries
   };
+
   if (GPUCreateBindGroup(_device,
                          &groupInfo,
                          &_fragmentGroup) != GPU_OK) {
@@ -246,37 +278,39 @@ SelectAdapter(GPUInstance *instance) {
 - (void)drawFrame {
   GPURenderPassColorAttachment color;
   GPURenderPassCreateInfo      passInfo;
-  GPURenderPassEncoder        *pass;
   GPUBufferBinding             vertexBinding;
+  GPURenderPassEncoder        *pass;
   GPUCommandBuffer            *cmdb;
   GPUFrame                    *frame;
   uint32_t                     dynamicOffset;
 
   frame = GPUBeginFrame(_swapchain);
   cmdb  = NULL;
-  if (!frame ||
-      GPUAcquireCommandBuffer(_queue,
-                              "triangle-ios-usl-frame",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+
+  if (!frame
+      || GPUAcquireCommandBuffer(_queue,
+                                 "triangle-ios-usl-frame",
+                                 &cmdb) != GPU_OK
+      || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
 
   memset(&color, 0, sizeof(color));
-  color.view                    = GPUFrameGetTargetView(frame);
-  color.loadOp                  = GPU_LOAD_OP_CLEAR;
-  color.storeOp                 = GPU_STORE_OP_STORE;
-  color.clearColor.float32[0]   = 0.015f;
-  color.clearColor.float32[1]   = 0.025f;
-  color.clearColor.float32[2]   = 0.045f;
-  color.clearColor.float32[3]   = 1.0f;
+  color.view                  = GPUFrameGetTargetView(frame);
+  color.loadOp                = GPU_LOAD_OP_CLEAR;
+  color.storeOp               = GPU_STORE_OP_STORE;
+  color.clearColor.float32[0] = 0.015f;
+  color.clearColor.float32[1] = 0.025f;
+  color.clearColor.float32[2] = 0.045f;
+  color.clearColor.float32[3] = 1.0f;
 
   memset(&passInfo, 0, sizeof(passInfo));
   passInfo.label                = "triangle-ios-usl-pass";
   passInfo.colorAttachmentCount = 1u;
   passInfo.pColorAttachments    = &color;
   pass = GPUBeginRenderPass(cmdb, &passInfo);
+
   if (!pass) {
     GPUEndFrame(frame);
     return;
@@ -308,11 +342,11 @@ SelectAdapter(GPUInstance *instance) {
     return;
   }
 
-  _displayLink = [CADisplayLink displayLinkWithTarget:self
+  _displayLink                         = [CADisplayLink displayLinkWithTarget:self
                                               selector:@selector(drawFrame)];
   _displayLink.preferredFrameRateRange = CAFrameRateRangeMake(30.0f,
-                                                               120.0f,
-                                                               60.0f);
+                                                              120.0f,
+                                                              60.0f);
   [_displayLink addToRunLoop:NSRunLoop.mainRunLoop
                      forMode:NSRunLoopCommonModes];
 }
@@ -324,8 +358,9 @@ SelectAdapter(GPUInstance *instance) {
   [super viewDidLayoutSubviews];
   width  = (uint32_t)self.view.bounds.size.width;
   height = (uint32_t)self.view.bounds.size.height;
-  if (_swapchain && width > 0u && height > 0u &&
-      (width != _width || height != _height)) {
+
+  if (_swapchain && width > 0u && height > 0u
+      && (width != _width || height != _height)) {
     if (GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
       _width  = width;
       _height = height;
@@ -353,11 +388,6 @@ SelectAdapter(GPUInstance *instance) {
 
 @end
 
-@interface TriangleAppDelegate : UIResponder <UIApplicationDelegate>
-@property(nonatomic, strong) UIWindow                *window;
-@property(nonatomic, strong) TriangleViewController *controller;
-@end
-
 @implementation TriangleAppDelegate
 
 - (BOOL)application:(UIApplication *)application
@@ -365,8 +395,8 @@ SelectAdapter(GPUInstance *instance) {
   (void)application;
   (void)launchOptions;
 
-  self.controller = [TriangleViewController new];
-  self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
+  self.controller                = [TriangleViewController new];
+  self.window                    = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.rootViewController = self.controller;
   [self.window makeKeyAndVisible];
   return YES;

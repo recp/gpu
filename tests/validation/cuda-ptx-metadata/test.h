@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef gpu_tests_cuda_ptx_metadata_test_h
 #define gpu_tests_cuda_ptx_metadata_test_h
 
@@ -12,20 +28,24 @@ typedef struct PTXSource {
   char *text;
 } PTXSource;
 
-static GPUShaderLibrary *
-ptx_new_library(GPUDevice *device, const char *source, uint64_t sourceSize,
-                uint32_t compileFlags) {
+static GPUShaderLibrary*
+ptx_new_library(GPUDevice  *device,
+                const char *source,
+                uint64_t    sourceSize,
+                uint32_t    compileFlags) {
   GPUShaderLibrary *library;
   PTXSource        *ptx;
 
   (void)device;
   (void)compileFlags;
+
   if (!source || sourceSize == 0u || sourceSize > SIZE_MAX - 1u) {
     return NULL;
   }
 
   library = calloc(1u, sizeof(*library));
   ptx     = calloc(1u, sizeof(*ptx));
+
   if (!library || !ptx || !(ptx->text = malloc((size_t)sourceSize + 1u))) {
     free(ptx);
     free(library);
@@ -35,6 +55,7 @@ ptx_new_library(GPUDevice *device, const char *source, uint64_t sourceSize,
   memcpy(ptx->text, source, (size_t)sourceSize);
   ptx->text[sourceSize] = '\0';
   library->_priv        = ptx;
+
   return library;
 }
 
@@ -43,10 +64,12 @@ ptx_destroy_library(GPUShaderLibrary *library) {
   PTXSource *ptx;
 
   ptx = library ? library->_priv : NULL;
+
   if (ptx) {
     free(ptx->text);
     free(ptx);
   }
+
   free(library);
 }
 
@@ -62,7 +85,7 @@ ptx_init_device(GPUDevice   *device,
   memset(instance, 0, sizeof(*instance));
   memset(api, 0, sizeof(*api));
 
-  api->backend                       = GPU_BACKEND_CUDA;
+  api->backend                      = GPU_BACKEND_CUDA;
   api->library.newLibraryWithSource = ptx_new_library;
   api->library.destroyLibrary       = ptx_destroy_library;
   instance->_api                    = api;
@@ -73,22 +96,25 @@ ptx_init_device(GPUDevice   *device,
   device->uslTargetArchitecture     = architecture;
 }
 
-static inline const GPUShaderResourceReflection *
+static inline const GPUShaderResourceReflection*
 ptx_find_resource(const GPUShaderReflection *reflection,
                   uint32_t                   group,
                   uint32_t                   binding) {
+  const GPUShaderResourceReflection *resource;
+  uint32_t                           i;
+
   if (!reflection) {
     return NULL;
   }
 
-  for (uint32_t i = 0u; i < reflection->resourceCount; i++) {
-    const GPUShaderResourceReflection *resource;
-
+  for (i = 0u; i < reflection->resourceCount; i++) {
     resource = &reflection->pResources[i];
+
     if (resource->groupIndex == group && resource->binding == binding) {
       return resource;
     }
   }
+
   return NULL;
 }
 
@@ -103,11 +129,12 @@ ptx_validate_buffer_resource(const GPUShaderReflection *reflection,
   const GPUShaderResourceReflection *resource;
 
   resource = ptx_find_resource(reflection, group, binding);
-  return resource && strcmp(resource->name, name) == 0 &&
-         resource->bindingType == bindingType && resource->arrayCount == 1u &&
-         resource->buffer.minBindingSize == minBindingSize &&
-         resource->buffer.strideBytes == strideBytes &&
-         !resource->hasDynamicOffset;
+
+  return resource && strcmp(resource->name, name) == 0
+         && resource->bindingType == bindingType && resource->arrayCount == 1u
+         && resource->buffer.minBindingSize == minBindingSize
+         && resource->buffer.strideBytes == strideBytes
+         && !resource->hasDynamicOffset;
 }
 
 static inline int
@@ -116,18 +143,18 @@ ptx_validate_buffer_param(const GPUShaderPTXParamInfo *param,
                           uint32_t                     binding,
                           GPUBindingType               bindingType,
                           uint32_t                     dataOffset) {
-  return param && param->kind == GPUShaderPTXParamBuffer &&
-         param->bindingType == bindingType && param->groupIndex == group &&
-         param->binding == binding && param->arrayIndex == 0u &&
-         param->dataOffset == dataOffset &&
-         param->samplerGroupIndex == UINT32_MAX &&
-         param->samplerBinding == UINT32_MAX &&
-         param->samplerArrayIndex == UINT32_MAX &&
-         param->staticSamplerId == UINT32_MAX &&
-         param->metadataFlags == GPUShaderPTXTextureMetadataNone;
+  return param && param->kind == GPUShaderPTXParamBuffer
+         && param->bindingType == bindingType && param->groupIndex == group
+         && param->binding == binding && param->arrayIndex == 0u
+         && param->dataOffset == dataOffset
+         && param->samplerGroupIndex == UINT32_MAX
+         && param->samplerBinding == UINT32_MAX
+         && param->samplerArrayIndex == UINT32_MAX
+         && param->staticSamplerId == UINT32_MAX
+         && param->metadataFlags == GPUShaderPTXTextureMetadataNone;
 }
 
-static const char *
+static const char*
 ptx_source(const GPUShaderLibrary *library) {
   const PTXSource *ptx;
 
@@ -137,8 +164,8 @@ ptx_source(const GPUShaderLibrary *library) {
 
 static inline uint32_t
 ptx_count(const char *text, const char *needle) {
-  uint32_t count;
   size_t   length;
+  uint32_t count;
 
   if (!text || !needle || !needle[0]) {
     return 0u;
@@ -146,10 +173,12 @@ ptx_count(const char *text, const char *needle) {
 
   count  = 0u;
   length = strlen(needle);
+
   while ((text = strstr(text, needle)) != NULL) {
     count++;
     text += length;
   }
+
   return count;
 }
 

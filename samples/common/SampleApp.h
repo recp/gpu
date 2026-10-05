@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef gpu_sample_app_h
 #define gpu_sample_app_h
 
@@ -6,34 +22,33 @@
 #import "../../include/gpu/gpu.h"
 
 static inline BOOL
-GPUSampleCreateWindow(NSString *title,
+GPUSampleCreateWindow(NSString            *title,
                       id<NSWindowDelegate> delegate,
-                      NSWindow *__strong *outWindow,
-                      NSView *__strong *outView) {
-  NSRect frame;
+                      NSWindow  *__strong *outWindow,
+                      NSView    *__strong *outView) {
+  NSRect    frame;
   NSWindow *window;
-  NSView *view;
+  NSView   *view;
 
   if (!title || !outWindow || !outView) {
     return NO;
   }
 
   frame = NSMakeRect(0, 0, 960, 640);
-  window = [[NSWindow alloc] initWithContentRect:frame
-                                      styleMask:(NSWindowStyleMaskTitled |
-                                                 NSWindowStyleMaskClosable |
-                                                 NSWindowStyleMaskResizable)
-                                        backing:NSBackingStoreBuffered
-                                          defer:NO];
-  if (!window) {
+
+  if (!(window = [[NSWindow alloc] initWithContentRect:frame
+                                             styleMask:(NSWindowStyleMaskTitled |
+                                                        NSWindowStyleMaskClosable |
+                                                        NSWindowStyleMaskResizable)
+                                               backing:NSBackingStoreBuffered
+                                                 defer:NO])) {
     return NO;
   }
 
-  window.title = title;
+  window.title    = title;
   window.delegate = delegate;
 
-  view = [[NSView alloc] initWithFrame:frame];
-  if (!view) {
+  if (!(view = [[NSView alloc] initWithFrame:frame])) {
     return NO;
   }
 
@@ -43,81 +58,78 @@ GPUSampleCreateWindow(NSString *title,
   [NSApp activateIgnoringOtherApps:YES];
 
   *outWindow = window;
-  *outView = view;
+  *outView   = view;
+
   return YES;
 }
 
-static inline GPUAdapter *
+static inline GPUAdapter*
 GPUSampleSelectAdapter(GPUInstance *instance) {
   return GPUGetAutoSelectedAdapter(instance);
 }
 
 static inline BOOL
-GPUSampleCreateDefaultSurfaceGPU(NSWindow        *window,
-                                 NSView          *view,
-                                 GPUInstance    **outInstance,
-                                 GPUAdapter     **outAdapter,
-                                 GPUDevice      **outDevice,
-                                 GPUQueue       **outQueue,
-                                 GPUSurface     **outSurface,
-                                 GPUSwapchain   **outSwapchain) {
-  GPUInstance     *instance;
-  GPUAdapter      *adapter;
-  GPUDevice       *device;
-  GPUQueue        *queue;
-  GPUSurface      *surface;
-  GPUSwapchain    *swapchain;
+GPUSampleCreateDefaultSurfaceGPU(NSWindow      *window,
+                                 NSView        *view,
+                                 GPUInstance  **outInstance,
+                                 GPUAdapter   **outAdapter,
+                                 GPUDevice    **outDevice,
+                                 GPUQueue     **outQueue,
+                                 GPUSurface   **outSurface,
+                                 GPUSwapchain **outSwapchain) {
+  GPUInstance  *instance;
+  GPUAdapter   *adapter;
+  GPUDevice    *device;
+  GPUQueue     *queue;
+  GPUSurface   *surface;
+  GPUSwapchain *swapchain;
 
-  if (!window || !view || !outInstance || !outAdapter || !outDevice ||
-      !outQueue || !outSurface || !outSwapchain) {
+  if (!window || !view || !outInstance || !outAdapter || !outDevice
+      || !outQueue || !outSurface || !outSwapchain) {
     return NO;
   }
 
   instance = NULL;
+
   if (GPUCreateInstance(NULL, &instance) != GPU_OK || !instance) {
     NSLog(@"GPU: failed to create instance");
     return NO;
   }
 
-  adapter = GPUSampleSelectAdapter(instance);
-  if (!adapter) {
+  if (!(adapter = GPUSampleSelectAdapter(instance))) {
     NSLog(@"GPU: failed to get adapter");
     GPUDestroyInstance(instance);
     return NO;
   }
 
-  device = GPUCreateDeviceWithDefaultQueues(adapter);
-  if (!device) {
+  if (!(device = GPUCreateDeviceWithDefaultQueues(adapter))) {
     NSLog(@"GPU: failed to create device");
     GPUDestroyInstance(instance);
     return NO;
   }
 
-  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
-  if (!queue) {
+  if (!(queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0))) {
     NSLog(@"GPU: failed to get command queue");
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
     return NO;
   }
 
-  surface = GPUCreateSurfaceFromNative(instance,
-                                       adapter,
-                                       (__bridge void *)view,
-                                       GPU_SURFACE_APPLE_NSVIEW,
-                                       window.backingScaleFactor ?: 1.0f);
-  if (!surface) {
+  if (!(surface = GPUCreateSurfaceFromNative(instance,
+                                             adapter,
+                                             (__bridge void *)view,
+                                             GPU_SURFACE_APPLE_NSVIEW,
+                                             window.backingScaleFactor ?: 1.0f))) {
     NSLog(@"GPU: failed to create surface");
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
     return NO;
   }
 
-  swapchain = GPUCreateSwapchainDefault(device,
-                                        surface,
-                                        (uint32_t)view.bounds.size.width,
-                                        (uint32_t)view.bounds.size.height);
-  if (!swapchain) {
+  if (!(swapchain = GPUCreateSwapchainDefault(device,
+                                              surface,
+                                              (uint32_t)view.bounds.size.width,
+                                              (uint32_t)view.bounds.size.height))) {
     NSLog(@"GPU: failed to create swapchain");
     GPUDestroySurface(surface);
     GPUDestroyDevice(device);
@@ -131,6 +143,7 @@ GPUSampleCreateDefaultSurfaceGPU(NSWindow        *window,
   *outQueue     = queue;
   *outSurface   = surface;
   *outSwapchain = swapchain;
+
   return YES;
 }
 
@@ -145,6 +158,7 @@ GPUSampleRecoverSwapchain(GPUSwapchain *swapchain, NSView *view) {
   }
 
   status = GPUGetSwapchainStatus(swapchain);
+
   switch (status) {
     case GPU_SWAPCHAIN_STATUS_READY:
     case GPU_SWAPCHAIN_STATUS_UNAVAILABLE:
@@ -159,8 +173,8 @@ GPUSampleRecoverSwapchain(GPUSwapchain *swapchain, NSView *view) {
 
   width  = (uint32_t)view.bounds.size.width;
   height = (uint32_t)view.bounds.size.height;
-  return width > 0u && height > 0u &&
-         GPUResizeSwapchain(swapchain, width, height) == GPU_OK;
+
+  return width > 0u && height > 0u && GPUResizeSwapchain(swapchain, width, height) == GPU_OK;
 }
 
 #endif

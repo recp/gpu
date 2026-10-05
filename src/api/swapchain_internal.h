@@ -20,26 +20,28 @@
 #include "../common.h"
 
 struct GPUSwapchain {
-  GPUDevice          *device;
-  void               *_priv;
-  void               *target;
-  float               backingScaleFactor;
-  uint32_t            width;
-  uint32_t            height;
-  GPUFormat           format;
-  GPUSwapchainStatus  status;
+  GPUDevice         *device;
+  void              *_priv;
+  void              *target;
+  float              backingScaleFactor;
+  uint32_t           width;
+  uint32_t           height;
+  GPUFormat          format;
+  GPUSwapchainStatus status;
 };
 
 static inline void
-gpuSwapchainSetStatus(GPUSwapchain       *swapchain,
-                      GPUSwapchainStatus  status) {
+gpuSwapchainSetStatus(GPUSwapchain      *swapchain,
+                      GPUSwapchainStatus status) {
   if (!swapchain) {
     return;
   }
-  if (swapchain->status >= GPU_SWAPCHAIN_STATUS_SUBOPTIMAL &&
-      status < swapchain->status) {
+
+  if (swapchain->status >= GPU_SWAPCHAIN_STATUS_SUBOPTIMAL
+      && status < swapchain->status) {
     return;
   }
+
   swapchain->status = status;
 }
 

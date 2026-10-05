@@ -81,6 +81,8 @@ static const DXGI_FORMAT dx12_formats[GPU_FORMAT_COUNT] = {
   [GPU_FORMAT_DEPTH32_FLOAT_STENCIL8] = DXGI_FORMAT_D32_FLOAT_S8X24_UINT
 };
 
+static const uint32_t dx12_sampleCounts[] = {2u, 4u, 8u};
+
 static DXGI_FORMAT
 dx12_sampledFormat(GPUFormat format) {
   switch (format) {
@@ -93,103 +95,100 @@ dx12_sampledFormat(GPUFormat format) {
     case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
       return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
     default:
-      return (uint32_t)format < GPU_ARRAY_LEN(dx12_formats)
-               ? dx12_formats[format]
-               : DXGI_FORMAT_UNKNOWN;
+      return (uint32_t)format < GPU_ARRAY_LEN(dx12_formats) ? dx12_formats[format] : DXGI_FORMAT_UNKNOWN;
   }
 }
 
 static void
 dx12_queryFormatCapabilities(const GPUAdapter *adapter) {
-  static const uint32_t sampleCounts[] = {2u, 4u, 8u};
-  GPUAdapterDX12  *adapterDX12;
-  GPUInstanceDX12 *instanceDX12;
-  ID3D12Device    *device;
-  HRESULT          result;
+  D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS levels;
+  GPUAdapterDX12                               *adapterDX12;
+  GPUInstanceDX12                              *instanceDX12;
+  ID3D12Device                                 *device;
+  GPUFormatCapabilities                        *caps;
+  HRESULT                                       result;
+  uint32_t                                      i;
+  DXGI_FORMAT                                   attachmentFormat;
+  DXGI_FORMAT                                   sampledFormat;
+  uint32_t                                      j;
 
   adapterDX12  = adapter ? adapter->_priv : NULL;
   instanceDX12 = adapter && adapter->inst ? adapter->inst->_priv : NULL;
+
   if (!adapterDX12 || !instanceDX12) {
     return;
   }
+
   memset(adapterDX12->formatCaps, 0, sizeof(adapterDX12->formatCaps));
   device = NULL;
   result = dx12_createNativeDevice(instanceDX12->deviceFactory,
                                    adapterDX12->dxgiAdapter,
                                    &IID_ID3D12Device,
                                    (void **)&device);
+
   if (FAILED(result) || !device) {
     return;
   }
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(dx12_formats); i++) {
-    D3D12_FEATURE_DATA_FORMAT_SUPPORT  attachmentSupport = {0};
-    D3D12_FEATURE_DATA_FORMAT_SUPPORT  sampledSupport = {0};
-    GPUFormatCapabilities             *caps;
-    DXGI_FORMAT                        attachmentFormat;
-    DXGI_FORMAT                        sampledFormat;
+  for (i = 0u; i < GPU_ARRAY_LEN(dx12_formats); i++) {
+    D3D12_FEATURE_DATA_FORMAT_SUPPORT attachmentSupport = {0};
+    D3D12_FEATURE_DATA_FORMAT_SUPPORT sampledSupport    = {0};
 
     attachmentFormat = dx12_formats[i];
+
     if (attachmentFormat == DXGI_FORMAT_UNKNOWN) {
       continue;
     }
 
     attachmentSupport.Format = attachmentFormat;
-    if (FAILED(device->lpVtbl->CheckFeatureSupport(
-          device,
-          D3D12_FEATURE_FORMAT_SUPPORT,
-          &attachmentSupport,
-          sizeof(attachmentSupport)))) {
+
+    if (FAILED(device->lpVtbl->CheckFeatureSupport(device,
+                                                   D3D12_FEATURE_FORMAT_SUPPORT,
+                                                   &attachmentSupport,
+                                                   sizeof(attachmentSupport)))) {
       continue;
     }
 
-    sampledFormat = dx12_sampledFormat((GPUFormat)i);
+    sampledFormat         = dx12_sampledFormat((GPUFormat)i);
     sampledSupport.Format = sampledFormat;
+
     if (sampledFormat == attachmentFormat) {
       sampledSupport = attachmentSupport;
-    } else if (FAILED(device->lpVtbl->CheckFeatureSupport(
-                 device,
-                 D3D12_FEATURE_FORMAT_SUPPORT,
-                 &sampledSupport,
-                 sizeof(sampledSupport)))) {
+    } else if (FAILED(device->lpVtbl->CheckFeatureSupport(device,
+                                                          D3D12_FEATURE_FORMAT_SUPPORT,
+                                                          &sampledSupport,
+                                                          sizeof(sampledSupport)))) {
       memset(&sampledSupport, 0, sizeof(sampledSupport));
     }
 
     caps = &adapterDX12->formatCaps[i];
-    caps->sampled =
-      (sampledSupport.Support1 &
-       (D3D12_FORMAT_SUPPORT1_SHADER_LOAD |
-        D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE)) != 0u;
-    caps->filterable =
-      (sampledSupport.Support1 & D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE) != 0u;
-    caps->storage =
-      (attachmentSupport.Support1 &
-       D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW) != 0u &&
-      (attachmentSupport.Support2 &
-       (D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD |
-        D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE)) ==
-        (D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD |
-         D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE);
-    caps->colorAttachment =
-      (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_RENDER_TARGET) != 0u;
-    caps->blendable =
-      (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_BLENDABLE) != 0u;
-    caps->depthStencil =
-      (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL) != 0u;
+
+    caps->sampled         = (sampledSupport.Support1 & (D3D12_FORMAT_SUPPORT1_SHADER_LOAD |
+                                                        D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE)) != 0u;
+    caps->filterable      = (sampledSupport.Support1 & D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE) != 0u;
+    caps->storage         = (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW) != 0u
+                            && (attachmentSupport.Support2 & (D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD |
+                                                              D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE)) ==
+                               (D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD | D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE);
+    caps->colorAttachment = (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_RENDER_TARGET) != 0u;
+    caps->blendable       = (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_BLENDABLE) != 0u;
+    caps->depthStencil    = (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL) != 0u;
+
     if (caps->colorAttachment || caps->depthStencil) {
       caps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
-      for (uint32_t j = 0u; j < GPU_ARRAY_LEN(sampleCounts); j++) {
-        D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS levels = {0};
+
+      for (j = 0u; j < GPU_ARRAY_LEN(dx12_sampleCounts); j++) {
+        levels = (D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS){0};
 
         levels.Format      = attachmentFormat;
-        levels.SampleCount = sampleCounts[j];
-        if (SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
-              device,
-              D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,
-              &levels,
-              sizeof(levels))) &&
-            levels.NumQualityLevels > 0u) {
-          caps->supportedSampleCounts |= sampleCounts[j];
+        levels.SampleCount = dx12_sampleCounts[j];
+
+        if (SUCCEEDED(device->lpVtbl->CheckFeatureSupport(device,
+                                                          D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,
+                                                          &levels,
+                                                          sizeof(levels)))
+            && levels.NumQualityLevels > 0u) {
+          caps->supportedSampleCounts |= dx12_sampleCounts[j];
         }
       }
     }
@@ -211,22 +210,25 @@ dx12_format(GPUFormat format) {
 
 GPU_HIDE
 void
-dx12_getFormatCapabilities(
-  const GPUAdapter      * __restrict adapter,
-  GPUFormat              format,
-  GPUFormatCapabilities * __restrict outCaps) {
+dx12_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
+                           GPUFormat                         format,
+                           GPUFormatCapabilities *__restrict outCaps) {
   GPUAdapterDX12 *adapterDX12;
 
   adapterDX12 = adapter ? adapter->_priv : NULL;
+
   if (!outCaps) {
     return;
   }
 
   memset(outCaps, 0, sizeof(*outCaps));
+
   if (!adapterDX12 || (uint32_t)format >= GPU_ARRAY_LEN(dx12_formats)) {
     return;
   }
+
   AcquireSRWLockExclusive(&adapterDX12->formatCapsLock);
+
   if (!adapterDX12->formatCapsReady) {
     dx12_queryFormatCapabilities(adapter);
   }

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 #include <stdio.h>
@@ -29,10 +45,10 @@ resize_canvas(WebGPUTriangle *state) {
 
 static int
 create_pipeline(WebGPUTriangle *state) {
-  GPUColorTargetState         color = {0};
   GPUCacheStats               stats;
   GPUPipelineCacheCreateInfo  cacheInfo = {0};
-  GPURenderPipelineCreateInfo info = {0};
+  GPUColorTargetState         color     = {0};
+  GPURenderPipelineCreateInfo info      = {0};
   GPURenderPipeline          *cachedPipeline;
   void                       *artifact;
   uint64_t                    artifactSize;
@@ -40,6 +56,7 @@ create_pipeline(WebGPUTriangle *state) {
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/triangle.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /triangle.us", 1);
     return 0;
@@ -50,15 +67,17 @@ create_pipeline(WebGPUTriangle *state) {
                                          artifactSize,
                                          &state->library);
   free(artifact);
+
   if (result != GPU_OK || !state->library) {
     set_status("GPU: failed to compile the USL artifact", 1);
     return 0;
   }
+
   if (GPUCreateShaderLayout(state->device,
                             state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 0u) {
+                            &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 0u) {
     set_status("GPU: unexpected WebGPU shader reflection", 1);
     return 0;
   }
@@ -69,72 +88,80 @@ create_pipeline(WebGPUTriangle *state) {
   cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
   cacheInfo.chain.structSize = sizeof(cacheInfo);
   cacheInfo.label            = "triangle-webgpu-usl-cache";
+
   if (GPUCreatePipelineCache(state->device,
                              &cacheInfo,
-                             &state->pipelineCache) != GPU_OK ||
-      !state->pipelineCache) {
+                             &state->pipelineCache) != GPU_OK
+      || !state->pipelineCache) {
     set_status("GPU: failed to create WebGPU pipeline cache", 1);
     return 0;
   }
 
-  info.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  info.chain.structSize     = sizeof(info);
-  info.label                = "triangle-webgpu-usl-pipeline";
-  info.layout               = state->shaderLayout->pipelineLayout;
-  info.cache                = state->pipelineCache;
-  info.library              = state->library;
-  info.vertexEntry          = "tri_vs";
-  info.fragmentEntry        = "tri_fs";
-  info.pColorTargets        = &color;
-  info.colorTargetCount     = 1u;
-  info.primitiveTopology    = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  info.cullMode             = GPU_CULL_MODE_NONE;
-  info.frontFace            = GPU_FRONT_FACE_CCW;
+  info.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  info.chain.structSize        = sizeof(info);
+  info.label                   = "triangle-webgpu-usl-pipeline";
+  info.layout                  = state->shaderLayout->pipelineLayout;
+  info.cache                   = state->pipelineCache;
+  info.library                 = state->library;
+  info.vertexEntry             = "tri_vs";
+  info.fragmentEntry           = "tri_fs";
+  info.pColorTargets           = &color;
+  info.colorTargetCount        = 1u;
+  info.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  info.cullMode                = GPU_CULL_MODE_NONE;
+  info.frontFace               = GPU_FRONT_FACE_CCW;
   info.multisample.sampleCount = 1u;
   info.multisample.sampleMask  = UINT32_MAX;
+
   GPUResetStats(state->device);
   result = GPUCreateRenderPipeline(state->device, &info, &state->pipeline);
+
   if (result != GPU_OK || !state->pipeline) {
     set_status("GPU: failed to create WebGPU pipeline", 1);
     return 0;
   }
 
   cachedPipeline = NULL;
+
   if (GPUCreateRenderPipeline(state->device,
                               &info,
-                              &cachedPipeline) != GPU_OK ||
-      !cachedPipeline ||
-      GPUGetCacheStats(state->device, &stats) != GPU_OK ||
-      stats.pipelineCompiles != 1u ||
-      stats.pipelineMisses != 1u ||
-      stats.pipelineHits != 1u) {
+                              &cachedPipeline) != GPU_OK
+      || !cachedPipeline
+      || GPUGetCacheStats(state->device, &stats) != GPU_OK
+      || stats.pipelineCompiles != 1u
+      || stats.pipelineMisses != 1u
+      || stats.pipelineHits != 1u) {
     GPUDestroyRenderPipeline(cachedPipeline);
     set_status("GPU: WebGPU pipeline cache miss/hit check failed", 1);
     return 0;
   }
+
   GPUDestroyRenderPipeline(cachedPipeline);
+
   return 1;
 }
 
 static void
 render_frame(void *userData) {
-  WebGPUTriangle                 *state;
-  GPUFrame                      *frame;
-  GPUCommandBuffer              *cmdb;
-  GPURenderPassEncoder          *pass;
-  GPURenderPassColorAttachment   color = {0};
-  GPURenderPassCreateInfo        passInfo = {0};
+  GPURenderPassCreateInfo      passInfo = {0};
+  GPURenderPassColorAttachment color    = {0};
+  WebGPUTriangle              *state;
+  GPUFrame                    *frame;
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassEncoder        *pass;
 
   state = userData;
+
   if (!resize_canvas(state)) {
     return;
   }
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) {
+  if (!(frame = GPUBeginFrame(state->swapchain))) {
     return;
   }
+
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(state->queue,
                               "triangle-webgpu-frame",
                               &cmdb) != GPU_OK || !cmdb) {
@@ -153,8 +180,8 @@ render_frame(void *userData) {
   passInfo.label                = "triangle-webgpu-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
@@ -163,19 +190,21 @@ render_frame(void *userData) {
   GPUBindRenderPipeline(pass, state->pipeline);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
+
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     fprintf(stderr, "GPU: failed to finish WebGPU frame\n");
   }
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
   WebGPUTriangle *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status(!adapter ? "GPU: failed to request WebGPU adapter"
                         : "GPU: failed to request WebGPU device",
@@ -187,23 +216,24 @@ webgpu_ready(GPUResult  result,
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               state->adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
+                                              state->adapter,
+                                              (void *)"#canvas",
+                                              GPU_SURFACE_WEB_CANVAS,
+                                              1.0f);
+
   if (!state->queue || !state->surface || !resize_canvas(state)) {
     set_status("GPU: failed to create WebGPU queue or canvas surface", 1);
     return;
   }
 
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain) {
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))) {
     set_status("GPU: failed to create WebGPU swapchain", 1);
     return;
   }
+
   if (!create_pipeline(state)) {
     return;
   }
@@ -222,7 +252,9 @@ main(void) {
   info.label            = "triangle-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create WebGPU instance", 1);
     return 1;
@@ -233,8 +265,10 @@ main(void) {
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   if (result != GPU_OK) {
     return 1;
   }
+
   return 0;
 }

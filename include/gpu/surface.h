@@ -23,6 +23,8 @@ extern "C" {
 #include "common.h"
 #include "device.h"
 
+typedef struct GPUSurface GPUSurface;
+
 typedef enum GPUSurfaceType {
   GPU_SURFACE_WINDOWS_HWND,
   GPU_SURFACE_WINDOWS_COREWINDOW,
@@ -33,8 +35,6 @@ typedef enum GPUSurfaceType {
   GPU_SURFACE_XLIB_WINDOW,
   GPU_SURFACE_WAYLAND_SURFACE,
 } GPUSurfaceType;
-
-typedef struct GPUSurface GPUSurface;
 
 typedef struct GPUSurfaceCreateInfo {
   GPUChainedStruct chain;
@@ -76,27 +76,27 @@ typedef struct GPUSurfaceCapabilities {
 
 GPU_EXPORT
 GPUResult
-GPUCreateSurface(GPUInstance                  * __restrict inst,
-                 const GPUSurfaceCreateInfo   * __restrict info,
-                 GPUSurface                  ** __restrict outSurface);
+GPUCreateSurface(GPUInstance                *__restrict inst,
+                 const GPUSurfaceCreateInfo *__restrict info,
+                 GPUSurface                **__restrict outSurface);
 
 GPU_EXPORT
 GPUSurface*
-GPUCreateSurfaceFromNative(GPUInstance       * __restrict inst,
-                           GPUAdapter        * __restrict adapter,
-                           void              * __restrict nativeHandle,
-                           GPUSurfaceType                 type,
-                           float                          scale);
+GPUCreateSurfaceFromNative(GPUInstance *__restrict inst,
+                           GPUAdapter  *__restrict adapter,
+                           void        *__restrict nativeHandle,
+                           GPUSurfaceType          type,
+                           float                   scale);
 
 GPU_EXPORT
 void
-GPUDestroySurface(GPUSurface * __restrict surface);
+GPUDestroySurface(GPUSurface *__restrict surface);
 
 GPU_EXPORT
 GPUResult
-GPUGetSurfaceCapabilities(const GPUAdapter * __restrict adapter,
-                          const GPUSurface * __restrict surface,
-                          GPUSurfaceCapabilities * __restrict outCaps);
+GPUGetSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
+                          const GPUSurface       *__restrict surface,
+                          GPUSurfaceCapabilities *__restrict outCaps);
 
 #ifdef __cplusplus
 }

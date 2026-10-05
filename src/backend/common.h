@@ -27,11 +27,13 @@
 /*#define GPUCalloc(X) calloc(1, sizeof(X) + sizeof(CONCAT(X, GPUBackendTypeSuffix))) */
 
 #define GPUCalloc(X) ({                                                       \
-  X*     x;                                                                   \
+  X     *x;                                                                   \
   size_t s;                                                                   \
+                                                                              \
   s        = sizeof(CONCAT(X, GPUBackendTypeSuffix));                         \
   x        = calloc(1, sizeof(X) + s);                                        \
-  x->_priv = (void*)((char*)x + sizeof(X));                                   \
+  x->_priv = (void *)((char *)x + sizeof(X));                                 \
+                                                                              \
   x;                                                                          \
 })
 
@@ -51,8 +53,9 @@
         .flags = GPU_QUEUE_COMPUTE_BIT                                        \
       }                                                                       \
     };                                                                        \
-    nQueCI = GPU_ARRAY_LEN(gpuDefaultQueues);                                  \
-    queCI  = gpuDefaultQueues;                                                 \
+                                                                              \
+    nQueCI = GPU_ARRAY_LEN(gpuDefaultQueues);                                 \
+    queCI  = gpuDefaultQueues;                                                \
   }                                                                           \
 
 #endif /* backend_common_h */

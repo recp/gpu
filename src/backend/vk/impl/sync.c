@@ -22,20 +22,32 @@ enum {
 
 GPU_HIDE
 void
-vk_pipelineBarrier(GPUDeviceVk                *device,
-                   VkCommandBuffer             command,
-                   VkPipelineStageFlags        srcStages,
-                   VkPipelineStageFlags        dstStages,
-                   uint32_t                    bufferBarrierCount,
+vk_pipelineBarrier(GPUDeviceVk                 *device,
+                   VkCommandBuffer              command,
+                   VkPipelineStageFlags         srcStages,
+                   VkPipelineStageFlags         dstStages,
+                   uint32_t                     bufferBarrierCount,
                    const VkBufferMemoryBarrier *bufferBarriers,
-                   uint32_t                    imageBarrierCount,
+                   uint32_t                     imageBarrierCount,
                    const VkImageMemoryBarrier  *imageBarriers) {
-  uint32_t bufferOffset;
-  uint32_t imageOffset;
+  VkBufferMemoryBarrier2KHR    buffers[VK_SYNC_BARRIER_CHUNK_SIZE];
+  VkImageMemoryBarrier2KHR     images[VK_SYNC_BARRIER_CHUNK_SIZE];
+  VkDependencyInfoKHR          dependency;
+  const VkBufferMemoryBarrier *bufferSrc;
+  VkBufferMemoryBarrier2KHR   *bufferDst;
+  const VkImageMemoryBarrier  *imageSrc;
+  VkImageMemoryBarrier2KHR    *imageDst;
+  uint32_t                     bufferOffset;
+  uint32_t                     imageOffset;
+  uint32_t                     bufferCount;
+  uint32_t                     imageCount;
+  uint32_t                     bufferIndex;
+  uint32_t                     imageIndex;
 
   if (!command || (bufferBarrierCount == 0u && imageBarrierCount == 0u)) {
     return;
   }
+
   if (!device || !device->synchronization2) {
     vkCmdPipelineBarrier(command,
                          srcStages,
@@ -52,61 +64,53 @@ vk_pipelineBarrier(GPUDeviceVk                *device,
 
   bufferOffset = 0u;
   imageOffset  = 0u;
-  while (bufferOffset < bufferBarrierCount ||
-         imageOffset < imageBarrierCount) {
-    VkBufferMemoryBarrier2KHR buffers[VK_SYNC_BARRIER_CHUNK_SIZE];
-    VkImageMemoryBarrier2KHR  images[VK_SYNC_BARRIER_CHUNK_SIZE];
-    VkDependencyInfoKHR       dependency = {0};
-    uint32_t                  bufferCount;
-    uint32_t                  imageCount;
+
+  while (bufferOffset < bufferBarrierCount || imageOffset < imageBarrierCount) {
+    dependency = (VkDependencyInfoKHR){0};
 
     bufferCount = bufferBarrierCount - bufferOffset;
+
     if (bufferCount > VK_SYNC_BARRIER_CHUNK_SIZE) {
       bufferCount = VK_SYNC_BARRIER_CHUNK_SIZE;
     }
+
     imageCount = imageBarrierCount - imageOffset;
+
     if (imageCount > VK_SYNC_BARRIER_CHUNK_SIZE) {
       imageCount = VK_SYNC_BARRIER_CHUNK_SIZE;
     }
 
-    for (uint32_t i = 0u; i < bufferCount; i++) {
-      const VkBufferMemoryBarrier *src;
-      VkBufferMemoryBarrier2KHR   *dst;
-
-      src                      = &bufferBarriers[bufferOffset + i];
-      dst                      = &buffers[i];
-      memset(dst, 0, sizeof(*dst));
-      dst->sType               =
-        VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2_KHR;
-      dst->srcStageMask        = srcStages;
-      dst->srcAccessMask       = src->srcAccessMask;
-      dst->dstStageMask        = dstStages;
-      dst->dstAccessMask       = src->dstAccessMask;
-      dst->srcQueueFamilyIndex = src->srcQueueFamilyIndex;
-      dst->dstQueueFamilyIndex = src->dstQueueFamilyIndex;
-      dst->buffer              = src->buffer;
-      dst->offset              = src->offset;
-      dst->size                = src->size;
+    for (bufferIndex = 0u; bufferIndex < bufferCount; bufferIndex++) {
+      bufferSrc = &bufferBarriers[bufferOffset + bufferIndex];
+      bufferDst = &buffers[bufferIndex];
+      memset(bufferDst, 0, sizeof(*bufferDst));
+      bufferDst->sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2_KHR;
+      bufferDst->srcStageMask        = srcStages;
+      bufferDst->srcAccessMask       = bufferSrc->srcAccessMask;
+      bufferDst->dstStageMask        = dstStages;
+      bufferDst->dstAccessMask       = bufferSrc->dstAccessMask;
+      bufferDst->srcQueueFamilyIndex = bufferSrc->srcQueueFamilyIndex;
+      bufferDst->dstQueueFamilyIndex = bufferSrc->dstQueueFamilyIndex;
+      bufferDst->buffer              = bufferSrc->buffer;
+      bufferDst->offset              = bufferSrc->offset;
+      bufferDst->size                = bufferSrc->size;
     }
-    for (uint32_t i = 0u; i < imageCount; i++) {
-      const VkImageMemoryBarrier *src;
-      VkImageMemoryBarrier2KHR   *dst;
 
-      src                        = &imageBarriers[imageOffset + i];
-      dst                        = &images[i];
-      memset(dst, 0, sizeof(*dst));
-      dst->sType                 =
-        VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR;
-      dst->srcStageMask          = srcStages;
-      dst->srcAccessMask         = src->srcAccessMask;
-      dst->dstStageMask          = dstStages;
-      dst->dstAccessMask         = src->dstAccessMask;
-      dst->oldLayout             = src->oldLayout;
-      dst->newLayout             = src->newLayout;
-      dst->srcQueueFamilyIndex   = src->srcQueueFamilyIndex;
-      dst->dstQueueFamilyIndex   = src->dstQueueFamilyIndex;
-      dst->image                 = src->image;
-      dst->subresourceRange      = src->subresourceRange;
+    for (imageIndex = 0u; imageIndex < imageCount; imageIndex++) {
+      imageSrc = &imageBarriers[imageOffset + imageIndex];
+      imageDst = &images[imageIndex];
+      memset(imageDst, 0, sizeof(*imageDst));
+      imageDst->sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR;
+      imageDst->srcStageMask        = srcStages;
+      imageDst->srcAccessMask       = imageSrc->srcAccessMask;
+      imageDst->dstStageMask        = dstStages;
+      imageDst->dstAccessMask       = imageSrc->dstAccessMask;
+      imageDst->oldLayout           = imageSrc->oldLayout;
+      imageDst->newLayout           = imageSrc->newLayout;
+      imageDst->srcQueueFamilyIndex = imageSrc->srcQueueFamilyIndex;
+      imageDst->dstQueueFamilyIndex = imageSrc->dstQueueFamilyIndex;
+      imageDst->image               = imageSrc->image;
+      imageDst->subresourceRange    = imageSrc->subresourceRange;
     }
 
     dependency.sType                    = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR;

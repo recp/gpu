@@ -59,17 +59,17 @@ vk_blitTextureRenderFallback(GPUCommandBuffer         *cmdb,
 
   command = cmdb ? cmdb->_priv : NULL;
   texture = info && info->src ? info->src->_priv : NULL;
-  if (!command || !command->command || !texture ||
-      !vk_transitionTexture(
-        command->command,
-        texture,
-        info->srcRegion.texture.mipLevel,
-        1u,
-        info->srcRegion.texture.baseArrayLayer,
-        info->srcRegion.layerCount,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-      )) {
+
+  if (!command || !command->command || !texture
+      || !vk_transitionTexture(command->command,
+                               texture,
+                               info->srcRegion.texture.mipLevel,
+                               1u,
+                               info->srcRegion.texture.baseArrayLayer,
+                               info->srcRegion.layerCount,
+                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)) {
     return;
   }
+
   gpuBlitTextureRenderFallback(cmdb, info, &vk_blitTextureShaders);
 }

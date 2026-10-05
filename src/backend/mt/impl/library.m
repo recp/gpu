@@ -16,6 +16,17 @@
 
 #include "../common.h"
 
+static const MTLCompareFunction mt_compareFunctions[] = {
+  [GPU_COMPARE_NEVER]         = MTLCompareFunctionNever,
+  [GPU_COMPARE_LESS]          = MTLCompareFunctionLess,
+  [GPU_COMPARE_EQUAL]         = MTLCompareFunctionEqual,
+  [GPU_COMPARE_LESS_EQUAL]     = MTLCompareFunctionLessEqual,
+  [GPU_COMPARE_GREATER]       = MTLCompareFunctionGreater,
+  [GPU_COMPARE_NOT_EQUAL]     = MTLCompareFunctionNotEqual,
+  [GPU_COMPARE_GREATER_EQUAL] = MTLCompareFunctionGreaterEqual,
+  [GPU_COMPARE_ALWAYS]        = MTLCompareFunctionAlways
+};
+
 static void
 mt_setSafeMathFallback(MTLCompileOptions *options) {
 #pragma clang diagnostic push
@@ -24,18 +35,43 @@ mt_setSafeMathFallback(MTLCompileOptions *options) {
 #pragma clang diagnostic pop
 }
 
+static void
+mt_destroyFunction(GPUShaderFunction *function) {
+  MTShaderFunction *native;
+
+  if (!function) {
+    return;
+  }
+
+  native = function->_priv;
+
+  if (native) {
+    [native->name release];
+    [native->library release];
+    [native->function release];
+    free(native);
+  }
+
+  free(function);
+}
+
+static MTLCompareFunction
+mt_samplerCompareFunction(GPUCompareOp op) {
+  return (uint32_t)op < GPU_ARRAY_LEN(mt_compareFunctions) ? mt_compareFunctions[op] : MTLCompareFunctionNever;
+}
+
 GPU_HIDE
 GPUShaderLibrary*
-mt_newLibraryWithSource(GPUDevice *device,
+mt_newLibraryWithSource(GPUDevice  *device,
                         const char *source,
-                        uint64_t sourceSize,
-                        uint32_t compileFlags) {
-  GPUDeviceMT          *deviceMT;
-  GPUShaderLibrary     *library;
-  id<MTLLibrary>        mtLibrary;
-  NSError              *error;
-  NSString             *nsSource;
-  MTLCompileOptions    *options;
+                        uint64_t    sourceSize,
+                        uint32_t    compileFlags) {
+  GPUDeviceMT           *deviceMT;
+  GPUShaderLibrary      *library;
+  id<MTLLibrary>         mtLibrary;
+  NSError               *error;
+  NSString              *nsSource;
+  MTLCompileOptions     *options;
 #if MT_HAS_METAL4
   MTL4LibraryDescriptor *descriptor;
 #endif
@@ -47,6 +83,7 @@ mt_newLibraryWithSource(GPUDevice *device,
                                      encoding:NSUTF8StringEncoding];
   options   = [MTLCompileOptions new];
   mtLibrary = nil;
+
   if (!deviceMT || !nsSource || !options) {
     [options release];
     [nsSource release];
@@ -63,9 +100,8 @@ mt_newLibraryWithSource(GPUDevice *device,
 
   if ((compileFlags & GPU_SHADER_SOURCE_COMPILE_STRICT_IEEE) != 0u) {
     if (@available(macOS 15.0, iOS 18.0, *)) {
-      options.mathMode                    = MTLMathModeSafe;
-      options.mathFloatingPointFunctions =
-        MTLMathFloatingPointFunctionsPrecise;
+      options.mathMode                   = MTLMathModeSafe;
+      options.mathFloatingPointFunctions = MTLMathFloatingPointFunctionsPrecise;
     } else {
       mt_setSafeMathFallback(options);
     }
@@ -83,9 +119,8 @@ mt_newLibraryWithSource(GPUDevice *device,
       descriptor         = [MTL4LibraryDescriptor new];
       descriptor.source  = nsSource;
       descriptor.options = options;
-      mtLibrary = [(id<MTL4Compiler>)deviceMT->compiler
-        newLibraryWithDescriptor:descriptor
-                           error:&error];
+      mtLibrary          = [(id<MTL4Compiler>)deviceMT->compiler newLibraryWithDescriptor:descriptor
+                                                                                    error:&error];
       [descriptor release];
     }
   } else
@@ -95,22 +130,25 @@ mt_newLibraryWithSource(GPUDevice *device,
                                                options:options
                                                  error:&error];
   }
+
   [options release];
   [nsSource release];
+
   if (!mtLibrary) {
     if (error) {
       NSLog(@"GPU mt_newLibraryWithSource failed: %@", error);
     }
+
     return NULL;
   }
 
-  library = calloc(1, sizeof(*library));
-  if (!library) {
+  if (!(library = calloc(1, sizeof(*library)))) {
     [mtLibrary release];
     return NULL;
   }
 
   library->_priv = mtLibrary;
+
   return library;
 }
 
@@ -118,18 +156,19 @@ GPU_HIDE
 GPUShaderFunction*
 mt_newFunction(GPUShaderLibrary *lib, const char *name) {
   GPUShaderFunction *func;
-  MTShaderFunction *native;
-  id<MTLFunction>   mtFunc;
-  NSString         *mtName;
+  MTShaderFunction  *native;
+  id<MTLFunction>    mtFunc;
+  NSString          *mtName;
 
   mtName = [NSString stringWithUTF8String:name];
-  mtFunc = [(id<MTLLibrary>)lib->_priv newFunctionWithName:mtName];
-  if (!mtFunc) {
+
+  if (!(mtFunc = [(id<MTLLibrary>)lib->_priv newFunctionWithName:mtName])) {
     return NULL;
   }
 
   func   = calloc(1, sizeof(*func));
   native = calloc(1, sizeof(*native));
+
   if (!func || !native) {
     free(native);
     free(func);
@@ -140,6 +179,7 @@ mt_newFunction(GPUShaderLibrary *lib, const char *name) {
   native->function = mtFunc;
   native->library  = [(id<MTLLibrary>)lib->_priv retain];
   native->name     = [mtName copy];
+
   if (!native->library || !native->name) {
     [native->name release];
     [native->library release];
@@ -148,42 +188,22 @@ mt_newFunction(GPUShaderLibrary *lib, const char *name) {
     free(func);
     return NULL;
   }
-  func->_priv      = native;
+
+  func->_priv = native;
 
   return func;
-}
-
-static void
-mt_destroyFunction(GPUShaderFunction *function) {
-  MTShaderFunction *native;
-
-  if (!function) {
-    return;
-  }
-  native = function->_priv;
-  if (native) {
-    [native->name release];
-    [native->library release];
-    [native->function release];
-    free(native);
-  }
-  free(function);
 }
 
 GPU_HIDE
 MTLSamplerMinMagFilter
 mt_samplerFilter(GPUFilter filter) {
-  return filter == GPU_FILTER_NEAREST ?
-    MTLSamplerMinMagFilterNearest :
-    MTLSamplerMinMagFilterLinear;
+  return filter == GPU_FILTER_NEAREST ? MTLSamplerMinMagFilterNearest : MTLSamplerMinMagFilterLinear;
 }
 
 GPU_HIDE
 MTLSamplerMipFilter
 mt_samplerMipFilter(GPUMipFilter filter) {
-  return filter == GPU_MIP_FILTER_NEAREST ?
-    MTLSamplerMipFilterNearest :
-    MTLSamplerMipFilterLinear;
+  return filter == GPU_MIP_FILTER_NEAREST ? MTLSamplerMipFilterNearest : MTLSamplerMipFilterLinear;
 }
 
 GPU_HIDE
@@ -200,35 +220,17 @@ mt_samplerAddressMode(GPUAddressMode mode) {
   }
 }
 
-static MTLCompareFunction
-mt_samplerCompareFunction(GPUCompareOp op) {
-  static const MTLCompareFunction functions[] = {
-    [GPU_COMPARE_NEVER]         = MTLCompareFunctionNever,
-    [GPU_COMPARE_LESS]          = MTLCompareFunctionLess,
-    [GPU_COMPARE_EQUAL]         = MTLCompareFunctionEqual,
-    [GPU_COMPARE_LESS_EQUAL]    = MTLCompareFunctionLessEqual,
-    [GPU_COMPARE_GREATER]       = MTLCompareFunctionGreater,
-    [GPU_COMPARE_NOT_EQUAL]     = MTLCompareFunctionNotEqual,
-    [GPU_COMPARE_GREATER_EQUAL] = MTLCompareFunctionGreaterEqual,
-    [GPU_COMPARE_ALWAYS]        = MTLCompareFunctionAlways
-  };
-
-  return (uint32_t)op < GPU_ARRAY_LEN(functions)
-           ? functions[op]
-           : MTLCompareFunctionNever;
-}
-
 GPU_HIDE
 GPUResult
-mt_createSampler(GPUApi * __restrict api,
-                 GPUDevice * __restrict device,
+mt_createSampler(GPUApi          *__restrict api,
+                 GPUDevice       *__restrict device,
                  const GPUSamplerCreateInfo *info,
-                 bool staticIfSupported,
-                 GPUSampler **outSampler) {
-  GPUDeviceMT *deviceMT;
+                 bool                        staticIfSupported,
+                 GPUSampler                **outSampler) {
+  GPUDeviceMT          *deviceMT;
   MTLSamplerDescriptor *desc;
-  GPUSampler *sampler;
-  id<MTLSamplerState> state;
+  GPUSampler           *sampler;
+  id<MTLSamplerState>   state;
 
   (void)api;
   (void)staticIfSupported;
@@ -236,46 +238,48 @@ mt_createSampler(GPUApi * __restrict api,
   if (!device || !info || !outSampler) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outSampler = NULL;
 
-  deviceMT = device->_priv;
-  desc = [MTLSamplerDescriptor new];
-  desc.minFilter = mt_samplerFilter(info->desc.minFilter);
-  desc.magFilter = mt_samplerFilter(info->desc.magFilter);
-  desc.mipFilter = mt_samplerMipFilter(info->desc.mipFilter);
-  desc.sAddressMode = mt_samplerAddressMode(info->desc.addressU);
-  desc.tAddressMode = mt_samplerAddressMode(info->desc.addressV);
-  desc.rAddressMode = mt_samplerAddressMode(info->desc.addressW);
-  desc.maxAnisotropy = info->desc.maxAnisotropy > 1u
-                         ? info->desc.maxAnisotropy
-                         : 1u;
+  deviceMT             = device->_priv;
+  desc                 = [MTLSamplerDescriptor new];
+  desc.minFilter       = mt_samplerFilter(info->desc.minFilter);
+  desc.magFilter       = mt_samplerFilter(info->desc.magFilter);
+  desc.mipFilter       = mt_samplerMipFilter(info->desc.mipFilter);
+  desc.sAddressMode    = mt_samplerAddressMode(info->desc.addressU);
+  desc.tAddressMode    = mt_samplerAddressMode(info->desc.addressV);
+  desc.rAddressMode    = mt_samplerAddressMode(info->desc.addressW);
+  desc.maxAnisotropy   = info->desc.maxAnisotropy > 1u ? info->desc.maxAnisotropy : 1u;
   desc.compareFunction = info->desc.compareEnable
-                           ? mt_samplerCompareFunction(info->desc.compare)
-                           : MTLCompareFunctionNever;
+                         ? mt_samplerCompareFunction(info->desc.compare)
+                         : MTLCompareFunctionNever;
 
   state = [deviceMT->device newSamplerStateWithDescriptor:desc];
   [desc release];
+
   if (!state) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  sampler = calloc(1, sizeof(*sampler));
-  if (!sampler) {
+  if (!(sampler = calloc(1, sizeof(*sampler)))) {
     [state release];
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   sampler->_priv = state;
+
   if (@available(macOS 13.0, iOS 16.0, *)) {
     sampler->_gpuResourceID = state.gpuResourceID._impl;
   }
+
   *outSampler = sampler;
+
   return GPU_OK;
 }
 
 GPU_HIDE
 void
-mt_destroySampler(GPUSampler * __restrict sampler) {
+mt_destroySampler(GPUSampler *__restrict sampler) {
   if (!sampler) {
     return;
   }
@@ -283,6 +287,7 @@ mt_destroySampler(GPUSampler * __restrict sampler) {
   if (sampler->_priv) {
     [(id<MTLSamplerState>)sampler->_priv release];
   }
+
   free(sampler);
 }
 

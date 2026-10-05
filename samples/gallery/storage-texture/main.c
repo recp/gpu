@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 #include <stdio.h>
@@ -58,6 +74,23 @@ static const StorageVertex kQuadVertices[] = {
   { {  0.82f,  0.82f, 0.0f, 1.0f }, { 1.0f, 0.0f } }
 };
 
+static const char *sourceTextureLabels[STORAGE_TEXTURE_COUNT]  = {
+  "storage-texture-webgpu-source-0",
+  "storage-texture-webgpu-source-1"
+};
+static const char *sourceViewLabels[STORAGE_TEXTURE_COUNT]     = {
+  "storage-texture-webgpu-source-view-0",
+  "storage-texture-webgpu-source-view-1"
+};
+static const char *filteredTextureLabels[STORAGE_TEXTURE_COUNT] = {
+  "storage-texture-webgpu-filtered-0",
+  "storage-texture-webgpu-filtered-1"
+};
+static const char *filteredViewLabels[STORAGE_TEXTURE_COUNT]   = {
+  "storage-texture-webgpu-filtered-view-0",
+  "storage-texture-webgpu-filtered-view-1"
+};
+
 static WebGPUStorageTexture app;
 
 static void
@@ -68,9 +101,11 @@ device_error(GPUDevice                *device,
 
   (void)device;
   state = userData;
+
   if (!state || !error || state->failed) {
     return;
   }
+
   state->failed = true;
   set_status(error->message ? error->message : "GPU: unknown device error", 1);
   emscripten_cancel_main_loop();
@@ -93,58 +128,52 @@ validate_reflection(WebGPUStorageTexture *state) {
   uint32_t                       readCount;
   uint32_t                       filterCount;
   uint32_t                       renderCount;
+  GPUTextureSampleType           sampleType;
 
-  paintEntries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[0],
-    &paintCount
-  );
-  readEntries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[1],
-    &readCount
-  );
-  filterEntries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[2],
-    &filterCount
-  );
-  renderEntries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[3],
-    &renderCount
-  );
-  if (!paintEntries || paintCount != 1u ||
-      paintEntries[0].binding != 0u ||
-      paintEntries[0].bindingType != GPU_BINDING_STORAGE_TEXTURE ||
-      paintEntries[0].arrayCount != STORAGE_TEXTURE_COUNT ||
-      paintEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
-      paintEntries[0].storageTexture.viewType != GPU_TEXTURE_VIEW_2D ||
-      paintEntries[0].storageTexture.format != GPU_FORMAT_RGBA8_UNORM ||
-      paintEntries[0].storageTexture.access !=
-        GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY) {
+  paintEntries  = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[0],
+                                               &paintCount);
+  readEntries   = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[1],
+                                               &readCount);
+  filterEntries = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[2],
+                                               &filterCount);
+  renderEntries = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[3],
+                                               &renderCount);
+
+  if (!paintEntries || paintCount != 1u
+      || paintEntries[0].binding != 0u
+      || paintEntries[0].bindingType != GPU_BINDING_STORAGE_TEXTURE
+      || paintEntries[0].arrayCount != STORAGE_TEXTURE_COUNT
+      || paintEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT
+      || paintEntries[0].storageTexture.viewType != GPU_TEXTURE_VIEW_2D
+      || paintEntries[0].storageTexture.format != GPU_FORMAT_RGBA8_UNORM
+      || paintEntries[0].storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY) {
     set_status("GPU: storage texture paint reflection mismatch", 1);
     return 0;
   }
-  if (!readEntries || readCount != 1u ||
-      readEntries[0].binding != 0u ||
-      readEntries[0].arrayCount != STORAGE_TEXTURE_COUNT ||
-      readEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT) {
+
+  if (!readEntries || readCount != 1u
+      || readEntries[0].binding != 0u
+      || readEntries[0].arrayCount != STORAGE_TEXTURE_COUNT
+      || readEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT) {
     set_status("GPU: storage texture read reflection mismatch", 1);
     return 0;
   }
-  state->readBindingType = readEntries[0].bindingType;
-  if (state->readBindingType == GPU_BINDING_SAMPLED_TEXTURE) {
-    GPUTextureSampleType sampleType;
 
+  state->readBindingType = readEntries[0].bindingType;
+
+  if (state->readBindingType == GPU_BINDING_SAMPLED_TEXTURE) {
     sampleType = readEntries[0].sampledTexture.sampleType;
-    if (readEntries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_2D ||
-        (sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT &&
-         sampleType != GPU_TEXTURE_SAMPLE_TYPE_UNFILTERABLE_FLOAT)) {
+
+    if (readEntries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_2D
+        || (sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT
+            && sampleType != GPU_TEXTURE_SAMPLE_TYPE_UNFILTERABLE_FLOAT)) {
       set_status("GPU: storage texture sampled-read reflection mismatch", 1);
       return 0;
     }
   } else if (state->readBindingType == GPU_BINDING_STORAGE_TEXTURE) {
-    if (readEntries[0].storageTexture.viewType != GPU_TEXTURE_VIEW_2D ||
-        readEntries[0].storageTexture.format != GPU_FORMAT_RGBA8_UNORM ||
-        readEntries[0].storageTexture.access !=
-          GPU_STORAGE_TEXTURE_ACCESS_READ_ONLY) {
+    if (readEntries[0].storageTexture.viewType != GPU_TEXTURE_VIEW_2D
+        || readEntries[0].storageTexture.format != GPU_FORMAT_RGBA8_UNORM
+        || readEntries[0].storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_READ_ONLY) {
       set_status("GPU: storage texture native-read reflection mismatch", 1);
       return 0;
     }
@@ -152,44 +181,46 @@ validate_reflection(WebGPUStorageTexture *state) {
     set_status("GPU: storage texture read binding class mismatch", 1);
     return 0;
   }
-  if (!filterEntries || filterCount != 1u ||
-      filterEntries[0].binding != 0u ||
-      filterEntries[0].bindingType != GPU_BINDING_STORAGE_TEXTURE ||
-      filterEntries[0].arrayCount != STORAGE_TEXTURE_COUNT ||
-      filterEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
-      filterEntries[0].storageTexture.viewType != GPU_TEXTURE_VIEW_2D ||
-      filterEntries[0].storageTexture.format != GPU_FORMAT_RGBA8_UNORM ||
-      filterEntries[0].storageTexture.access !=
-        GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY) {
+
+  if (!filterEntries || filterCount != 1u
+      || filterEntries[0].binding != 0u
+      || filterEntries[0].bindingType != GPU_BINDING_STORAGE_TEXTURE
+      || filterEntries[0].arrayCount != STORAGE_TEXTURE_COUNT
+      || filterEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT
+      || filterEntries[0].storageTexture.viewType != GPU_TEXTURE_VIEW_2D
+      || filterEntries[0].storageTexture.format != GPU_FORMAT_RGBA8_UNORM
+      || filterEntries[0].storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY) {
     set_status("GPU: storage texture filter reflection mismatch", 1);
     return 0;
   }
-  if (!renderEntries || renderCount != 2u ||
-      renderEntries[0].binding != 0u ||
-      renderEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      renderEntries[0].arrayCount != STORAGE_TEXTURE_COUNT ||
-      renderEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      renderEntries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_2D ||
-      renderEntries[0].sampledTexture.sampleType !=
-        GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
-      renderEntries[1].binding != 1u ||
-      renderEntries[1].bindingType != GPU_BINDING_SAMPLER ||
-      renderEntries[1].arrayCount != 1u ||
-      renderEntries[1].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
+
+  if (!renderEntries || renderCount != 2u
+      || renderEntries[0].binding != 0u
+      || renderEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || renderEntries[0].arrayCount != STORAGE_TEXTURE_COUNT
+      || renderEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT
+      || renderEntries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_2D
+      || renderEntries[0].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT
+      || renderEntries[1].binding != 1u
+      || renderEntries[1].bindingType != GPU_BINDING_SAMPLER
+      || renderEntries[1].arrayCount != 1u
+      || renderEntries[1].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
     set_status("GPU: storage texture render reflection mismatch", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_shader(WebGPUStorageTexture *state) {
-  void      *artifact;
-  uint64_t   artifactSize;
-  GPUResult  result;
+  void     *artifact;
+  uint64_t  artifactSize;
+  GPUResult result;
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/storage_texture.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /storage_texture.us", 1);
     return 0;
@@ -200,6 +231,7 @@ create_shader(WebGPUStorageTexture *state) {
                                          artifactSize,
                                          &state->library);
   free(artifact);
+
   if (result != GPU_OK || !state->library) {
     set_status(result == GPU_ERROR_UNSUPPORTED
                  ? "GPU: storage-texture shader target unsupported"
@@ -207,22 +239,26 @@ create_shader(WebGPUStorageTexture *state) {
                1);
     return 0;
   }
+
   result = GPUCreateShaderLayout(state->device,
                                  state->library,
                                  &state->shaderLayout);
+
   if (result != GPU_OK || !state->shaderLayout) {
     set_status("GPU: failed to create storage-texture shader layout", 1);
     return 0;
   }
-  if (state->shaderLayout->bindGroupLayoutCount != 4u ||
-      !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0] ||
-      !state->shaderLayout->bindGroupLayouts[1] ||
-      !state->shaderLayout->bindGroupLayouts[2] ||
-      !state->shaderLayout->bindGroupLayouts[3]) {
+
+  if (state->shaderLayout->bindGroupLayoutCount != 4u
+      || !state->shaderLayout->bindGroupLayouts
+      || !state->shaderLayout->bindGroupLayouts[0]
+      || !state->shaderLayout->bindGroupLayouts[1]
+      || !state->shaderLayout->bindGroupLayouts[2]
+      || !state->shaderLayout->bindGroupLayouts[3]) {
     set_status("GPU: unexpected storage-texture layout shape", 1);
     return 0;
   }
+
   return validate_reflection(state);
 }
 
@@ -236,6 +272,7 @@ create_read_write_shader(WebGPUStorageTexture *state) {
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/storage_texture_read_write.us",
                  &artifact,
                  &artifactSize)) {
@@ -248,52 +285,53 @@ create_read_write_shader(WebGPUStorageTexture *state) {
                                          artifactSize,
                                          &state->readWriteLibrary);
   free(artifact);
+
   if (result == GPU_ERROR_UNSUPPORTED) {
     state->nativeReadWrite = false;
     return 1;
   }
-  if (result != GPU_OK || !state->readWriteLibrary ||
-      GPUCreateShaderLayout(state->device,
-                            state->readWriteLibrary,
-                            &state->readWriteLayout) != GPU_OK ||
-      !state->readWriteLayout ||
-      state->readWriteLayout->bindGroupLayoutCount != 1u ||
-      !state->readWriteLayout->bindGroupLayouts ||
-      !state->readWriteLayout->bindGroupLayouts[0] ||
-      !state->readWriteLayout->pipelineLayout) {
+
+  if (result != GPU_OK || !state->readWriteLibrary
+      || GPUCreateShaderLayout(state->device,
+                               state->readWriteLibrary,
+                               &state->readWriteLayout) != GPU_OK
+      || !state->readWriteLayout
+      || state->readWriteLayout->bindGroupLayoutCount != 1u
+      || !state->readWriteLayout->bindGroupLayouts
+      || !state->readWriteLayout->bindGroupLayouts[0]
+      || !state->readWriteLayout->pipelineLayout) {
     set_status("GPU: failed to create native read-write storage shader", 1);
     return 0;
   }
 
   entryCount = 0u;
-  entries = GPUGetBindGroupLayoutEntries(
-    state->readWriteLayout->bindGroupLayouts[0],
-    &entryCount
-  );
-  if (!entries || entryCount != 1u ||
-      entries[0].binding != 0u ||
-      entries[0].bindingType != GPU_BINDING_STORAGE_TEXTURE ||
-      entries[0].arrayCount != STORAGE_TEXTURE_COUNT ||
-      entries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
-      entries[0].storageTexture.viewType != GPU_TEXTURE_VIEW_2D ||
-      entries[0].storageTexture.format != GPU_FORMAT_RGBA8_UNORM ||
-      entries[0].storageTexture.access !=
-        GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE) {
+  entries = GPUGetBindGroupLayoutEntries(state->readWriteLayout->bindGroupLayouts[0],
+                                         &entryCount);
+
+  if (!entries || entryCount != 1u
+      || entries[0].binding != 0u
+      || entries[0].bindingType != GPU_BINDING_STORAGE_TEXTURE
+      || entries[0].arrayCount != STORAGE_TEXTURE_COUNT
+      || entries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT
+      || entries[0].storageTexture.viewType != GPU_TEXTURE_VIEW_2D
+      || entries[0].storageTexture.format != GPU_FORMAT_RGBA8_UNORM
+      || entries[0].storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE) {
     set_status("GPU: unexpected read-write storage reflection", 1);
     return 0;
   }
 
   state->nativeReadWrite = true;
+
   return 1;
 }
 
 static int
 create_pipelines(WebGPUStorageTexture *state) {
-  GPUComputePipelineCreateInfo computeInfo = {0};
-  GPURenderPipelineCreateInfo  renderInfo = {0};
   GPUVertexAttribute           attributes[2] = {0};
-  GPUVertexBufferLayout        vertexLayout = {0};
-  GPUColorTargetState          color = {0};
+  GPURenderPipelineCreateInfo  renderInfo    = {0};
+  GPUComputePipelineCreateInfo computeInfo   = {0};
+  GPUVertexBufferLayout        vertexLayout  = {0};
+  GPUColorTargetState          color         = {0};
 
   computeInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   computeInfo.chain.structSize = sizeof(computeInfo);
@@ -301,10 +339,11 @@ create_pipelines(WebGPUStorageTexture *state) {
   computeInfo.layout           = state->shaderLayout->pipelineLayout;
   computeInfo.library          = state->library;
   computeInfo.entryPoint       = "paint_cs";
+
   if (GPUCreateComputePipeline(state->device,
                                &computeInfo,
-                               &state->paintPipeline) != GPU_OK ||
-      !state->paintPipeline) {
+                               &state->paintPipeline) != GPU_OK
+      || !state->paintPipeline) {
     set_status("GPU: failed to create storage-texture paint pipeline", 1);
     return 0;
   }
@@ -314,10 +353,11 @@ create_pipelines(WebGPUStorageTexture *state) {
     computeInfo.layout     = state->readWriteLayout->pipelineLayout;
     computeInfo.library    = state->readWriteLibrary;
     computeInfo.entryPoint = "mutate_cs";
+
     if (GPUCreateComputePipeline(state->device,
                                  &computeInfo,
-                                 &state->readWritePipeline) != GPU_OK ||
-        !state->readWritePipeline) {
+                                 &state->readWritePipeline) != GPU_OK
+        || !state->readWritePipeline) {
       set_status("GPU: failed to create read-write storage pipeline", 1);
       return 0;
     }
@@ -327,10 +367,11 @@ create_pipelines(WebGPUStorageTexture *state) {
   computeInfo.layout     = state->shaderLayout->pipelineLayout;
   computeInfo.library    = state->library;
   computeInfo.entryPoint = "filter_cs";
+
   if (GPUCreateComputePipeline(state->device,
                                &computeInfo,
-                               &state->filterPipeline) != GPU_OK ||
-      !state->filterPipeline) {
+                               &state->filterPipeline) != GPU_OK
+      || !state->filterPipeline) {
     set_status("GPU: failed to create storage-texture filter pipeline", 1);
     return 0;
   }
@@ -341,86 +382,76 @@ create_pipelines(WebGPUStorageTexture *state) {
   attributes[1].format         = GPU_VERTEX_FORMAT_FLOAT32X2;
   attributes[1].shaderLocation = 1u;
   attributes[1].offset         = offsetof(StorageVertex, uv);
-  vertexLayout.pAttributes     = attributes;
-  vertexLayout.strideBytes     = sizeof(StorageVertex);
-  vertexLayout.stepMode        = GPU_VERTEX_STEP_MODE_VERTEX;
-  vertexLayout.attributeCount  = 2u;
+
+  vertexLayout.pAttributes    = attributes;
+  vertexLayout.strideBytes    = sizeof(StorageVertex);
+  vertexLayout.stepMode       = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.attributeCount = 2u;
 
   color.format          = GPUGetSwapchainFormat(state->swapchain);
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
 
-  renderInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  renderInfo.chain.structSize     = sizeof(renderInfo);
-  renderInfo.label                = "storage-texture-webgpu-render";
-  renderInfo.layout               = state->shaderLayout->pipelineLayout;
-  renderInfo.library              = state->library;
-  renderInfo.vertexEntry          = "storage_vs";
-  renderInfo.fragmentEntry        = "storage_fs";
-  renderInfo.pColorTargets        = &color;
-  renderInfo.pDepthStencilState   = NULL;
-  renderInfo.vertex.pBufferLayouts = &vertexLayout;
+  renderInfo.chain.sType              = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  renderInfo.chain.structSize         = sizeof(renderInfo);
+  renderInfo.label                    = "storage-texture-webgpu-render";
+  renderInfo.layout                   = state->shaderLayout->pipelineLayout;
+  renderInfo.library                  = state->library;
+  renderInfo.vertexEntry              = "storage_vs";
+  renderInfo.fragmentEntry            = "storage_fs";
+  renderInfo.pColorTargets            = &color;
+  renderInfo.pDepthStencilState       = NULL;
+  renderInfo.vertex.pBufferLayouts    = &vertexLayout;
   renderInfo.vertex.bufferLayoutCount = 1u;
-  renderInfo.colorTargetCount     = 1u;
-  renderInfo.depthStencilFormat   = GPU_FORMAT_UNDEFINED;
-  renderInfo.primitiveTopology    = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  renderInfo.cullMode             = GPU_CULL_MODE_NONE;
-  renderInfo.frontFace            = GPU_FRONT_FACE_CCW;
-  renderInfo.multisample.sampleCount = 1u;
-  renderInfo.multisample.sampleMask  = UINT32_MAX;
+  renderInfo.colorTargetCount         = 1u;
+  renderInfo.depthStencilFormat       = GPU_FORMAT_UNDEFINED;
+  renderInfo.primitiveTopology        = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  renderInfo.cullMode                 = GPU_CULL_MODE_NONE;
+  renderInfo.frontFace                = GPU_FRONT_FACE_CCW;
+  renderInfo.multisample.sampleCount  = 1u;
+  renderInfo.multisample.sampleMask   = UINT32_MAX;
+
   if (GPUCreateRenderPipeline(state->device,
                               &renderInfo,
-                              &state->renderPipeline) != GPU_OK ||
-      !state->renderPipeline) {
+                              &state->renderPipeline) != GPU_OK
+      || !state->renderPipeline) {
     set_status("GPU: failed to create storage-texture render pipeline", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_resources(WebGPUStorageTexture *state) {
-  static const char *sourceTextureLabels[STORAGE_TEXTURE_COUNT] = {
-    "storage-texture-webgpu-source-0",
-    "storage-texture-webgpu-source-1"
-  };
-  static const char *sourceViewLabels[STORAGE_TEXTURE_COUNT] = {
-    "storage-texture-webgpu-source-view-0",
-    "storage-texture-webgpu-source-view-1"
-  };
-  static const char *filteredTextureLabels[STORAGE_TEXTURE_COUNT] = {
-    "storage-texture-webgpu-filtered-0",
-    "storage-texture-webgpu-filtered-1"
-  };
-  static const char *filteredViewLabels[STORAGE_TEXTURE_COUNT] = {
-    "storage-texture-webgpu-filtered-view-0",
-    "storage-texture-webgpu-filtered-view-1"
-  };
-  GPUBufferCreateInfo          vertexInfo = {0};
-  GPUTextureCreateInfo         textureInfo = {0};
-  GPUTextureViewCreateInfo     viewInfo = {0};
-  GPUSamplerCreateInfo         samplerInfo = {0};
-  GPUBindGroupEntry            paintEntries[STORAGE_TEXTURE_COUNT] = {0};
-  GPUBindGroupEntry            readWriteEntries[STORAGE_TEXTURE_COUNT] = {0};
-  GPUBindGroupEntry            readEntries[STORAGE_TEXTURE_COUNT] = {0};
-  GPUBindGroupEntry            filterEntries[STORAGE_TEXTURE_COUNT] = {0};
-  GPUBindGroupEntry            sampleEntries[STORAGE_TEXTURE_COUNT + 1u] = {0};
-  GPUBindGroupCreateInfo       groupInfo = {0};
-  GPUBindGroupCreateInfo       sampleInfo = {0};
+  GPUTextureViewCreateInfo viewInfo = {0};
+
+  GPUBindGroupEntry        sampleEntries[STORAGE_TEXTURE_COUNT + 1u] = {0};
+  GPUBindGroupEntry        paintEntries[STORAGE_TEXTURE_COUNT]       = {0};
+  GPUBindGroupEntry        readWriteEntries[STORAGE_TEXTURE_COUNT]   = {0};
+  GPUBindGroupEntry        readEntries[STORAGE_TEXTURE_COUNT]        = {0};
+  GPUBindGroupEntry        filterEntries[STORAGE_TEXTURE_COUNT]      = {0};
+
+  GPUTextureCreateInfo     textureInfo = {0};
+  GPUSamplerCreateInfo     samplerInfo = {0};
+  GPUBindGroupCreateInfo   groupInfo   = {0};
+  GPUBindGroupCreateInfo   sampleInfo  = {0};
+  GPUBufferCreateInfo      vertexInfo  = {0};
+  uint32_t                 i;
 
   vertexInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   vertexInfo.chain.structSize = sizeof(vertexInfo);
   vertexInfo.label            = "storage-texture-webgpu-vertices";
   vertexInfo.sizeBytes        = sizeof(kQuadVertices);
-  vertexInfo.usage            = GPU_BUFFER_USAGE_VERTEX |
-                                GPU_BUFFER_USAGE_COPY_DST;
+  vertexInfo.usage            = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(state->device,
                       &vertexInfo,
-                      &state->vertexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->vertexBuffer,
-                          0u,
-                          kQuadVertices,
-                          sizeof(kQuadVertices)) != GPU_OK) {
+                      &state->vertexBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->vertexBuffer,
+                             0u,
+                             kQuadVertices,
+                             sizeof(kQuadVertices)) != GPU_OK) {
     set_status("GPU: failed to upload storage-texture vertices", 1);
     return 0;
   }
@@ -434,8 +465,7 @@ create_resources(WebGPUStorageTexture *state) {
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
-  textureInfo.usage            = GPU_TEXTURE_USAGE_STORAGE |
-                                 GPU_TEXTURE_USAGE_SAMPLED;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_STORAGE | GPU_TEXTURE_USAGE_SAMPLED;
 
   viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   viewInfo.chain.structSize = sizeof(viewInfo);
@@ -443,37 +473,44 @@ create_resources(WebGPUStorageTexture *state) {
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
-  for (uint32_t i = 0u; i < STORAGE_TEXTURE_COUNT; i++) {
+
+  for (i = 0u; i < STORAGE_TEXTURE_COUNT; i++) {
     textureInfo.label = sourceTextureLabels[i];
+
     if (GPUCreateTexture(state->device,
                          &textureInfo,
-                         &state->sourceTextures[i]) != GPU_OK ||
-        !state->sourceTextures[i]) {
+                         &state->sourceTextures[i]) != GPU_OK
+        || !state->sourceTextures[i]) {
       set_status("GPU: failed to create a source storage texture", 1);
       return 0;
     }
+
     viewInfo.label = sourceViewLabels[i];
+
     if (GPUCreateTextureView(state->sourceTextures[i],
                              &viewInfo,
-                             &state->sourceViews[i]) != GPU_OK ||
-        !state->sourceViews[i]) {
+                             &state->sourceViews[i]) != GPU_OK
+        || !state->sourceViews[i]) {
       set_status("GPU: failed to create a source storage-texture view", 1);
       return 0;
     }
 
     textureInfo.label = filteredTextureLabels[i];
+
     if (GPUCreateTexture(state->device,
                          &textureInfo,
-                         &state->filteredTextures[i]) != GPU_OK ||
-        !state->filteredTextures[i]) {
+                         &state->filteredTextures[i]) != GPU_OK
+        || !state->filteredTextures[i]) {
       set_status("GPU: failed to create a filtered storage texture", 1);
       return 0;
     }
+
     viewInfo.label = filteredViewLabels[i];
+
     if (GPUCreateTextureView(state->filteredTextures[i],
                              &viewInfo,
-                             &state->filteredViews[i]) != GPU_OK ||
-        !state->filteredViews[i]) {
+                             &state->filteredViews[i]) != GPU_OK
+        || !state->filteredViews[i]) {
       set_status("GPU: failed to create a filtered storage-texture view", 1);
       return 0;
     }
@@ -488,16 +525,17 @@ create_resources(WebGPUStorageTexture *state) {
   samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+
   if (GPUCreateSampler(state->device,
                        &samplerInfo,
                        false,
-                       &state->sampler) != GPU_OK ||
-      !state->sampler) {
+                       &state->sampler) != GPU_OK
+      || !state->sampler) {
     set_status("GPU: failed to create the storage-texture sampler", 1);
     return 0;
   }
 
-  for (uint32_t i = 0u; i < STORAGE_TEXTURE_COUNT; i++) {
+  for (i = 0u; i < STORAGE_TEXTURE_COUNT; i++) {
     paintEntries[i].textureView = state->sourceViews[i];
     paintEntries[i].binding     = 0u;
     paintEntries[i].arrayIndex  = i;
@@ -523,16 +561,18 @@ create_resources(WebGPUStorageTexture *state) {
     sampleEntries[i].arrayIndex  = i;
     sampleEntries[i].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
   }
+
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "storage-texture-webgpu-paint-group";
   groupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
   groupInfo.pEntries         = paintEntries;
   groupInfo.entryCount       = STORAGE_TEXTURE_COUNT;
+
   if (GPUCreateBindGroup(state->device,
                          &groupInfo,
-                         &state->paintGroup) != GPU_OK ||
-      !state->paintGroup) {
+                         &state->paintGroup) != GPU_OK
+      || !state->paintGroup) {
     set_status("GPU: failed to create the reflected paint group", 1);
     return 0;
   }
@@ -541,10 +581,11 @@ create_resources(WebGPUStorageTexture *state) {
     groupInfo.label    = "storage-texture-webgpu-read-write-group";
     groupInfo.layout   = state->readWriteLayout->bindGroupLayouts[0];
     groupInfo.pEntries = readWriteEntries;
+
     if (GPUCreateBindGroup(state->device,
                            &groupInfo,
-                           &state->readWriteGroup) != GPU_OK ||
-        !state->readWriteGroup) {
+                           &state->readWriteGroup) != GPU_OK
+        || !state->readWriteGroup) {
       set_status("GPU: failed to create the read-write storage group", 1);
       return 0;
     }
@@ -553,10 +594,11 @@ create_resources(WebGPUStorageTexture *state) {
   groupInfo.label    = "storage-texture-webgpu-read-group";
   groupInfo.layout   = state->shaderLayout->bindGroupLayouts[1];
   groupInfo.pEntries = readEntries;
+
   if (GPUCreateBindGroup(state->device,
                          &groupInfo,
-                         &state->readGroup) != GPU_OK ||
-      !state->readGroup) {
+                         &state->readGroup) != GPU_OK
+      || !state->readGroup) {
     set_status("GPU: failed to create the reflected read group", 1);
     return 0;
   }
@@ -564,10 +606,11 @@ create_resources(WebGPUStorageTexture *state) {
   groupInfo.label    = "storage-texture-webgpu-filter-group";
   groupInfo.layout   = state->shaderLayout->bindGroupLayouts[2];
   groupInfo.pEntries = filterEntries;
+
   if (GPUCreateBindGroup(state->device,
                          &groupInfo,
-                         &state->filterGroup) != GPU_OK ||
-      !state->filterGroup) {
+                         &state->filterGroup) != GPU_OK
+      || !state->filterGroup) {
     set_status("GPU: failed to create the reflected filter group", 1);
     return 0;
   }
@@ -575,59 +618,66 @@ create_resources(WebGPUStorageTexture *state) {
   sampleEntries[STORAGE_TEXTURE_COUNT].sampler     = state->sampler;
   sampleEntries[STORAGE_TEXTURE_COUNT].binding     = 1u;
   sampleEntries[STORAGE_TEXTURE_COUNT].bindingType = GPU_BINDING_SAMPLER;
+
   sampleInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   sampleInfo.chain.structSize = sizeof(sampleInfo);
   sampleInfo.label            = "storage-texture-webgpu-sample-group";
   sampleInfo.layout           = state->shaderLayout->bindGroupLayouts[3];
   sampleInfo.pEntries         = sampleEntries;
   sampleInfo.entryCount       = STORAGE_TEXTURE_COUNT + 1u;
+
   if (GPUCreateBindGroup(state->device,
                          &sampleInfo,
-                         &state->sampleGroup) != GPU_OK ||
-      !state->sampleGroup) {
+                         &state->sampleGroup) != GPU_OK
+      || !state->sampleGroup) {
     set_status("GPU: failed to create the reflected sample group", 1);
     return 0;
   }
+
   return 1;
 }
 
 static void
 render_frame(void *userData) {
-  WebGPUStorageTexture         *state;
-  GPUFrame                     *frame;
-  GPUCommandBuffer             *cmdb;
-  GPUComputePassEncoder        *compute;
-  GPURenderPassEncoder         *render;
-  GPUTextureBarrier             textureBarriers[STORAGE_TEXTURE_COUNT] = {0};
-  GPUBarrierBatch               barriers = {0};
-  GPUBufferBinding              vertex = {0};
-  GPURenderPassColorAttachment  color = {0};
-  GPURenderPassCreateInfo       passInfo = {0};
+  GPUCommandBuffer            *cmdb;
+  GPUTextureBarrier            textureBarriers[STORAGE_TEXTURE_COUNT] = {0};
+
+  GPURenderPassCreateInfo      passInfo = {0};
+  GPUBarrierBatch              barriers = {0};
+  GPURenderPassColorAttachment color    = {0};
+  GPUBufferBinding             vertex   = {0};
+  WebGPUStorageTexture        *state;
+  GPUFrame                    *frame;
+  GPUComputePassEncoder       *compute;
+  GPURenderPassEncoder        *render;
+  uint32_t                     i;
 
   state = userData;
+
   if (!resize_canvas(state)) {
     return;
   }
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) {
+  if (!(frame = GPUBeginFrame(state->swapchain))) {
     return;
   }
+
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(state->queue,
                               "storage-texture-webgpu-frame",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+                              &cmdb) != GPU_OK
+      || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
 
-  compute = GPUBeginComputePass(cmdb, "storage-texture-webgpu-paint");
-  if (!compute) {
+  if (!(compute = GPUBeginComputePass(cmdb, "storage-texture-webgpu-paint"))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
   }
+
   GPUBindComputePipeline(compute, state->paintPipeline);
   GPUBindComputeGroup(compute, 0u, state->paintGroup, 0u, NULL);
   GPUDispatch(compute,
@@ -636,30 +686,30 @@ render_frame(void *userData) {
               1u);
   GPUEndComputePass(compute);
 
-  for (uint32_t i = 0u; i < STORAGE_TEXTURE_COUNT; i++) {
+  for (i = 0u; i < STORAGE_TEXTURE_COUNT; i++) {
     textureBarriers[i].texture    = state->sourceTextures[i];
     textureBarriers[i].srcAccess  = GPU_ACCESS_SHADER_WRITE;
-    textureBarriers[i].dstAccess  = GPU_ACCESS_SHADER_READ |
-                                    (state->nativeReadWrite
-                                       ? GPU_ACCESS_SHADER_WRITE
-                                       : 0u);
+    textureBarriers[i].dstAccess  = GPU_ACCESS_SHADER_READ
+                                 | (state->nativeReadWrite ? GPU_ACCESS_SHADER_WRITE : 0u);
     textureBarriers[i].mipCount   = 1u;
     textureBarriers[i].layerCount = 1u;
   }
+
   barriers.pTextureBarriers    = textureBarriers;
   barriers.srcStages           = GPU_STAGE_COMPUTE;
   barriers.dstStages           = GPU_STAGE_COMPUTE;
   barriers.textureBarrierCount = STORAGE_TEXTURE_COUNT;
+
   GPUEncodeBarriers(cmdb, &barriers);
 
   if (state->nativeReadWrite) {
-    compute = GPUBeginComputePass(cmdb,
-                                  "storage-texture-webgpu-read-write");
-    if (!compute) {
+    if (!(compute = GPUBeginComputePass(cmdb,
+                                        "storage-texture-webgpu-read-write"))) {
       (void)GPUDiscardCommandBuffer(cmdb);
       GPUEndFrame(frame);
       return;
     }
+
     GPUBindComputePipeline(compute, state->readWritePipeline);
     GPUBindComputeGroup(compute, 0u, state->readWriteGroup, 0u, NULL);
     GPUDispatch(compute,
@@ -667,19 +717,21 @@ render_frame(void *userData) {
                 STORAGE_TEXTURE_SIZE / STORAGE_WORKGROUP_SIZE,
                 1u);
     GPUEndComputePass(compute);
-    for (uint32_t i = 0u; i < STORAGE_TEXTURE_COUNT; i++) {
+
+    for (i = 0u; i < STORAGE_TEXTURE_COUNT; i++) {
       textureBarriers[i].srcAccess = GPU_ACCESS_SHADER_WRITE;
       textureBarriers[i].dstAccess = GPU_ACCESS_SHADER_READ;
     }
+
     GPUEncodeBarriers(cmdb, &barriers);
   }
 
-  compute = GPUBeginComputePass(cmdb, "storage-texture-webgpu-filter");
-  if (!compute) {
+  if (!(compute = GPUBeginComputePass(cmdb, "storage-texture-webgpu-filter"))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
   }
+
   GPUBindComputePipeline(compute, state->filterPipeline);
   GPUBindComputeGroup(compute, 1u, state->readGroup, 0u, NULL);
   GPUBindComputeGroup(compute, 2u, state->filterGroup, 0u, NULL);
@@ -689,10 +741,12 @@ render_frame(void *userData) {
               1u);
   GPUEndComputePass(compute);
 
-  for (uint32_t i = 0u; i < STORAGE_TEXTURE_COUNT; i++) {
+  for (i = 0u; i < STORAGE_TEXTURE_COUNT; i++) {
     textureBarriers[i].texture = state->filteredTextures[i];
   }
+
   barriers.dstStages = GPU_STAGE_FRAGMENT;
+
   GPUEncodeBarriers(cmdb, &barriers);
 
   color.view                  = GPUFrameGetTargetView(frame);
@@ -702,28 +756,32 @@ render_frame(void *userData) {
   color.clearColor.float32[1] = 0.035f;
   color.clearColor.float32[2] = 0.085f;
   color.clearColor.float32[3] = 1.0f;
+
   passInfo.label                = "storage-texture-webgpu-render";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  render = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!render) {
+
+  if (!(render = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
   }
 
   vertex.buffer = state->vertexBuffer;
+
   GPUBindRenderPipeline(render, state->renderPipeline);
   GPUBindVertexBuffers(render, 0u, 1u, &vertex);
   GPUBindRenderGroup(render, 3u, state->sampleGroup, 0u, NULL);
   GPUDraw(render, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(render);
+
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     set_status("GPU: failed to finish the storage-texture frame", 1);
     return;
   }
 
   state->frameCount++;
+
   if (state->frameCount > WARM_FRAME_COUNT) {
     GPUFrameStats stats;
 
@@ -731,8 +789,8 @@ render_frame(void *userData) {
       if (stats.drawCalls != 1u) {
         set_status("GPU: storage-texture draw was not encoded", 1);
         emscripten_cancel_main_loop();
-      } else if (stats.hotPathAllocCount != 0u ||
-                 stats.hotPathFreeCount != 0u) {
+      } else if (stats.hotPathAllocCount != 0u
+                 || stats.hotPathFreeCount != 0u) {
         set_status("GPU: warm storage-texture frame allocated wrapper memory", 1);
         emscripten_cancel_main_loop();
       }
@@ -741,14 +799,15 @@ render_frame(void *userData) {
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
-  WebGPUStorageTexture *state;
   GPURuntimeConfig      runtime = {0};
+  WebGPUStorageTexture *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status(!adapter ? "GPU: failed to request WebGPU adapter"
                         : "GPU: failed to request WebGPU device",
@@ -759,38 +818,40 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (!state->queue || GPUConfigureRuntime(device, &runtime) != GPU_OK) {
     set_status("GPU: failed to configure WebGPU runtime", 1);
     return;
   }
+
   if (GPUSetDeviceErrorCallback(device, device_error, state) != GPU_OK) {
     set_status("GPU: failed to install the WebGPU error callback", 1);
     return;
   }
 
-  state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               state->adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
-  if (!state->surface || !resize_canvas(state)) {
+  if (!(state->surface = GPUCreateSurfaceFromNative(state->instance,
+                                                    state->adapter,
+                                                    (void *)"#canvas",
+                                                    GPU_SURFACE_WEB_CANVAS,
+                                                    1.0f))
+      || !resize_canvas(state)) {
     set_status("GPU: failed to create the WebGPU canvas surface", 1);
     return;
   }
 
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain ||
-      !create_shader(state) ||
-      !create_read_write_shader(state) ||
-      !create_pipelines(state) ||
-      !create_resources(state)) {
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))
+      || !create_shader(state)
+      || !create_read_write_shader(state)
+      || !create_pipelines(state)
+      || !create_resources(state)) {
     return;
   }
 
@@ -811,7 +872,9 @@ main(void) {
   info.label            = "storage-texture-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create WebGPU instance", 1);
     return 1;
@@ -822,8 +885,10 @@ main(void) {
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   if (result != GPU_OK) {
     return 1;
   }
+
   return 0;
 }

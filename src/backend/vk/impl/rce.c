@@ -18,6 +18,25 @@
 #include "../../../api/buffer_internal.h"
 #include "../../../api/render/pipeline_internal.h"
 
+#ifdef VK_KHR_fragment_shading_rate
+static const VkExtent2D vk_shadingRates[] = {
+  [GPU_SHADING_RATE_1X1_EXT] = {1u, 1u},
+  [GPU_SHADING_RATE_1X2_EXT] = {1u, 2u},
+  [GPU_SHADING_RATE_2X1_EXT] = {2u, 1u},
+  [GPU_SHADING_RATE_2X2_EXT] = {2u, 2u},
+  [GPU_SHADING_RATE_2X4_EXT] = {2u, 4u},
+  [GPU_SHADING_RATE_4X2_EXT] = {4u, 2u},
+  [GPU_SHADING_RATE_4X4_EXT] = {4u, 4u}
+};
+
+static const VkFragmentShadingRateCombinerOpKHR vk_shadingCombiners[] = {
+  [GPU_SHADING_RATE_COMBINER_KEEP_EXT] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR,
+  [GPU_SHADING_RATE_COMBINER_REPLACE_EXT] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR,
+  [GPU_SHADING_RATE_COMBINER_MIN_EXT] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR,
+  [GPU_SHADING_RATE_COMBINER_MAX_EXT] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR
+};
+#endif
+
 static GPURenderEncoderVk*
 vk__renderEncoder(GPURenderPassEncoder *encoder) {
   return encoder ? encoder->_priv : NULL;
@@ -38,22 +57,23 @@ vk__viewport(float x,
   viewport.height   = -height;
   viewport.minDepth = minDepth;
   viewport.maxDepth = maxDepth;
+
   return viewport;
 }
 
 static void
 vk__scissorAxis(int32_t   origin,
-                 uint32_t  extent,
-                 uint32_t  limit,
-                 int32_t  *outOrigin,
-                 uint32_t *outExtent) {
+                uint32_t  extent,
+                uint32_t  limit,
+                int32_t  *outOrigin,
+                uint32_t *outExtent) {
   uint64_t clipped;
   uint64_t maxExtent;
 
   if (origin < 0) {
-    clipped  = (uint64_t)-(int64_t)origin;
-    extent   = clipped >= extent ? 0u : extent - (uint32_t)clipped;
-    origin   = 0;
+    clipped = (uint64_t)-(int64_t)origin;
+    extent  = clipped >= extent ? 0u : extent - (uint32_t)clipped;
+    origin  = 0;
   }
 
   if ((uint32_t)origin >= limit) {
@@ -69,30 +89,29 @@ vk__scissorAxis(int32_t   origin,
 
 static bool
 vk__bindIndexBuffer(GPURenderPassEncoder *encoder,
-                    GPURenderEncoderVk      *native) {
-  GPUBuffer    *buffer;
-  GPUBufferVk  *bufferVk;
-  VkDeviceSize  offset;
-  VkIndexType   indexType;
-  uint64_t      indexSize;
+                    GPURenderEncoderVk   *native) {
+  GPUBuffer   *buffer;
+  GPUBufferVk *bufferVk;
+  VkDeviceSize offset;
+  uint64_t     indexSize;
+  VkIndexType  indexType;
 
   buffer    = encoder ? encoder->_indexBuffer : NULL;
   bufferVk  = buffer ? buffer->_priv : NULL;
   offset    = encoder ? encoder->_indexBufferOffset : 0u;
-  indexSize = encoder && encoder->_indexType == GPU_INDEX_TYPE_UINT32
-                ? 4u
-                : 2u;
+  indexSize = encoder && encoder->_indexType == GPU_INDEX_TYPE_UINT32 ? 4u : 2u;
   indexType = indexSize == 4u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
-  if (!native || !native->command || !buffer || !bufferVk ||
-      !bufferVk->buffer || offset >= buffer->sizeBytes ||
-      buffer->sizeBytes - offset < indexSize ||
-      (offset & (indexSize - 1u)) != 0u) {
+
+  if (!native || !native->command || !buffer || !bufferVk
+      || !bufferVk->buffer || offset >= buffer->sizeBytes
+      || buffer->sizeBytes - offset < indexSize
+      || (offset & (indexSize - 1u)) != 0u) {
     return false;
   }
 
-  if (native->indexBound && native->indexBuffer == buffer &&
-      native->indexOffset == offset &&
-      native->indexType == encoder->_indexType) {
+  if (native->indexBound && native->indexBuffer == buffer
+      && native->indexOffset == offset
+      && native->indexType == encoder->_indexType) {
     return true;
   }
 
@@ -101,27 +120,29 @@ vk__bindIndexBuffer(GPURenderPassEncoder *encoder,
   native->indexOffset = offset;
   native->indexType   = encoder->_indexType;
   native->indexBound  = true;
+
   return true;
 }
 
 GPU_HIDE
 GPURenderPassEncoder*
 vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
-  GPUCommandBufferVk     *command;
-  GPURenderPassVk        *renderPass;
+  VkRenderPassBeginInfo beginInfo = {0};
+  VkViewport            viewport  = {0};
+  VkRect2D              scissor   = {0};
+  GPUCommandBufferVk   *command;
+  GPURenderPassVk      *renderPass;
   GPURenderPassEncoder *encoder;
-  GPURenderEncoderVk     *native;
-  VkRenderPassBeginInfo   beginInfo = {0};
-  VkViewport              viewport = {0};
-  VkRect2D                scissor = {0};
+  GPURenderEncoderVk   *native;
 
   command    = cmdb ? cmdb->_priv : NULL;
   renderPass = pass ? pass->_priv : NULL;
-  if (!command || !renderPass ||
-      (renderPass->dynamic
-         ? (!renderPass->renderingInfo.pColorAttachments &&
-            !renderPass->renderingInfo.pDepthAttachment)
-         : (!renderPass->renderPass || !renderPass->framebuffer))) {
+
+  if (!command || !renderPass
+      || (renderPass->dynamic
+            ? (!renderPass->renderingInfo.pColorAttachments
+            && !renderPass->renderingInfo.pDepthAttachment)
+            : (!renderPass->renderPass || !renderPass->framebuffer))) {
     return NULL;
   }
 
@@ -129,22 +150,20 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   native  = &command->renderState;
   memset(encoder, 0, sizeof(*encoder));
   memset(native, 0, sizeof(*native));
-  native->device  = cmdb && cmdb->_queue && cmdb->_queue->_device ?
-    cmdb->_queue->_device->_priv :
-    NULL;
+  native->device     = cmdb && cmdb->_queue && cmdb->_queue->_device ? cmdb->_queue->_device->_priv : NULL;
   native->renderPass = renderPass;
   native->command    = command->command;
   native->extent     = renderPass->extent;
 
-  if (renderPass->dynamic &&
-      (!native->device || !native->device->beginRendering)) {
+  if (renderPass->dynamic
+      && (!native->device || !native->device->beginRendering)) {
     return NULL;
   }
-  native->debugLabelActive = vk_beginDebugLabel(
-    gpuCommandBufferDevice(cmdb),
-    native->command,
-    pass->label
-  );
+
+  native->debugLabelActive = vk_beginDebugLabel(gpuCommandBufferDevice(cmdb),
+                                                native->command,
+                                                pass->label);
+
   if (renderPass->dynamic) {
     native->device->beginRendering(native->command,
                                    &renderPass->renderingInfo);
@@ -160,9 +179,9 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
                          VK_SUBPASS_CONTENTS_INLINE);
   }
 #ifdef VK_KHR_fragment_shading_rate
-  if (native->device && native->device->vrsDrawRate &&
-      native->device->setFragmentShadingRate) {
-    const VkExtent2D rate = {1u, 1u};
+  if (native->device && native->device->vrsDrawRate
+      && native->device->setFragmentShadingRate) {
+    const VkExtent2D                   rate = {1u, 1u};
     VkFragmentShadingRateCombinerOpKHR combiners[2];
 
     combiners[0] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
@@ -181,7 +200,8 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
                           (float)native->extent.height,
                           0.0f,
                           1.0f);
-  scissor.extent    = native->extent;
+
+  scissor.extent = native->extent;
   vkCmdSetViewport(native->command, 0u, 1u, &viewport);
   vkCmdSetScissor(native->command, 0u, 1u, &scissor);
   vkCmdSetStencilReference(native->command,
@@ -190,12 +210,13 @@ vk_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 
   encoder->_priv          = native;
   encoder->_primitiveType = GPUPrimitiveTypeTriangle;
+
   return encoder;
 }
 
 GPU_HIDE
 void
-vk_setRenderPipelineState(GPURenderPassEncoder *encoder,
+vk_setRenderPipelineState(GPURenderPassEncoder   *encoder,
                           GPURenderPipelineState *pipelineState,
                           GPUCullMode             cullMode,
                           GPUFrontFace            frontFace) {
@@ -206,6 +227,7 @@ vk_setRenderPipelineState(GPURenderPassEncoder *encoder,
   GPU__UNUSED(frontFace);
   native   = vk__renderEncoder(encoder);
   pipeline = pipelineState ? pipelineState->_priv : NULL;
+
   if (!native || !pipeline) {
     return;
   }
@@ -213,9 +235,11 @@ vk_setRenderPipelineState(GPURenderPassEncoder *encoder,
   vkCmdBindPipeline(native->command,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipeline->pipeline);
+
   if (native->descriptors.pipelineLayout != pipeline->shaderLayout.baseLayout) {
     memset(native->descriptors.groups, 0, sizeof(native->descriptors.groups));
   }
+
   vk_bindShaderSamplers(native->command,
                         VK_PIPELINE_BIND_POINT_GRAPHICS,
                         &pipeline->shaderLayout);
@@ -226,10 +250,11 @@ vk_setRenderPipelineState(GPURenderPassEncoder *encoder,
 GPU_HIDE
 void
 vk_viewport(GPURenderPassEncoder *encoder, const GPUViewport *value) {
-  GPURenderEncoderVk *native;
   VkViewport          viewport;
+  GPURenderEncoderVk *native;
 
   native = vk__renderEncoder(encoder);
+
   if (!native || !value) {
     return;
   }
@@ -246,24 +271,25 @@ vk_viewport(GPURenderPassEncoder *encoder, const GPUViewport *value) {
 GPU_HIDE
 void
 vk_scissor(GPURenderPassEncoder *encoder, const GPUScissorRect *value) {
-  GPURenderEncoderVk *native;
   VkRect2D            scissor;
+  GPURenderEncoderVk *native;
 
   native = vk__renderEncoder(encoder);
+
   if (!native || !value) {
     return;
   }
 
   vk__scissorAxis(value->x,
-                   value->width,
-                   native->extent.width,
-                   &scissor.offset.x,
-                   &scissor.extent.width);
+                  value->width,
+                  native->extent.width,
+                  &scissor.offset.x,
+                  &scissor.extent.width);
   vk__scissorAxis(value->y,
-                   value->height,
-                   native->extent.height,
-                   &scissor.offset.y,
-                   &scissor.extent.height);
+                  value->height,
+                  native->extent.height,
+                  &scissor.offset.y,
+                  &scissor.extent.height);
   vkCmdSetScissor(native->command, 0u, 1u, &scissor);
 }
 
@@ -273,6 +299,7 @@ vk_blendConstant(GPURenderPassEncoder *encoder, const float rgba[4]) {
   GPURenderEncoderVk *native;
 
   native = vk__renderEncoder(encoder);
+
   if (!native || !rgba) {
     return;
   }
@@ -286,6 +313,7 @@ vk_stencilReference(GPURenderPassEncoder *encoder, uint32_t reference) {
   GPURenderEncoderVk *native;
 
   native = vk__renderEncoder(encoder);
+
   if (!native) {
     return;
   }
@@ -297,44 +325,24 @@ vk_stencilReference(GPURenderPassEncoder *encoder, uint32_t reference) {
 
 GPU_HIDE
 void
-vk_setFragmentShadingRate(
-  GPURenderPassEncoder      *encoder,
-  GPUShadingRateEXT             rate,
-  GPUShadingRateCombinerEXT     primitiveCombiner,
-  GPUShadingRateCombinerEXT     attachmentCombiner) {
+vk_setFragmentShadingRate(GPURenderPassEncoder     *encoder,
+                          GPUShadingRateEXT         rate,
+                          GPUShadingRateCombinerEXT primitiveCombiner,
+                          GPUShadingRateCombinerEXT attachmentCombiner) {
 #ifdef VK_KHR_fragment_shading_rate
-  static const VkExtent2D rates[] = {
-    [GPU_SHADING_RATE_1X1_EXT] = {1u, 1u},
-    [GPU_SHADING_RATE_1X2_EXT] = {1u, 2u},
-    [GPU_SHADING_RATE_2X1_EXT] = {2u, 1u},
-    [GPU_SHADING_RATE_2X2_EXT] = {2u, 2u},
-    [GPU_SHADING_RATE_2X4_EXT] = {2u, 4u},
-    [GPU_SHADING_RATE_4X2_EXT] = {4u, 2u},
-    [GPU_SHADING_RATE_4X4_EXT] = {4u, 4u}
-  };
-  static const VkFragmentShadingRateCombinerOpKHR combiners[] = {
-    [GPU_SHADING_RATE_COMBINER_KEEP_EXT] =
-      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR,
-    [GPU_SHADING_RATE_COMBINER_REPLACE_EXT] =
-      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR,
-    [GPU_SHADING_RATE_COMBINER_MIN_EXT] =
-      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR,
-    [GPU_SHADING_RATE_COMBINER_MAX_EXT] =
-      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR
-  };
-  GPURenderEncoderVk                    *native;
-  VkFragmentShadingRateCombinerOpKHR     nativeCombiners[2];
-
+  VkFragmentShadingRateCombinerOpKHR nativeCombiners[2];
+  GPURenderEncoderVk                *native;
   native = vk__renderEncoder(encoder);
-  if (!native || !native->device || !native->device->vrsDrawRate ||
-      !native->device->setFragmentShadingRate) {
+
+  if (!native || !native->device || !native->device->vrsDrawRate
+      || !native->device->setFragmentShadingRate) {
     return;
   }
 
-  nativeCombiners[0] = combiners[primitiveCombiner];
-  nativeCombiners[1] = combiners[attachmentCombiner];
+  nativeCombiners[0] = vk_shadingCombiners[primitiveCombiner];
+  nativeCombiners[1] = vk_shadingCombiners[attachmentCombiner];
   native->device->setFragmentShadingRate(native->command,
-                                         &rates[rate],
+                                         &vk_shadingRates[rate],
                                          nativeCombiners);
 #else
   GPU__UNUSED(encoder);
@@ -347,21 +355,24 @@ vk_setFragmentShadingRate(
 GPU_HIDE
 void
 vk_renderPushConstants(GPURenderPassEncoder *encoder,
-                       GPUShaderStageFlags       stages,
-                       const void               *data,
-                       uint32_t                  sizeBytes) {
+                       GPUShaderStageFlags   stages,
+                       const void           *data,
+                       uint32_t              sizeBytes) {
   GPURenderEncoderVk *native;
   VkShaderStageFlags  stageFlags;
 
   native = vk__renderEncoder(encoder);
+
   if (!native || !native->pipelineLayout || !data || sizeBytes == 0u) {
     return;
   }
 
   stageFlags = 0u;
+
   if ((stages & GPU_SHADER_STAGE_VERTEX_BIT) != 0u) {
     stageFlags |= VK_SHADER_STAGE_VERTEX_BIT;
   }
+
   if ((stages & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u) {
     stageFlags |= VK_SHADER_STAGE_FRAGMENT_BIT;
   }
@@ -369,6 +380,7 @@ vk_renderPushConstants(GPURenderPassEncoder *encoder,
   if ((stages & GPU_SHADER_STAGE_TASK_BIT) != 0u) {
     stageFlags |= VK_SHADER_STAGE_TASK_BIT_EXT;
   }
+
   if ((stages & GPU_SHADER_STAGE_MESH_BIT) != 0u) {
     stageFlags |= VK_SHADER_STAGE_MESH_BIT_EXT;
   }
@@ -386,15 +398,16 @@ vk_renderPushConstants(GPURenderPassEncoder *encoder,
 GPU_HIDE
 void
 vk_vertexBuffer(GPURenderPassEncoder *encoder,
-                GPUBuffer               *buffer,
-                uint64_t                 offset,
-                uint32_t                 index) {
+                GPUBuffer            *buffer,
+                uint64_t              offset,
+                uint32_t              index) {
   GPURenderEncoderVk *native;
   GPUBufferVk        *bufferVk;
   VkDeviceSize        nativeOffset;
 
   native   = vk__renderEncoder(encoder);
   bufferVk = buffer ? buffer->_priv : NULL;
+
   if (!native || !bufferVk || !bufferVk->buffer) {
     return;
   }
@@ -410,16 +423,17 @@ vk_vertexBuffer(GPURenderPassEncoder *encoder,
 GPU_HIDE
 void
 vk_drawPrimitives(GPURenderPassEncoder *encoder,
-                  GPUPrimitiveType         type,
-                  size_t                   start,
-                  size_t                   count,
-                  uint32_t                 instanceCount,
-                  uint32_t                 firstInstance) {
+                  GPUPrimitiveType      type,
+                  size_t                start,
+                  size_t                count,
+                  uint32_t              instanceCount,
+                  uint32_t              firstInstance) {
   GPURenderEncoderVk *native;
 
   GPU__UNUSED(type);
 
   native = vk__renderEncoder(encoder);
+
   if (!native || start > UINT32_MAX || count > UINT32_MAX) {
     return;
   }
@@ -434,14 +448,15 @@ vk_drawPrimitives(GPURenderPassEncoder *encoder,
 GPU_HIDE
 void
 vk_drawIndexedPrims(GPURenderPassEncoder *encoder,
-                    uint32_t                 indexCount,
-                    uint32_t                 instanceCount,
-                    uint32_t                 firstIndex,
-                    int32_t                  vertexOffset,
-                    uint32_t                 firstInstance) {
+                    uint32_t              indexCount,
+                    uint32_t              instanceCount,
+                    uint32_t              firstIndex,
+                    int32_t               vertexOffset,
+                    uint32_t              firstInstance) {
   GPURenderEncoderVk *native;
 
   native = vk__renderEncoder(encoder);
+
   if (!vk__bindIndexBuffer(encoder, native)) {
     return;
   }
@@ -457,9 +472,9 @@ vk_drawIndexedPrims(GPURenderPassEncoder *encoder,
 GPU_HIDE
 void
 vk_drawPrimitivesIndirect(GPURenderPassEncoder *encoder,
-                          GPUPrimitiveType         type,
-                          GPUBuffer               *argsBuffer,
-                          uint64_t                 argsOffset) {
+                          GPUPrimitiveType      type,
+                          GPUBuffer            *argsBuffer,
+                          uint64_t              argsOffset) {
   GPURenderEncoderVk *native;
   GPUBufferVk        *buffer;
 
@@ -467,6 +482,7 @@ vk_drawPrimitivesIndirect(GPURenderPassEncoder *encoder,
 
   native = vk__renderEncoder(encoder);
   buffer = argsBuffer ? argsBuffer->_priv : NULL;
+
   if (!native || !native->command || !buffer || !buffer->buffer) {
     return;
   }
@@ -481,13 +497,14 @@ vk_drawPrimitivesIndirect(GPURenderPassEncoder *encoder,
 GPU_HIDE
 void
 vk_drawIndexedPrimsIndirect(GPURenderPassEncoder *encoder,
-                            GPUBuffer               *argsBuffer,
-                            uint64_t                 argsOffset) {
+                            GPUBuffer            *argsBuffer,
+                            uint64_t              argsOffset) {
   GPURenderEncoderVk *native;
   GPUBufferVk        *buffer;
 
   native = vk__renderEncoder(encoder);
   buffer = argsBuffer ? argsBuffer->_priv : NULL;
+
   if (!vk__bindIndexBuffer(encoder, native) || !buffer || !buffer->buffer) {
     return;
   }
@@ -502,11 +519,11 @@ vk_drawIndexedPrimsIndirect(GPURenderPassEncoder *encoder,
 GPU_HIDE
 bool
 vk_multiDrawPrimitivesIndirect(GPURenderPassEncoder *encoder,
-                               GPUPrimitiveType         type,
-                               GPUBuffer               *argsBuffer,
-                               uint64_t                 argsOffset,
-                               uint32_t                 drawCount,
-                               uint32_t                 strideBytes) {
+                               GPUPrimitiveType      type,
+                               GPUBuffer            *argsBuffer,
+                               uint64_t              argsOffset,
+                               uint32_t              drawCount,
+                               uint32_t              strideBytes) {
   GPURenderEncoderVk *native;
   GPUBufferVk        *buffer;
 
@@ -514,10 +531,11 @@ vk_multiDrawPrimitivesIndirect(GPURenderPassEncoder *encoder,
 
   native = vk__renderEncoder(encoder);
   buffer = argsBuffer ? argsBuffer->_priv : NULL;
-  if (!native || !native->device || !native->command ||
-      !buffer || !buffer->buffer ||
-      drawCount > native->device->maxDrawIndirectCount ||
-      (drawCount > 1u && !native->device->multiDrawIndirect)) {
+
+  if (!native || !native->device || !native->command
+      || !buffer || !buffer->buffer
+      || drawCount > native->device->maxDrawIndirectCount
+      || (drawCount > 1u && !native->device->multiDrawIndirect)) {
     return false;
   }
 
@@ -526,26 +544,28 @@ vk_multiDrawPrimitivesIndirect(GPURenderPassEncoder *encoder,
                     argsOffset,
                     drawCount,
                     strideBytes);
+
   return true;
 }
 
 GPU_HIDE
 bool
 vk_multiDrawIndexedPrimsIndirect(GPURenderPassEncoder *encoder,
-                                 GPUBuffer               *argsBuffer,
-                                 uint64_t                 argsOffset,
-                                 uint32_t                 drawCount,
-                                 uint32_t                 strideBytes) {
+                                 GPUBuffer            *argsBuffer,
+                                 uint64_t              argsOffset,
+                                 uint32_t              drawCount,
+                                 uint32_t              strideBytes) {
   GPURenderEncoderVk *native;
   GPUBufferVk        *buffer;
 
   native = vk__renderEncoder(encoder);
   buffer = argsBuffer ? argsBuffer->_priv : NULL;
-  if (!native || !native->device || !native->command ||
-      !buffer || !buffer->buffer ||
-      drawCount > native->device->maxDrawIndirectCount ||
-      (drawCount > 1u && !native->device->multiDrawIndirect) ||
-      !vk__bindIndexBuffer(encoder, native)) {
+
+  if (!native || !native->device || !native->command
+      || !buffer || !buffer->buffer
+      || drawCount > native->device->maxDrawIndirectCount
+      || (drawCount > 1u && !native->device->multiDrawIndirect)
+      || !vk__bindIndexBuffer(encoder, native)) {
     return false;
   }
 
@@ -554,27 +574,32 @@ vk_multiDrawIndexedPrimsIndirect(GPURenderPassEncoder *encoder,
                            argsOffset,
                            drawCount,
                            strideBytes);
+
   return true;
 }
 
 GPU_HIDE
 void
 vk_drawMesh(GPURenderPassEncoder *encoder,
-            uint32_t                 groupCountX,
-            uint32_t                 groupCountY,
-            uint32_t                 groupCountZ,
-            const uint32_t           taskWorkgroupSize[3],
-            const uint32_t           meshWorkgroupSize[3]) {
+            uint32_t              groupCountX,
+            uint32_t              groupCountY,
+            uint32_t              groupCountZ,
+            const uint32_t        taskWorkgroupSize[3],
+            const uint32_t        meshWorkgroupSize[3]) {
 #ifdef VK_EXT_mesh_shader
   GPURenderEncoderVk *native;
+#endif
 
+#ifdef VK_EXT_mesh_shader
   GPU__UNUSED(taskWorkgroupSize);
   GPU__UNUSED(meshWorkgroupSize);
 
   native = vk__renderEncoder(encoder);
+
   if (!native || !native->device || !native->device->drawMeshTasks) {
     return;
   }
+
   native->device->drawMeshTasks(native->command,
                                 groupCountX,
                                 groupCountY,
@@ -593,21 +618,26 @@ GPU_HIDE
 void
 vk_endRenderEncoding(GPURenderPassEncoder *encoder) {
   GPURenderEncoderVk *native;
+  GPUTextureViewVk   *view;
+  uint32_t            i;
 
   native = vk__renderEncoder(encoder);
+
   if (native) {
     if (native->renderPass && native->renderPass->dynamic) {
       native->device->endRendering(native->command);
-      for (uint32_t i = 0u; i < native->renderPass->colorCount; i++) {
-        GPUTextureViewVk *view;
 
+      for (i = 0u; i < native->renderPass->colorCount; i++) {
         view = native->renderPass->colorViews[i];
+
         if (view && view->swapchain) {
           vk_transitionView(native->command,
                             view,
                             VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         }
+
         view = native->renderPass->resolveViews[i];
+
         if (view && view->swapchain) {
           vk_transitionView(native->command,
                             view,
@@ -617,6 +647,7 @@ vk_endRenderEncoding(GPURenderPassEncoder *encoder) {
     } else {
       vkCmdEndRenderPass(native->command);
     }
+
     if (native->debugLabelActive) {
       vk_endDebugLabel(gpuCommandBufferDevice(encoder->_cmdb), native->command);
       native->debugLabelActive = false;
@@ -643,8 +674,8 @@ vk_initRCE(GPUApiRCE *api) {
   api->drawPrimitivesIndirect   = vk_drawPrimitivesIndirect;
   api->drawIndexedPrimsIndirect = vk_drawIndexedPrimsIndirect;
 
-  api->multiDrawPrimitivesIndirect = vk_multiDrawPrimitivesIndirect;
+  api->multiDrawPrimitivesIndirect   = vk_multiDrawPrimitivesIndirect;
   api->multiDrawIndexedPrimsIndirect = vk_multiDrawIndexedPrimsIndirect;
 
-  api->endEncoding              = vk_endRenderEncoding;
+  api->endEncoding = vk_endRenderEncoding;
 }

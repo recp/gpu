@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "webgpu.h"
 
 #include <emscripten/emscripten.h>
@@ -5,6 +21,12 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+
+static const GPUFeature defaultFeatures[] = {
+  GPU_FEATURE_COMPUTE,
+  GPU_FEATURE_INDIRECT_DRAW,
+  GPU_FEATURE_MULTI_DRAW
+};
 
 EM_JS(void, set_status_js, (const char *message, int failed), {
   const status = document.getElementById("status");
@@ -42,9 +64,73 @@ EM_JS(int, prepare_canvas_layout_js, (), {
   return 1;
 });
 
+static void
+finish_webgpu_request(WebGPURequest *request,
+                      GPUResult      result,
+                      GPUAdapter    *adapter,
+                      GPUDevice     *device) {
+  if (request->completed) {
+    return;
+  }
+
+  request->result    = result;
+  request->completed = true;
+
+  request->callback(result, adapter, device, request->userData);
+}
+
+static void
+webgpu_device_ready(GPUResult result, GPUDevice *device, void *userData) {
+  WebGPURequest *request;
+
+  request = userData;
+
+  if (result == GPU_OK && !device) {
+    result = GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  finish_webgpu_request(request, result, request->adapter, device);
+}
+
+static void
+webgpu_adapter_ready(GPUResult result, GPUAdapter *adapter, void *userData) {
+  GPUDeviceCreateInfo info = {0};
+  WebGPURequest      *request;
+
+  request = userData;
+
+  if (result != GPU_OK || !adapter) {
+    if (result == GPU_OK) {
+      result = GPU_ERROR_BACKEND_FAILURE;
+    }
+
+    finish_webgpu_request(request, result, NULL, NULL);
+    return;
+  }
+
+  request->adapter = adapter;
+
+  if (request->optionalFeatureCount > 0u) {
+    info.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    info.chain.structSize      = sizeof(info);
+    info.optional.pFeatures    = request->optionalFeatures;
+    info.optional.featureCount = request->optionalFeatureCount;
+  }
+
+  result = GPURequestDevice(adapter,
+                            request->optionalFeatureCount > 0u ? &info : NULL,
+                            webgpu_device_ready,
+                            request);
+
+  if (result != GPU_OK && !request->completed) {
+    finish_webgpu_request(request, result, adapter, NULL);
+  }
+}
+
 void
 set_status(const char *message, int failed) {
   set_status_js(message, failed);
+
   if (failed) {
     fprintf(stderr, "%s\n", message);
   } else {
@@ -61,86 +147,31 @@ set_status_notice(const char *message) {
 int
 read_file(const char *path, void **outData, uint64_t *outSize) {
   void *data;
-  long  size;
   FILE *file;
+  long  size;
 
-  file = fopen(path, "rb");
-  if (!file ||
-      fseek(file, 0, SEEK_END) != 0 ||
-      (size = ftell(file)) <= 0 ||
-      fseek(file, 0, SEEK_SET) != 0) {
+  if (!(file = fopen(path, "rb"))
+      || fseek(file, 0, SEEK_END) != 0
+      || (size = ftell(file)) <= 0
+      || fseek(file, 0, SEEK_SET) != 0) {
     if (file) {
       fclose(file);
     }
     return 0;
   }
 
-  data = malloc((size_t)size);
-  if (!data || fread(data, 1u, (size_t)size, file) != (size_t)size) {
+  if (!(data = malloc((size_t)size)) || fread(data, 1u, (size_t)size, file) != (size_t)size) {
     free(data);
     fclose(file);
     return 0;
   }
 
   fclose(file);
+
   *outData = data;
   *outSize = (uint64_t)size;
+
   return 1;
-}
-
-static void
-finish_webgpu_request(WebGPURequest *request,
-                      GPUResult      result,
-                      GPUAdapter    *adapter,
-                      GPUDevice     *device) {
-  if (request->completed) {
-    return;
-  }
-
-  request->result    = result;
-  request->completed = true;
-  request->callback(result, adapter, device, request->userData);
-}
-
-static void
-webgpu_device_ready(GPUResult result, GPUDevice *device, void *userData) {
-  WebGPURequest *request;
-
-  request = userData;
-  if (result == GPU_OK && !device) {
-    result = GPU_ERROR_BACKEND_FAILURE;
-  }
-  finish_webgpu_request(request, result, request->adapter, device);
-}
-
-static void
-webgpu_adapter_ready(GPUResult result, GPUAdapter *adapter, void *userData) {
-  GPUDeviceCreateInfo info = {0};
-  WebGPURequest *request;
-
-  request = userData;
-  if (result != GPU_OK || !adapter) {
-    if (result == GPU_OK) {
-      result = GPU_ERROR_BACKEND_FAILURE;
-    }
-    finish_webgpu_request(request, result, NULL, NULL);
-    return;
-  }
-
-  request->adapter = adapter;
-  if (request->optionalFeatureCount > 0u) {
-    info.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    info.chain.structSize      = sizeof(info);
-    info.optional.pFeatures    = request->optionalFeatures;
-    info.optional.featureCount = request->optionalFeatureCount;
-  }
-  result = GPURequestDevice(adapter,
-                            request->optionalFeatureCount > 0u ? &info : NULL,
-                            webgpu_device_ready,
-                            request);
-  if (result != GPU_OK && !request->completed) {
-    finish_webgpu_request(request, result, adapter, NULL);
-  }
 }
 
 GPUResult
@@ -163,15 +194,12 @@ request_webgpu_device_features(GPUInstance        *instance,
                                void               *userData,
                                const GPUFeature   *optionalFeatures,
                                uint32_t            optionalFeatureCount) {
-  static const GPUFeature defaultFeatures[] = {
-    GPU_FEATURE_COMPUTE,
-    GPU_FEATURE_INDIRECT_DRAW,
-    GPU_FEATURE_MULTI_DRAW
-  };
   GPUResult result;
+  uint32_t  i, j;
+  bool      duplicate;
 
-  if (!instance || !request || !callback ||
-      (optionalFeatureCount > 0u && !optionalFeatures)) {
+  if (!instance || !request || !callback
+      || (optionalFeatureCount > 0u && !optionalFeatures)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -181,35 +209,38 @@ request_webgpu_device_features(GPUInstance        *instance,
   request->result               = GPU_OK;
   request->optionalFeatureCount = 0u;
   request->completed            = false;
-  if (optionalFeatureCount > 0u) {
-    for (uint32_t i = 0u; i < GPU_ARRAY_LEN(defaultFeatures); i++) {
-      request->optionalFeatures[request->optionalFeatureCount++] =
-        defaultFeatures[i];
-    }
-    for (uint32_t i = 0u; i < optionalFeatureCount; i++) {
-      bool duplicate;
 
+  if (optionalFeatureCount > 0u) {
+    for (i = 0u; i < GPU_ARRAY_LEN(defaultFeatures); i++) {
+      request->optionalFeatures[request->optionalFeatureCount++] = defaultFeatures[i];
+    }
+
+    for (i = 0u; i < optionalFeatureCount; i++) {
       duplicate = false;
-      for (uint32_t j = 0u; j < request->optionalFeatureCount; j++) {
+
+      for (j = 0u; j < request->optionalFeatureCount; j++) {
         if (request->optionalFeatures[j] == optionalFeatures[i]) {
           duplicate = true;
           break;
         }
       }
+
       if (!duplicate) {
-        if (request->optionalFeatureCount >=
-            GPU_ARRAY_LEN(request->optionalFeatures)) {
+        if (request->optionalFeatureCount >= GPU_ARRAY_LEN(request->optionalFeatures)) {
           return GPU_ERROR_INVALID_ARGUMENT;
         }
-        request->optionalFeatures[request->optionalFeatureCount++] =
-          optionalFeatures[i];
+
+        request->optionalFeatures[request->optionalFeatureCount++] = optionalFeatures[i];
       }
     }
   }
+
   result = GPURequestAdapter(instance, NULL, webgpu_adapter_ready, request);
+
   if (result != GPU_OK && !request->completed) {
     finish_webgpu_request(request, result, NULL, NULL);
   }
+
   return request->completed ? request->result : result;
 }
 
@@ -225,50 +256,55 @@ resize_webgpu_canvas(GPUSwapchain *swapchain,
   int      layoutChanged;
 
   layoutChanged = prepare_canvas_layout_js();
+
   if (layoutChanged < 0) {
     return 0;
   }
+
   if (!layoutChanged && *width != 0u && *height != 0u) {
     return 1;
   }
-  if (emscripten_get_element_css_size("#canvas", &cssWidth, &cssHeight) !=
-      EMSCRIPTEN_RESULT_SUCCESS) {
+
+  if (emscripten_get_element_css_size("#canvas", &cssWidth, &cssHeight) != EMSCRIPTEN_RESULT_SUCCESS) {
     return 0;
   }
 
   scale = emscripten_get_device_pixel_ratio();
+
   if (scale <= 0.0) {
     scale = 1.0;
   }
+
   nextWidth  = (uint32_t)(cssWidth * scale + 0.5);
   nextHeight = (uint32_t)(cssHeight * scale + 0.5);
+
   if (nextWidth == 0u || nextHeight == 0u) {
     return 0;
   }
 
-  if ((layoutChanged || nextWidth != *width || nextHeight != *height) &&
-      emscripten_set_element_css_size("#canvas",
-                                      (double)nextWidth / scale,
-                                      (double)nextHeight / scale) !=
-        EMSCRIPTEN_RESULT_SUCCESS) {
+  if ((layoutChanged || nextWidth != *width || nextHeight != *height)
+      && emscripten_set_element_css_size("#canvas",
+                                         (double)nextWidth / scale,
+                                         (double)nextHeight / scale) != EMSCRIPTEN_RESULT_SUCCESS) {
     return 0;
   }
+
   if (nextWidth == *width && nextHeight == *height) {
     return 1;
   }
 
   if (emscripten_set_canvas_element_size("#canvas",
                                          (int)nextWidth,
-                                         (int)nextHeight) !=
-      EMSCRIPTEN_RESULT_SUCCESS) {
+                                         (int)nextHeight) != EMSCRIPTEN_RESULT_SUCCESS) {
     return 0;
   }
-  if (swapchain &&
-      GPUResizeSwapchain(swapchain, nextWidth, nextHeight) != GPU_OK) {
+
+  if (swapchain && GPUResizeSwapchain(swapchain, nextWidth, nextHeight) != GPU_OK) {
     return 0;
   }
 
   *width  = nextWidth;
   *height = nextHeight;
+
   return 1;
 }

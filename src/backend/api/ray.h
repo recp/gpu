@@ -24,84 +24,67 @@ extern "C" {
 
 typedef struct GPUApiRayQuery {
   GPUResult
-  (*getSizes)(GPUDevice                                    *device,
-              const GPUAccelerationStructureBuildInfoEXT  *info,
-              GPUAccelerationStructureSizesEXT            *outSizes);
+  (*getSizes)(GPUDevice                                  *device,
+              const GPUAccelerationStructureBuildInfoEXT *info,
+              GPUAccelerationStructureSizesEXT           *outSizes);
 
   GPUResult
-  (*create)(GPUDevice                                    *device,
+  (*create)(GPUDevice                                   *device,
             const GPUAccelerationStructureCreateInfoEXT *info,
             GPUAccelerationStructureEXT                 *structure);
 
-  void
-  (*destroy)(GPUAccelerationStructureEXT *structure);
+  void (*destroy)(GPUAccelerationStructureEXT *structure);
 
-  GPUAccelerationStructurePassEncoderEXT *
-  (*beginPass)(GPUCommandBuffer *cmdb, const char *label);
+  GPUAccelerationStructurePassEncoderEXT * (*beginPass)(GPUCommandBuffer *cmdb, const char *label);
 
   GPUResult
   (*build)(GPUAccelerationStructurePassEncoderEXT     *pass,
            GPUAccelerationStructureEXT                *dst,
            const GPUAccelerationStructureBuildInfoEXT *info,
-           GPUBuffer                                   *scratchBuffer,
-           uint64_t                                     scratchOffset);
+           GPUBuffer                                  *scratchBuffer,
+           uint64_t                                    scratchOffset);
 
-  void
-  (*endPass)(GPUAccelerationStructurePassEncoderEXT *pass);
-
-  GPUResult
-  (*createIntersectionFunctionTable)(
-    GPUDevice                                       *device,
-    const GPUIntersectionFunctionTableCreateInfoEXT *info,
-    GPUIntersectionFunctionTableEXT                 *table);
-
-  void
-  (*destroyIntersectionFunctionTable)(
-    GPUIntersectionFunctionTableEXT *table);
+  void (*endPass)(GPUAccelerationStructurePassEncoderEXT *pass);
 
   GPUResult
-  (*setIntersectionFunctionTableBuffer)(
-    GPUIntersectionFunctionTableEXT *table,
-    uint32_t                         index,
-    GPUBuffer                       *buffer,
-    uint64_t                         offset);
+  (*createIntersectionFunctionTable)(GPUDevice                                       *device,
+                                     const GPUIntersectionFunctionTableCreateInfoEXT *info,
+                                     GPUIntersectionFunctionTableEXT                 *table);
+
+  void (*destroyIntersectionFunctionTable)(GPUIntersectionFunctionTableEXT *table);
+
+  GPUResult
+  (*setIntersectionFunctionTableBuffer)(GPUIntersectionFunctionTableEXT *table,
+                                        uint32_t                         index,
+                                        GPUBuffer                       *buffer,
+                                        uint64_t                         offset);
 
   void
-  (*bindComputeIntersectionFunctionTable)(
-    GPUComputePassEncoder           *pass,
-    uint32_t                         index,
-    GPUIntersectionFunctionTableEXT *table);
+  (*bindComputeIntersectionFunctionTable)(GPUComputePassEncoder           *pass,
+                                          uint32_t                         index,
+                                          GPUIntersectionFunctionTableEXT *table);
 
   void
-  (*bindRenderIntersectionFunctionTable)(
-    GPURenderPassEncoder            *pass,
-    uint32_t                         index,
-    GPUIntersectionFunctionTableEXT *table);
+  (*bindRenderIntersectionFunctionTable)(GPURenderPassEncoder            *pass,
+                                         uint32_t                         index,
+                                         GPUIntersectionFunctionTableEXT *table);
 } GPUApiRayQuery;
 
 typedef struct GPUApiRayTracing {
   GPUResult
-  (*createPipeline)(GPUDevice                                 *device,
-                    const GPURayTracingPipelineCreateInfoEXT  *info,
-                    GPURayTracingPipelineEXT                  *pipeline);
+  (*createPipeline)(GPUDevice                                *device,
+                    const GPURayTracingPipelineCreateInfoEXT *info,
+                    GPURayTracingPipelineEXT                 *pipeline);
 
-  void
-  (*destroyPipeline)(GPURayTracingPipelineEXT *pipeline);
+  void (*destroyPipeline)(GPURayTracingPipelineEXT *pipeline);
 
-  GPUResult
-  (*createShaderTable)(GPUDevice                         *device,
-                       const GPUShaderTableCreateInfoEXT *info,
-                       GPUShaderTableEXT                 *table);
+  GPUResult (*createShaderTable)(GPUDevice *device, const GPUShaderTableCreateInfoEXT *info, GPUShaderTableEXT *table);
 
-  void
-  (*destroyShaderTable)(GPUShaderTableEXT *table);
+  void (*destroyShaderTable)(GPUShaderTableEXT *table);
 
-  GPURayTracingPassEncoderEXT *
-  (*beginPass)(GPUCommandBuffer *cmdb, const char *label);
+  GPURayTracingPassEncoderEXT * (*beginPass)(GPUCommandBuffer *cmdb, const char *label);
 
-  void
-  (*bindPipeline)(GPURayTracingPassEncoderEXT *pass,
-                  GPURayTracingPipelineEXT    *pipeline);
+  void (*bindPipeline)(GPURayTracingPassEncoderEXT *pass, GPURayTracingPipelineEXT *pipeline);
 
   bool
   (*bindGroup)(GPURayTracingPassEncoderEXT *pass,
@@ -118,8 +101,7 @@ typedef struct GPUApiRayTracing {
               uint32_t                     height,
               uint32_t                     depth);
 
-  void
-  (*endPass)(GPURayTracingPassEncoderEXT *pass);
+  void (*endPass)(GPURayTracingPassEncoderEXT *pass);
 } GPUApiRayTracing;
 
 #ifdef __cplusplus

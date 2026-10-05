@@ -32,9 +32,8 @@ typedef struct GPUSampler                  GPUSampler;
 typedef struct GPUBindGroupLayout          GPUBindGroupLayout;
 typedef struct GPUBindGroup                GPUBindGroup;
 typedef struct GPUPipelineLayout           GPUPipelineLayout;
-
 typedef struct GPUAccelerationStructureEXT GPUAccelerationStructureEXT;
-typedef struct GPUSamplerFeedbackMapEXT     GPUSamplerFeedbackMapEXT;
+typedef struct GPUSamplerFeedbackMapEXT    GPUSamplerFeedbackMapEXT;
 
 #ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
 #define GPU_RENDER_ENCODER_TYPES_DEFINED
@@ -124,9 +123,9 @@ typedef struct GPUBindGroupEntry {
       uint64_t   size;
     }                            buffer;
   };
-  uint32_t                       binding;
-  uint32_t                       arrayIndex; /* 0 for non-array. */
-  GPUBindingType                 bindingType;
+  uint32_t       binding;
+  uint32_t       arrayIndex; /* 0 for non-array. */
+  GPUBindingType bindingType;
 } GPUBindGroupEntry;
 
 typedef struct GPUBindGroupCreateInfo {
@@ -144,22 +143,22 @@ typedef struct GPUShaderLayout {
 } GPUShaderLayout;
 
 typedef struct GPUPipelineLayoutCreateInfo {
-  GPUChainedStruct    chain;
-  const char         *label;
+  GPUChainedStruct           chain;
+  const char                *label;
   GPUBindGroupLayout *const *ppBindGroupLayouts;
-  uint32_t            bindGroupLayoutCount;
-  uint32_t            pushConstantSizeBytes;
-  GPUShaderStageFlags pushConstantStages;
+  uint32_t                   bindGroupLayoutCount;
+  uint32_t                   pushConstantSizeBytes;
+  GPUShaderStageFlags        pushConstantStages;
 } GPUPipelineLayoutCreateInfo;
 
 GPU_EXPORT
 GPUResult
-GPUCreateBindGroupLayout(GPUDevice *device,
+GPUCreateBindGroupLayout(GPUDevice                          *device,
                          const GPUBindGroupLayoutCreateInfo *info,
-                         GPUBindGroupLayout **outLayout);
+                         GPUBindGroupLayout                **outLayout);
 
 GPU_EXPORT
-const GPUBindGroupLayoutEntry *
+const GPUBindGroupLayoutEntry*
 GPUGetBindGroupLayoutEntries(const GPUBindGroupLayout *layout,
                              uint32_t                 *outCount);
 
@@ -169,9 +168,9 @@ GPUDestroyBindGroupLayout(GPUBindGroupLayout *layout);
 
 GPU_EXPORT
 GPUResult
-GPUCreateBindGroup(GPUDevice *device,
+GPUCreateBindGroup(GPUDevice                    *device,
                    const GPUBindGroupCreateInfo *info,
-                   GPUBindGroup **outGroup);
+                   GPUBindGroup                **outGroup);
 
 GPU_EXPORT
 GPUResult
@@ -185,30 +184,30 @@ GPUDestroyBindGroup(GPUBindGroup *group);
 
 GPU_EXPORT
 GPUResult
-GPUCreatePipelineLayout(GPUDevice *device,
+GPUCreatePipelineLayout(GPUDevice                         *device,
                         const GPUPipelineLayoutCreateInfo *info,
-                        GPUPipelineLayout **outLayout);
+                        GPUPipelineLayout                **outLayout);
 
 GPU_EXPORT
 GPUResult
-GPUCreateBindGroupLayoutsFromReflection(GPUDevice *device,
+GPUCreateBindGroupLayoutsFromReflection(GPUDevice              *device,
                                         const GPUShaderLibrary *library,
-                                        uint32_t *inoutLayoutCount,
-                                        GPUBindGroupLayout **outLayouts);
+                                        uint32_t               *inoutLayoutCount,
+                                        GPUBindGroupLayout    **outLayouts);
 
 GPU_EXPORT
 GPUResult
-GPUCreatePipelineLayoutFromReflection(GPUDevice *device,
-                                      const GPUShaderLibrary *library,
-                                      uint32_t bindGroupLayoutCount,
-                                      GPUBindGroupLayout * const *ppLayouts,
-                                      GPUPipelineLayout **outLayout);
+GPUCreatePipelineLayoutFromReflection(GPUDevice                 *device,
+                                      const GPUShaderLibrary    *library,
+                                      uint32_t                   bindGroupLayoutCount,
+                                      GPUBindGroupLayout *const *ppLayouts,
+                                      GPUPipelineLayout        **outLayout);
 
 GPU_EXPORT
 GPUResult
-GPUCreateShaderLayout(GPUDevice *device,
+GPUCreateShaderLayout(GPUDevice              *device,
                       const GPUShaderLibrary *library,
-                      GPUShaderLayout **outLayout);
+                      GPUShaderLayout       **outLayout);
 
 GPU_EXPORT
 void
@@ -221,10 +220,10 @@ GPUDestroyPipelineLayout(GPUPipelineLayout *layout);
 GPU_EXPORT
 void
 GPUBindRenderGroup(GPURenderPassEncoder *pass,
-                   uint32_t groupIndex,
-                   GPUBindGroup *group,
-                   uint32_t dynamicOffsetCount,
-                   const uint32_t *pDynamicOffsets);
+                   uint32_t              groupIndex,
+                   GPUBindGroup         *group,
+                   uint32_t              dynamicOffsetCount,
+                   const uint32_t       *pDynamicOffsets);
 
 #ifdef __cplusplus
 }

@@ -19,7 +19,7 @@
 #include "vertex_internal.h"
 
 GPU_HIDE
-GPUVertexDescriptor *
+GPUVertexDescriptor*
 gpuCreateVertexDesc(GPUApi *api) {
   if (!api || !api->vertex.newVertexDesc)
     return NULL;
@@ -43,40 +43,40 @@ gpuDestroyVertexDesc(GPUApi *api, GPUVertexDescriptor *vert) {
 
 GPU_HIDE
 void
-gpuVertexDescAttrib(GPUApi             * __restrict api,
-                    GPUVertexDescriptor * __restrict vert,
-                    uint32_t                         attribIndex,
-                    GPUVertexFormat                  format,
-                    uint32_t                         offset,
-                    uint32_t                         bufferIndex) {
+gpuVertexDescAttrib(GPUApi              *__restrict api,
+                    GPUVertexDescriptor *__restrict vert,
+                    uint32_t                        attribIndex,
+                    GPUVertexFormat                 format,
+                    uint32_t                        offset,
+                    uint32_t                        bufferIndex) {
   if (!api || !vert || !api->vertex.attrib)
     return;
-  
+
   api->vertex.attrib(vert, attribIndex, format, offset, bufferIndex);
 }
 
 GPU_HIDE
 void
-gpuVertexDescLayout(GPUApi             * __restrict api,
-                    GPUVertexDescriptor * __restrict vert,
-                    uint32_t                         layoutIndex,
-                    uint32_t                         stride,
-                    GPUVertexStepMode                stepMode) {
+gpuVertexDescLayout(GPUApi              *__restrict api,
+                    GPUVertexDescriptor *__restrict vert,
+                    uint32_t                        layoutIndex,
+                    uint32_t                        stride,
+                    GPUVertexStepMode               stepMode) {
   if (!api || !vert || !api->vertex.layout)
     return;
-  
+
   api->vertex.layout(vert, layoutIndex, stride, stepMode);
 }
 
 GPU_HIDE
 void
-gpuPipelineSetVertexDesc(GPURenderPipeline   * __restrict pipeline,
-                         GPUVertexDescriptor * __restrict vert) {
+gpuPipelineSetVertexDesc(GPURenderPipeline   *__restrict pipeline,
+                         GPUVertexDescriptor *__restrict vert) {
   GPUApi *api;
 
-  if (!pipeline || !vert || !(api = pipeline->_api) ||
-      !api->vertex.vertexDesc)
+  if (!pipeline || !vert || !(api = pipeline->_api)
+      || !api->vertex.vertexDesc)
     return;
-  
+
   api->vertex.vertexDesc(pipeline, vert);
 }

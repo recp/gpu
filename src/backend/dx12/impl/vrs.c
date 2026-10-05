@@ -23,21 +23,25 @@ dx12_getVRSCapabilities(const GPUAdapter      *adapter,
   GPUAdapterDX12 *native;
 
   native = adapter ? adapter->_priv : NULL;
+
   if (!native || !outCaps) {
     return;
   }
 
   memset(outCaps, 0, sizeof(*outCaps));
+
   if (native->vrsTier >= D3D12_VARIABLE_SHADING_RATE_TIER_1) {
     outCaps->modes |= GPU_VRS_DRAW_RATE_BIT_EXT;
   }
+
   if (native->vrsTier >= D3D12_VARIABLE_SHADING_RATE_TIER_2) {
     outCaps->modes |= GPU_VRS_ATTACHMENT_BIT_EXT;
+
     outCaps->minAttachmentTexelSize.width  = native->vrsTileSize;
     outCaps->minAttachmentTexelSize.height = native->vrsTileSize;
-    outCaps->maxAttachmentTexelSize        =
-      outCaps->minAttachmentTexelSize;
+    outCaps->maxAttachmentTexelSize        = outCaps->minAttachmentTexelSize;
   }
+
   outCaps->rates     = native->vrsRates;
   outCaps->combiners = native->vrsCombiners;
 }

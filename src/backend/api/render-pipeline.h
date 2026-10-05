@@ -35,50 +35,35 @@ typedef enum GPUFunctionType {
 
 typedef struct GPUApiRender {
   GPUResult
-  (*createPipeline)(GPUDevice                         * __restrict device,
-                    const GPURenderPipelineCreateInfo * __restrict info,
-                    uint32_t                                       requiredBindGroupMask,
-                    GPURenderPipeline                 * __restrict pipeline);
+  (*createPipeline)(GPUDevice                         *__restrict device,
+                    const GPURenderPipelineCreateInfo *__restrict info,
+                    uint32_t                                      requiredBindGroupMask,
+                    GPURenderPipeline                 *__restrict pipeline);
 
-  GPURenderPipeline*
-  (*newRenderPipeline)(GPUFormat pixelFormat, bool mesh);
-  
-  GPURenderPipelineState*
-  (*newRenderState)(GPUDevice         * __restrict device,
-                    GPURenderPipeline * __restrict pipeline);
+  GPURenderPipeline * (*newRenderPipeline)(GPUFormat pixelFormat, bool mesh);
+
+  GPURenderPipelineState * (*newRenderState)(GPUDevice *__restrict device, GPURenderPipeline *__restrict pipeline);
+
+  void (*destroyRenderPipeline)(GPURenderPipeline *pipeline);
 
   void
-  (*destroyRenderPipeline)(GPURenderPipeline *pipeline);
-  
-  void
-  (*setFunction)(GPURenderPipeline * __restrict pipline,
-                 GPUShaderFunction * __restrict func,
-                 GPUFunctionType                functype);
+  (*setFunction)(GPURenderPipeline *__restrict pipline,
+                 GPUShaderFunction *__restrict func,
+                 GPUFunctionType               functype);
 
   GPUResult
-  (*setIntersectionFunctions)(
-    GPURenderPipeline             *pipeline,
-    GPUShaderFunction *const      *functions,
-    const GPUShaderStageFlags     *stages,
-    uint32_t                       functionCount);
-  
-  void
-  (*colorFormat)(GPURenderPipeline * __restrict pipline,
-                 uint32_t                       index,
-                 GPUFormat                      pixelFormat);
-  
-  void
-  (*depthFormat)(GPURenderPipeline * __restrict pipline,
-                 GPUFormat                      pixelFormat);
-  
-  void
-  (*stencilFormat)(GPURenderPipeline * __restrict pipline,
-                   GPUFormat                      pixelFormat);
-  
-  void
-  (*sampleCount)(GPURenderPipeline * __restrict pipline,
-                 uint32_t                       sampleCount);
-  
+  (*setIntersectionFunctions)(GPURenderPipeline         *pipeline,
+                              GPUShaderFunction  *const *functions,
+                              const GPUShaderStageFlags *stages,
+                              uint32_t                   functionCount);
+
+  void (*colorFormat)(GPURenderPipeline *__restrict pipline, uint32_t index, GPUFormat pixelFormat);
+
+  void (*depthFormat)(GPURenderPipeline *__restrict pipline, GPUFormat pixelFormat);
+
+  void (*stencilFormat)(GPURenderPipeline *__restrict pipline, GPUFormat pixelFormat);
+
+  void (*sampleCount)(GPURenderPipeline *__restrict pipline, uint32_t sampleCount);
 } GPUApiRender;
 
 #ifdef __cplusplus

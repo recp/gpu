@@ -40,7 +40,7 @@ typedef enum GPUAccessMask {
 } GPUAccessMask;
 
 typedef struct GPUBufferBarrier {
-  GPUBuffer     *buffer;
+  GPUBuffer    *buffer;
   GPUAccessMask srcAccess;
   GPUAccessMask dstAccess;
   uint64_t      offset;
@@ -48,7 +48,7 @@ typedef struct GPUBufferBarrier {
 } GPUBufferBarrier;
 
 typedef struct GPUTextureBarrier {
-  GPUTexture    *texture;
+  GPUTexture   *texture;
   GPUAccessMask srcAccess;
   GPUAccessMask dstAccess;
   uint32_t      baseMip;
@@ -79,7 +79,7 @@ GPU_EXPORT
 void
 GPUEncodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers);
 
-/* Transitions every mip and layer of a texture. */
+/* transitions every mip and layer of a texture. */
 GPU_EXPORT
 void
 GPUTransitionTexture(GPUCommandBuffer *cmdb,

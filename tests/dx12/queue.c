@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../src/backend/dx12/common.h"
 
 #include <stdint.h>
@@ -18,12 +34,17 @@ typedef struct CompletionProbe {
   uint32_t          count;
 } CompletionProbe;
 
+static uint8_t upload[DX12_TRANSFER_TEST_BYTES];
+
+static uint8_t pixels[DX12_TRANSFER_TEST_BYTES];
+
 static void
-on_complete(void             * __restrict sender,
-            GPUCommandBuffer * __restrict cmdb) {
+on_complete(void             *__restrict sender,
+            GPUCommandBuffer *__restrict cmdb) {
   CompletionProbe *probe;
 
   probe = sender;
+
   if (!probe) {
     return;
   }
@@ -41,22 +62,25 @@ first_adapter(GPUInstance *instance) {
   adapter = NULL;
   count   = 1u;
   result  = GPUEnumerateAdapters(instance, &count, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      count == 0u) {
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || count == 0u) {
     return NULL;
   }
+
   return adapter;
 }
 
 static GPUCommandBuffer*
-submit_empty(GPUQueue *queue,
+submit_empty(GPUQueue        *queue,
              GPUFence        *fence,
              CompletionProbe *probe) {
-  GPUCommandBuffer *cmdb;
-  GPUCommandBuffer *buffers[1];
+  GPUCommandBuffer  *buffers[1];
   GPUQueueSubmitInfo submitInfo;
+  GPUCommandBuffer  *cmdb;
 
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(queue, "dx12-empty", &cmdb) != GPU_OK || !cmdb) {
     return NULL;
   }
@@ -69,11 +93,13 @@ submit_empty(GPUQueue *queue,
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = buffers;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
-      !GPUIsFenceSignaled(fence)) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK
+      || !GPUIsFenceSignaled(fence)) {
     return NULL;
   }
+
   return cmdb;
 }
 
@@ -93,20 +119,25 @@ discard_reuses(GPUQueue *queue) {
 
   memset(&probe, 0, sizeof(probe));
   first = NULL;
-  if (GPUAcquireCommandBuffer(queue, "dx12-discard", &first) != GPU_OK ||
-      !first) {
+
+  if (GPUAcquireCommandBuffer(queue, "dx12-discard", &first) != GPU_OK
+      || !first) {
     return false;
   }
+
   GPUSetCommandBufferCompletionHandler(first, &probe, on_complete);
+
   if (GPUDiscardCommandBuffer(first) != GPU_OK || probe.count != 0u) {
     return false;
   }
 
   second = NULL;
-  if (GPUAcquireCommandBuffer(queue, "dx12-discard-reuse", &second) != GPU_OK ||
-      !second || second != first) {
+
+  if (GPUAcquireCommandBuffer(queue, "dx12-discard-reuse", &second) != GPU_OK
+      || !second || second != first) {
     return false;
   }
+
   return GPUDiscardCommandBuffer(second) == GPU_OK && probe.count == 0u;
 }
 
@@ -114,30 +145,32 @@ static bool
 frame_time_roundtrip(GPUDevice *device,
                      GPUQueue  *queue,
                      GPUFence  *fence) {
-  GPUCommandBufferDX12 *cmdbDX12;
-  GPUTransferPassEncoder   *copyPass;
-  GPUDeviceDX12        *deviceDX12;
-  GPUQueueDX12         *queueDX12;
-  GPUCommandBuffer     *cmdb;
-  GPUBuffer            *src;
-  GPUBuffer            *dst;
-  GPURuntimeConfig      config;
-  GPUFrameStats         stats;
-  GPUBufferCreateInfo   bufferInfo;
-  GPUBufferCopyRegion   copyRegion;
-  GPUQueueSubmitInfo    submitInfo;
-  GPUResult             submitResult;
-  GPUResult             waitResult;
-  GPUResult             statsResult;
-  bool                  ok;
+  GPURuntimeConfig        config;
+  GPUFrameStats           stats;
+  GPUBufferCreateInfo     bufferInfo;
+  GPUBufferCopyRegion     copyRegion;
+  GPUQueueSubmitInfo      submitInfo;
+  GPUCommandBufferDX12   *cmdbDX12;
+  GPUTransferPassEncoder *copyPass;
+  GPUDeviceDX12          *deviceDX12;
+  GPUQueueDX12           *queueDX12;
+  GPUCommandBuffer       *cmdb;
+  GPUBuffer              *src;
+  GPUBuffer              *dst;
+  GPUResult               submitResult;
+  GPUResult               waitResult;
+  GPUResult               statsResult;
+  bool                    ok;
 
   deviceDX12 = device ? device->_priv : NULL;
   queueDX12  = queue ? queue->_priv : NULL;
+
   if (!deviceDX12 || !queueDX12) {
     return false;
   }
-  if (!deviceDX12->queryResultsReliable ||
-      queueDX12->timestampFrequency == 0u) {
+
+  if (!deviceDX12->queryResultsReliable
+      || queueDX12->timestampFrequency == 0u) {
     return true;
   }
 
@@ -146,6 +179,7 @@ frame_time_roundtrip(GPUDevice *device,
   config.chain.structSize = sizeof(config);
   config.validationMode   = GPU_VALIDATION_FULL;
   config.enableStats      = true;
+
   if (GPUConfigureRuntime(device, &config) != GPU_OK) {
     return false;
   }
@@ -164,26 +198,29 @@ frame_time_roundtrip(GPUDevice *device,
   bufferInfo.sizeBytes        = DX12_FRAME_TIME_COPY_BYTES;
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  src = NULL;
-  dst = NULL;
-  if (GPUCreateBuffer(device, &bufferInfo, &src) != GPU_OK || !src ||
-      GPUCreateBuffer(device, &bufferInfo, &dst) != GPU_OK || !dst) {
+  src                         = NULL;
+  dst                         = NULL;
+
+  if (GPUCreateBuffer(device, &bufferInfo, &src) != GPU_OK || !src
+      || GPUCreateBuffer(device, &bufferInfo, &dst) != GPU_OK || !dst) {
     ok = false;
     goto cleanup;
   }
 
   GPUResetStats(device);
   memset(&copyRegion, 0, sizeof(copyRegion));
-  if (GPUAcquireCommandBuffer(queue, "dx12-frame-time", &cmdb) != GPU_OK ||
-      !cmdb || !(cmdbDX12 = cmdb->_priv)) {
+
+  if (GPUAcquireCommandBuffer(queue, "dx12-frame-time", &cmdb) != GPU_OK
+      || !cmdb || !(cmdbDX12 = cmdb->_priv)) {
     ok = false;
     goto cleanup;
   }
-  copyPass = GPUBeginTransferPass(cmdb, "dx12-frame-time-copy");
-  if (!copyPass) {
+
+  if (!(copyPass = GPUBeginTransferPass(cmdb, "dx12-frame-time-copy"))) {
     ok = false;
     goto cleanup;
   }
+
   copyRegion.sizeBytes = DX12_FRAME_TIME_COPY_BYTES;
   GPUCopyBufferToBuffer(copyPass, src, dst, &copyRegion);
   GPUEndTransferPass(copyPass);
@@ -202,8 +239,9 @@ frame_time_roundtrip(GPUDevice *device,
   statsResult  = waitResult == GPU_OK
                    ? GPUGetLastFrameStats(device, &stats)
                    : GPU_ERROR_BACKEND_FAILURE;
-  ok = submitResult == GPU_OK && waitResult == GPU_OK &&
-       statsResult == GPU_OK && stats.gpuFrameMs > 0.0;
+  ok           = submitResult == GPU_OK && waitResult == GPU_OK
+                 && statsResult == GPU_OK && stats.gpuFrameMs > 0.0;
+
   if (!ok) {
     fprintf(stderr,
             "DX12 frame time details: submit=%d wait=%d stats=%d "
@@ -228,17 +266,19 @@ cleanup:
 static bool
 submit_error_propagates(GPUQueue *queue) {
   CompletionProbe       probe;
-  GPUCommandBuffer     *cmdb;
   GPUCommandBuffer     *buffers[1];
-  GPUCommandBufferDX12 *native;
   GPUQueueSubmitInfo    submitInfo;
+  GPUCommandBuffer     *cmdb;
+  GPUCommandBufferDX12 *native;
 
   memset(&probe, 0, sizeof(probe));
   cmdb = NULL;
-  if (GPUAcquireCommandBuffer(queue, "dx12-submit-error", &cmdb) != GPU_OK ||
-      !cmdb || !(native = cmdb->_priv) || !native->commandList) {
+
+  if (GPUAcquireCommandBuffer(queue, "dx12-submit-error", &cmdb) != GPU_OK
+      || !cmdb || !(native = cmdb->_priv) || !native->commandList) {
     return false;
   }
+
   if (FAILED(native->commandList->lpVtbl->Close(native->commandList))) {
     return false;
   }
@@ -250,29 +290,34 @@ submit_error_propagates(GPUQueue *queue) {
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = buffers;
-  return GPUQueueSubmit(queue, &submitInfo) == GPU_ERROR_BACKEND_FAILURE &&
-         probe.count == 1u && probe.cmdb == cmdb;
+  return GPUQueueSubmit(queue, &submitInfo) == GPU_ERROR_BACKEND_FAILURE
+         && probe.count == 1u && probe.cmdb == cmdb;
 }
 
 static bool
-buffer_transfers_reuse(GPUQueue *queue,
-                       GPUDevice       *device,
-                       GPUFence        *queueFence) {
-  GPUQueueDX12         *native;
-  GPUBufferCreateInfo   bufferInfo;
-  GPUTransferSlotDX12   slots[GPU_DX12_TRANSFER_SLOT_COUNT];
-  GPUBuffer            *buffer;
-  ID3D12Fence          *fence;
-  ID3D12Resource       *readback;
-  HANDLE                event;
-  uint64_t              readbackCapacity;
-  static uint8_t        upload[DX12_TRANSFER_TEST_BYTES];
-  uint32_t              value;
-  uint32_t              copied;
-  bool                  ok;
+buffer_transfers_reuse(GPUQueue  *queue,
+                       GPUDevice *device,
+                       GPUFence  *queueFence) {
+  GPUBufferCreateInfo  bufferInfo;
+  GPUTransferSlotDX12  slots[GPU_DX12_TRANSFER_SLOT_COUNT];
+  GPUQueueDX12        *native;
+  GPUBuffer           *buffer;
+  ID3D12Fence         *fence;
+  ID3D12Resource      *readback;
+  HANDLE               event;
+  GPUTransferSlotDX12 *slot;
+  uint64_t             readbackCapacity;
+  uint32_t             value;
+  uint32_t             copied;
+  uint32_t             uploadIndex;
+  uint32_t             snapshotIndex;
+  uint32_t             writeIndex;
+  uint32_t             verifyIndex;
+  bool                 ok;
 
   native = queue ? queue->_priv : NULL;
   buffer = NULL;
+
   if (!native || !device) {
     return false;
   }
@@ -284,16 +329,18 @@ buffer_transfers_reuse(GPUQueue *queue,
   bufferInfo.sizeBytes        = sizeof(upload);
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     return false;
   }
 
   ok = true;
-  for (uint32_t i = 0u;
-       ok && i < GPU_DX12_TRANSFER_SLOT_COUNT *
-                  DX12_BUFFER_UPLOADS_PER_SLOT;
-       i++) {
-    value = UINT32_C(0x12340000) + i;
+
+  for (uploadIndex = 0u;
+       ok && uploadIndex < GPU_DX12_TRANSFER_SLOT_COUNT *
+                           DX12_BUFFER_UPLOADS_PER_SLOT;
+       uploadIndex++) {
+    value = UINT32_C(0x12340000) + uploadIndex;
     memcpy(upload, &value, sizeof(value));
     ok = GPUQueueWriteBuffer(queue,
                              buffer,
@@ -301,25 +348,28 @@ buffer_transfers_reuse(GPUQueue *queue,
                              upload,
                              sizeof(upload)) == GPU_OK;
   }
+
   copied = 0u;
-  ok = ok && GPUQueueReadBuffer(queue,
-                                buffer,
-                                0u,
-                                &copied,
-                                sizeof(copied)) == GPU_OK &&
-       copied == value && !native->transferOpen;
-  if (!ok || !native->transferFence || !native->transferEvent ||
-      !native->readbackStaging) {
+  ok     = ok && GPUQueueReadBuffer(queue,
+                                    buffer,
+                                    0u,
+                                    &copied,
+                                    sizeof(copied)) == GPU_OK
+           && copied == value && !native->transferOpen;
+
+  if (!ok || !native->transferFence || !native->transferEvent
+      || !native->readbackStaging) {
     (void)wait_queue(queue, queueFence);
     GPUDestroyBuffer(buffer);
     return false;
   }
 
-  for (uint32_t i = 0u; i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
-    slots[i] = native->transferSlots[i];
-    if (!slots[i].allocator || !slots[i].commandList ||
-        !slots[i].uploadStaging || !slots[i].uploadMapped ||
-        slots[i].uploadCapacity < DX12_TRANSFER_TEST_BYTES) {
+  for (snapshotIndex = 0u; snapshotIndex < GPU_DX12_TRANSFER_SLOT_COUNT; snapshotIndex++) {
+    slots[snapshotIndex] = native->transferSlots[snapshotIndex];
+
+    if (!slots[snapshotIndex].allocator || !slots[snapshotIndex].commandList
+        || !slots[snapshotIndex].uploadStaging || !slots[snapshotIndex].uploadMapped
+        || slots[snapshotIndex].uploadCapacity < DX12_TRANSFER_TEST_BYTES) {
       (void)wait_queue(queue, queueFence);
       GPUDestroyBuffer(buffer);
       return false;
@@ -330,62 +380,68 @@ buffer_transfers_reuse(GPUQueue *queue,
   event            = native->transferEvent;
   readback         = native->readbackStaging;
   readbackCapacity = native->readbackCapacity;
-  for (uint32_t i = 0u; i < 16u; i++) {
-    value  = UINT32_C(0xabc00000) + i;
+
+  for (writeIndex = 0u; writeIndex < 16u; writeIndex++) {
+    value  = UINT32_C(0xabc00000) + writeIndex;
     copied = 0u;
+
     if (GPUQueueWriteBuffer(queue,
                             buffer,
                             0u,
                             &value,
-                            sizeof(value)) != GPU_OK ||
-        GPUQueueReadBuffer(queue,
-                           buffer,
-                           0u,
-                           &copied,
-                           sizeof(copied)) != GPU_OK ||
-        copied != value ||
-        native->transferFence != fence ||
-        native->transferEvent != event ||
-        native->readbackStaging != readback ||
-        native->readbackCapacity != readbackCapacity ||
-        native->transferOpen) {
+                            sizeof(value)) != GPU_OK
+        || GPUQueueReadBuffer(queue,
+                              buffer,
+                              0u,
+                              &copied,
+                              sizeof(copied)) != GPU_OK
+        || copied != value
+        || native->transferFence != fence
+        || native->transferEvent != event
+        || native->readbackStaging != readback
+        || native->readbackCapacity != readbackCapacity
+        || native->transferOpen) {
       ok = false;
       break;
     }
   }
 
-  for (uint32_t i = 0u; ok && i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
-    GPUTransferSlotDX12 *slot;
-
-    slot = &native->transferSlots[i];
-    ok = slot->allocator == slots[i].allocator &&
-         slot->commandList == slots[i].commandList &&
-         slot->uploadStaging == slots[i].uploadStaging &&
-         slot->uploadMapped == slots[i].uploadMapped &&
-         slot->uploadCapacity == slots[i].uploadCapacity;
+  for (verifyIndex = 0u; ok && verifyIndex < GPU_DX12_TRANSFER_SLOT_COUNT; verifyIndex++) {
+    slot = &native->transferSlots[verifyIndex];
+    ok   = slot->allocator == slots[verifyIndex].allocator
+           && slot->commandList == slots[verifyIndex].commandList
+           && slot->uploadStaging == slots[verifyIndex].uploadStaging
+           && slot->uploadMapped == slots[verifyIndex].uploadMapped
+           && slot->uploadCapacity == slots[verifyIndex].uploadCapacity;
   }
+
   ok = wait_queue(queue, queueFence) && ok;
   GPUDestroyBuffer(buffer);
   return ok;
 }
 
 static bool
-texture_transfers_reuse(GPUQueue *queue,
-                        GPUDevice       *device,
-                        GPUFence        *queueFence) {
-  GPUQueueDX12         *native;
+texture_transfers_reuse(GPUQueue  *queue,
+                        GPUDevice *device,
+                        GPUFence  *queueFence) {
   GPUTextureCreateInfo  textureInfo;
   GPUTextureWriteRegion writeRegion;
   GPUTransferSlotDX12   slots[GPU_DX12_TRANSFER_SLOT_COUNT];
+  GPUQueueDX12         *native;
   GPUTexture           *texture;
   ID3D12Fence          *fence;
   HANDLE                event;
-  static uint8_t        pixels[DX12_TRANSFER_TEST_BYTES];
+  GPUTransferSlotDX12  *slot;
   uint32_t              warmupWrites;
+  uint32_t              uploadIndex;
+  uint32_t              snapshotIndex;
+  uint32_t              writeIndex;
+  uint32_t              verifyIndex;
   bool                  ok;
 
   native  = queue ? queue->_priv : NULL;
   texture = NULL;
+
   if (!native || !device) {
     return false;
   }
@@ -402,8 +458,9 @@ texture_transfers_reuse(GPUQueue *queue,
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_COPY_DST;
-  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK ||
-      !texture) {
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK
+      || !texture) {
     return false;
   }
 
@@ -420,14 +477,17 @@ texture_transfers_reuse(GPUQueue *queue,
     GPUDestroyTexture(texture);
     return false;
   }
+
   warmupWrites = GPU_DX12_TRANSFER_SLOT_COUNT *
                  DX12_TEXTURE_UPLOADS_PER_SLOT;
-  ok = true;
-  for (uint32_t i = 0u; ok && i < warmupWrites; i++) {
-    pixels[0] = (uint8_t)i;
-    pixels[1] = (uint8_t)(i + 1u);
-    pixels[2] = (uint8_t)(i + 2u);
+  ok           = true;
+
+  for (uploadIndex = 0u; ok && uploadIndex < warmupWrites; uploadIndex++) {
+    pixels[0] = (uint8_t)uploadIndex;
+    pixels[1] = (uint8_t)(uploadIndex + 1u);
+    pixels[2] = (uint8_t)(uploadIndex + 2u);
     pixels[3] = 255u;
+
     if (GPUQueueWriteTexture(queue,
                              texture,
                              &writeRegion,
@@ -437,43 +497,47 @@ texture_transfers_reuse(GPUQueue *queue,
       break;
     }
   }
+
   ok = ok && wait_queue(queue, queueFence);
-  for (uint32_t i = 0u; ok && i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
-    slots[i] = native->transferSlots[i];
-    ok = slots[i].allocator && slots[i].commandList &&
-         slots[i].uploadStaging && slots[i].uploadMapped &&
-         slots[i].uploadCapacity >= GPU_DX12_TEXTURE_TRANSFER_CAPACITY;
+
+  for (snapshotIndex = 0u; ok && snapshotIndex < GPU_DX12_TRANSFER_SLOT_COUNT; snapshotIndex++) {
+    slots[snapshotIndex] = native->transferSlots[snapshotIndex];
+    ok                   = slots[snapshotIndex].allocator && slots[snapshotIndex].commandList
+                           && slots[snapshotIndex].uploadStaging && slots[snapshotIndex].uploadMapped
+                           && slots[snapshotIndex].uploadCapacity >= GPU_DX12_TEXTURE_TRANSFER_CAPACITY;
   }
+
   fence = native->transferFence;
   event = native->transferEvent;
-  for (uint32_t i = 0u; ok && i < 16u; i++) {
-    pixels[0] = (uint8_t)i;
-    pixels[1] = (uint8_t)(i + 1u);
-    pixels[2] = (uint8_t)(i + 2u);
+
+  for (writeIndex = 0u; ok && writeIndex < 16u; writeIndex++) {
+    pixels[0] = (uint8_t)writeIndex;
+    pixels[1] = (uint8_t)(writeIndex + 1u);
+    pixels[2] = (uint8_t)(writeIndex + 2u);
     pixels[3] = 255u;
+
     if (GPUQueueWriteTexture(queue,
                              texture,
                              &writeRegion,
                              pixels,
-                             sizeof(pixels)) != GPU_OK ||
-        native->transferFence != fence ||
-        native->transferEvent != event ||
-        !native->transferOpen) {
+                             sizeof(pixels)) != GPU_OK
+        || native->transferFence != fence
+        || native->transferEvent != event
+        || !native->transferOpen) {
       ok = false;
       break;
     }
   }
 
-  for (uint32_t i = 0u; ok && i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
-    GPUTransferSlotDX12 *slot;
-
-    slot = &native->transferSlots[i];
-    ok = slot->allocator == slots[i].allocator &&
-         slot->commandList == slots[i].commandList &&
-         slot->uploadStaging == slots[i].uploadStaging &&
-         slot->uploadMapped == slots[i].uploadMapped &&
-         slot->uploadCapacity == slots[i].uploadCapacity;
+  for (verifyIndex = 0u; ok && verifyIndex < GPU_DX12_TRANSFER_SLOT_COUNT; verifyIndex++) {
+    slot = &native->transferSlots[verifyIndex];
+    ok   = slot->allocator == slots[verifyIndex].allocator
+           && slot->commandList == slots[verifyIndex].commandList
+           && slot->uploadStaging == slots[verifyIndex].uploadStaging
+           && slot->uploadMapped == slots[verifyIndex].uploadMapped
+           && slot->uploadCapacity == slots[verifyIndex].uploadCapacity;
   }
+
   ok = wait_queue(queue, queueFence) && ok;
   GPUDestroyTexture(texture);
   return ok;
@@ -485,16 +549,16 @@ main(void) {
   GPUDeviceCreateInfo   deviceInfo;
   GPUFenceCreateInfo    fenceInfo;
   GPUQueueRequest       queueRequest;
-  GPUFeature            requiredFeature;
+  CompletionProbe       probe;
   GPUCommandBuffer     *firstCmdb;
   GPUCommandBuffer     *secondCmdb;
   GPUQueue             *queue0;
   GPUQueue             *queue1;
-  CompletionProbe       probe;
   GPUInstance          *instance;
   GPUAdapter           *adapter;
   GPUDevice            *device;
   GPUFence             *fence;
+  GPUFeature            requiredFeature;
 
   memset(&instanceInfo, 0, sizeof(instanceInfo));
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -503,20 +567,21 @@ main(void) {
   instanceInfo.enableValidation = true;
 
   instance = NULL;
+
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
     fprintf(stderr, "DX12 instance creation failed\n");
     return 1;
   }
 
-  adapter = first_adapter(instance);
-  if (!adapter) {
+  if (!(adapter = first_adapter(instance))) {
     fprintf(stderr, "DX12 adapter enumeration failed\n");
     GPUDestroyInstance(instance);
     return 1;
   }
-  if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_COMPUTE) ||
-      !GPUIsFeatureSupported(adapter, GPU_FEATURE_INDIRECT_DRAW) ||
-      !GPUIsFeatureSupported(adapter, GPU_FEATURE_MULTI_DRAW)) {
+
+  if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_COMPUTE)
+      || !GPUIsFeatureSupported(adapter, GPU_FEATURE_INDIRECT_DRAW)
+      || !GPUIsFeatureSupported(adapter, GPU_FEATURE_MULTI_DRAW)) {
     fprintf(stderr, "DX12 feature reporting failed\n");
     GPUDestroyInstance(instance);
     return 1;
@@ -538,14 +603,16 @@ main(void) {
   deviceInfo.queues.pRequests        = &queueRequest;
 
   device = NULL;
+
   if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "DX12 device creation failed\n");
     GPUDestroyInstance(instance);
     return 1;
   }
-  if (GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE) ||
-      GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW) ||
-      !GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW)) {
+
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE)
+      || GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW)
+      || !GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW)) {
     fprintf(stderr, "DX12 enabled wrong feature set\n");
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
@@ -554,9 +621,10 @@ main(void) {
 
   queue0 = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   queue1 = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 1u);
-  if (!queue0 || !queue1 || queue0 == queue1 ||
-      GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 2u) ||
-      GPUGetAvailableQueueBits(device) != GPU_QUEUE_GRAPHICS) {
+
+  if (!queue0 || !queue1 || queue0 == queue1
+      || GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 2u)
+      || GPUGetAvailableQueueBits(device) != GPU_QUEUE_GRAPHICS) {
     fprintf(stderr, "DX12 indexed queue lookup failed\n");
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
@@ -566,40 +634,46 @@ main(void) {
   memset(&fenceInfo, 0, sizeof(fenceInfo));
   fenceInfo.chain.sType      = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fenceInfo.chain.structSize = sizeof(fenceInfo);
-  fence = NULL;
+  fence                      = NULL;
+
   if (GPUCreateFence(device, &fenceInfo, &fence) != GPU_OK || !fence) {
     fprintf(stderr, "DX12 fence creation failed\n");
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
     return 1;
   }
+
   if (!frame_time_roundtrip(device, queue0, fence)) {
     fprintf(stderr, "DX12 frame time roundtrip failed\n");
     goto fail;
   }
+
   if (!discard_reuses(queue0)) {
     fprintf(stderr, "DX12 command-buffer discard failed\n");
     goto fail;
   }
+
   if (!buffer_transfers_reuse(queue0, device, fence)) {
     fprintf(stderr, "DX12 buffer transfer reuse failed\n");
     goto fail;
   }
+
   if (!texture_transfers_reuse(queue0, device, fence)) {
     fprintf(stderr, "DX12 texture transfer reuse failed\n");
     goto fail;
   }
 
   memset(&probe, 0, sizeof(probe));
-  firstCmdb = submit_empty(queue0, fence, &probe);
-  if (!firstCmdb || probe.count != 1u || probe.cmdb != firstCmdb) {
+
+  if (!(firstCmdb = submit_empty(queue0, fence, &probe)) || probe.count != 1u || probe.cmdb != firstCmdb) {
     fprintf(stderr, "DX12 first submit failed\n");
     goto fail;
   }
 
   secondCmdb = submit_empty(queue0, fence, &probe);
-  if (!secondCmdb || secondCmdb != firstCmdb ||
-      probe.count != 2u || probe.cmdb != secondCmdb) {
+
+  if (!secondCmdb || secondCmdb != firstCmdb
+      || probe.count != 2u || probe.cmdb != secondCmdb) {
     fprintf(stderr, "DX12 command-buffer reuse failed\n");
     goto fail;
   }
@@ -608,10 +682,12 @@ main(void) {
     fprintf(stderr, "DX12 second queue submit failed\n");
     goto fail;
   }
+
   if (!submit_error_propagates(queue0)) {
     fprintf(stderr, "DX12 submit error was not propagated\n");
     goto fail;
   }
+
   if (!submit_empty(queue0, fence, &probe) || probe.count != 4u) {
     fprintf(stderr, "DX12 queue did not recover after submit error\n");
     goto fail;
@@ -621,6 +697,7 @@ main(void) {
   GPUDestroyDevice(device);
   GPUDestroyInstance(instance);
   printf("DX12 queue validation passed\n");
+
   return 0;
 
 fail:

@@ -28,16 +28,17 @@ typedef struct GPUDevice GPUDevice;
 
 typedef uint32_t GPUBufferUsageFlags;
 enum {
-  GPU_BUFFER_USAGE_VERTEX    = 1u << 0,
-  GPU_BUFFER_USAGE_INDEX     = 1u << 1,
-  GPU_BUFFER_USAGE_UNIFORM   = 1u << 2,
-  GPU_BUFFER_USAGE_STORAGE   = 1u << 3,
-  GPU_BUFFER_USAGE_COPY_SRC  = 1u << 4,
-  GPU_BUFFER_USAGE_COPY_DST  = 1u << 5,
-  GPU_BUFFER_USAGE_INDIRECT  = 1u << 6,
-  GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT = 1u << 7,
+  GPU_BUFFER_USAGE_VERTEX   = 1u << 0,
+  GPU_BUFFER_USAGE_INDEX    = 1u << 1,
+  GPU_BUFFER_USAGE_UNIFORM  = 1u << 2,
+  GPU_BUFFER_USAGE_STORAGE  = 1u << 3,
+  GPU_BUFFER_USAGE_COPY_SRC = 1u << 4,
+  GPU_BUFFER_USAGE_COPY_DST = 1u << 5,
+  GPU_BUFFER_USAGE_INDIRECT = 1u << 6,
+
+  GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT   = 1u << 7,
   GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT = 1u << 8,
-  GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT = 1u << 9
+  GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT                 = 1u << 9
 };
 
 typedef struct GPUBufferCreateInfo {
@@ -49,34 +50,34 @@ typedef struct GPUBufferCreateInfo {
 
 GPU_EXPORT
 GPUResult
-GPUCreateBuffer(GPUDevice                 * __restrict device,
-                const GPUBufferCreateInfo * __restrict info,
-                GPUBuffer                ** __restrict outBuffer);
+GPUCreateBuffer(GPUDevice                 *__restrict device,
+                const GPUBufferCreateInfo *__restrict info,
+                GPUBuffer                **__restrict outBuffer);
 
 GPU_EXPORT
 void
-GPUDestroyBuffer(GPUBuffer * __restrict buff);
+GPUDestroyBuffer(GPUBuffer *__restrict buff);
 
-/*! Returns zero unless device-address support and usage were enabled. */
+/*! returns zero unless device-address support and usage were enabled. */
 GPU_EXPORT
 uint64_t
-GPUGetBufferDeviceAddressEXT(const GPUBuffer * __restrict buff);
+GPUGetBufferDeviceAddressEXT(const GPUBuffer *__restrict buff);
 
 GPU_EXPORT
 GPUResult
-GPUQueueWriteBuffer(GPUQueue        * __restrict queue,
-                    GPUBuffer       * __restrict buff,
-                    uint64_t                     dstOffset,
-                    const void      * __restrict data,
-                    uint64_t                     sizeBytes);
+GPUQueueWriteBuffer(GPUQueue   *__restrict queue,
+                    GPUBuffer  *__restrict buff,
+                    uint64_t               dstOffset,
+                    const void *__restrict data,
+                    uint64_t               sizeBytes);
 
 GPU_EXPORT
 GPUResult
-GPUQueueReadBuffer(GPUQueue        * __restrict queue,
-                   GPUBuffer       * __restrict buff,
-                   uint64_t                     srcOffset,
-                   void           * __restrict outData,
-                   uint64_t                     sizeBytes);
+GPUQueueReadBuffer(GPUQueue  *__restrict queue,
+                   GPUBuffer *__restrict buff,
+                   uint64_t              srcOffset,
+                   void      *__restrict outData,
+                   uint64_t              sizeBytes);
 
 #ifdef __cplusplus
 }

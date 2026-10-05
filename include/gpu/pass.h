@@ -32,7 +32,7 @@ typedef struct GPURenderPassEncoder GPURenderPassEncoder;
 #endif
 
 typedef struct GPUTransferPassEncoder GPUTransferPassEncoder;
-typedef struct GPUQuerySet             GPUQuerySet;
+typedef struct GPUQuerySet            GPUQuerySet;
 
 typedef enum GPULoadOp {
   GPU_LOAD_OP_LOAD      = 0,
@@ -52,11 +52,11 @@ typedef union GPUClearColorValue {
 } GPUClearColorValue;
 
 typedef struct GPURenderPassColorAttachment {
-  GPUTextureView     *view;
-  GPUTextureView     *resolveView;
-  GPULoadOp           loadOp;
-  GPUStoreOp          storeOp;
-  GPUClearColorValue  clearColor;
+  GPUTextureView    *view;
+  GPUTextureView    *resolveView;
+  GPULoadOp          loadOp;
+  GPUStoreOp         storeOp;
+  GPUClearColorValue clearColor;
 } GPURenderPassColorAttachment;
 
 typedef struct GPURenderPassDepthStencilAttachment {
@@ -69,7 +69,7 @@ typedef struct GPURenderPassDepthStencilAttachment {
   float           clearDepth;
 } GPURenderPassDepthStencilAttachment;
 
-/* Writes one timestamp at pass begin and one at pass end. */
+/* writes one timestamp at pass begin and one at pass end. */
 typedef struct GPUPassTimestampWrites {
   GPUQuerySet *querySet;
   uint32_t     beginIndex;
@@ -120,11 +120,11 @@ typedef struct GPUTextureToTextureCopyRegion {
 } GPUTextureToTextureCopyRegion;
 
 typedef struct GPUTextureBlitInfo {
-  GPUTexture                  *src;
-  GPUTexture                  *dst;
-  GPUTextureSubresourceRegion  srcRegion;
-  GPUTextureSubresourceRegion  dstRegion;
-  GPUFilter                    filter;
+  GPUTexture                 *src;
+  GPUTexture                 *dst;
+  GPUTextureSubresourceRegion srcRegion;
+  GPUTextureSubresourceRegion dstRegion;
+  GPUFilter                   filter;
 } GPUTextureBlitInfo;
 
 typedef uint32_t GPUAddressCopyFlagsEXT;
@@ -178,11 +178,11 @@ typedef struct GPUIndirectMemoryCopyInfoEXT {
 } GPUIndirectMemoryCopyInfoEXT;
 
 typedef struct GPUIndirectMemoryToTextureCopyInfoEXT {
-  GPUTexture                                  *dst;
-  const GPUIndirectTextureSubresourceEXT      *pTextureSubresources;
-  GPUIndirectCommandRangeEXT                   commands;
-  GPUAddressCopyFlagsEXT                       srcFlags;
-  uint32_t                                     commandCount;
+  GPUTexture                             *dst;
+  const GPUIndirectTextureSubresourceEXT *pTextureSubresources;
+  GPUIndirectCommandRangeEXT              commands;
+  GPUAddressCopyFlagsEXT                  srcFlags;
+  uint32_t                                commandCount;
 } GPUIndirectMemoryToTextureCopyInfoEXT;
 
 GPU_EXPORT
@@ -206,30 +206,30 @@ GPUBeginTransferPass(GPUCommandBuffer *cmdb, const char *label);
 
 GPU_EXPORT
 void
-GPUCopyBufferToBuffer(GPUTransferPassEncoder   *pass,
-                      GPUBuffer                *src,
-                      GPUBuffer                *dst,
+GPUCopyBufferToBuffer(GPUTransferPassEncoder    *pass,
+                      GPUBuffer                 *src,
+                      GPUBuffer                 *dst,
                       const GPUBufferCopyRegion *region);
 
 GPU_EXPORT
 void
-GPUCopyBufferToTexture(GPUTransferPassEncoder          *pass,
-                       GPUBuffer                       *src,
-                       GPUTexture                      *dst,
+GPUCopyBufferToTexture(GPUTransferPassEncoder           *pass,
+                       GPUBuffer                        *src,
+                       GPUTexture                       *dst,
                        const GPUBufferTextureCopyRegion *region);
 
 GPU_EXPORT
 void
-GPUCopyTextureToBuffer(GPUTransferPassEncoder          *pass,
-                       GPUTexture                      *src,
-                       GPUBuffer                       *dst,
+GPUCopyTextureToBuffer(GPUTransferPassEncoder           *pass,
+                       GPUTexture                       *src,
+                       GPUBuffer                        *dst,
                        const GPUBufferTextureCopyRegion *region);
 
 GPU_EXPORT
 void
-GPUCopyTextureToTexture(GPUTransferPassEncoder             *pass,
-                        GPUTexture                         *src,
-                        GPUTexture                         *dst,
+GPUCopyTextureToTexture(GPUTransferPassEncoder              *pass,
+                        GPUTexture                          *src,
+                        GPUTexture                          *dst,
                         const GPUTextureToTextureCopyRegion *region);
 
 GPU_EXPORT
@@ -239,7 +239,7 @@ GPUCopyMemoryIndirectEXT(GPUTransferPassEncoder             *pass,
 
 GPU_EXPORT
 void
-GPUCopyMemoryToTextureIndirectEXT(GPUTransferPassEncoder                     *pass,
+GPUCopyMemoryToTextureIndirectEXT(GPUTransferPassEncoder                      *pass,
                                   const GPUIndirectMemoryToTextureCopyInfoEXT *info);
 
 GPU_EXPORT

@@ -19,18 +19,16 @@
 
 GPU_EXPORT
 GPUResult
-GPUGetSubgroupMatrixPropertiesEXT(
-  const GPUAdapter               *adapter,
-  uint32_t                       *inoutPropertyCount,
-  GPUSubgroupMatrixPropertiesEXT *outProperties) {
+GPUGetSubgroupMatrixPropertiesEXT(const GPUAdapter               *adapter,
+                                  uint32_t                       *inoutPropertyCount,
+                                  GPUSubgroupMatrixPropertiesEXT *outProperties) {
   GPUApi *api;
 
   if (!adapter || !inoutPropertyCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  api = gpuAdapterApi(adapter);
-  if (!api || !api->device.getSubgroupMatrixProperties) {
+  if (!(api = gpuAdapterApi(adapter)) || !api->device.getSubgroupMatrixProperties) {
     *inoutPropertyCount = 0u;
     return GPU_ERROR_UNSUPPORTED;
   }

@@ -1,26 +1,41 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <gpu/gpu.h>
 
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-static void *
+static void*
 read_file(const char *path, uint64_t *outSize) {
   FILE *file;
   void *data;
   long  size;
 
-  file = fopen(path, "rb");
-  if (!file || fseek(file, 0, SEEK_END) != 0 ||
-      (size = ftell(file)) <= 0 || fseek(file, 0, SEEK_SET) != 0) {
+  if (!(file = fopen(path, "rb")) || fseek(file, 0, SEEK_END) != 0
+      || (size = ftell(file)) <= 0 || fseek(file, 0, SEEK_SET) != 0) {
     if (file) {
       fclose(file);
     }
+
     return NULL;
   }
 
-  data = malloc((size_t)size);
-  if (!data || fread(data, 1u, (size_t)size, file) != (size_t)size) {
+  if (!(data = malloc((size_t)size)) || fread(data, 1u, (size_t)size, file) != (size_t)size) {
     free(data);
     fclose(file);
     return NULL;
@@ -28,26 +43,27 @@ read_file(const char *path, uint64_t *outSize) {
 
   fclose(file);
   *outSize = (uint64_t)size;
+
   return data;
 }
 
 int
 main(int argc, char **argv) {
-  GPUInstanceCreateInfo          instanceInfo = {0};
-  GPUColorTargetState            colorTargets[2] = {{0}};
-  GPUDepthStencilState           depthStencil = {0};
-  GPURenderPipelineCreateInfo    pipelineInfo = {0};
-  GPUInstance                   *instance;
-  GPUAdapter                    *adapter;
-  GPUDevice                     *device;
-  GPUShaderLibrary              *library;
-  GPUShaderLayout               *layout;
-  GPURenderPipeline             *pipeline;
-  void                          *artifact;
-  GPUResult                      result;
-  uint64_t                       artifactSize;
-  uint32_t                       adapterCount;
-  int                            ok;
+  GPUInstanceCreateInfo       instanceInfo    = {0};
+  GPUColorTargetState         colorTargets[2] = {{0}};
+  GPUDepthStencilState        depthStencil    = {0};
+  GPURenderPipelineCreateInfo pipelineInfo    = {0};
+  GPUInstance                *instance;
+  GPUAdapter                 *adapter;
+  GPUDevice                  *device;
+  GPUShaderLibrary           *library;
+  GPUShaderLayout            *layout;
+  GPURenderPipeline          *pipeline;
+  void                       *artifact;
+  uint64_t                    artifactSize;
+  GPUResult                   result;
+  uint32_t                    adapterCount;
+  int                         ok;
 
   if (argc != 2) {
     fprintf(stderr, "usage: gpu-dx12-depth-test artifact.us\n");
@@ -55,8 +71,8 @@ main(int argc, char **argv) {
   }
 
   artifactSize = 0u;
-  artifact     = read_file(argv[1], &artifactSize);
-  if (!artifact) {
+
+  if (!(artifact = read_file(argv[1], &artifactSize))) {
     return 1;
   }
 
@@ -64,7 +80,8 @@ main(int argc, char **argv) {
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_DX12;
   instanceInfo.enableValidation = true;
-  instance = NULL;
+  instance                      = NULL;
+
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
     free(artifact);
     return 1;
@@ -72,9 +89,10 @@ main(int argc, char **argv) {
 
   adapter      = NULL;
   adapterCount = 1u;
-  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter || !(device = GPUCreateDeviceWithDefaultQueues(adapter))) {
+  result       = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !adapter || !(device = GPUCreateDeviceWithDefaultQueues(adapter))) {
     GPUDestroyInstance(instance);
     free(artifact);
     return 1;
@@ -83,44 +101,42 @@ main(int argc, char **argv) {
   library  = NULL;
   layout   = NULL;
   pipeline = NULL;
-  colorTargets[0].format                 = GPU_FORMAT_BGRA8_UNORM;
-  colorTargets[0].blend.enabled          = true;
-  colorTargets[0].blend.color.srcFactor  = GPU_BLEND_FACTOR_SRC_ALPHA;
-  colorTargets[0].blend.color.dstFactor  =
-    GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-  colorTargets[0].blend.color.op          = GPU_BLEND_OP_ADD;
-  colorTargets[0].blend.alpha.srcFactor  = GPU_BLEND_FACTOR_ONE;
-  colorTargets[0].blend.alpha.dstFactor  = GPU_BLEND_FACTOR_ZERO;
-  colorTargets[0].blend.alpha.op          = GPU_BLEND_OP_ADD;
-  colorTargets[0].blend.writeMask         = GPU_COLOR_WRITE_ALL;
-  colorTargets[1].format                  = GPU_FORMAT_BGRA8_UNORM;
-  colorTargets[1].blend.writeMask         = GPU_COLOR_WRITE_G;
-  depthStencil.depthTestEnable     = true;
-  depthStencil.depthWriteEnable    = true;
-  depthStencil.depthCompare        = GPU_COMPARE_LESS;
-  depthStencil.stencilTestEnable   = true;
-  depthStencil.front.compare       = GPU_COMPARE_ALWAYS;
-  depthStencil.front.failOp        = GPU_STENCIL_OP_REPLACE;
-  depthStencil.front.depthFailOp   = GPU_STENCIL_OP_INCREMENT_CLAMP;
-  depthStencil.front.passOp        = GPU_STENCIL_OP_KEEP;
-  depthStencil.back.compare        = GPU_COMPARE_ALWAYS;
-  depthStencil.back.failOp         = GPU_STENCIL_OP_ZERO;
-  depthStencil.back.depthFailOp    = GPU_STENCIL_OP_DECREMENT_WRAP;
-  depthStencil.back.passOp         = GPU_STENCIL_OP_INVERT;
-  depthStencil.stencilReadMask     = UINT8_MAX;
-  depthStencil.stencilWriteMask    = UINT8_MAX;
-  pipelineInfo.chain.sType         =
-    GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  pipelineInfo.chain.structSize    = sizeof(pipelineInfo);
-  pipelineInfo.vertexEntry         = "tri_vs";
-  pipelineInfo.fragmentEntry       = "tri_fs";
-  pipelineInfo.colorTargetCount    = 2u;
-  pipelineInfo.pColorTargets       = colorTargets;
-  pipelineInfo.depthStencilFormat  = GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
-  pipelineInfo.pDepthStencilState  = &depthStencil;
-  pipelineInfo.primitiveTopology   = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  pipelineInfo.cullMode            = GPU_CULL_MODE_NONE;
-  pipelineInfo.frontFace           = GPU_FRONT_FACE_CCW;
+  colorTargets[0].format                = GPU_FORMAT_BGRA8_UNORM;
+  colorTargets[0].blend.enabled         = true;
+  colorTargets[0].blend.color.srcFactor = GPU_BLEND_FACTOR_SRC_ALPHA;
+  colorTargets[0].blend.color.dstFactor = GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  colorTargets[0].blend.color.op        = GPU_BLEND_OP_ADD;
+  colorTargets[0].blend.alpha.srcFactor = GPU_BLEND_FACTOR_ONE;
+  colorTargets[0].blend.alpha.dstFactor = GPU_BLEND_FACTOR_ZERO;
+  colorTargets[0].blend.alpha.op        = GPU_BLEND_OP_ADD;
+  colorTargets[0].blend.writeMask       = GPU_COLOR_WRITE_ALL;
+  colorTargets[1].format          = GPU_FORMAT_BGRA8_UNORM;
+  colorTargets[1].blend.writeMask = GPU_COLOR_WRITE_G;
+  depthStencil.depthTestEnable   = true;
+  depthStencil.depthWriteEnable  = true;
+  depthStencil.depthCompare      = GPU_COMPARE_LESS;
+  depthStencil.stencilTestEnable = true;
+  depthStencil.front.compare     = GPU_COMPARE_ALWAYS;
+  depthStencil.front.failOp      = GPU_STENCIL_OP_REPLACE;
+  depthStencil.front.depthFailOp = GPU_STENCIL_OP_INCREMENT_CLAMP;
+  depthStencil.front.passOp      = GPU_STENCIL_OP_KEEP;
+  depthStencil.back.compare      = GPU_COMPARE_ALWAYS;
+  depthStencil.back.failOp       = GPU_STENCIL_OP_ZERO;
+  depthStencil.back.depthFailOp  = GPU_STENCIL_OP_DECREMENT_WRAP;
+  depthStencil.back.passOp       = GPU_STENCIL_OP_INVERT;
+  depthStencil.stencilReadMask   = UINT8_MAX;
+  depthStencil.stencilWriteMask  = UINT8_MAX;
+  pipelineInfo.chain.sType                       = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize                  = sizeof(pipelineInfo);
+  pipelineInfo.vertexEntry                       = "tri_vs";
+  pipelineInfo.fragmentEntry                     = "tri_fs";
+  pipelineInfo.colorTargetCount                  = 2u;
+  pipelineInfo.pColorTargets                     = colorTargets;
+  pipelineInfo.depthStencilFormat                = GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  pipelineInfo.pDepthStencilState                = &depthStencil;
+  pipelineInfo.primitiveTopology                 = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineInfo.cullMode                          = GPU_CULL_MODE_NONE;
+  pipelineInfo.frontFace                         = GPU_FRONT_FACE_CCW;
   pipelineInfo.multisample.sampleCount           = 4u;
   pipelineInfo.multisample.sampleMask            = UINT32_MAX;
   pipelineInfo.multisample.alphaToCoverageEnable = true;
@@ -128,14 +144,15 @@ main(int argc, char **argv) {
   ok = GPUCreateShaderLibraryFromUSL(device,
                                      artifact,
                                      artifactSize,
-                                     &library) == GPU_OK && library &&
-       GPUCreateShaderLayout(device, library, &layout) == GPU_OK && layout;
+                                     &library) == GPU_OK && library
+       && GPUCreateShaderLayout(device, library, &layout) == GPU_OK && layout;
+
   if (ok) {
     pipelineInfo.layout  = layout->pipelineLayout;
     pipelineInfo.library = library;
-    ok = GPUCreateRenderPipeline(device,
-                                 &pipelineInfo,
-                                 &pipeline) == GPU_OK && pipeline;
+    ok                   = GPUCreateRenderPipeline(device,
+                                                   &pipelineInfo,
+                                                   &pipeline) == GPU_OK && pipeline;
   }
 
   GPUDestroyRenderPipeline(pipeline);
@@ -151,5 +168,6 @@ main(int argc, char **argv) {
   }
 
   puts("DX12 depth-stencil pipeline validation passed");
+
   return 0;
 }

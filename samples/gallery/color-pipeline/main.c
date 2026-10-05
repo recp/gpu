@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 #include <stdio.h>
@@ -48,9 +64,11 @@ device_error(GPUDevice                *device,
 
   (void)device;
   state = userData;
+
   if (!state || !error || state->failed) {
     return;
   }
+
   state->failed = true;
   set_status(error->message ? error->message : "GPU: unknown device error", 1);
   emscripten_cancel_main_loop();
@@ -65,16 +83,11 @@ resize_canvas(WebGPUColorPipeline *state) {
 
 static void
 fill_source(void) {
-  for (uint32_t y = 0u; y < COLOR_SOURCE_SIZE; y++) {
-    for (uint32_t x = 0u; x < COLOR_SOURCE_SIZE; x++) {
-      uint32_t cell;
-      uint32_t offset;
-      uint32_t red;
-      uint32_t green;
-      uint32_t blue;
-      int32_t  dx;
-      int32_t  dy;
+  uint32_t y, x, cell, offset, red, green, blue;
+  int32_t  dx, dy;
 
+  for (y = 0u; y < COLOR_SOURCE_SIZE; y++) {
+    for (x = 0u; x < COLOR_SOURCE_SIZE; x++) {
       cell   = ((x / 32u) + (y / 32u)) & 1u;
       offset = (y * COLOR_SOURCE_SIZE + x) * 4u;
       red    = 24u + x * 210u / (COLOR_SOURCE_SIZE - 1u);
@@ -82,6 +95,7 @@ fill_source(void) {
       blue   = cell ? 178u : 56u;
       dx     = (int32_t)x - 174;
       dy     = (int32_t)y - 78;
+
       if (dx * dx + dy * dy < 27 * 27) {
         red   = 255u;
         green = 232u;
@@ -103,30 +117,29 @@ validate_reflection(WebGPUColorPipeline *state) {
   uint32_t                       sourceCount;
   uint32_t                       tonemapCount;
 
-  sourceEntries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[0],
-    &sourceCount
-  );
-  tonemapEntries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[1],
-    &tonemapCount
-  );
-  if (!sourceEntries || sourceCount != 3u ||
-      sourceEntries[0].binding != 0u ||
-      sourceEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      sourceEntries[1].binding != 1u ||
-      sourceEntries[1].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      sourceEntries[2].binding != 2u ||
-      sourceEntries[2].bindingType != GPU_BINDING_SAMPLER) {
+  sourceEntries  = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[0],
+                                                &sourceCount);
+  tonemapEntries = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[1],
+                                                &tonemapCount);
+
+  if (!sourceEntries || sourceCount != 3u
+      || sourceEntries[0].binding != 0u
+      || sourceEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || sourceEntries[1].binding != 1u
+      || sourceEntries[1].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || sourceEntries[2].binding != 2u
+      || sourceEntries[2].bindingType != GPU_BINDING_SAMPLER) {
     return 0;
   }
-  if (!tonemapEntries || tonemapCount != 2u ||
-      tonemapEntries[0].binding != 0u ||
-      tonemapEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      tonemapEntries[1].binding != 1u ||
-      tonemapEntries[1].bindingType != GPU_BINDING_SAMPLER) {
+
+  if (!tonemapEntries || tonemapCount != 2u
+      || tonemapEntries[0].binding != 0u
+      || tonemapEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || tonemapEntries[1].binding != 1u
+      || tonemapEntries[1].bindingType != GPU_BINDING_SAMPLER) {
     return 0;
   }
+
   return 1;
 }
 
@@ -134,10 +147,11 @@ static int
 create_shader(WebGPUColorPipeline *state) {
   void      *artifact;
   uint64_t   artifactSize;
-  GPUResult  result;
+  GPUResult result;
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/color_pipeline.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /color_pipeline.us", 1);
     return 0;
@@ -148,19 +162,21 @@ create_shader(WebGPUColorPipeline *state) {
                                          artifactSize,
                                          &state->library);
   free(artifact);
-  if (result != GPU_OK || !state->library ||
-      GPUCreateShaderLayout(state->device,
-                            state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 2u ||
-      !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0] ||
-      !state->shaderLayout->bindGroupLayouts[1] ||
-      !validate_reflection(state)) {
+
+  if (result != GPU_OK || !state->library
+      || GPUCreateShaderLayout(state->device,
+                               state->library,
+                               &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 2u
+      || !state->shaderLayout->bindGroupLayouts
+      || !state->shaderLayout->bindGroupLayouts[0]
+      || !state->shaderLayout->bindGroupLayouts[1]
+      || !validate_reflection(state)) {
     set_status("GPU: unexpected color-pipeline reflection", 1);
     return 0;
   }
+
   return 1;
 }
 
@@ -171,6 +187,7 @@ create_pipelines(WebGPUColorPipeline *state) {
 
   color.format          = GPU_FORMAT_RGBA16_FLOAT;
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
+
   info.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   info.chain.structSize        = sizeof(info);
   info.label                   = "webgpu-color-hdr";
@@ -185,10 +202,11 @@ create_pipelines(WebGPUColorPipeline *state) {
   info.frontFace               = GPU_FRONT_FACE_CCW;
   info.multisample.sampleCount = 1u;
   info.multisample.sampleMask  = UINT32_MAX;
+
   if (GPUCreateRenderPipeline(state->device,
                               &info,
-                              &state->hdrPipeline) != GPU_OK ||
-      !state->hdrPipeline) {
+                              &state->hdrPipeline) != GPU_OK
+      || !state->hdrPipeline) {
     set_status("GPU: failed to create HDR pipeline", 1);
     return 0;
   }
@@ -196,13 +214,15 @@ create_pipelines(WebGPUColorPipeline *state) {
   color.format       = GPUGetSwapchainFormat(state->swapchain);
   info.label         = "webgpu-color-tonemap";
   info.fragmentEntry = "tonemap_fs";
+
   if (GPUCreateRenderPipeline(state->device,
                               &info,
-                              &state->tonemapPipeline) != GPU_OK ||
-      !state->tonemapPipeline) {
+                              &state->tonemapPipeline) != GPU_OK
+      || !state->tonemapPipeline) {
     set_status("GPU: failed to create tone-map pipeline", 1);
     return 0;
   }
+
   return 1;
 }
 
@@ -229,10 +249,11 @@ create_texture(WebGPUColorPipeline *state,
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = usage;
+
   if (GPUCreateTexture(state->device,
                        &textureInfo,
-                       outTexture) != GPU_OK ||
-      !*outTexture) {
+                       outTexture) != GPU_OK
+      || !*outTexture) {
     return 0;
   }
 
@@ -243,22 +264,24 @@ create_texture(WebGPUColorPipeline *state,
   viewInfo.format           = format;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
-  if (GPUCreateTextureView(*outTexture, &viewInfo, outView) != GPU_OK ||
-      !*outView) {
+
+  if (GPUCreateTextureView(*outTexture, &viewInfo, outView) != GPU_OK
+      || !*outView) {
     GPUDestroyTexture(*outTexture);
     *outTexture = NULL;
     return 0;
   }
+
   return 1;
 }
 
 static int
-create_bind_group(WebGPUColorPipeline    *state,
-                  const char             *label,
-                  uint32_t                layoutIndex,
+create_bind_group(WebGPUColorPipeline     *state,
+                  const char              *label,
+                  uint32_t                 layoutIndex,
                   const GPUBindGroupEntry *entries,
-                  uint32_t                entryCount,
-                  GPUBindGroup          **outGroup) {
+                  uint32_t                 entryCount,
+                  GPUBindGroup           **outGroup) {
   GPUBindGroupCreateInfo info = {0};
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
@@ -267,49 +290,48 @@ create_bind_group(WebGPUColorPipeline    *state,
   info.layout           = state->shaderLayout->bindGroupLayouts[layoutIndex];
   info.pEntries         = entries;
   info.entryCount       = entryCount;
-  return GPUCreateBindGroup(state->device, &info, outGroup) == GPU_OK &&
-         *outGroup;
+
+  return GPUCreateBindGroup(state->device, &info, outGroup) == GPU_OK
+         && *outGroup;
 }
 
 static int
 create_resources(WebGPUColorPipeline *state) {
-  GPUTextureWriteRegion upload           = {0};
-  GPUSamplerCreateInfo  samplerInfo      = {0};
   GPUBindGroupEntry     sourceEntries[3] = {0};
   GPUBindGroupEntry     toneEntries[2]   = {0};
+  GPUSamplerCreateInfo  samplerInfo      = {0};
+  GPUTextureWriteRegion upload           = {0};
 
   if (!create_texture(state,
                       "webgpu-color-srgb",
                       GPU_FORMAT_RGBA8_UNORM_SRGB,
                       COLOR_SOURCE_SIZE,
                       COLOR_SOURCE_SIZE,
-                      GPU_TEXTURE_USAGE_SAMPLED |
-                        GPU_TEXTURE_USAGE_COPY_DST,
+                      GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST,
                       &state->srgbTexture,
-                      &state->srgbView) ||
-      !create_texture(state,
-                      "webgpu-color-linear",
-                      GPU_FORMAT_RGBA8_UNORM,
-                      COLOR_SOURCE_SIZE,
-                      COLOR_SOURCE_SIZE,
-                      GPU_TEXTURE_USAGE_SAMPLED |
-                        GPU_TEXTURE_USAGE_COPY_DST,
-                      &state->linearTexture,
-                      &state->linearView) ||
-      !create_texture(state,
-                      "webgpu-color-hdr",
-                      GPU_FORMAT_RGBA16_FLOAT,
-                      COLOR_HDR_WIDTH,
-                      COLOR_HDR_HEIGHT,
-                      GPU_TEXTURE_USAGE_COLOR_TARGET |
-                        GPU_TEXTURE_USAGE_SAMPLED,
-                      &state->hdrTexture,
-                      &state->hdrView)) {
+                      &state->srgbView)
+      || !create_texture(state,
+                         "webgpu-color-linear",
+                         GPU_FORMAT_RGBA8_UNORM,
+                         COLOR_SOURCE_SIZE,
+                         COLOR_SOURCE_SIZE,
+                         GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST,
+                         &state->linearTexture,
+                         &state->linearView)
+      || !create_texture(state,
+                         "webgpu-color-hdr",
+                         GPU_FORMAT_RGBA16_FLOAT,
+                         COLOR_HDR_WIDTH,
+                         COLOR_HDR_HEIGHT,
+                         GPU_TEXTURE_USAGE_COLOR_TARGET | GPU_TEXTURE_USAGE_SAMPLED,
+                         &state->hdrTexture,
+                         &state->hdrView)) {
     set_status("GPU: failed to create color-pipeline textures", 1);
     return 0;
   }
 
   fill_source();
+
   upload.aspect       = GPU_TEXTURE_ASPECT_ALL;
   upload.width        = COLOR_SOURCE_SIZE;
   upload.height       = COLOR_SOURCE_SIZE;
@@ -317,16 +339,17 @@ create_resources(WebGPUColorPipeline *state) {
   upload.layerCount   = 1u;
   upload.bytesPerRow  = COLOR_SOURCE_SIZE * 4u;
   upload.rowsPerImage = COLOR_SOURCE_SIZE;
+
   if (GPUQueueWriteTexture(state->queue,
                            state->srgbTexture,
                            &upload,
                            sourcePixels,
-                           sizeof(sourcePixels)) != GPU_OK ||
-      GPUQueueWriteTexture(state->queue,
-                           state->linearTexture,
-                           &upload,
-                           sourcePixels,
-                           sizeof(sourcePixels)) != GPU_OK) {
+                           sizeof(sourcePixels)) != GPU_OK
+      || GPUQueueWriteTexture(state->queue,
+                              state->linearTexture,
+                              &upload,
+                              sourcePixels,
+                              sizeof(sourcePixels)) != GPU_OK) {
     set_status("GPU: failed to upload color-pipeline source", 1);
     return 0;
   }
@@ -340,11 +363,12 @@ create_resources(WebGPUColorPipeline *state) {
   samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+
   if (GPUCreateSampler(state->device,
                        &samplerInfo,
                        false,
-                       &state->sampler) != GPU_OK ||
-      !state->sampler) {
+                       &state->sampler) != GPU_OK
+      || !state->sampler) {
     set_status("GPU: failed to create color-pipeline sampler", 1);
     return 0;
   }
@@ -371,37 +395,39 @@ create_resources(WebGPUColorPipeline *state) {
                          0u,
                          sourceEntries,
                          GPU_ARRAY_LEN(sourceEntries),
-                         &state->sourceGroup) ||
-      !create_bind_group(state,
-                         "webgpu-color-tonemap-group",
-                         1u,
-                         toneEntries,
-                         GPU_ARRAY_LEN(toneEntries),
-                         &state->tonemapGroup)) {
+                         &state->sourceGroup)
+      || !create_bind_group(state,
+                            "webgpu-color-tonemap-group",
+                            1u,
+                            toneEntries,
+                            GPU_ARRAY_LEN(toneEntries),
+                            &state->tonemapGroup)) {
     set_status("GPU: failed to create color-pipeline bind groups", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
 encode_hdr_pass(WebGPUColorPipeline *state,
                 GPUCommandBuffer    *cmdb) {
-  GPURenderPassColorAttachment color    = {0};
   GPURenderPassCreateInfo      passInfo = {0};
+  GPURenderPassColorAttachment color    = {0};
   GPURenderPassEncoder        *pass;
 
   color.view                  = state->hdrView;
   color.loadOp                = GPU_LOAD_OP_CLEAR;
   color.storeOp               = GPU_STORE_OP_STORE;
   color.clearColor.float32[3] = 1.0f;
+
   passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize     = sizeof(passInfo);
   passInfo.label                = "webgpu-color-hdr-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     return 0;
   }
 
@@ -409,20 +435,22 @@ encode_hdr_pass(WebGPUColorPipeline *state,
   GPUBindRenderGroup(pass, 0u, state->sourceGroup, 0u, NULL);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
+
   return 1;
 }
 
 static void
 encode_hdr_barrier(WebGPUColorPipeline *state,
                    GPUCommandBuffer    *cmdb) {
-  GPUTextureBarrier barrier = {0};
   GPUBarrierBatch   batch   = {0};
+  GPUTextureBarrier barrier = {0};
 
   barrier.texture    = state->hdrTexture;
   barrier.srcAccess  = GPU_ACCESS_COLOR_WRITE;
   barrier.dstAccess  = GPU_ACCESS_SHADER_READ;
   barrier.mipCount   = 1u;
   barrier.layerCount = 1u;
+
   batch.pTextureBarriers    = &barrier;
   batch.srcStages           = GPU_STAGE_FRAGMENT;
   batch.dstStages           = GPU_STAGE_FRAGMENT;
@@ -434,8 +462,8 @@ static int
 encode_tonemap_pass(WebGPUColorPipeline *state,
                     GPUCommandBuffer    *cmdb,
                     GPUFrame            *frame) {
-  GPURenderPassColorAttachment color    = {0};
   GPURenderPassCreateInfo      passInfo = {0};
+  GPURenderPassColorAttachment color    = {0};
   GPURenderPassEncoder        *pass;
 
   color.view                  = GPUFrameGetTargetView(frame);
@@ -445,13 +473,14 @@ encode_tonemap_pass(WebGPUColorPipeline *state,
   color.clearColor.float32[1] = 0.010f;
   color.clearColor.float32[2] = 0.024f;
   color.clearColor.float32[3] = 1.0f;
+
   passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize     = sizeof(passInfo);
   passInfo.label                = "webgpu-color-tonemap-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     return 0;
   }
 
@@ -459,6 +488,7 @@ encode_tonemap_pass(WebGPUColorPipeline *state,
   GPUBindRenderGroup(pass, 1u, state->tonemapGroup, 0u, NULL);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
+
   return 1;
 }
 
@@ -469,16 +499,19 @@ render_frame(void *userData) {
   GPUCommandBuffer    *cmdb;
 
   state = userData;
+
   if (!resize_canvas(state)) {
     return;
   }
+
   frame = GPUBeginFrame(state->swapchain);
   cmdb  = NULL;
-  if (!frame ||
-      GPUAcquireCommandBuffer(state->queue,
-                              "webgpu-color-frame",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+
+  if (!frame
+      || GPUAcquireCommandBuffer(state->queue,
+                                 "webgpu-color-frame",
+                                 &cmdb) != GPU_OK
+      || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
@@ -489,26 +522,30 @@ render_frame(void *userData) {
     set_status("GPU: failed to encode HDR pass", 1);
     return;
   }
+
   encode_hdr_barrier(state, cmdb);
+
   if (!encode_tonemap_pass(state, cmdb, frame)) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     set_status("GPU: failed to encode tone-map pass", 1);
     return;
   }
+
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     set_status("GPU: failed to finish color-pipeline frame", 1);
     return;
   }
 
   state->frameCount++;
+
   if (state->frameCount > WARM_FRAME_COUNT) {
     GPUFrameStats stats;
 
-    if (GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.drawCalls != 2u ||
-         stats.hotPathAllocCount != 0u ||
-         stats.hotPathFreeCount != 0u)) {
+    if (GPUGetLastFrameStats(state->device, &stats) == GPU_OK
+        && (stats.drawCalls != 2u
+         || stats.hotPathAllocCount != 0u
+         || stats.hotPathFreeCount != 0u)) {
       set_status("GPU: color-pipeline warm path regression", 1);
       emscripten_cancel_main_loop();
     }
@@ -516,51 +553,57 @@ render_frame(void *userData) {
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
-  WebGPUColorPipeline *state;
   GPURuntimeConfig     runtime = {0};
+  WebGPUColorPipeline *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status("GPU: failed to request WebGPU device", 1);
     return;
   }
+
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (!state->queue || GPUConfigureRuntime(device, &runtime) != GPU_OK) {
     set_status("GPU: failed to configure color-pipeline runtime", 1);
     return;
   }
+
   if (GPUSetDeviceErrorCallback(device, device_error, state) != GPU_OK) {
     set_status("GPU: failed to install color-pipeline error callback", 1);
     return;
   }
 
   state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
+                                              adapter,
+                                              (void *)"#canvas",
+                                              GPU_SURFACE_WEB_CANVAS,
+                                              1.0f);
+
   if (!state->surface || !resize_canvas(state)) {
     set_status("GPU: failed to create color-pipeline canvas", 1);
     return;
   }
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain ||
-      !create_shader(state) ||
-      !create_pipelines(state) ||
-      !create_resources(state)) {
+
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))
+      || !create_shader(state)
+      || !create_pipelines(state)
+      || !create_resources(state)) {
     return;
   }
 
@@ -579,7 +622,9 @@ main(void) {
   info.label            = "color-pipeline-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create WebGPU instance", 1);
     return 1;
@@ -590,5 +635,6 @@ main(void) {
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   return result == GPU_OK ? 0 : 1;
 }

@@ -2,37 +2,20 @@
  * Copyright (C) 2026 Recep Aslantas
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "../common.h"
 #include "../../../api/usl_target.h"
-
-void
-cuda_queueLock(GPUQueueCuda *queue) {
-#if defined(_WIN32) || defined(WIN32)
-  EnterCriticalSection(&queue->lock);
-#else
-  pthread_mutex_lock(&queue->lock);
-#endif
-}
-
-void
-cuda_queueUnlock(GPUQueueCuda *queue) {
-#if defined(_WIN32) || defined(WIN32)
-  LeaveCriticalSection(&queue->lock);
-#else
-  pthread_mutex_unlock(&queue->lock);
-#endif
-}
-
-void
-cuda_queueSignal(GPUQueueCuda *queue) {
-#if defined(_WIN32) || defined(WIN32)
-  WakeAllConditionVariable(&queue->condition);
-#else
-  pthread_cond_broadcast(&queue->condition);
-#endif
-}
 
 static void
 cuda__queueWait(GPUQueueCuda *queue) {
@@ -45,65 +28,13 @@ cuda__queueWait(GPUQueueCuda *queue) {
 
 static void
 cuda__releaseDispatches(GPUCommandCuda *command) {
-  for (uint32_t i = 0u; i < command->dispatchCount; i++) {
+  uint32_t i;
+
+  for (i = 0u; i < command->dispatchCount; i++) {
     GPUDestroyComputePipeline(command->dispatches[i].pipeline);
   }
+
   command->dispatchCount = 0u;
-}
-
-GPUCommandCuda *
-cuda_createCommand(GPUQueueCuda *queue) {
-  GPUCommandCuda *command;
-
-  if (!queue || !queue->driver) {
-    return NULL;
-  }
-  command = calloc(1, sizeof(*command));
-  if (!command) {
-    return NULL;
-  }
-  command->owner            = queue;
-  command->command._priv    = command;
-  command->command._queue   = &queue->queue;
-  command->dispatchCapacity = CUDA_INITIAL_DISPATCH_CAPACITY;
-  command->dispatches       = calloc(command->dispatchCapacity,
-                                     sizeof(*command->dispatches));
-  if (!command->dispatches ||
-      queue->driver->eventCreate(&command->completion,
-                                 CU_EVENT_DISABLE_TIMING) != CUDA_SUCCESS) {
-    free(command->dispatches);
-    free(command);
-    return NULL;
-  }
-
-  cuda_queueLock(queue);
-  command->allNext = queue->commands;
-  queue->commands  = command;
-  cuda_queueUnlock(queue);
-  return command;
-}
-
-void
-cuda_recycleCommand(GPUCommandBuffer *cmdb) {
-  GPUCommandCuda *command;
-  GPUQueueCuda   *queue;
-
-  command = cuda_command(cmdb);
-  queue   = command ? command->owner : NULL;
-  if (!command || !queue) {
-    return;
-  }
-
-  cuda__releaseDispatches(command);
-  cuda_queueLock(queue);
-  command->next       = queue->freeCommands;
-  queue->freeCommands = command;
-  if (command->pending && queue->pendingCount > 0u) {
-    queue->pendingCount--;
-  }
-  command->pending = false;
-  cuda_queueSignal(queue);
-  cuda_queueUnlock(queue);
 }
 
 static void
@@ -113,20 +44,26 @@ cuda__completionLoop(GPUQueueCuda *queue) {
 
   for (;;) {
     cuda_queueLock(queue);
+
     while (!queue->pendingHead && !queue->stopping) {
       cuda__queueWait(queue);
     }
+
     command = queue->pendingHead;
+
     if (command) {
       queue->pendingHead = command->next;
+
       if (!queue->pendingHead) {
         queue->pendingTail = NULL;
       }
+
       command->next = NULL;
     } else if (queue->stopping) {
       cuda_queueUnlock(queue);
       break;
     }
+
     cuda_queueUnlock(queue);
 
     if (cuda_push(queue->driver, queue->context) == GPU_OK) {
@@ -135,9 +72,11 @@ cuda__completionLoop(GPUQueueCuda *queue) {
     } else {
       result = -1;
     }
+
     if (result != CUDA_SUCCESS) {
       cuda_report(queue->queue._device, result, "event synchronization");
     }
+
     gpuFinishCommandBuffer(&command->command, cuda_recycleCommand);
   }
 }
@@ -149,7 +88,7 @@ cuda__completionThread(void *userData) {
   return 0;
 }
 #else
-static void *
+static void*
 cuda__completionThread(void *userData) {
   cuda__completionLoop(userData);
   return NULL;
@@ -158,6 +97,9 @@ cuda__completionThread(void *userData) {
 
 static void
 cuda__destroyQueue(GPUQueueCuda *queue) {
+  GPUCommandCuda *command;
+  GPUCommandCuda *next;
+
   if (!queue || !queue->driver) {
     return;
   }
@@ -176,22 +118,23 @@ cuda__destroyQueue(GPUQueueCuda *queue) {
   }
 
   if (cuda_push(queue->driver, queue->context) == GPU_OK) {
-    GPUCommandCuda *command;
-    GPUCommandCuda *next;
-
     for (command = queue->commands; command; command = next) {
       next = command->allNext;
       cuda__releaseDispatches(command);
+
       if (command->completion) {
         (void)queue->driver->eventDestroy(command->completion);
       }
+
       free(command->paramData);
       free(command->dispatches);
       free(command);
     }
+
     if (queue->stream) {
       (void)queue->driver->streamDestroy(queue->stream);
     }
+
     cuda_pop(queue->driver);
   }
 
@@ -205,10 +148,12 @@ cuda__destroyQueue(GPUQueueCuda *queue) {
 }
 
 static bool
-cuda__initQueue(GPUDevice      *device,
+cuda__initQueue(GPUDevice     *device,
                 GPUDeviceCuda *native,
                 GPUQueueCuda  *queue) {
-  CUresult result;
+  GPUCommandCuda *command;
+  CUresult        result;
+  uint32_t        i;
 
   queue->driver        = native->driver;
   queue->context       = native->context;
@@ -222,6 +167,7 @@ cuda__initQueue(GPUDevice      *device,
   if (pthread_mutex_init(&queue->lock, NULL) != 0) {
     return false;
   }
+
   if (pthread_cond_init(&queue->condition, NULL) != 0) {
     pthread_mutex_destroy(&queue->lock);
     return false;
@@ -230,34 +176,33 @@ cuda__initQueue(GPUDevice      *device,
 
   result = native->driver->streamCreate(&queue->stream,
                                         CU_STREAM_NON_BLOCKING);
+
   if (result != CUDA_SUCCESS) {
     cuda__destroyQueue(queue);
     return false;
   }
 
-  for (uint32_t i = 0u; i < CUDA_COMMAND_SLOT_COUNT; i++) {
-    GPUCommandCuda *command;
-
-    command = cuda_createCommand(queue);
-    if (!command) {
+  for (i = 0u; i < CUDA_COMMAND_SLOT_COUNT; i++) {
+    if (!(command = cuda_createCommand(queue))) {
       cuda__destroyQueue(queue);
       return false;
     }
+
     command->next       = queue->freeCommands;
     queue->freeCommands = command;
   }
 
 #if defined(_WIN32) || defined(WIN32)
-  queue->worker = CreateThread(NULL,
-                               0u,
-                               cuda__completionThread,
-                               queue,
-                               0u,
-                               NULL);
-  if (!queue->worker) {
+  if (!(queue->worker = CreateThread(NULL,
+                                     0u,
+                                     cuda__completionThread,
+                                     queue,
+                                     0u,
+                                     NULL))) {
     cuda__destroyQueue(queue);
     return false;
   }
+
   queue->workerStarted = true;
 #else
   if (pthread_create(&queue->worker,
@@ -268,124 +213,133 @@ cuda__initQueue(GPUDevice      *device,
     cuda__destroyQueue(queue);
     return false;
   }
+
   queue->workerStarted = true;
 #endif
+
   return true;
 }
 
-static GPUAdapter *
-cuda_getAvailableAdapters(GPUInstance * __restrict inst,
-                          uint32_t                  maxNumberOfItems) {
+static GPUAdapter*
+cuda_getAvailableAdapters(GPUInstance *__restrict inst,
+                          uint32_t                maxNumberOfItems) {
   GPUAdapter *head;
   GPUAdapter *tail;
   GPUCUDA    *driver;
   uint32_t    emitted;
   int         count;
+  int         ordinal;
 
   driver = cuda_driver();
-  if (!driver || maxNumberOfItems == 0u ||
-      driver->deviceGetCount(&count) != CUDA_SUCCESS || count <= 0) {
+
+  if (!driver || maxNumberOfItems == 0u
+      || driver->deviceGetCount(&count) != CUDA_SUCCESS || count <= 0) {
     return NULL;
   }
 
   head    = NULL;
   tail    = NULL;
   emitted = 0u;
-  for (int ordinal = 0;
-       ordinal < count && emitted < maxNumberOfItems;
-       ordinal++) {
+
+  for (ordinal = 0; ordinal < count && emitted < maxNumberOfItems; ordinal++) {
     GPUAdapterCuda  candidate = {0};
     GPUAdapterCuda *native;
     GPUAdapter     *adapter;
 
     candidate.driver  = driver;
     candidate.ordinal = ordinal;
-    if (driver->deviceGet(&candidate.device, ordinal) != CUDA_SUCCESS ||
-        driver->deviceGetName(candidate.name,
-                              (int)sizeof(candidate.name),
-                              candidate.device) != CUDA_SUCCESS ||
-        driver->deviceGetUuid(&candidate.uuid,
-                              candidate.device) != CUDA_SUCCESS) {
+
+    if (driver->deviceGet(&candidate.device, ordinal) != CUDA_SUCCESS
+        || driver->deviceGetName(candidate.name,
+                                 (int)sizeof(candidate.name),
+                                 candidate.device) != CUDA_SUCCESS
+        || driver->deviceGetUuid(&candidate.uuid,
+                                 candidate.device) != CUDA_SUCCESS) {
       continue;
     }
+
     candidate.name[sizeof(candidate.name) - 1u] = '\0';
-    if (driver->deviceGetAttribute(
-          &candidate.computeMajor,
-          CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
-          candidate.device) != CUDA_SUCCESS ||
-        driver->deviceGetAttribute(
-          &candidate.computeMinor,
-          CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
-          candidate.device) != CUDA_SUCCESS ||
-        driver->deviceGetAttribute(
-          &candidate.maxThreadsPerBlock,
-          CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK,
-          candidate.device) != CUDA_SUCCESS ||
-        driver->deviceGetAttribute(&candidate.warpSize,
-                                   CU_DEVICE_ATTRIBUTE_WARP_SIZE,
-                                   candidate.device) != CUDA_SUCCESS ||
-        driver->deviceGetAttribute(&candidate.maxBlockDim[0],
-                                   CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X,
-                                   candidate.device) != CUDA_SUCCESS ||
-        driver->deviceGetAttribute(&candidate.maxBlockDim[1],
-                                   CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y,
-                                   candidate.device) != CUDA_SUCCESS ||
-        driver->deviceGetAttribute(&candidate.maxBlockDim[2],
-                                   CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z,
-                                   candidate.device) != CUDA_SUCCESS ||
-        driver->deviceGetAttribute(&candidate.maxGridDim[0],
-                                   CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_X,
-                                   candidate.device) != CUDA_SUCCESS ||
-        driver->deviceGetAttribute(&candidate.maxGridDim[1],
-                                   CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Y,
-                                   candidate.device) != CUDA_SUCCESS ||
-        driver->deviceGetAttribute(&candidate.maxGridDim[2],
-                                   CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Z,
-                                   candidate.device) != CUDA_SUCCESS ||
-        candidate.computeMajor <= 0 || candidate.computeMinor < 0 ||
-        candidate.maxThreadsPerBlock <= 0 || candidate.warpSize <= 0 ||
-        candidate.maxBlockDim[0] <= 0 || candidate.maxBlockDim[1] <= 0 ||
-        candidate.maxBlockDim[2] <= 0 || candidate.maxGridDim[0] <= 0 ||
-        candidate.maxGridDim[1] <= 0 || candidate.maxGridDim[2] <= 0) {
+
+    if (driver->deviceGetAttribute(&candidate.computeMajor,
+                                   CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
+                                   candidate.device) != CUDA_SUCCESS
+        || driver->deviceGetAttribute(&candidate.computeMinor,
+                                      CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
+                                      candidate.device) != CUDA_SUCCESS
+        || driver->deviceGetAttribute(&candidate.maxThreadsPerBlock,
+                                      CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK,
+                                      candidate.device) != CUDA_SUCCESS
+        || driver->deviceGetAttribute(&candidate.warpSize,
+                                      CU_DEVICE_ATTRIBUTE_WARP_SIZE,
+                                      candidate.device) != CUDA_SUCCESS
+        || driver->deviceGetAttribute(&candidate.maxBlockDim[0],
+                                      CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X,
+                                      candidate.device) != CUDA_SUCCESS
+        || driver->deviceGetAttribute(&candidate.maxBlockDim[1],
+                                      CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y,
+                                      candidate.device) != CUDA_SUCCESS
+        || driver->deviceGetAttribute(&candidate.maxBlockDim[2],
+                                      CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z,
+                                      candidate.device) != CUDA_SUCCESS
+        || driver->deviceGetAttribute(&candidate.maxGridDim[0],
+                                      CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_X,
+                                      candidate.device) != CUDA_SUCCESS
+        || driver->deviceGetAttribute(&candidate.maxGridDim[1],
+                                      CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Y,
+                                      candidate.device) != CUDA_SUCCESS
+        || driver->deviceGetAttribute(&candidate.maxGridDim[2],
+                                      CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Z,
+                                      candidate.device) != CUDA_SUCCESS
+        || candidate.computeMajor <= 0 || candidate.computeMinor < 0
+        || candidate.maxThreadsPerBlock <= 0 || candidate.warpSize <= 0
+        || candidate.maxBlockDim[0] <= 0 || candidate.maxBlockDim[1] <= 0
+        || candidate.maxBlockDim[2] <= 0 || candidate.maxGridDim[0] <= 0
+        || candidate.maxGridDim[1] <= 0 || candidate.maxGridDim[2] <= 0) {
       continue;
     }
+
     (void)driver->deviceGetAttribute(&candidate.unifiedAddressing,
                                      CU_DEVICE_ATTRIBUTE_UNIFIED_ADDRESSING,
                                      candidate.device);
 
     adapter = calloc(1, sizeof(*adapter));
     native  = malloc(sizeof(*native));
+
     if (!adapter || !native) {
       free(native);
       free(adapter);
       break;
     }
+
     *native = candidate;
 
     adapter->inst  = inst;
     adapter->_priv = native;
+
     if (tail) {
       tail->next = adapter;
     } else {
       head = adapter;
     }
+
     tail = adapter;
     emitted++;
   }
+
   return head;
 }
 
-static GPUAdapter *
-cuda_selectAdapter(GPUInstance       * __restrict inst,
-                   GPUAdapter        * __restrict adapters,
-                   GPUPowerPreference             powerPreference) {
+static GPUAdapter*
+cuda_selectAdapter(GPUInstance *__restrict inst,
+                   GPUAdapter  *__restrict adapters,
+                   GPUPowerPreference      powerPreference) {
   GPU__UNUSED(inst);
   GPU__UNUSED(powerPreference);
   return adapters;
 }
 
 static void
-cuda_destroyAdapter(GPUAdapter * __restrict adapter) {
+cuda_destroyAdapter(GPUAdapter *__restrict adapter) {
   if (adapter) {
     free(adapter->_priv);
     free(adapter);
@@ -393,31 +347,42 @@ cuda_destroyAdapter(GPUAdapter * __restrict adapter) {
 }
 
 static GPUResult
-cuda_getAdapterProperties(const GPUAdapter     * __restrict adapter,
-                          GPUAdapterProperties * __restrict outProperties) {
+cuda_getAdapterProperties(const GPUAdapter     *__restrict adapter,
+                          GPUAdapterProperties *__restrict outProperties) {
   GPUAdapterCuda *native;
 
   native = cuda_adapter(adapter);
+
   if (!native || !outProperties) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   memset(outProperties, 0, sizeof(*outProperties));
   outProperties->name           = native->name;
   outProperties->backend        = GPU_BACKEND_CUDA;
   outProperties->type           = GPU_ADAPTER_TYPE_DISCRETE;
   outProperties->executionFlags = GPU_EXECUTION_COMPUTE_BIT;
+
   return GPU_OK;
 }
 
 static GPUResult
-cuda_getAdapterIdentity(const GPUAdapter   * __restrict adapter,
-                        GPUAdapterIdentity * __restrict outIdentity) {
+cuda_getAdapterIdentity(const GPUAdapter   *__restrict adapter,
+                        GPUAdapterIdentity *__restrict outIdentity) {
+#if defined(_WIN32) || defined(WIN32)
+  char            luid[8];
+#endif
   GPUAdapterCuda *native;
+#if defined(_WIN32) || defined(WIN32)
+  unsigned int    nodeMask;
+#endif
 
   native = cuda_adapter(adapter);
+
   if (!native || !outIdentity) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   memset(outIdentity, 0, sizeof(*outIdentity));
   memcpy(outIdentity->deviceUUID,
          native->uuid.bytes,
@@ -425,10 +390,8 @@ cuda_getAdapterIdentity(const GPUAdapter   * __restrict adapter,
   outIdentity->validFlags = GPU_ADAPTER_IDENTITY_UUID_BIT;
 #if defined(_WIN32) || defined(WIN32)
   if (native->driver->deviceGetLuid) {
-    char         luid[8];
-    unsigned int nodeMask;
-
     nodeMask = 0u;
+
     if (native->driver->deviceGetLuid(luid,
                                       &nodeMask,
                                       native->device) == CUDA_SUCCESS) {
@@ -438,6 +401,7 @@ cuda_getAdapterIdentity(const GPUAdapter   * __restrict adapter,
     }
   }
 #endif
+
   return GPU_OK;
 }
 
@@ -448,9 +412,9 @@ cuda_hasSubgroups(const GPUAdapterCuda *adapter) {
 
 static bool
 cuda_hasShaderF16(const GPUAdapterCuda *adapter) {
-  return adapter &&
-         (adapter->computeMajor > 5 ||
-          (adapter->computeMajor == 5 && adapter->computeMinor >= 3));
+  return adapter
+         && (adapter->computeMajor > 5
+             || (adapter->computeMajor == 5 && adapter->computeMinor >= 3));
 }
 
 static bool
@@ -479,66 +443,77 @@ cuda_hasComputeDerivatives(const GPUAdapterCuda *adapter) {
 }
 
 static bool
-cuda_supportsFeature(const GPUAdapter * __restrict adapter,
-                     GPUFeature                    feature) {
+cuda_supportsFeature(const GPUAdapter *__restrict adapter,
+                     GPUFeature                   feature) {
   GPUAdapterCuda *native;
 
   native = cuda_adapter(adapter);
+
   if (!native) {
     return false;
   }
+
   switch (feature) {
     case GPU_FEATURE_COMPUTE:
     case GPU_FEATURE_DESCRIPTOR_INDEXING:
       return true;
+
     case GPU_FEATURE_SUBGROUPS:
       return cuda_hasSubgroups(native);
+
     case GPU_FEATURE_SHADER_F16:
       return cuda_hasShaderF16(native);
+
     case GPU_FEATURE_SUBGROUP_MATRIX:
       return cuda_hasSubgroupMatrix(native);
+
     case GPU_FEATURE_ATOMIC64:
       return cuda_hasAtomic64(native);
+
     case GPU_FEATURE_SHADER_SUBGROUP_CLOCK:
       return cuda_hasShaderSubgroupClock(native);
+
     case GPU_FEATURE_SHADER_DEVICE_CLOCK:
       return cuda_hasShaderDeviceClock(native);
+
     case GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS:
     case GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR:
       return cuda_hasComputeDerivatives(native);
+
     case GPU_FEATURE_BUFFER_DEVICE_ADDRESS:
       return native->unifiedAddressing != 0;
+
     default:
       return false;
   }
 }
 
 static bool
-cuda_supportsSubgroupOperations(
-  const GPUAdapter                * __restrict adapter,
-  GPUShaderStageFlags                          stage,
-  GPUBackendSubgroupOperationFlags             operations
-) {
-  const GPUBackendSubgroupOperationFlags supported =
-    GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
-    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
-    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
-  GPUAdapterCuda *native;
+cuda_supportsSubgroupOperations(const GPUAdapter     *__restrict adapter,
+                                GPUShaderStageFlags              stage,
+                                GPUBackendSubgroupOperationFlags operations) {
+  GPUAdapterCuda                        *native;
+  const GPUBackendSubgroupOperationFlags supported = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT
+                                                     | GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT
+                                                     | GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
 
   native = cuda_adapter(adapter);
-  return cuda_hasSubgroups(native) && stage == GPU_SHADER_STAGE_COMPUTE_BIT &&
-         operations != 0u && (operations & ~supported) == 0u;
+
+  return cuda_hasSubgroups(native) && stage == GPU_SHADER_STAGE_COMPUTE_BIT
+         && operations != 0u && (operations & ~supported) == 0u;
 }
 
 static void
-cuda_getLimits(const GPUAdapter * __restrict adapter,
-               GPULimits       * __restrict outLimits) {
+cuda_getLimits(const GPUAdapter *__restrict adapter,
+               GPULimits        *__restrict outLimits) {
   GPUAdapterCuda *native;
 
   native = cuda_adapter(adapter);
+
   if (!native || !outLimits) {
     return;
   }
+
   outLimits->maxBindGroups                   = GPU_ENCODER_MAX_BIND_GROUPS;
   outLimits->maxBindingsPerGroup             = 64u;
   outLimits->minUniformBufferOffsetAlignment = 1u;
@@ -549,6 +524,7 @@ cuda_getLimits(const GPUAdapter * __restrict adapter,
   outLimits->maxComputeWorkgroupSizeZ        = (uint32_t)native->maxBlockDim[2];
   outLimits->maxPushConstantSizeBytes        = 0u;
   outLimits->maxSamplerAnisotropy            = CUDA_MAX_SAMPLER_ANISOTROPY;
+
   if (cuda_hasSubgroups(native)) {
     outLimits->minSubgroupSize = (uint32_t)native->warpSize;
     outLimits->maxSubgroupSize = (uint32_t)native->warpSize;
@@ -556,47 +532,44 @@ cuda_getLimits(const GPUAdapter * __restrict adapter,
 }
 
 static void
-cuda_getFormatCapabilities(
-  const GPUAdapter      * __restrict adapter,
-  GPUFormat                          format,
-  GPUFormatCapabilities * __restrict outCapabilities
-) {
+cuda_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
+                           GPUFormat                         format,
+                           GPUFormatCapabilities *__restrict outCapabilities) {
   GPUCudaFormatInfo info;
 
   if (outCapabilities) {
     memset(outCapabilities, 0, sizeof(*outCapabilities));
+
     if (cuda_adapter(adapter) && cuda_formatInfo(format, &info)) {
       outCapabilities->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
-      outCapabilities->sampled =
-        (info.flags & GPU_CUDA_FORMAT_SAMPLED_BIT) != 0u;
-      outCapabilities->filterable =
-        (info.flags & GPU_CUDA_FORMAT_FILTERABLE_BIT) != 0u;
-      outCapabilities->storage =
-        (info.flags & GPU_CUDA_FORMAT_STORAGE_BIT) != 0u;
+      outCapabilities->sampled               = (info.flags & GPU_CUDA_FORMAT_SAMPLED_BIT) != 0u;
+      outCapabilities->filterable            = (info.flags & GPU_CUDA_FORMAT_FILTERABLE_BIT) != 0u;
+      outCapabilities->storage               = (info.flags & GPU_CUDA_FORMAT_STORAGE_BIT) != 0u;
     }
   }
 }
 
 static GPUResult
-cuda_getSubgroupMatrixProperties(
-  const GPUAdapter               * __restrict adapter,
-  uint32_t                       * __restrict inoutPropertyCount,
-  GPUSubgroupMatrixPropertiesEXT * __restrict outProperties
-) {
+cuda_getSubgroupMatrixProperties(const GPUAdapter               *__restrict adapter,
+                                 uint32_t                       *__restrict inoutPropertyCount,
+                                 GPUSubgroupMatrixPropertiesEXT *__restrict outProperties) {
   GPUAdapterCuda *native;
   uint32_t        capacity;
 
   native = cuda_adapter(adapter);
+
   if (!native || !inoutPropertyCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (!cuda_hasSubgroupMatrix(native)) {
     *inoutPropertyCount = 0u;
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  capacity = *inoutPropertyCount;
+  capacity            = *inoutPropertyCount;
   *inoutPropertyCount = 1u;
+
   if (outProperties && capacity > 0u) {
     memset(outProperties, 0, sizeof(*outProperties));
     outProperties->m          = 16u;
@@ -609,116 +582,130 @@ cuda_getSubgroupMatrixProperties(
     outProperties->stages     = GPU_SHADER_STAGE_COMPUTE_BIT;
     outProperties->scope      = GPU_SUBGROUP_MATRIX_SCOPE_SUBGROUP_EXT;
   }
-  return outProperties && capacity == 0u
-           ? GPU_ERROR_INSUFFICIENT_CAPACITY
-           : GPU_OK;
+
+  return outProperties && capacity == 0u ? GPU_ERROR_INSUFFICIENT_CAPACITY : GPU_OK;
 }
 
-static GPUDevice *
-cuda_createDevice(GPUAdapter               * __restrict adapter,
-                  const GPUQueueCreateInfo  queueInfos[],
-                  uint32_t                  queueInfoCount,
-                  uint64_t                  enabledFeatureMask) {
-  uint64_t        supportedMask;
+static GPUDevice*
+cuda_createDevice(GPUAdapter   *__restrict adapter,
+                  const GPUQueueCreateInfo queueInfos[],
+                  uint32_t                 queueInfoCount,
+                  uint64_t                 enabledFeatureMask) {
   GPUAdapterCuda *adapterNative;
   GPUDeviceCuda  *native;
   GPUDevice      *device;
+  uint64_t        supportedMask;
   uint32_t        queueCount;
   CUresult        result;
 
   adapterNative = cuda_adapter(adapter);
   supportedMask = (1ull << GPU_FEATURE_COMPUTE) |
                   (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING);
+
   if (cuda_hasSubgroups(adapterNative)) {
     supportedMask |= 1ull << GPU_FEATURE_SUBGROUPS;
   }
+
   if (cuda_hasShaderF16(adapterNative)) {
     supportedMask |= 1ull << GPU_FEATURE_SHADER_F16;
   }
+
   if (cuda_hasSubgroupMatrix(adapterNative)) {
     supportedMask |= 1ull << GPU_FEATURE_SUBGROUP_MATRIX;
   }
+
   if (cuda_hasAtomic64(adapterNative)) {
     supportedMask |= 1ull << GPU_FEATURE_ATOMIC64;
   }
+
   if (cuda_hasShaderSubgroupClock(adapterNative)) {
     supportedMask |= 1ull << GPU_FEATURE_SHADER_SUBGROUP_CLOCK;
   }
+
   if (cuda_hasShaderDeviceClock(adapterNative)) {
     supportedMask |= 1ull << GPU_FEATURE_SHADER_DEVICE_CLOCK;
   }
+
   if (cuda_hasComputeDerivatives(adapterNative)) {
     supportedMask |= 1ull << GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS;
     supportedMask |= 1ull << GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR;
   }
+
   if (adapterNative && adapterNative->unifiedAddressing != 0) {
     supportedMask |= 1ull << GPU_FEATURE_BUFFER_DEVICE_ADDRESS;
   }
+
   if (!adapterNative || (enabledFeatureMask & ~supportedMask) != 0u) {
     return NULL;
   }
 
   queueCount = queueInfoCount == 0u ? 1u : 0u;
+
   for (uint32_t i = 0u; i < queueInfoCount; i++) {
-    if (queueInfos[i].flags != GPU_QUEUE_COMPUTE_BIT ||
-        ((uint32_t)queueInfos[i].optionalFlags &
-          ~(uint32_t)GPU_QUEUE_COMPUTE_BIT) != 0u ||
-        queueInfos[i].count > 64u - queueCount) {
+    if (queueInfos[i].flags != GPU_QUEUE_COMPUTE_BIT
+        || ((uint32_t)queueInfos[i].optionalFlags & ~(uint32_t)GPU_QUEUE_COMPUTE_BIT) != 0u
+        || queueInfos[i].count > 64u - queueCount) {
       return NULL;
     }
+
     queueCount += queueInfos[i].count;
   }
+
   if (queueCount == 0u || queueCount > 64u) {
     return NULL;
   }
 
   device = calloc(1, sizeof(*device));
   native = calloc(1, sizeof(*native));
+
   if (!device || !native) {
     free(native);
     free(device);
     return NULL;
   }
-  native->queues = calloc(queueCount, sizeof(*native->queues));
-  if (!native->queues) {
+
+  if (!(native->queues = calloc(queueCount, sizeof(*native->queues)))) {
     free(native);
     free(device);
     return NULL;
   }
 
-  native->driver     = adapterNative->driver;
-  native->cudaDevice = adapterNative->device;
-  native->queueCount = queueCount;
+  native->driver             = adapterNative->driver;
+  native->cudaDevice         = adapterNative->device;
+  native->queueCount         = queueCount;
   native->maxThreadsPerBlock = (uint32_t)adapterNative->maxThreadsPerBlock;
+
   for (uint32_t i = 0u; i < 3u; i++) {
     native->maxBlockDim[i] = (uint32_t)adapterNative->maxBlockDim[i];
     native->maxGridDim[i]  = (uint32_t)adapterNative->maxGridDim[i];
   }
-  device->_priv      = native;
-  device->inst       = adapter->inst;
-  device->adapter    = adapter;
+
+  device->_priv         = native;
+  device->inst          = adapter->inst;
+  device->adapter       = adapter;
   device->queueFamilies = GPU_QUEUE_COMPUTE_BIT;
-  device->uslTargetArchitecture =
-    (uint32_t)(adapterNative->computeMajor * 10 +
-               adapterNative->computeMinor);
-  device->uslTargetVersion =
-    gpu_uslCUDAPTXVersion(adapterNative->driver->driverVersion);
+
+  device->uslTargetArchitecture = (uint32_t)(adapterNative->computeMajor * 10 + adapterNative->computeMinor);
+  device->uslTargetVersion      = gpu_uslCUDAPTXVersion(adapterNative->driver->driverVersion);
+
   if (device->uslTargetVersion == 0u) {
     free(native->queues);
     free(native);
     free(device);
     return NULL;
   }
-  device->uslBoundedDescriptorIndexing =
-    (enabledFeatureMask &
-     (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u;
+
+  device->uslBoundedDescriptorIndexing = (enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u;
+
   result = native->driver->primaryCtxRetain(&native->context,
-                                             native->cudaDevice);
-  if (result != CUDA_SUCCESS ||
-      cuda_push(native->driver, native->context) != GPU_OK) {
+                                            native->cudaDevice);
+
+  if (result != CUDA_SUCCESS
+      || cuda_push(native->driver, native->context) != GPU_OK) {
     if (result == CUDA_SUCCESS) {
       (void)native->driver->primaryCtxRelease(native->cudaDevice);
     }
+
     free(native->queues);
     free(native);
     free(device);
@@ -728,9 +715,11 @@ cuda_createDevice(GPUAdapter               * __restrict adapter,
   for (uint32_t i = 0u; i < queueCount; i++) {
     if (!cuda__initQueue(device, native, &native->queues[i])) {
       cuda_pop(native->driver);
+
       for (uint32_t j = 0u; j < i; j++) {
         cuda__destroyQueue(&native->queues[j]);
       }
+
       (void)native->driver->primaryCtxRelease(native->cudaDevice);
       free(native->queues);
       free(native);
@@ -738,69 +727,170 @@ cuda_createDevice(GPUAdapter               * __restrict adapter,
       return NULL;
     }
   }
+
   cuda_pop(native->driver);
+
   return device;
 }
 
 static GPUResult
-cuda_waitIdle(GPUDevice * __restrict device) {
+cuda_waitIdle(GPUDevice *__restrict device) {
   GPUDeviceCuda *native;
-  GPUResult       result;
+  GPUQueueCuda  *queue;
+  GPUResult      result;
+  CUresult       cudaResult;
+  uint32_t       i;
 
   native = cuda_device(device);
+
   if (!native) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  result = GPU_OK;
-  for (uint32_t i = 0u; i < native->queueCount; i++) {
-    GPUQueueCuda *queue;
-    CUresult cudaResult;
 
+  result = GPU_OK;
+
+  for (i = 0u; i < native->queueCount; i++) {
     queue = &native->queues[i];
     cuda_queueLock(queue);
+
     if (cuda_push(native->driver, native->context) != GPU_OK) {
       cuda_queueUnlock(queue);
       result = GPU_ERROR_BACKEND_FAILURE;
       continue;
     }
+
     cudaResult = native->driver->streamSynchronize(queue->stream);
     cuda_pop(native->driver);
     cuda_queueUnlock(queue);
+
     if (cudaResult != CUDA_SUCCESS) {
       cuda_report(device, cudaResult, "stream synchronization");
       result = GPU_ERROR_BACKEND_FAILURE;
     }
   }
 
-  for (uint32_t i = 0u; i < native->queueCount; i++) {
-    GPUQueueCuda *queue;
-
+  for (i = 0u; i < native->queueCount; i++) {
     queue = &native->queues[i];
     cuda_queueLock(queue);
+
     while (queue->pendingCount > 0u) {
       cuda__queueWait(queue);
     }
+
     cuda_queueUnlock(queue);
   }
+
   return result;
 }
 
 static void
-cuda_destroyDevice(GPUDevice * __restrict device) {
+cuda_destroyDevice(GPUDevice *__restrict device) {
   GPUDeviceCuda *native;
+  uint32_t       i;
 
   native = cuda_device(device);
+
   if (!native) {
     free(device);
     return;
   }
-  for (uint32_t i = 0u; i < native->queueCount; i++) {
+
+  for (i = 0u; i < native->queueCount; i++) {
     cuda__destroyQueue(&native->queues[i]);
   }
+
   (void)native->driver->primaryCtxRelease(native->cudaDevice);
   free(native->queues);
   free(native);
   free(device);
+}
+
+void
+cuda_queueLock(GPUQueueCuda *queue) {
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(&queue->lock);
+#else
+  pthread_mutex_lock(&queue->lock);
+#endif
+}
+
+void
+cuda_queueUnlock(GPUQueueCuda *queue) {
+#if defined(_WIN32) || defined(WIN32)
+  LeaveCriticalSection(&queue->lock);
+#else
+  pthread_mutex_unlock(&queue->lock);
+#endif
+}
+
+void
+cuda_queueSignal(GPUQueueCuda *queue) {
+#if defined(_WIN32) || defined(WIN32)
+  WakeAllConditionVariable(&queue->condition);
+#else
+  pthread_cond_broadcast(&queue->condition);
+#endif
+}
+
+GPUCommandCuda*
+cuda_createCommand(GPUQueueCuda *queue) {
+  GPUCommandCuda *command;
+
+  if (!queue || !queue->driver) {
+    return NULL;
+  }
+
+  if (!(command = calloc(1, sizeof(*command)))) {
+    return NULL;
+  }
+
+  command->owner            = queue;
+  command->command._priv    = command;
+  command->command._queue   = &queue->queue;
+  command->dispatchCapacity = CUDA_INITIAL_DISPATCH_CAPACITY;
+  command->dispatches       = calloc(command->dispatchCapacity,
+                                     sizeof(*command->dispatches));
+
+  if (!command->dispatches
+      || queue->driver->eventCreate(&command->completion,
+                                    CU_EVENT_DISABLE_TIMING) != CUDA_SUCCESS) {
+    free(command->dispatches);
+    free(command);
+    return NULL;
+  }
+
+  cuda_queueLock(queue);
+  command->allNext = queue->commands;
+  queue->commands  = command;
+  cuda_queueUnlock(queue);
+
+  return command;
+}
+
+void
+cuda_recycleCommand(GPUCommandBuffer *cmdb) {
+  GPUCommandCuda *command;
+  GPUQueueCuda   *queue;
+
+  command = cuda_command(cmdb);
+  queue   = command ? command->owner : NULL;
+
+  if (!command || !queue) {
+    return;
+  }
+
+  cuda__releaseDispatches(command);
+  cuda_queueLock(queue);
+  command->next       = queue->freeCommands;
+  queue->freeCommands = command;
+
+  if (command->pending && queue->pendingCount > 0u) {
+    queue->pendingCount--;
+  }
+
+  command->pending = false;
+  cuda_queueSignal(queue);
+  cuda_queueUnlock(queue);
 }
 
 void

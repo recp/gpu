@@ -20,13 +20,13 @@
 #include "../common.h"
 
 struct GPUSamplerFeedbackMapEXT {
-  void                                *_priv;
-  GPUDevice                           *device;
-  GPUTexture                          *texture;
-  GPUSamplerFeedbackDecodeInfoEXT      decodeInfo;
-  GPUSamplerFeedbackModeEXT            mode;
-  uint32_t                             mipRegionWidth;
-  uint32_t                             mipRegionHeight;
+  void                           *_priv;
+  GPUDevice                      *device;
+  GPUTexture                     *texture;
+  GPUSamplerFeedbackDecodeInfoEXT decodeInfo;
+  GPUSamplerFeedbackModeEXT       mode;
+  uint32_t                        mipRegionWidth;
+  uint32_t                        mipRegionHeight;
 };
 
 #endif /* gpu_sampler_feedback_internal_h */

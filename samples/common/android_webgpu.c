@@ -1,4 +1,21 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #define GPU_SAMPLE_PLATFORM_IMPLEMENTATION
+
 #include "sample_platform.h"
 #include "asset_io.h"
 
@@ -17,7 +34,7 @@ typedef struct GPUAndroidWebRuntime {
   GPUAndroidSample     *sample;
   GPUTextureView       *frameTargetView;
   GPURenderPassEncoder *fittedPass;
-  void (*render)(void *);
+  void                (*render)(void *);
   void                 *renderData;
   bool                  ready;
   bool                  canceled;
@@ -34,12 +51,27 @@ typedef struct GPUAndroidFetchRequest {
   uint64_t                       generation;
 } GPUAndroidFetchRequest;
 
+static bool
+bridge_create(GPUAndroidSample *sample, void *userData);
+
+static bool
+bridge_render(GPUAndroidSample *sample, void *userData);
+
+static void
+bridge_destroy(GPUAndroidSample *sample, void *userData);
+
+static const GPUAndroidSampleCallbacks bridgeCallbacks = {
+  .create  = bridge_create,
+  .render  = bridge_render,
+  .destroy = bridge_destroy
+};
+
+static GPUAndroidWebRuntime    runtime;
+static pthread_mutex_t         fetchMutex = PTHREAD_MUTEX_INITIALIZER;
 static GPUAndroidFetchRequest *fetchHead;
 static GPUAndroidFetchRequest *fetchTail;
-static GPUAndroidWebRuntime     runtime;
-static pthread_mutex_t          fetchMutex = PTHREAD_MUTEX_INITIALIZER;
-static uint64_t                 fetchGeneration = 1u;
-static bool                     fetchNativeRegistered;
+static uint64_t                fetchGeneration = 1u;
+static bool                    fetchNativeRegistered;
 
 static void*
 decode_image_bytes(const void *data,
@@ -72,14 +104,17 @@ android_jni_attach(ANativeActivity *activity,
   *env      = NULL;
   *attached = false;
   status    = (*vm)->GetEnv(vm, (void **)env, JNI_VERSION_1_6);
+
   if (status == JNI_EDETACHED) {
     if ((*vm)->AttachCurrentThread(vm, env, NULL) != JNI_OK) {
       return false;
     }
+
     *attached = true;
   } else if (status != JNI_OK || !*env) {
     return false;
   }
+
   return true;
 }
 
@@ -102,12 +137,12 @@ bridge_create(GPUAndroidSample *sample, void *userData) {
   (void)userData;
   memset(&runtime, 0, sizeof(runtime));
   runtime.sample = sample;
-  config = sample && sample->definition
-             ? sample->definition->config
-             : NULL;
+  config         = sample && sample->definition ? sample->definition->config : NULL;
+
   if (!config || !config->start || config->start() != 0 || runtime.failed) {
     return false;
   }
+
   return true;
 }
 
@@ -118,17 +153,21 @@ drain_fetches(void) {
   for (;;) {
     pthread_mutex_lock(&fetchMutex);
     request = fetchHead;
+
     if (request) {
       fetchHead = request->next;
+
       if (!fetchHead) {
         fetchTail = NULL;
       }
     }
+
     pthread_mutex_unlock(&fetchMutex);
 
     if (!request) {
       return;
     }
+
     request->callback(request->bytes,
                       request->byteCount,
                       request->error,
@@ -143,24 +182,28 @@ bridge_render(GPUAndroidSample *sample, void *userData) {
   (void)sample;
   (void)userData;
   drain_fetches();
+
   if (runtime.failed || runtime.canceled) {
     return false;
   }
+
   if (runtime.render) {
     runtime.frameTargetView = NULL;
     runtime.fittedPass      = NULL;
     runtime.render(runtime.renderData);
+
     if (!runtime.ready && !runtime.failed && !runtime.canceled) {
       android_set_ready();
       runtime.ready = true;
     }
   }
+
   return !runtime.failed && !runtime.canceled;
 }
 
 static void
 cancel_fetches(void) {
-  GPUAndroidFetchRequest *request;
+  GPUAndroidFetchRequest *request, *next;
 
   pthread_mutex_lock(&fetchMutex);
   fetchGeneration++;
@@ -170,8 +213,6 @@ cancel_fetches(void) {
   pthread_mutex_unlock(&fetchMutex);
 
   while (request) {
-    GPUAndroidFetchRequest *next;
-
     next = request->next;
     free(request->bytes);
     free(request->error);
@@ -188,17 +229,6 @@ bridge_destroy(GPUAndroidSample *sample, void *userData) {
   memset(&runtime, 0, sizeof(runtime));
 }
 
-static const GPUAndroidSampleCallbacks bridgeCallbacks = {
-  .create  = bridge_create,
-  .render  = bridge_render,
-  .destroy = bridge_destroy
-};
-
-const GPUAndroidSampleCallbacks*
-GPUSampleAndroidWebCallbacks(void) {
-  return &bridgeCallbacks;
-}
-
 static void
 android_set_status(const char *message, bool failed) {
   ANativeActivity *activity;
@@ -213,20 +243,24 @@ android_set_status(const char *message, bool failed) {
   }
 
   activity = runtime.sample->app->activity;
+
   if (!android_jni_attach(activity, &env, &attached)) {
     return;
   }
 
   activityClass = (*env)->GetObjectClass(env, activity->clazz);
-  setSampleStatus = activityClass
-                      ? (*env)->GetMethodID(env,
-                                            activityClass,
-                                            "setSampleStatus",
-                                            "(Ljava/lang/String;Z)V")
-                      : NULL;
-  nativeMessage = setSampleStatus && message
-                    ? (*env)->NewStringUTF(env, message)
-                    : NULL;
+
+  if (activityClass) {
+    setSampleStatus = (*env)->GetMethodID(env,
+                                          activityClass,
+                                          "setSampleStatus",
+                                          "(Ljava/lang/String;Z)V");
+  } else {
+    setSampleStatus = NULL;
+  }
+
+  nativeMessage = setSampleStatus && message ? (*env)->NewStringUTF(env, message) : NULL;
+
   if (setSampleStatus) {
     (*env)->CallVoidMethod(env,
                            activity->clazz,
@@ -234,15 +268,19 @@ android_set_status(const char *message, bool failed) {
                            nativeMessage,
                            failed ? JNI_TRUE : JNI_FALSE);
   }
+
   if ((*env)->ExceptionCheck(env)) {
     (*env)->ExceptionClear(env);
   }
+
   if (nativeMessage) {
     (*env)->DeleteLocalRef(env, nativeMessage);
   }
+
   if (activityClass) {
     (*env)->DeleteLocalRef(env, activityClass);
   }
+
   android_jni_detach(activity, attached);
 }
 
@@ -260,35 +298,43 @@ android_set_notice(const char *message) {
   }
 
   activity = runtime.sample->app->activity;
+
   if (!android_jni_attach(activity, &env, &attached)) {
     return;
   }
 
   activityClass = (*env)->GetObjectClass(env, activity->clazz);
-  setSampleNotice = activityClass
-                      ? (*env)->GetMethodID(env,
-                                            activityClass,
-                                            "setSampleNotice",
-                                            "(Ljava/lang/String;)V")
-                      : NULL;
-  nativeMessage = setSampleNotice && message
-                    ? (*env)->NewStringUTF(env, message)
-                    : NULL;
+
+  if (activityClass) {
+    setSampleNotice = (*env)->GetMethodID(env,
+                                          activityClass,
+                                          "setSampleNotice",
+                                          "(Ljava/lang/String;)V");
+  } else {
+    setSampleNotice = NULL;
+  }
+
+  nativeMessage = setSampleNotice && message ? (*env)->NewStringUTF(env, message) : NULL;
+
   if (setSampleNotice) {
     (*env)->CallVoidMethod(env,
                            activity->clazz,
                            setSampleNotice,
                            nativeMessage);
   }
+
   if ((*env)->ExceptionCheck(env)) {
     (*env)->ExceptionClear(env);
   }
+
   if (nativeMessage) {
     (*env)->DeleteLocalRef(env, nativeMessage);
   }
+
   if (activityClass) {
     (*env)->DeleteLocalRef(env, activityClass);
   }
+
   android_jni_detach(activity, attached);
 }
 
@@ -305,27 +351,235 @@ android_set_ready(void) {
   }
 
   activity = runtime.sample->app->activity;
+
   if (!android_jni_attach(activity, &env, &attached)) {
     return;
   }
 
   activityClass = (*env)->GetObjectClass(env, activity->clazz);
-  setSampleReady = activityClass
-                     ? (*env)->GetMethodID(env,
-                                           activityClass,
-                                           "setSampleReady",
-                                           "()V")
-                     : NULL;
+
+  if (activityClass) {
+    setSampleReady = (*env)->GetMethodID(env,
+                                         activityClass,
+                                         "setSampleReady",
+                                         "()V");
+  } else {
+    setSampleReady = NULL;
+  }
+
   if (setSampleReady) {
     (*env)->CallVoidMethod(env, activity->clazz, setSampleReady);
   }
+
   if ((*env)->ExceptionCheck(env)) {
     (*env)->ExceptionClear(env);
   }
+
   if (activityClass) {
     (*env)->DeleteLocalRef(env, activityClass);
   }
+
   android_jni_detach(activity, attached);
+}
+
+static void
+content_rect(float *x, float *y, float *width, float *height) {
+  float surfaceWidth, surfaceHeight;
+  float targetWidth, targetHeight;
+
+  surfaceWidth  = runtime.sample ? (float)runtime.sample->width : 0.0f;
+  surfaceHeight = runtime.sample ? (float)runtime.sample->height : 0.0f;
+  targetWidth   = surfaceWidth;
+  targetHeight  = targetWidth * 10.0f / 16.0f;
+
+  if (targetHeight > surfaceHeight) {
+    targetHeight = surfaceHeight;
+    targetWidth  = targetHeight * 16.0f / 10.0f;
+  }
+
+  *x      = (surfaceWidth - targetWidth) * 0.5f;
+  *y      = (surfaceHeight - targetHeight) * 0.5f;
+  *width  = targetWidth;
+  *height = targetHeight;
+}
+
+static void*
+decode_image_bytes(const void *data,
+                   uint64_t    size,
+                   uint32_t   *width,
+                   uint32_t   *height) {
+  AndroidBitmapInfo info;
+  ANativeActivity  *activity;
+  JNIEnv           *env;
+  jclass            bitmapFactoryClass;
+  jmethodID         decodeByteArray;
+  jbyteArray        bytes;
+  jobject           bitmap;
+  void             *bitmapPixels;
+  void             *pixels;
+  size_t            rowBytes;
+  uint32_t          y;
+  bool              attached;
+
+  if (!runtime.sample || !data || size == 0u || size > INT32_MAX
+      || !width || !height) {
+    return NULL;
+  }
+
+  activity = runtime.sample->app->activity;
+
+  if (!android_jni_attach(activity, &env, &attached)) {
+    return NULL;
+  }
+
+  bitmapFactoryClass = (*env)->FindClass(env, "android/graphics/BitmapFactory");
+
+  if (bitmapFactoryClass) {
+    decodeByteArray = (*env)->GetStaticMethodID(env,
+                                                bitmapFactoryClass,
+                                                "decodeByteArray",
+                                                "([BII)Landroid/graphics/Bitmap;");
+  } else {
+    decodeByteArray = NULL;
+  }
+
+  bytes = decodeByteArray ? (*env)->NewByteArray(env, (jsize)size) : NULL;
+
+  if (bytes) {
+    (*env)->SetByteArrayRegion(env,
+                               bytes,
+                               0,
+                               (jsize)size,
+                               data);
+  }
+
+  if (bytes) {
+    bitmap = (*env)->CallStaticObjectMethod(env,
+                                            bitmapFactoryClass,
+                                            decodeByteArray,
+                                            bytes,
+                                            0,
+                                            (jint)size);
+  } else {
+    bitmap = NULL;
+  }
+
+  pixels       = NULL;
+  bitmapPixels = NULL;
+
+  if (bitmap
+      && AndroidBitmap_getInfo(env, bitmap, &info) == ANDROID_BITMAP_RESULT_SUCCESS
+      && info.format == ANDROID_BITMAP_FORMAT_RGBA_8888
+      && AndroidBitmap_lockPixels(env, bitmap, &bitmapPixels) == ANDROID_BITMAP_RESULT_SUCCESS) {
+    rowBytes = (size_t)info.width * 4u;
+
+    if ((pixels = malloc(rowBytes * info.height))) {
+      for (y = 0u; y < info.height; y++) {
+        memcpy((uint8_t *)pixels + rowBytes * y,
+               (const uint8_t *)bitmapPixels + info.stride * y,
+               rowBytes);
+      }
+
+      *width  = info.width;
+      *height = info.height;
+    }
+
+    AndroidBitmap_unlockPixels(env, bitmap);
+  }
+
+  if (bitmap) {
+    (*env)->DeleteLocalRef(env, bitmap);
+  }
+
+  if (bytes) {
+    (*env)->DeleteLocalRef(env, bytes);
+  }
+
+  if (bitmapFactoryClass) {
+    (*env)->DeleteLocalRef(env, bitmapFactoryClass);
+  }
+
+  android_jni_detach(activity, attached);
+
+  return pixels;
+}
+
+static void JNICALL
+android_fetch_complete(JNIEnv    *env,
+                       jclass     type,
+                       jlong      requestValue,
+                       jbyteArray data,
+                       jstring    message) {
+  GPUAndroidFetchRequest *request;
+  const char             *error;
+  jsize                   length;
+  bool                    stale;
+
+  (void)type;
+  request = (GPUAndroidFetchRequest *)(uintptr_t)requestValue;
+
+  if (!request) {
+    return;
+  }
+
+  length = data ? (*env)->GetArrayLength(env, data) : 0;
+
+  if (length > 0) {
+    if ((request->bytes = malloc((size_t)length))) {
+      (*env)->GetByteArrayRegion(env,
+                                 data,
+                                 0,
+                                 length,
+                                 request->bytes);
+
+      if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        free(request->bytes);
+        request->bytes = NULL;
+      } else {
+        request->byteCount = (uint64_t)length;
+      }
+    }
+  }
+
+  error = message ? (*env)->GetStringUTFChars(env, message, NULL) : NULL;
+
+  if (error) {
+    request->error = strdup(error);
+    (*env)->ReleaseStringUTFChars(env, message, error);
+  }
+
+  if (!request->bytes && !request->error) {
+    request->error = strdup("sample: Android download failed");
+  }
+
+  pthread_mutex_lock(&fetchMutex);
+  stale = request->generation != fetchGeneration;
+
+  if (!stale) {
+    request->next = NULL;
+
+    if (fetchTail) {
+      fetchTail->next = request;
+    } else {
+      fetchHead = request;
+    }
+
+    fetchTail = request;
+  }
+
+  pthread_mutex_unlock(&fetchMutex);
+
+  if (stale) {
+    free(request->bytes);
+    free(request->error);
+    free(request);
+  }
+}
+
+const GPUAndroidSampleCallbacks*
+GPUSampleAndroidWebCallbacks(void) {
+  return &bridgeCallbacks;
 }
 
 void
@@ -335,6 +589,7 @@ set_status(const char *message, int failed) {
                       "%s",
                       message ? message : "GPU sample status");
   android_set_status(message, failed != 0);
+
   if (failed) {
     runtime.failed = true;
   }
@@ -361,27 +616,27 @@ read_file(const char *path, void **outData, uint64_t *outSize) {
 
   *outData = NULL;
   *outSize = 0u;
-  asset = AAssetManager_open(
-    runtime.sample->app->activity->assetManager,
-    asset_name(path),
-    AASSET_MODE_BUFFER
-  );
-  if (!asset) {
+
+  if (!(asset = AAssetManager_open(runtime.sample->app->activity->assetManager,
+                                   asset_name(path),
+                                   AASSET_MODE_BUFFER))) {
     return 0;
   }
 
   size = AAsset_getLength(asset);
   data = size > 0 ? malloc((size_t)size) : NULL;
-  if (!data ||
-      AAsset_read(asset, data, (size_t)size) != size) {
+
+  if (!data || AAsset_read(asset, data, (size_t)size) != size) {
     free(data);
     AAsset_close(asset);
     return 0;
   }
 
   AAsset_close(asset);
+
   *outData = data;
   *outSize = (uint64_t)size;
+
   return 1;
 }
 
@@ -407,6 +662,7 @@ request_webgpu_device_features(GPUInstance        *instance,
                                uint32_t            optionalFeatureCount) {
   (void)optionalFeatures;
   (void)optionalFeatureCount;
+
   if (!instance || !request || !callback || !runtime.sample) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -420,6 +676,7 @@ request_webgpu_device_features(GPUInstance        *instance,
            runtime.sample->adapter,
            runtime.sample->device,
            userData);
+
   return runtime.failed ? GPU_ERROR_BACKEND_FAILURE : GPU_OK;
 }
 
@@ -428,13 +685,15 @@ resize_webgpu_canvas(GPUSwapchain *swapchain,
                      uint32_t     *width,
                      uint32_t     *height) {
   (void)swapchain;
-  if (!runtime.sample || !width || !height ||
-      runtime.sample->width == 0u || runtime.sample->height == 0u) {
+
+  if (!runtime.sample || !width || !height
+      || runtime.sample->width == 0u || runtime.sample->height == 0u) {
     return 0;
   }
 
   *width  = runtime.sample->width;
   *height = runtime.sample->height;
+
   return 1;
 }
 
@@ -463,20 +722,22 @@ GPUResult
 gpu_android_sample_create_instance(const GPUInstanceCreateInfo *info,
                                    GPUInstance                **outInstance) {
   (void)info;
+
   if (!runtime.sample || !outInstance) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   *outInstance = runtime.sample->instance;
+
   return GPU_OK;
 }
 
 GPUSurface*
-gpu_android_sample_create_surface(GPUInstance          *instance,
-                                  GPUAdapter           *adapter,
-                                  void                 *nativeHandle,
-                                  GPUSurfaceType        nativeType,
-                                  float                 contentScale) {
+gpu_android_sample_create_surface(GPUInstance   *instance,
+                                  GPUAdapter    *adapter,
+                                  void          *nativeHandle,
+                                  GPUSurfaceType nativeType,
+                                  float          contentScale) {
   (void)instance;
   (void)adapter;
   (void)nativeHandle;
@@ -497,59 +758,43 @@ gpu_android_sample_create_swapchain(GPUDevice  *device,
   return runtime.sample ? runtime.sample->swapchain : NULL;
 }
 
-static void
-content_rect(float *x, float *y, float *width, float *height) {
-  float surfaceWidth, surfaceHeight;
-  float targetWidth, targetHeight;
-
-  surfaceWidth  = runtime.sample ? (float)runtime.sample->width : 0.0f;
-  surfaceHeight = runtime.sample ? (float)runtime.sample->height : 0.0f;
-  targetWidth   = surfaceWidth;
-  targetHeight  = targetWidth * 10.0f / 16.0f;
-  if (targetHeight > surfaceHeight) {
-    targetHeight = surfaceHeight;
-    targetWidth  = targetHeight * 16.0f / 10.0f;
-  }
-
-  *x      = (surfaceWidth - targetWidth) * 0.5f;
-  *y      = (surfaceHeight - targetHeight) * 0.5f;
-  *width  = targetWidth;
-  *height = targetHeight;
-}
-
 GPUTextureView*
 gpu_android_frame_target_view(GPUFrame *frame) {
   runtime.frameTargetView = GPUFrameGetTargetView(frame);
+
   return runtime.frameTargetView;
 }
 
 GPURenderPassEncoder*
-gpu_android_begin_render_pass(GPUCommandBuffer             *cmdb,
+gpu_android_begin_render_pass(GPUCommandBuffer              *cmdb,
                               const GPURenderPassCreateInfo *info) {
-  GPURenderPassEncoder *pass;
-  GPUViewport           viewport = {0};
-  GPUScissorRect        scissor  = {0};
-  float                 x, y, width, height;
-  bool                  targetsFrame;
+  GPUViewport                         viewport = {0};
+  GPUScissorRect                      scissor  = {0};
+  const GPURenderPassColorAttachment *color;
+  GPURenderPassEncoder               *pass;
+  float                               x, y, width, height;
+  uint32_t                            i;
+  bool                                targetsFrame;
 
-  pass = GPUBeginRenderPass(cmdb, info);
-  if (!pass || !info || !runtime.frameTargetView) {
+  if (!(pass = GPUBeginRenderPass(cmdb, info)) || !info || !runtime.frameTargetView) {
     return pass;
   }
 
   targetsFrame = false;
-  for (uint32_t i = 0u; i < info->colorAttachmentCount; i++) {
-    const GPURenderPassColorAttachment *color;
 
+  for (i = 0u; i < info->colorAttachmentCount; i++) {
     color = &info->pColorAttachments[i];
-    targetsFrame |= color->view == runtime.frameTargetView ||
-                    color->resolveView == runtime.frameTargetView;
+
+    targetsFrame |= color->view == runtime.frameTargetView
+                    || color->resolveView == runtime.frameTargetView;
   }
+
   if (!targetsFrame) {
     return pass;
   }
 
   content_rect(&x, &y, &width, &height);
+
   viewport.x        = x;
   viewport.y        = y;
   viewport.width    = width;
@@ -560,9 +805,11 @@ gpu_android_begin_render_pass(GPUCommandBuffer             *cmdb,
   scissor.y         = (int32_t)y;
   scissor.width     = (uint32_t)width;
   scissor.height    = (uint32_t)height;
+
   GPUSetViewport(pass, &viewport);
   GPUSetScissor(pass, &scissor);
   runtime.fittedPass = pass;
+
   return pass;
 }
 
@@ -571,23 +818,25 @@ gpu_android_end_render_pass(GPURenderPassEncoder *pass) {
   if (runtime.fittedPass == pass) {
     runtime.fittedPass = NULL;
   }
+
   GPUEndRenderPass(pass);
 }
 
 void
 gpu_android_set_viewport(GPURenderPassEncoder *pass,
-                         const GPUViewport     *viewport) {
+                         const GPUViewport    *viewport) {
   GPUViewport mapped;
   float       x, y, width, height;
   float       scaleX, scaleY;
 
-  if (!viewport || pass != runtime.fittedPass || !runtime.sample ||
-      runtime.sample->width == 0u || runtime.sample->height == 0u) {
+  if (!viewport || pass != runtime.fittedPass || !runtime.sample
+      || runtime.sample->width == 0u || runtime.sample->height == 0u) {
     GPUSetViewport(pass, viewport);
     return;
   }
 
   content_rect(&x, &y, &width, &height);
+
   scaleX         = width / (float)runtime.sample->width;
   scaleY         = height / (float)runtime.sample->height;
   mapped         = *viewport;
@@ -595,142 +844,58 @@ gpu_android_set_viewport(GPURenderPassEncoder *pass,
   mapped.y       = y + viewport->y * scaleY;
   mapped.width  *= scaleX;
   mapped.height *= scaleY;
+
   GPUSetViewport(pass, &mapped);
 }
 
 void
 gpu_android_set_scissor(GPURenderPassEncoder *pass,
-                        const GPUScissorRect  *scissor) {
+                        const GPUScissorRect *scissor) {
   GPUScissorRect mapped;
   float          x, y, width, height;
   float          scaleX, scaleY;
 
-  if (!scissor || pass != runtime.fittedPass || !runtime.sample ||
-      runtime.sample->width == 0u || runtime.sample->height == 0u) {
+  if (!scissor || pass != runtime.fittedPass || !runtime.sample
+      || runtime.sample->width == 0u || runtime.sample->height == 0u) {
     GPUSetScissor(pass, scissor);
     return;
   }
 
   content_rect(&x, &y, &width, &height);
+
   scaleX        = width / (float)runtime.sample->width;
   scaleY        = height / (float)runtime.sample->height;
   mapped.x      = (int32_t)(x + (float)scissor->x * scaleX);
   mapped.y      = (int32_t)(y + (float)scissor->y * scaleY);
   mapped.width  = (uint32_t)((float)scissor->width * scaleX);
   mapped.height = (uint32_t)((float)scissor->height * scaleY);
+
   GPUSetScissor(pass, &mapped);
 }
 
 void*
 gpu_android_load_image(const char *path, int *width, int *height) {
-  void     *data;
-  void     *pixels;
-  uint64_t  size;
-  uint32_t  imageWidth, imageHeight;
+  void    *data;
+  void    *pixels;
+  uint64_t size;
+  uint32_t imageWidth, imageHeight;
 
-  if (!runtime.sample || !width || !height ||
-      !read_file(path, &data, &size)) {
+  if (!runtime.sample || !width || !height
+      || !read_file(path, &data, &size)) {
     return NULL;
   }
 
   imageWidth  = 0u;
   imageHeight = 0u;
+
   pixels = decode_image_bytes(data, size, &imageWidth, &imageHeight);
   free(data);
+
   if (pixels) {
     *width  = (int)imageWidth;
     *height = (int)imageHeight;
   }
-  return pixels;
-}
 
-static void*
-decode_image_bytes(const void *data,
-                   uint64_t    size,
-                   uint32_t   *width,
-                   uint32_t   *height) {
-  ANativeActivity  *activity;
-  JNIEnv           *env;
-  jclass            bitmapFactoryClass;
-  jmethodID         decodeByteArray;
-  jbyteArray        bytes;
-  jobject           bitmap;
-  AndroidBitmapInfo info;
-  void             *bitmapPixels;
-  void             *pixels;
-  bool              attached;
-
-  if (!runtime.sample || !data || size == 0u || size > INT32_MAX ||
-      !width || !height) {
-    return NULL;
-  }
-
-  activity = runtime.sample->app->activity;
-  if (!android_jni_attach(activity, &env, &attached)) {
-    return NULL;
-  }
-
-  bitmapFactoryClass = (*env)->FindClass(env, "android/graphics/BitmapFactory");
-  decodeByteArray = bitmapFactoryClass
-                      ? (*env)->GetStaticMethodID(
-                          env,
-                          bitmapFactoryClass,
-                          "decodeByteArray",
-                          "([BII)Landroid/graphics/Bitmap;"
-                        )
-                      : NULL;
-  bytes = decodeByteArray
-            ? (*env)->NewByteArray(env, (jsize)size)
-            : NULL;
-  if (bytes) {
-    (*env)->SetByteArrayRegion(env,
-                               bytes,
-                               0,
-                               (jsize)size,
-                               data);
-  }
-  bitmap = bytes
-             ? (*env)->CallStaticObjectMethod(env,
-                                              bitmapFactoryClass,
-                                              decodeByteArray,
-                                              bytes,
-                                              0,
-                                              (jint)size)
-             : NULL;
-
-  pixels       = NULL;
-  bitmapPixels = NULL;
-  if (bitmap &&
-      AndroidBitmap_getInfo(env, bitmap, &info) == ANDROID_BITMAP_RESULT_SUCCESS &&
-      info.format == ANDROID_BITMAP_FORMAT_RGBA_8888 &&
-      AndroidBitmap_lockPixels(env, bitmap, &bitmapPixels) ==
-        ANDROID_BITMAP_RESULT_SUCCESS) {
-    size_t rowBytes;
-
-    rowBytes = (size_t)info.width * 4u;
-    pixels   = malloc(rowBytes * info.height);
-    if (pixels) {
-      for (uint32_t y = 0u; y < info.height; y++) {
-        memcpy((uint8_t *)pixels + rowBytes * y,
-               (const uint8_t *)bitmapPixels + info.stride * y,
-               rowBytes);
-      }
-      *width  = info.width;
-      *height = info.height;
-    }
-    AndroidBitmap_unlockPixels(env, bitmap);
-  }
-
-  if (bitmap) {
-    (*env)->DeleteLocalRef(env, bitmap);
-  }
-  if (bytes) {
-    (*env)->DeleteLocalRef(env, bytes);
-  }
-  if (bitmapFactoryClass) {
-    (*env)->DeleteLocalRef(env, bitmapFactoryClass);
-  }
-  android_jni_detach(activity, attached);
   return pixels;
 }
 
@@ -738,11 +903,11 @@ int
 sample_fetch_url(const char         *url,
                  SampleFetchCallback callback,
                  void               *userData) {
+  JNINativeMethod         fetchCompleteMethod;
   GPUAndroidFetchRequest *request;
   ANativeActivity        *activity;
   JNIEnv                 *env;
   jclass                  activityClass;
-  JNINativeMethod         fetchCompleteMethod;
   jmethodID               fetchUrl;
   jstring                 nativeUrl;
   bool                    attached;
@@ -751,25 +916,29 @@ sample_fetch_url(const char         *url,
     return 0;
   }
 
-  request = calloc(1, sizeof(*request));
-  if (!request) {
+  if (!(request = calloc(1, sizeof(*request)))) {
     return 0;
   }
+
   pthread_mutex_lock(&fetchMutex);
   request->generation = fetchGeneration;
   pthread_mutex_unlock(&fetchMutex);
   request->callback = callback;
   request->userData = userData;
 
-  activity      = runtime.sample->app->activity;
+  activity = runtime.sample->app->activity;
+
   if (!android_jni_attach(activity, &env, &attached)) {
     free(request);
     return 0;
   }
+
   activityClass = (*env)->GetObjectClass(env, activity->clazz);
+
   fetchCompleteMethod.name      = "nativeFetchComplete";
   fetchCompleteMethod.signature = "(J[BLjava/lang/String;)V";
   fetchCompleteMethod.fnPtr     = (void *)android_fetch_complete;
+
   if (!fetchNativeRegistered && activityClass) {
     if ((*env)->RegisterNatives(env,
                                 activityClass,
@@ -780,14 +949,18 @@ sample_fetch_url(const char         *url,
       (*env)->ExceptionClear(env);
     }
   }
-  fetchUrl = activityClass
-               && fetchNativeRegistered
-                 ? (*env)->GetMethodID(env,
-                                       activityClass,
-                                       "fetchUrl",
-                                       "(Ljava/lang/String;J)V")
-                 : NULL;
+
+  if (activityClass && fetchNativeRegistered) {
+    fetchUrl = (*env)->GetMethodID(env,
+                                   activityClass,
+                                   "fetchUrl",
+                                   "(Ljava/lang/String;J)V");
+  } else {
+    fetchUrl = NULL;
+  }
+
   nativeUrl = fetchUrl ? (*env)->NewStringUTF(env, url) : NULL;
+
   if (nativeUrl) {
     (*env)->CallVoidMethod(env,
                            activity->clazz,
@@ -800,85 +973,23 @@ sample_fetch_url(const char         *url,
     (*env)->ExceptionClear(env);
     fetchUrl = NULL;
   }
+
   if (nativeUrl) {
     (*env)->DeleteLocalRef(env, nativeUrl);
   }
+
   if (activityClass) {
     (*env)->DeleteLocalRef(env, activityClass);
   }
+
   android_jni_detach(activity, attached);
+
   if (!fetchUrl) {
     free(request);
     return 0;
   }
+
   return 1;
-}
-
-static void JNICALL
-android_fetch_complete(
-  JNIEnv    *env,
-  jclass     type,
-  jlong      requestValue,
-  jbyteArray data,
-  jstring    message
-) {
-  GPUAndroidFetchRequest *request;
-  const char             *error;
-  jsize                   length;
-  bool                    stale;
-
-  (void)type;
-  request = (GPUAndroidFetchRequest *)(uintptr_t)requestValue;
-  if (!request) {
-    return;
-  }
-
-  length = data ? (*env)->GetArrayLength(env, data) : 0;
-  if (length > 0) {
-    request->bytes = malloc((size_t)length);
-    if (request->bytes) {
-      (*env)->GetByteArrayRegion(env,
-                                 data,
-                                 0,
-                                 length,
-                                 request->bytes);
-      if ((*env)->ExceptionCheck(env)) {
-        (*env)->ExceptionClear(env);
-        free(request->bytes);
-        request->bytes = NULL;
-      } else {
-        request->byteCount = (uint64_t)length;
-      }
-    }
-  }
-
-  error = message ? (*env)->GetStringUTFChars(env, message, NULL) : NULL;
-  if (error) {
-    request->error = strdup(error);
-    (*env)->ReleaseStringUTFChars(env, message, error);
-  }
-  if (!request->bytes && !request->error) {
-    request->error = strdup("sample: Android download failed");
-  }
-
-  pthread_mutex_lock(&fetchMutex);
-  stale = request->generation != fetchGeneration;
-  if (!stale) {
-    request->next = NULL;
-    if (fetchTail) {
-      fetchTail->next = request;
-    } else {
-      fetchHead = request;
-    }
-    fetchTail = request;
-  }
-  pthread_mutex_unlock(&fetchMutex);
-
-  if (stale) {
-    free(request->bytes);
-    free(request->error);
-    free(request);
-  }
 }
 
 int
@@ -895,12 +1006,14 @@ sample_decode_image(const void         *bytes,
 
   width  = 0u;
   height = 0u;
+
   pixels = decode_image_bytes(bytes, byteCount, &width, &height);
   callback(pixels,
            width,
            height,
            pixels ? NULL : "sample: Android image decode failed",
            userData);
+
   return pixels != NULL;
 }
 
@@ -922,53 +1035,60 @@ sample_temporary_path(const char *name, char *path, size_t capacity) {
     return 0;
   }
 
-  activity       = runtime.sample->app->activity;
+  activity = runtime.sample->app->activity;
+
   if (!android_jni_attach(activity, &env, &attached)) {
     return 0;
   }
-  activityClass  = (*env)->GetObjectClass(env, activity->clazz);
-  getCacheDir    = activityClass
-                     ? (*env)->GetMethodID(env,
-                                           activityClass,
-                                           "getCacheDir",
-                                           "()Ljava/io/File;")
-                     : NULL;
-  cacheDir       = getCacheDir
-                     ? (*env)->CallObjectMethod(env,
-                                                activity->clazz,
-                                                getCacheDir)
-                     : NULL;
-  fileClass      = cacheDir ? (*env)->GetObjectClass(env, cacheDir) : NULL;
-  getAbsolutePath = fileClass
-                      ? (*env)->GetMethodID(env,
-                                            fileClass,
-                                            "getAbsolutePath",
-                                            "()Ljava/lang/String;")
-                      : NULL;
-  absolutePath = getAbsolutePath
-                   ? (*env)->CallObjectMethod(env, cacheDir, getAbsolutePath)
-                   : NULL;
-  directory = absolutePath
-                ? (*env)->GetStringUTFChars(env, absolutePath, NULL)
-                : NULL;
-  length = directory
-             ? snprintf(path, capacity, "%s/%s", directory, name)
-             : -1;
+
+  activityClass = (*env)->GetObjectClass(env, activity->clazz);
+
+  if (activityClass) {
+    getCacheDir = (*env)->GetMethodID(env,
+                                      activityClass,
+                                      "getCacheDir",
+                                      "()Ljava/io/File;");
+  } else {
+    getCacheDir = NULL;
+  }
+
+  cacheDir  = getCacheDir ? (*env)->CallObjectMethod(env, activity->clazz, getCacheDir) : NULL;
+  fileClass = cacheDir ? (*env)->GetObjectClass(env, cacheDir) : NULL;
+
+  if (fileClass) {
+    getAbsolutePath = (*env)->GetMethodID(env,
+                                          fileClass,
+                                          "getAbsolutePath",
+                                          "()Ljava/lang/String;");
+  } else {
+    getAbsolutePath = NULL;
+  }
+
+  absolutePath = getAbsolutePath ? (*env)->CallObjectMethod(env, cacheDir, getAbsolutePath) : NULL;
+  directory    = absolutePath ? (*env)->GetStringUTFChars(env, absolutePath, NULL) : NULL;
+  length       = directory ? snprintf(path, capacity, "%s/%s", directory, name) : -1;
+
   if (directory) {
     (*env)->ReleaseStringUTFChars(env, absolutePath, directory);
   }
+
   if (absolutePath) {
     (*env)->DeleteLocalRef(env, absolutePath);
   }
+
   if (fileClass) {
     (*env)->DeleteLocalRef(env, fileClass);
   }
+
   if (cacheDir) {
     (*env)->DeleteLocalRef(env, cacheDir);
   }
+
   if (activityClass) {
     (*env)->DeleteLocalRef(env, activityClass);
   }
+
   android_jni_detach(activity, attached);
+
   return length > 0 && (size_t)length < capacity;
 }

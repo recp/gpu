@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef gpu_sample_android_h
 #define gpu_sample_android_h
 
@@ -36,21 +52,21 @@ typedef struct GPUAndroidSampleDefinition {
 } GPUAndroidSampleDefinition;
 
 struct GPUAndroidSample {
-  struct android_app              *app;
-  GPUInstance                     *instance;
-  GPUAdapter                      *adapter;
-  GPUDevice                       *device;
-  GPUQueue                        *queue;
-  GPUSurface                      *surface;
-  GPUSwapchain                    *swapchain;
-  const GPUAndroidSampleCallbacks *callbacks;
+  struct android_app               *app;
+  GPUInstance                      *instance;
+  GPUAdapter                       *adapter;
+  GPUDevice                        *device;
+  GPUQueue                         *queue;
+  GPUSurface                       *surface;
+  GPUSwapchain                     *swapchain;
+  const GPUAndroidSampleCallbacks  *callbacks;
   const GPUAndroidSampleDefinition *definition;
-  void                            *userData;
-  const char                      *name;
-  uint32_t                         width;
-  uint32_t                         height;
-  bool                             focused;
-  bool                             failed;
+  void                             *userData;
+  const char                       *name;
+  uint32_t                          width;
+  uint32_t                          height;
+  bool                              focused;
+  bool                              failed;
 };
 
 bool
@@ -65,10 +81,10 @@ bool
 GPUSampleAndroidFail(GPUAndroidSample *sample, const char *stage);
 
 void
-GPUSampleAndroidRun(struct android_app              *app,
-                    const char                      *name,
-                    const GPUAndroidSampleCallbacks *callbacks,
-                    void                            *userData,
+GPUSampleAndroidRun(struct android_app               *app,
+                    const char                       *name,
+                    const GPUAndroidSampleCallbacks  *callbacks,
+                    void                             *userData,
                     const GPUAndroidSampleDefinition *definition);
 
 void

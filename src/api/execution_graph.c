@@ -29,22 +29,9 @@ static bool
 gpu_graphChainValid(const GPUChainedStruct *chain,
                     GPUStructureType        type,
                     size_t                  size) {
-  return chain &&
-         (chain->sType == GPU_STRUCTURE_TYPE_NONE || chain->sType == type) &&
-         (chain->structSize == 0u || chain->structSize >= size);
-}
-
-GPU_HIDE
-void
-gpuRetainExecutionGraph(GPUExecutionGraphEXT *graph) {
-  if (!graph) {
-    return;
-  }
-#if defined(_WIN32) || defined(WIN32)
-  InterlockedIncrement((volatile LONG *)&graph->refCount);
-#else
-  __atomic_add_fetch(&graph->refCount, 1u, __ATOMIC_RELAXED);
-#endif
+  return chain
+         && (chain->sType == GPU_STRUCTURE_TYPE_NONE || chain->sType == type)
+         && (chain->structSize == 0u || chain->structSize >= size);
 }
 
 static void
@@ -54,6 +41,7 @@ gpu_releaseExecutionGraph(GPUExecutionGraphEXT *graph) {
   if (!graph) {
     return;
   }
+
 #if defined(_WIN32) || defined(WIN32)
   if (InterlockedDecrement((volatile LONG *)&graph->refCount) != 0) {
     return;
@@ -63,19 +51,22 @@ gpu_releaseExecutionGraph(GPUExecutionGraphEXT *graph) {
     return;
   }
 #endif
+
   api = graph->_api;
+
   if (api && api->executionGraph.destroy) {
     api->executionGraph.destroy(graph);
   }
+
   free(graph);
 }
 
 static bool
-gpu_graphRequirementsValid(
-  const GPUExecutionGraphMemoryRequirementsEXT *requirements) {
+gpu_graphRequirementsValid(const GPUExecutionGraphMemoryRequirementsEXT *requirements) {
   if (!requirements || requirements->minSizeBytes > requirements->maxSizeBytes) {
     return false;
   }
+
   if (requirements->maxSizeBytes == 0u) {
     return requirements->minSizeBytes == 0u;
   }
@@ -84,22 +75,22 @@ gpu_graphRequirementsValid(
 }
 
 static bool
-gpu_graphMemorySizeValid(
-  const GPUExecutionGraphMemoryRequirementsEXT *requirements,
-  uint64_t                                      sizeBytes) {
+gpu_graphMemorySizeValid(const GPUExecutionGraphMemoryRequirementsEXT *requirements,
+                         uint64_t                                      sizeBytes) {
   if (!gpu_graphRequirementsValid(requirements)) {
     return false;
   }
+
   if (requirements->maxSizeBytes == 0u) {
     return sizeBytes == 0u;
   }
-  if (sizeBytes < requirements->minSizeBytes ||
-      sizeBytes > requirements->maxSizeBytes) {
+
+  if (sizeBytes < requirements->minSizeBytes
+      || sizeBytes > requirements->maxSizeBytes) {
     return false;
   }
 
-  return (sizeBytes - requirements->minSizeBytes) %
-           requirements->sizeGranularityBytes == 0u;
+  return (sizeBytes - requirements->minSizeBytes) % requirements->sizeGranularityBytes == 0u;
 }
 
 static bool
@@ -109,19 +100,20 @@ gpu_graphEntryValid(const GPUExecutionGraphEntryEXT *entry) {
   if (!entry) {
     return false;
   }
+
   alignment = entry->recordAlignmentBytes;
-  return alignment > 0u && (alignment & (alignment - 1u)) == 0u &&
-         (entry->recordSizeBytes == 0u ||
-          entry->recordSizeBytes % alignment == 0u);
+
+  return alignment > 0u && (alignment & (alignment - 1u)) == 0u
+         && (entry->recordSizeBytes == 0u || entry->recordSizeBytes % alignment == 0u);
 }
 
 static bool
 gpu_graphInputLayoutValid(const GPUExecutionGraphEntryEXT *entry,
                           uint64_t                         strideBytes) {
-  return gpu_graphEntryValid(entry) &&
-         (strideBytes == 0u ||
-          (strideBytes >= entry->recordSizeBytes &&
-           strideBytes % entry->recordAlignmentBytes == 0u));
+  return gpu_graphEntryValid(entry)
+         && (strideBytes == 0u
+             || (strideBytes >= entry->recordSizeBytes
+                 && strideBytes % entry->recordAlignmentBytes == 0u));
 }
 
 static bool
@@ -132,34 +124,39 @@ gpu_graphInputSize(const GPUExecutionGraphEntryEXT *entry,
   uint64_t effectiveStride;
   uint64_t lastRecord;
 
-  if (!outSizeBytes || recordCount == 0u ||
-      !gpu_graphInputLayoutValid(entry, strideBytes)) {
+  if (!outSizeBytes || recordCount == 0u
+      || !gpu_graphInputLayoutValid(entry, strideBytes)) {
     return false;
   }
+
   if (entry->recordSizeBytes == 0u) {
     *outSizeBytes = 0u;
     return true;
   }
+
   if (recordCount == 1u) {
     *outSizeBytes = entry->recordSizeBytes;
     return true;
   }
+
   effectiveStride = strideBytes ? strideBytes : entry->recordSizeBytes;
-  lastRecord = (uint64_t)recordCount - 1u;
-  if (lastRecord >
-      (UINT64_MAX - entry->recordSizeBytes) / effectiveStride) {
+  lastRecord      = (uint64_t)recordCount - 1u;
+
+  if (lastRecord > (UINT64_MAX - entry->recordSizeBytes) / effectiveStride) {
     return false;
   }
+
   *outSizeBytes = lastRecord * effectiveStride + entry->recordSizeBytes;
+
   return true;
 }
 
-static GPUDevice *
+static GPUDevice*
 gpu_graphPassDevice(const GPUComputePassEncoder *pass) {
   return pass ? pass->_device : NULL;
 }
 
-static GPUApi *
+static GPUApi*
 gpu_graphPassApi(const GPUComputePassEncoder *pass) {
   return pass && pass->_api ? pass->_api : gpuDeviceApi(gpu_graphPassDevice(pass));
 }
@@ -181,16 +178,63 @@ gpu_graphBindingsComplete(const GPUComputePassEncoder *pass) {
   GPUDevice *device;
 
   device = gpu_graphPassDevice(pass);
+
   if (!gpuDeviceValidationEnabled(device)) {
     return true;
   }
+
   return gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
                                       pass->_boundGroupLayouts,
                                       GPU_ENCODER_MAX_BIND_GROUPS,
                                       pass->_requiredBindGroupMask);
 #else
   GPU__UNUSED(pass);
+
   return true;
+#endif
+}
+
+static bool
+gpu_graphDispatchReady(GPUComputePassEncoder        *pass,
+                       GPUExecutionGraphInstanceEXT *instance,
+                       const char                   *name) {
+  if (!pass || pass->_ended || !instance) {
+    return false;
+  }
+
+  if (!pass->_hasPipeline || !pass->_executionGraph) {
+    gpu_graphValidationError(pass, name);
+    return false;
+  }
+
+  if (instance->device != gpu_graphPassDevice(pass)
+      || instance->_api != gpu_graphPassApi(pass)
+      || instance->graph != (GPUExecutionGraphEXT *)pass->_pipeline) {
+    gpu_graphValidationError(pass,
+                             "execution graph dispatch skipped: instance mismatch");
+    return false;
+  }
+
+  if (!gpu_graphBindingsComplete(pass)) {
+    gpu_graphValidationError(pass,
+                             "execution graph dispatch skipped: missing bind group");
+    return false;
+  }
+
+  return true;
+}
+
+GPU_HIDE
+void
+gpuRetainExecutionGraph(GPUExecutionGraphEXT *graph) {
+  if (!graph) {
+    return;
+  }
+
+#if defined(_WIN32) || defined(WIN32)
+  InterlockedIncrement((volatile LONG *)&graph->refCount);
+#else
+  __atomic_add_fetch(&graph->refCount, 1u, __ATOMIC_RELAXED);
 #endif
 }
 
@@ -199,58 +243,67 @@ GPUResult
 GPUCreateExecutionGraphEXT(GPUDevice                            *device,
                            const GPUExecutionGraphCreateInfoEXT *info,
                            GPUExecutionGraphEXT                **outGraph) {
+  GPUPipelineCacheKey   cacheKey;
+  const char           *entryPoints[USL_RUNTIME_MAX_ENTRY_POINTS];
   GPUExecutionGraphEXT *graph;
   GPUExecutionGraphEXT *cachedGraph;
   GPUApi               *api;
-  GPUPipelineCacheKey   cacheKey;
-  const char           *entryPoints[USL_RUNTIME_MAX_ENTRY_POINTS];
   uint32_t              entryCount;
+  uint32_t              i;
   GPUResult             result;
 
   if (!outGraph) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outGraph = NULL;
   memset(&cacheKey, 0, sizeof(cacheKey));
-  if (!device || !info || !info->library || !info->layout ||
-      (info->graphName && info->graphName[0] == '\0') ||
-      !gpu_graphChainValid(&info->chain,
-                           GPU_STRUCTURE_TYPE_EXECUTION_GRAPH_CREATE_INFO_EXT,
-                           sizeof(*info)) ||
-      info->library->_device != device ||
-      info->layout->_device != device ||
-      (info->cache && info->cache->device != device)) {
+
+  if (!device || !info || !info->library || !info->layout
+      || (info->graphName && info->graphName[0] == '\0')
+      || !gpu_graphChainValid(&info->chain,
+                              GPU_STRUCTURE_TYPE_EXECUTION_GRAPH_CREATE_INFO_EXT,
+                              sizeof(*info))
+      || info->library->_device != device
+      || info->layout->_device != device
+      || (info->cache && info->cache->device != device)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_EXECUTION_GRAPH)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
   entryCount = gpuGetShaderLibraryExecutionGraphEntryCount(info->library);
+
   if (entryCount == 0u || entryCount > GPU_ARRAY_LEN(entryPoints)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  for (uint32_t i = 0u; i < entryCount; i++) {
+
+  for (i = 0u; i < entryCount; i++) {
     GPUShaderExecutionGraphEntryInfo entry;
 
     if (!gpuGetShaderLibraryExecutionGraphEntryAt(info->library, i, &entry)) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
+
     entryPoints[i] = entry.entryPoint;
   }
-  api = gpuDeviceApi(device);
-  if (!api || info->library->_api != api || !api->executionGraph.create) {
+
+  if (!(api = gpuDeviceApi(device)) || info->library->_api != api || !api->executionGraph.create) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  graph = calloc(1, sizeof(*graph));
-  if (!graph) {
+  if (!(graph = calloc(1, sizeof(*graph)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
-  graph->_api    = api;
-  graph->device  = device;
-  graph->library = info->library;
-  graph->layout  = info->layout;
+
+  graph->_api     = api;
+  graph->device   = device;
+  graph->library  = info->library;
+  graph->layout   = info->layout;
   graph->refCount = 1u;
+
   if (!gpuPipelineLayoutMatchesShaderEntries(info->layout,
                                              info->library,
                                              entryPoints,
@@ -260,20 +313,23 @@ GPUCreateExecutionGraphEXT(GPUDevice                            *device,
     free(graph);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   gpuGetPipelineLayoutPushConstants(info->layout,
                                     &graph->pushConstantSizeBytes,
                                     &graph->pushConstantStages);
 
   if (info->cache && !info->chain.pNext) {
     cachedGraph = NULL;
-    result = gpuPipelineCacheFindGraph(info->cache,
-                                       info,
-                                       &cacheKey,
-                                       &cachedGraph);
+    result      = gpuPipelineCacheFindGraph(info->cache,
+                                            info,
+                                            &cacheKey,
+                                            &cachedGraph);
+
     if (result != GPU_OK) {
       free(graph);
       return result;
     }
+
     if (cachedGraph) {
       gpuPipelineCacheReleaseKey(&cacheKey);
       free(graph);
@@ -283,8 +339,9 @@ GPUCreateExecutionGraphEXT(GPUDevice                            *device,
   }
 
   result = api->executionGraph.create(device, info, graph);
-  if (result != GPU_OK ||
-      !gpu_graphRequirementsValid(&graph->memoryRequirements)) {
+
+  if (result != GPU_OK
+      || !gpu_graphRequirementsValid(&graph->memoryRequirements)) {
     gpuPipelineCacheReleaseKey(&cacheKey);
     gpu_releaseExecutionGraph(graph);
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
@@ -295,7 +352,9 @@ GPUCreateExecutionGraphEXT(GPUDevice                            *device,
   } else {
     gpuRecordPipelineCompile(device, info->cache);
   }
+
   *outGraph = graph;
+
   return GPU_OK;
 }
 
@@ -307,23 +366,22 @@ GPUDestroyExecutionGraphEXT(GPUExecutionGraphEXT *graph) {
 
 GPU_EXPORT
 GPUResult
-GPUGetExecutionGraphMemoryRequirementsEXT(
-  const GPUExecutionGraphEXT             *graph,
-  GPUExecutionGraphMemoryRequirementsEXT *outRequirements) {
+GPUGetExecutionGraphMemoryRequirementsEXT(const GPUExecutionGraphEXT             *graph,
+                                          GPUExecutionGraphMemoryRequirementsEXT *outRequirements) {
   if (!graph || !outRequirements) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   *outRequirements = graph->memoryRequirements;
+
   return GPU_OK;
 }
 
 GPU_EXPORT
 GPUResult
-GPUCreateExecutionGraphInstanceEXT(
-  GPUDevice                                     *device,
-  const GPUExecutionGraphInstanceCreateInfoEXT  *info,
-  GPUExecutionGraphInstanceEXT                 **outInstance) {
+GPUCreateExecutionGraphInstanceEXT(GPUDevice                                    *device,
+                                   const GPUExecutionGraphInstanceCreateInfoEXT *info,
+                                   GPUExecutionGraphInstanceEXT                **outInstance) {
   GPUExecutionGraphInstanceCreateInfoEXT resolvedInfo;
   GPUExecutionGraphInstanceEXT          *instance;
   GPUApi                                *api;
@@ -333,47 +391,56 @@ GPUCreateExecutionGraphInstanceEXT(
   if (!outInstance) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outInstance = NULL;
-  if (!device || !info || !info->graph || info->graph->device != device ||
-      !gpu_graphChainValid(
-        &info->chain,
-        GPU_STRUCTURE_TYPE_EXECUTION_GRAPH_INSTANCE_CREATE_INFO_EXT,
-        sizeof(*info))) {
+
+  if (!device || !info || !info->graph || info->graph->device != device
+      || !gpu_graphChainValid(&info->chain,
+                              GPU_STRUCTURE_TYPE_EXECUTION_GRAPH_INSTANCE_CREATE_INFO_EXT,
+                              sizeof(*info))) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   api = info->graph->_api;
-  if (!api || api != gpuDeviceApi(device) ||
-      !api->executionGraph.createInstance) {
+
+  if (!api || api != gpuDeviceApi(device)
+      || !api->executionGraph.createInstance) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   memorySizeBytes = info->memorySizeBytes > 0u
                       ? info->memorySizeBytes
                       : info->graph->memoryRequirements.minSizeBytes;
+
   if (!gpu_graphMemorySizeValid(&info->graph->memoryRequirements,
                                 memorySizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  instance = calloc(1, sizeof(*instance));
-  if (!instance) {
+  if (!(instance = calloc(1, sizeof(*instance)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+
   instance->_api            = api;
   instance->device          = device;
   instance->graph           = info->graph;
   instance->memorySizeBytes = memorySizeBytes;
-  resolvedInfo              = *info;
+
+  resolvedInfo                 = *info;
   resolvedInfo.memorySizeBytes = memorySizeBytes;
+
   result = api->executionGraph.createInstance(device,
-                                               &resolvedInfo,
-                                               instance);
+                                              &resolvedInfo,
+                                              instance);
+
   if (result != GPU_OK) {
     free(instance);
     return result;
   }
+
   gpuRetainExecutionGraph(info->graph);
   *outInstance = instance;
+
   return GPU_OK;
 }
 
@@ -381,16 +448,19 @@ GPU_EXPORT
 void
 GPUDestroyExecutionGraphInstanceEXT(GPUExecutionGraphInstanceEXT *instance) {
   GPUExecutionGraphEXT *graph;
-  GPUApi                *api;
+  GPUApi               *api;
 
   if (!instance) {
     return;
   }
+
   graph = instance->graph;
   api   = instance->_api;
+
   if (api && api->executionGraph.destroyInstance) {
     api->executionGraph.destroyInstance(instance);
   }
+
   free(instance);
   gpu_releaseExecutionGraph(graph);
 }
@@ -405,16 +475,20 @@ GPUGetExecutionGraphEntryEXT(const GPUExecutionGraphEXT *graph,
   if (!graph || !entryName || entryName[0] == '\0' || !outEntry) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   memset(outEntry, 0, sizeof(*outEntry));
+
   if (!graph->_api || !graph->_api->executionGraph.getEntry) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   result = graph->_api->executionGraph.getEntry(graph, entryName, outEntry);
+
   if (result != GPU_OK) {
     memset(outEntry, 0, sizeof(*outEntry));
     return result;
   }
+
   if (!gpu_graphEntryValid(outEntry)) {
     memset(outEntry, 0, sizeof(*outEntry));
     return GPU_ERROR_BACKEND_FAILURE;
@@ -432,21 +506,26 @@ GPUBindExecutionGraphEXT(GPUComputePassEncoder *pass,
   if (!pass || pass->_ended || !graph) {
     return;
   }
-  if (graph->device != gpu_graphPassDevice(pass) ||
-      graph->_api != gpu_graphPassApi(pass)) {
+
+  if (graph->device != gpu_graphPassDevice(pass)
+      || graph->_api != gpu_graphPassApi(pass)) {
     gpu_graphValidationError(pass,
                              "GPUBindExecutionGraphEXT skipped: device mismatch");
     return;
   }
+
   api = graph->_api;
+
   if (!api || !api->executionGraph.bind) {
     return;
   }
 
   gpuFrameStatsRecordBindRequest(pass->_stats);
+
   if (pass->_executionGraph && pass->_pipeline == graph) {
     return;
   }
+
   if (pass->_pipelineLayout != graph->layout) {
     memset(pass->_boundGroups, 0, sizeof(pass->_boundGroups));
     memset(pass->_boundGroupLayouts, 0, sizeof(pass->_boundGroupLayouts));
@@ -454,48 +533,23 @@ GPUBindExecutionGraphEXT(GPUComputePassEncoder *pass,
            0,
            sizeof(pass->_boundDynamicOffsetCounts));
   }
+
   pass->_pipelineLayout = graph->layout;
 
   api->executionGraph.bind(pass, graph);
   gpuFrameStatsRecordBindEmission(pass->_stats);
-  pass->_pipeline                = graph;
-  pass->_requiredBindGroupMask   = graph->requiredBindGroupMask;
-  pass->_pushConstantSizeBytes   = graph->pushConstantSizeBytes;
-  pass->_pushConstantStages      = graph->pushConstantStages &
-                                   GPU_SHADER_STAGE_COMPUTE_BIT;
-  pass->_hasPipeline             = true;
-  pass->_executionGraph          = true;
-  pass->_pushConstantsEmitted    = false;
+
+  pass->_pipeline              = graph;
+  pass->_requiredBindGroupMask = graph->requiredBindGroupMask;
+  pass->_pushConstantSizeBytes = graph->pushConstantSizeBytes;
+  pass->_pushConstantStages    = graph->pushConstantStages & GPU_SHADER_STAGE_COMPUTE_BIT;
+  pass->_hasPipeline           = true;
+  pass->_executionGraph        = true;
+  pass->_pushConstantsEmitted  = false;
+
   if (pass->_pushConstantSizeBytes > 0u) {
     memset(pass->_pushConstants, 0, pass->_pushConstantSizeBytes);
   }
-}
-
-static bool
-gpu_graphDispatchReady(GPUComputePassEncoder        *pass,
-                       GPUExecutionGraphInstanceEXT *instance,
-                       const char                   *name) {
-  if (!pass || pass->_ended || !instance) {
-    return false;
-  }
-  if (!pass->_hasPipeline || !pass->_executionGraph) {
-    gpu_graphValidationError(pass, name);
-    return false;
-  }
-  if (instance->device != gpu_graphPassDevice(pass) ||
-      instance->_api != gpu_graphPassApi(pass) ||
-      instance->graph != (GPUExecutionGraphEXT *)pass->_pipeline) {
-    gpu_graphValidationError(pass,
-                             "execution graph dispatch skipped: instance mismatch");
-    return false;
-  }
-  if (!gpu_graphBindingsComplete(pass)) {
-    gpu_graphValidationError(pass,
-                             "execution graph dispatch skipped: missing bind group");
-    return false;
-  }
-
-  return true;
 }
 
 GPU_EXPORT
@@ -504,41 +558,40 @@ GPUDispatchExecutionGraphEXT(GPUComputePassEncoder           *pass,
                              GPUExecutionGraphInstanceEXT    *instance,
                              uint32_t                         inputCount,
                              const GPUExecutionGraphInputEXT *pInputs) {
-  GPUApi *api;
+  const GPUExecutionGraphInputEXT *input;
+  GPUApi                          *api;
+  uint64_t                         sizeBytes;
+  uint32_t                         i;
 
-  if (!gpu_graphDispatchReady(
-        pass,
-        instance,
-        "GPUDispatchExecutionGraphEXT skipped: no execution graph bound")) {
+  if (!gpu_graphDispatchReady(pass,
+                              instance,
+                              "GPUDispatchExecutionGraphEXT skipped: no execution graph bound")) {
     return;
   }
+
   if (inputCount == 0u || !pInputs) {
     gpu_graphValidationError(pass,
                              "GPUDispatchExecutionGraphEXT skipped: no inputs");
     return;
   }
-  for (uint32_t i = 0u; i < inputCount; i++) {
-    const GPUExecutionGraphInputEXT *input;
-    uint64_t                         sizeBytes;
 
+  for (i = 0u; i < inputCount; i++) {
     input = &pInputs[i];
+
     if (!gpu_graphInputSize(&input->entry,
                             input->recordCount,
                             input->recordStrideBytes,
-                            &sizeBytes) ||
-        (sizeBytes > 0u &&
-         (!input->pRecords ||
-          ((uintptr_t)input->pRecords &
-           (input->entry.recordAlignmentBytes - 1u)) != 0u))) {
-      gpu_graphValidationError(
-        pass,
-        "GPUDispatchExecutionGraphEXT skipped: invalid input"
-      );
+                            &sizeBytes)
+        || (sizeBytes > 0u
+            && (!input->pRecords
+                || ((uintptr_t)input->pRecords & (input->entry.recordAlignmentBytes - 1u)) != 0u))) {
+      gpu_graphValidationError(pass,
+                               "GPUDispatchExecutionGraphEXT skipped: invalid input");
       return;
     }
   }
-  api = gpu_graphPassApi(pass);
-  if (!api || !api->executionGraph.dispatch) {
+
+  if (!(api = gpu_graphPassApi(pass)) || !api->executionGraph.dispatch) {
     return;
   }
 
@@ -547,55 +600,50 @@ GPUDispatchExecutionGraphEXT(GPUComputePassEncoder           *pass,
 
 GPU_EXPORT
 void
-GPUDispatchExecutionGraphBufferEXT(
-  GPUComputePassEncoder                 *pass,
-  GPUExecutionGraphInstanceEXT          *instance,
-  uint32_t                               inputCount,
-  const GPUExecutionGraphBufferInputEXT *pInputs) {
-  GPUApi *api;
+GPUDispatchExecutionGraphBufferEXT(GPUComputePassEncoder                 *pass,
+                                   GPUExecutionGraphInstanceEXT          *instance,
+                                   uint32_t                               inputCount,
+                                   const GPUExecutionGraphBufferInputEXT *pInputs) {
+  const GPUExecutionGraphBufferInputEXT *input;
+  GPUApi                                *api;
+  uint64_t                               sizeBytes;
+  uint32_t                               i;
 
-  if (!gpu_graphDispatchReady(
-        pass,
-        instance,
-        "GPUDispatchExecutionGraphBufferEXT skipped: no execution graph bound")) {
+  if (!gpu_graphDispatchReady(pass,
+                              instance,
+                              "GPUDispatchExecutionGraphBufferEXT skipped: no execution graph bound")) {
     return;
   }
+
   if (inputCount == 0u || !pInputs) {
-    gpu_graphValidationError(
-      pass,
-      "GPUDispatchExecutionGraphBufferEXT skipped: no inputs"
-    );
+    gpu_graphValidationError(pass,
+                             "GPUDispatchExecutionGraphBufferEXT skipped: no inputs");
     return;
   }
-  for (uint32_t i = 0u; i < inputCount; i++) {
-    const GPUExecutionGraphBufferInputEXT *input;
-    uint64_t                               sizeBytes;
 
+  for (i = 0u; i < inputCount; i++) {
     input = &pInputs[i];
-    if (!input->records || input->records->device != instance->device ||
-        !gpuBufferHasUsage(input->records,
-                           GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT |
-                           GPU_BUFFER_USAGE_INDIRECT) ||
-        !gpu_graphInputSize(&input->entry,
-                            input->recordCount,
-                            input->recordStrideBytes,
-                            &sizeBytes) ||
-        (input->recordOffset &
-         (input->entry.recordAlignmentBytes - 1u)) != 0u ||
-        (sizeBytes > 0u
-           ? !gpuBufferRangeValid(input->records,
-                                  input->recordOffset,
-                                  sizeBytes)
-           : !gpuBufferOffsetValid(input->records, input->recordOffset))) {
-      gpu_graphValidationError(
-        pass,
-        "GPUDispatchExecutionGraphBufferEXT skipped: invalid input"
-      );
+
+    if (!input->records || input->records->device != instance->device
+        || !gpuBufferHasUsage(input->records,
+                              GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT | GPU_BUFFER_USAGE_INDIRECT)
+        || !gpu_graphInputSize(&input->entry,
+                               input->recordCount,
+                               input->recordStrideBytes,
+                               &sizeBytes)
+        || (input->recordOffset & (input->entry.recordAlignmentBytes - 1u)) != 0u
+        || (sizeBytes > 0u
+              ? !gpuBufferRangeValid(input->records,
+                                     input->recordOffset,
+                                     sizeBytes)
+              : !gpuBufferOffsetValid(input->records, input->recordOffset))) {
+      gpu_graphValidationError(pass,
+                               "GPUDispatchExecutionGraphBufferEXT skipped: invalid input");
       return;
     }
   }
-  api = gpu_graphPassApi(pass);
-  if (!api || !api->executionGraph.dispatchBuffer) {
+
+  if (!(api = gpu_graphPassApi(pass)) || !api->executionGraph.dispatchBuffer) {
     return;
   }
 

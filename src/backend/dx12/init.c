@@ -26,7 +26,8 @@ GPUApi dx12 = {
 GPU_HIDE
 GPUApi*
 backend_dx12(void) {
-  // TODO: init
+  /* todo: init */
+
   if (!dx12.initialized) {
     dx12_initDevice(&dx12.device);
     dx12_initRenderPipeline(&dx12.render);
@@ -39,8 +40,10 @@ backend_dx12(void) {
     dx12_initMemory(&dx12.memory);
     dx12_initTexture(&dx12.texture);
     dx12_initSampler(&dx12.sampler);
-    // dx12_initDepthStencil(&dx12.depthStencil);
-    // dx12_initVertex(&dx12.vertex);
+
+    /* dx12_initDepthStencil(&dx12.depthStencil); */
+    /* dx12_initVertex(&dx12.vertex); */
+
     dx12_initLibrary(&dx12.library);
     dx12_initPipelineCache(&dx12.pipelineCache);
     dx12_initRenderPass(&dx12.renderPass);
@@ -58,5 +61,6 @@ backend_dx12(void) {
 
     dx12.initialized = true;
   }
+
   return &dx12;
 }

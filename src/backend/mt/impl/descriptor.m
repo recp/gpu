@@ -62,14 +62,12 @@ typedef enum MTBindDynamicStatus {
   MT_BIND_DYNAMIC_DONE
 } MTBindDynamicStatus;
 
-static uint32_t *
+static uint32_t*
 mt_bindGroupRecordMap(MTBindGroup *native) {
-  return native
-           ? (uint32_t *)&native->arrays[native->arrayCount]
-           : NULL;
+  return native ? (uint32_t *)&native->arrays[native->arrayCount] : NULL;
 }
 
-static MTBufferDescriptorArray *
+static MTBufferDescriptorArray*
 mt_bufferDescriptorArray(MTBindGroup *native, uint32_t layoutEntryIndex) {
   uint32_t *recordMap;
   uint32_t  recordIndex;
@@ -77,24 +75,22 @@ mt_bufferDescriptorArray(MTBindGroup *native, uint32_t layoutEntryIndex) {
   if (!native || layoutEntryIndex >= native->layoutEntryCount) {
     return NULL;
   }
+
   recordMap   = mt_bindGroupRecordMap(native);
   recordIndex = recordMap[layoutEntryIndex];
-  return recordIndex < native->arrayCount
-           ? &native->arrays[recordIndex]
-           : NULL;
+
+  return recordIndex < native->arrayCount ? &native->arrays[recordIndex] : NULL;
 }
 
 static bool
 mt_isBufferDescriptorArray(const GPUBindGroupBindingView *binding) {
-  return binding && binding->kind == GPUBindKindBuffer &&
-         binding->arrayCount > 1u;
+  return binding && binding->kind == GPUBindKindBuffer
+         && binding->arrayCount > 1u;
 }
 
 static uint64_t
 mt_bufferAddress(const GPUBindGroupBindingView *binding) {
-  return binding && binding->buffer
-           ? binding->buffer->_gpuAddress + binding->offset
-           : 0u;
+  return binding && binding->buffer ? binding->buffer->_gpuAddress + binding->offset : 0u;
 }
 
 static void
@@ -104,10 +100,13 @@ mt_scanBindGroup(void *ctx, const GPUBindGroupBindingView *binding) {
   if (!ctx || !binding) {
     return;
   }
+
   scan = ctx;
+
   if (binding->layoutEntryIndex >= scan->layoutEntryCount) {
     scan->layoutEntryCount = binding->layoutEntryIndex + 1u;
   }
+
   if (mt_isBufferDescriptorArray(binding) && binding->arrayIndex == 0u) {
     scan->arrayCount++;
   }
@@ -116,30 +115,34 @@ mt_scanBindGroup(void *ctx, const GPUBindGroupBindingView *binding) {
 static void
 mt_buildBindGroup(void *ctx, const GPUBindGroupBindingView *binding) {
   MTBufferDescriptorArray *record;
-  MTBindGroupBuild         *build;
-  GPUDeviceMT              *deviceMT;
-  id<MTLBuffer>             argumentBuffer;
-  uint32_t                 *recordMap;
-  uint32_t                  recordIndex;
-  uint64_t                 *addresses;
+  MTBindGroupBuild        *build;
+  GPUDeviceMT             *deviceMT;
+  id<MTLBuffer>            argumentBuffer;
+  uint32_t                *recordMap;
+  uint64_t                *addresses;
+  uint32_t                 recordIndex;
 
   if (!ctx || !mt_isBufferDescriptorArray(binding)) {
     return;
   }
+
   build     = ctx;
   recordMap = mt_bindGroupRecordMap(build->native);
-  if (!build->valid || !recordMap ||
-      binding->layoutEntryIndex >= build->native->layoutEntryCount) {
+
+  if (!build->valid || !recordMap
+      || binding->layoutEntryIndex >= build->native->layoutEntryCount) {
     build->valid = false;
     return;
   }
 
   recordIndex = recordMap[binding->layoutEntryIndex];
+
   if (binding->arrayIndex == 0u) {
     if (recordIndex != UINT32_MAX) {
       build->valid = false;
       return;
     }
+
     for (recordIndex = 0u;
          recordIndex < build->native->arrayCount;
          recordIndex++) {
@@ -147,31 +150,33 @@ mt_buildBindGroup(void *ctx, const GPUBindGroupBindingView *binding) {
         break;
       }
     }
+
     if (recordIndex >= build->native->arrayCount) {
       build->valid = false;
       return;
     }
 
     deviceMT = build->device->_priv;
-    argumentBuffer = [deviceMT->device
-      newBufferWithLength:(NSUInteger)binding->arrayCount * sizeof(*addresses)
-                  options:MTLResourceStorageModeShared];
-    if (!argumentBuffer) {
+
+    if (!(argumentBuffer = [deviceMT->device newBufferWithLength:(NSUInteger)binding->arrayCount * sizeof(*addresses)
+                                                         options:MTLResourceStorageModeShared])) {
       build->valid = false;
       return;
     }
 
-    record                            = &build->native->arrays[recordIndex];
-    record->argumentBuffer._priv      = argumentBuffer;
-    record->argumentBuffer.device     = build->device;
+    record                           = &build->native->arrays[recordIndex];
+    record->argumentBuffer._priv     = argumentBuffer;
+    record->argumentBuffer.device    = build->device;
     record->argumentBuffer.sizeBytes = argumentBuffer.length;
     record->argumentBuffer.usage     = GPU_BUFFER_USAGE_UNIFORM;
     record->layoutEntryIndex         = binding->layoutEntryIndex;
     record->arrayCount               = binding->arrayCount;
     record->bindingType              = binding->bindingType;
+
     if (@available(macOS 13.0, iOS 16.0, *)) {
       record->argumentBuffer._gpuAddress = argumentBuffer.gpuAddress;
     }
+
     recordMap[binding->layoutEntryIndex] = recordIndex;
   } else if (recordIndex == UINT32_MAX) {
     build->valid = false;
@@ -179,18 +184,22 @@ mt_buildBindGroup(void *ctx, const GPUBindGroupBindingView *binding) {
   }
 
   record = &build->native->arrays[recordIndex];
-  if (record->arrayCount != binding->arrayCount ||
-      binding->arrayIndex >= record->arrayCount) {
+
+  if (record->arrayCount != binding->arrayCount
+      || binding->arrayIndex >= record->arrayCount) {
     build->valid = false;
     return;
   }
+
   addresses = record->argumentBuffer._priv
                 ? [(id<MTLBuffer>)record->argumentBuffer._priv contents]
                 : NULL;
+
   if (!addresses) {
     build->valid = false;
     return;
   }
+
   addresses[binding->arrayIndex] = mt_bufferAddress(binding);
 }
 
@@ -201,21 +210,26 @@ mt_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   MTBindGroup     *native;
   uint32_t        *recordMap;
   size_t           storageSize;
+  uint32_t         mapIndex;
+  uint32_t         cleanupIndex;
 
   if (!device || !group) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   memset(&scan, 0, sizeof(scan));
+
   if (!gpuForEachBindGroupBinding(group, mt_scanBindGroup, &scan)) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   if (scan.arrayCount == 0u) {
     return GPU_OK;
   }
+
   if ((size_t)scan.arrayCount >
-        (SIZE_MAX - sizeof(*native)) / sizeof(*native->arrays) ||
-      (size_t)scan.layoutEntryCount >
+        (SIZE_MAX - sizeof(*native)) / sizeof(*native->arrays)
+      || (size_t)scan.layoutEntryCount >
         (SIZE_MAX - sizeof(*native) -
          (size_t)scan.arrayCount * sizeof(*native->arrays)) /
           sizeof(*recordMap)) {
@@ -225,48 +239,55 @@ mt_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   storageSize = sizeof(*native) +
                 (size_t)scan.arrayCount * sizeof(*native->arrays) +
                 (size_t)scan.layoutEntryCount * sizeof(*recordMap);
-  native = calloc(1, storageSize);
-  if (!native) {
+
+  if (!(native = calloc(1, storageSize))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+
   native->arrayCount       = scan.arrayCount;
   native->layoutEntryCount = scan.layoutEntryCount;
-  recordMap = mt_bindGroupRecordMap(native);
-  for (uint32_t i = 0u; i < scan.layoutEntryCount; i++) {
-    recordMap[i] = UINT32_MAX;
+  recordMap                = mt_bindGroupRecordMap(native);
+
+  for (mapIndex = 0u; mapIndex < scan.layoutEntryCount; mapIndex++) {
+    recordMap[mapIndex] = UINT32_MAX;
   }
 
   build.device = device;
   build.native = native;
   build.valid  = true;
-  if (!gpuForEachBindGroupBinding(group, mt_buildBindGroup, &build) ||
-      !build.valid) {
-    for (uint32_t i = 0u; i < native->arrayCount; i++) {
-      [(id<MTLBuffer>)native->arrays[i].argumentBuffer._priv release];
+
+  if (!gpuForEachBindGroupBinding(group, mt_buildBindGroup, &build)
+      || !build.valid) {
+    for (cleanupIndex = 0u; cleanupIndex < native->arrayCount; cleanupIndex++) {
+      [(id<MTLBuffer>)native->arrays[cleanupIndex].argumentBuffer._priv release];
     }
+
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   group->_native = native;
+
   return GPU_OK;
 }
 
 static void
-mt_updateBindGroupBinding(void *ctx,
+mt_updateBindGroupBinding(void                          *ctx,
                           const GPUBindGroupBindingView *binding) {
   MTBufferDescriptorArray *record;
-  MTBindGroupBuild         *build;
-  uint64_t                 *addresses;
+  MTBindGroupBuild        *build;
+  uint64_t                *addresses;
 
   if (!ctx || !mt_isBufferDescriptorArray(binding)) {
     return;
   }
+
   build  = ctx;
   record = mt_bufferDescriptorArray(build->native,
                                     binding->layoutEntryIndex);
-  if (!build->valid || !record ||
-      binding->arrayIndex >= record->arrayCount) {
+
+  if (!build->valid || !record
+      || binding->arrayIndex >= record->arrayCount) {
     build->valid = false;
     return;
   }
@@ -274,10 +295,12 @@ mt_updateBindGroupBinding(void *ctx,
   addresses = record->argumentBuffer._priv
                 ? [(id<MTLBuffer>)record->argumentBuffer._priv contents]
                 : NULL;
+
   if (!addresses) {
     build->valid = false;
     return;
   }
+
   addresses[binding->arrayIndex] = mt_bufferAddress(binding);
 }
 
@@ -290,6 +313,7 @@ mt_updateBindGroup(GPUBindGroup            *group,
   if (!group || (entryCount > 0u && !entries)) {
     return false;
   }
+
   if (!group->_native) {
     return true;
   }
@@ -297,34 +321,37 @@ mt_updateBindGroup(GPUBindGroup            *group,
   build.device = gpuBindGroupGetDevice(group);
   build.native = group->_native;
   build.valid  = true;
+
   return gpuForEachBindGroupEntry(group,
                                   entryCount,
                                   entries,
                                   mt_updateBindGroupBinding,
-                                  &build) &&
-         build.valid;
+                                  &build)
+         && build.valid;
 }
 
 static void
 mt_destroyBindGroup(GPUBindGroup *group) {
   MTBindGroup *native;
+  uint32_t     i;
 
   native = group ? group->_native : NULL;
+
   if (!native) {
     return;
   }
-  for (uint32_t i = 0u; i < native->arrayCount; i++) {
+
+  for (i = 0u; i < native->arrayCount; i++) {
     [(id<MTLBuffer>)native->arrays[i].argumentBuffer._priv release];
   }
+
   free(native);
   group->_native = NULL;
 }
 
 static MTLResourceUsage
 mt_resourceUsage(GPUBindingType type) {
-  return type == GPU_BINDING_STORAGE_BUFFER
-           ? MTLResourceUsageRead | MTLResourceUsageWrite
-           : MTLResourceUsageRead;
+  return type == GPU_BINDING_STORAGE_BUFFER ? MTLResourceUsageRead | MTLResourceUsageWrite : MTLResourceUsageRead;
 }
 
 static MTLRenderStages
@@ -332,25 +359,30 @@ mt_renderStages(GPUShaderStageFlags visibility) {
   MTLRenderStages stages;
 
   stages = 0u;
+
   if ((visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0u) {
     stages |= MTLRenderStageVertex;
   }
+
   if ((visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u) {
     stages |= MTLRenderStageFragment;
   }
+
   if (@available(macOS 13.0, iOS 16.0, *)) {
     if ((visibility & GPU_SHADER_STAGE_TASK_BIT) != 0u) {
       stages |= MTLRenderStageObject;
     }
+
     if ((visibility & GPU_SHADER_STAGE_MESH_BIT) != 0u) {
       stages |= MTLRenderStageMesh;
     }
   }
+
   return stages;
 }
 
 static void
-mt_useRenderBuffer(MTBindContext                  *ctx,
+mt_useRenderBuffer(MTBindContext                 *ctx,
                    const GPUBindGroupBindingView *binding) {
   MTRenderEncoder *native;
   id<MTLBuffer>    buffer;
@@ -358,8 +390,10 @@ mt_useRenderBuffer(MTBindContext                  *ctx,
   if (!ctx || !binding || !binding->buffer) {
     return;
   }
+
   native = ctx->render->_priv;
   buffer = binding->buffer->_priv;
+
   if (!native || !buffer) {
     ctx->valid = false;
     return;
@@ -378,7 +412,7 @@ mt_useRenderBuffer(MTBindContext                  *ctx,
 }
 
 static void
-mt_useComputeBuffer(MTBindContext                  *ctx,
+mt_useComputeBuffer(MTBindContext                 *ctx,
                     const GPUBindGroupBindingView *binding) {
   MTComputeEncoder *native;
   id<MTLBuffer>     buffer;
@@ -386,8 +420,10 @@ mt_useComputeBuffer(MTBindContext                  *ctx,
   if (!ctx || !binding || !binding->buffer) {
     return;
   }
+
   native = ctx->compute->_priv;
   buffer = binding->buffer->_priv;
+
   if (!native || !buffer) {
     ctx->valid = false;
     return;
@@ -411,20 +447,23 @@ mt_bindRenderBuffer(GPURenderPassEncoder *pass,
   if ((visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0u) {
     gpuSetRenderVertexBuffer(pass, buffer, offset, index);
   }
+
   if ((visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u) {
     gpuSetRenderFragmentBuffer(pass, buffer, offset, index);
   }
+
   if ((visibility & GPU_SHADER_STAGE_TASK_BIT) != 0u) {
     gpuSetRenderTaskBuffer(pass, buffer, offset, index);
   }
+
   if ((visibility & GPU_SHADER_STAGE_MESH_BIT) != 0u) {
     gpuSetRenderMeshBuffer(pass, buffer, offset, index);
   }
 }
 
 static void
-mt_bindRenderArgumentBuffer(MTBindContext                  *ctx,
-                            MTBufferDescriptorArray        *record,
+mt_bindRenderArgumentBuffer(MTBindContext                 *ctx,
+                            MTBufferDescriptorArray       *record,
                             const GPUBindGroupBindingView *binding) {
   GPUBuffer    *argumentBuffer;
   uint64_t     *addresses;
@@ -439,6 +478,7 @@ mt_bindRenderArgumentBuffer(MTBindContext                  *ctx,
                           binding->binding,
                           binding->visibility);
     }
+
     mt_useRenderBuffer(ctx, binding);
     return;
   }
@@ -452,48 +492,53 @@ mt_bindRenderArgumentBuffer(MTBindContext                  *ctx,
       ctx->valid = false;
       return;
     }
+
     ctx->dynamicRecord = record;
     ctx->dynamicIndex  = 0u;
     memset(&ctx->dynamicBuffer, 0, sizeof(ctx->dynamicBuffer));
     ctx->dynamicBuffer._priv     = upload;
     ctx->dynamicBuffer.device    = record->argumentBuffer.device;
     ctx->dynamicBuffer.sizeBytes = upload.length;
+
     if (@available(macOS 13.0, iOS 16.0, *)) {
       ctx->dynamicBuffer._gpuAddress = upload.gpuAddress;
     }
+
     mt_bindRenderBuffer(ctx->render,
                         &ctx->dynamicBuffer,
                         ctx->dynamicOffset,
                         binding->binding,
                         binding->visibility);
   }
-  if (ctx->dynamicRecord != record ||
-      ctx->dynamicIndex != binding->arrayIndex) {
+
+  if (ctx->dynamicRecord != record
+      || ctx->dynamicIndex != binding->arrayIndex) {
     ctx->valid = false;
     return;
   }
 
   argumentBuffer = &ctx->dynamicBuffer;
   argumentOffset = ctx->dynamicOffset;
-  addresses = argumentBuffer->_priv
-                ? (uint64_t *)((uint8_t *)[(id<MTLBuffer>)argumentBuffer->_priv
-                                            contents] + argumentOffset)
+  addresses      = argumentBuffer->_priv
+                ? (uint64_t *)((uint8_t *)[(id<MTLBuffer>)argumentBuffer->_priv contents] + argumentOffset)
                 : NULL;
+
   if (!addresses) {
     ctx->valid = false;
     return;
   }
+
   addresses[binding->arrayIndex] = mt_bufferAddress(binding);
   ctx->dynamicIndex++;
   mt_useRenderBuffer(ctx, binding);
 }
 
 static void
-mt_bindComputeArgumentBuffer(MTBindContext                  *ctx,
-                             MTBufferDescriptorArray        *record,
+mt_bindComputeArgumentBuffer(MTBindContext                 *ctx,
+                             MTBufferDescriptorArray       *record,
                              const GPUBindGroupBindingView *binding) {
-  uint64_t      *addresses;
-  id<MTLBuffer>  upload;
+  uint64_t     *addresses;
+  id<MTLBuffer> upload;
 
   if (!binding->hasDynamicOffset) {
     if (binding->arrayIndex == 0u) {
@@ -502,6 +547,7 @@ mt_bindComputeArgumentBuffer(MTBindContext                  *ctx,
                           0u,
                           binding->binding);
     }
+
     mt_useComputeBuffer(ctx, binding);
     return;
   }
@@ -515,34 +561,39 @@ mt_bindComputeArgumentBuffer(MTBindContext                  *ctx,
       ctx->valid = false;
       return;
     }
+
     ctx->dynamicRecord = record;
     ctx->dynamicIndex  = 0u;
     memset(&ctx->dynamicBuffer, 0, sizeof(ctx->dynamicBuffer));
     ctx->dynamicBuffer._priv     = upload;
     ctx->dynamicBuffer.device    = record->argumentBuffer.device;
     ctx->dynamicBuffer.sizeBytes = upload.length;
+
     if (@available(macOS 13.0, iOS 16.0, *)) {
       ctx->dynamicBuffer._gpuAddress = upload.gpuAddress;
     }
+
     gpuSetComputeBuffer(ctx->compute,
                         &ctx->dynamicBuffer,
                         ctx->dynamicOffset,
                         binding->binding);
   }
-  if (ctx->dynamicRecord != record ||
-      ctx->dynamicIndex != binding->arrayIndex) {
+
+  if (ctx->dynamicRecord != record
+      || ctx->dynamicIndex != binding->arrayIndex) {
     ctx->valid = false;
     return;
   }
 
   addresses = ctx->dynamicBuffer._priv
-                ? (uint64_t *)((uint8_t *)[(id<MTLBuffer>)ctx->dynamicBuffer._priv
-                                            contents] + ctx->dynamicOffset)
+                ? (uint64_t *)((uint8_t *)[(id<MTLBuffer>)ctx->dynamicBuffer._priv contents] + ctx->dynamicOffset)
                 : NULL;
+
   if (!addresses) {
     ctx->valid = false;
     return;
   }
+
   addresses[binding->arrayIndex] = mt_bufferAddress(binding);
   ctx->dynamicIndex++;
   mt_useComputeBuffer(ctx, binding);
@@ -551,89 +602,94 @@ mt_bindComputeArgumentBuffer(MTBindContext                  *ctx,
 static void
 mt_bindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   MTBufferDescriptorArray *record;
-  MTBindContext            *bind;
-  GPUApiRCE                *api;
-  uint32_t                  index;
+  MTBindContext           *bind;
+  GPUApiRCE               *api;
+  uint32_t                 index;
 
   if (!ctx || !binding) {
     return;
   }
+
   bind  = ctx;
   index = binding->binding + binding->arrayIndex;
+
   if (!bind->valid || !bind->render || !bind->render->_api) {
     return;
   }
+
   api = &bind->render->_api->rce;
 
   record = mt_bufferDescriptorArray(bind->native,
                                     binding->layoutEntryIndex);
+
   if (record) {
     mt_bindRenderArgumentBuffer(bind, record, binding);
     return;
   }
 
   if ((binding->visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0u) {
-    if (binding->kind == GPUBindKindBuffer && binding->buffer &&
-        api->vertexBuffer) {
+    if (binding->kind == GPUBindKindBuffer && binding->buffer
+        && api->vertexBuffer) {
       api->vertexBuffer(bind->render, binding->buffer, binding->offset, index);
-    } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
-               api->setVertexTexture) {
+    } else if (binding->kind == GPUBindKindTexture && binding->textureView
+               && api->setVertexTexture) {
       api->setVertexTexture(bind->render, binding->textureView, index);
-    } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
-               api->setVertexSampler) {
+    } else if (binding->kind == GPUBindKindSampler && binding->sampler
+               && api->setVertexSampler) {
       api->setVertexSampler(bind->render, binding->sampler, index);
-    } else if (binding->kind == GPUBindKindAccelerationStructure &&
-               binding->accelerationStructure &&
-               api->setVertexAccelerationStructure) {
-      api->setVertexAccelerationStructure(
-        bind->render,
-        binding->accelerationStructure,
-        index);
+    } else if (binding->kind == GPUBindKindAccelerationStructure
+               && binding->accelerationStructure
+               && api->setVertexAccelerationStructure) {
+      api->setVertexAccelerationStructure(bind->render,
+                                          binding->accelerationStructure,
+                                          index);
     }
   }
+
   if ((binding->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u) {
-    if (binding->kind == GPUBindKindBuffer && binding->buffer &&
-        api->fragmentBuffer) {
+    if (binding->kind == GPUBindKindBuffer && binding->buffer
+        && api->fragmentBuffer) {
       api->fragmentBuffer(bind->render,
                           binding->buffer,
                           binding->offset,
                           index);
-    } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
-               api->setFragmentTexture) {
+    } else if (binding->kind == GPUBindKindTexture && binding->textureView
+               && api->setFragmentTexture) {
       api->setFragmentTexture(bind->render, binding->textureView, index);
-    } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
-               api->setFragmentSampler) {
+    } else if (binding->kind == GPUBindKindSampler && binding->sampler
+               && api->setFragmentSampler) {
       api->setFragmentSampler(bind->render, binding->sampler, index);
-    } else if (binding->kind == GPUBindKindAccelerationStructure &&
-               binding->accelerationStructure &&
-               api->setFragmentAccelerationStructure) {
-      api->setFragmentAccelerationStructure(
-        bind->render,
-        binding->accelerationStructure,
-        index);
+    } else if (binding->kind == GPUBindKindAccelerationStructure
+               && binding->accelerationStructure
+               && api->setFragmentAccelerationStructure) {
+      api->setFragmentAccelerationStructure(bind->render,
+                                            binding->accelerationStructure,
+                                            index);
     }
   }
+
   if ((binding->visibility & GPU_SHADER_STAGE_TASK_BIT) != 0u) {
-    if (binding->kind == GPUBindKindBuffer && binding->buffer &&
-        api->taskBuffer) {
+    if (binding->kind == GPUBindKindBuffer && binding->buffer
+        && api->taskBuffer) {
       api->taskBuffer(bind->render, binding->buffer, binding->offset, index);
-    } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
-               api->setTaskTexture) {
+    } else if (binding->kind == GPUBindKindTexture && binding->textureView
+               && api->setTaskTexture) {
       api->setTaskTexture(bind->render, binding->textureView, index);
-    } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
-               api->setTaskSampler) {
+    } else if (binding->kind == GPUBindKindSampler && binding->sampler
+               && api->setTaskSampler) {
       api->setTaskSampler(bind->render, binding->sampler, index);
     }
   }
+
   if ((binding->visibility & GPU_SHADER_STAGE_MESH_BIT) != 0u) {
-    if (binding->kind == GPUBindKindBuffer && binding->buffer &&
-        api->meshBuffer) {
+    if (binding->kind == GPUBindKindBuffer && binding->buffer
+        && api->meshBuffer) {
       api->meshBuffer(bind->render, binding->buffer, binding->offset, index);
-    } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
-               api->setMeshTexture) {
+    } else if (binding->kind == GPUBindKindTexture && binding->textureView
+               && api->setMeshTexture) {
       api->setMeshTexture(bind->render, binding->textureView, index);
-    } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
-               api->setMeshSampler) {
+    } else if (binding->kind == GPUBindKindSampler && binding->sampler
+               && api->setMeshSampler) {
       api->setMeshSampler(bind->render, binding->sampler, index);
     }
   }
@@ -652,30 +708,35 @@ mt_bindRenderSingleDynamicBuffer(GPURenderPassEncoder *pass,
 
   binding  = priv->singleBuffer;
   pipeline = pipelineLayout ? pipelineLayout->_priv : NULL;
-  if (!pass || !binding || !pipeline || !dynamicOffsets ||
-      groupIndex >= pipeline->bindGroupLayoutCount ||
-      pipeline->bindGroupLayouts[groupIndex] != priv->layout ||
-      !pipeline->backendBindings || !pipeline->backendBindings[groupIndex] ||
-      !binding->buffer) {
+
+  if (!pass || !binding || !pipeline || !dynamicOffsets
+      || groupIndex >= pipeline->bindGroupLayoutCount
+      || pipeline->bindGroupLayouts[groupIndex] != priv->layout
+      || !pipeline->backendBindings || !pipeline->backendBindings[groupIndex]
+      || !binding->buffer) {
     return MT_BIND_DYNAMIC_FAILED;
   }
 
   offset = binding->offset + dynamicOffsets[0];
-  if (offset < binding->offset ||
-      !gpuBufferRangeValid(binding->buffer, offset, binding->size)) {
+
+  if (offset < binding->offset
+      || !gpuBufferRangeValid(binding->buffer, offset, binding->size)) {
     return MT_BIND_DYNAMIC_FAILED;
   }
 
   index = pipeline->backendBindings[groupIndex][binding->layoutEntryIndex] +
           binding->arrayIndex;
+
   if (priv->singleBufferStages == GPU_SHADER_STAGE_FRAGMENT_BIT) {
     mt_fragmentBuffer(pass, binding->buffer, offset, index);
     return MT_BIND_DYNAMIC_DONE;
   }
+
   if (priv->singleBufferStages == GPU_SHADER_STAGE_VERTEX_BIT) {
     mt_vertexBuffer(pass, binding->buffer, offset, index);
     return MT_BIND_DYNAMIC_DONE;
   }
+
   return MT_BIND_DYNAMIC_FALLBACK;
 }
 
@@ -686,129 +747,149 @@ mt_bindRenderDynamicBuffers(GPURenderPassEncoder *pass,
                             GPUBindGroup         *group,
                             uint32_t              dynamicOffsetCount,
                             const uint32_t       *dynamicOffsets) {
-  GPUBindGroupLayoutPriv *layout;
-  GPUBindGroupPriv       *priv;
-  GPUPipelineLayoutPriv  *pipeline;
-  GPUApiRCE              *api;
-  MTBindGroup            *native;
+  GPUBindGroupLayoutPriv        *layout;
+  GPUBindGroupPriv              *priv;
+  GPUPipelineLayoutPriv         *pipeline;
+  GPUApiRCE                     *api;
+  MTBindGroup                   *native;
+  const GPUBindGroupLayoutEntry *singleEntry;
+  const GPUBindGroupBindingPriv *singleBinding;
+  const GPUBindGroupLayoutEntry *entry;
+  const GPUBindGroupBindingPriv *binding;
+  uint64_t                       singleOffset;
+  uint64_t                       offset;
+  uint32_t                       singleIndex;
+  uint32_t                       i;
+  uint32_t                       index;
 
   priv   = group ? group->_priv : NULL;
   native = group ? group->_native : NULL;
-  if (priv && dynamicOffsetCount == 1u && priv->singleBuffer &&
-      priv->singleBuffer->dynamicOffsetIndex == 0u) {
+
+  if (priv && dynamicOffsetCount == 1u && priv->singleBuffer
+      && priv->singleBuffer->dynamicOffsetIndex == 0u) {
     return mt_bindRenderSingleDynamicBuffer(pass,
                                             pipelineLayout,
                                             groupIndex,
                                             priv,
                                             dynamicOffsets);
   }
-  if (!priv || dynamicOffsetCount == 0u ||
-      dynamicOffsetCount != priv->dynamicOffsetCount ||
-      priv->dynamicOffsetCount != priv->count || priv->bindless ||
-      (native && native->arrayCount != 0u)) {
+
+  if (!priv || dynamicOffsetCount == 0u
+      || dynamicOffsetCount != priv->dynamicOffsetCount
+      || priv->dynamicOffsetCount != priv->count || priv->bindless
+      || (native && native->arrayCount != 0u)) {
     return MT_BIND_DYNAMIC_FALLBACK;
   }
 
   layout   = priv->layout ? priv->layout->_priv : NULL;
   pipeline = pipelineLayout ? pipelineLayout->_priv : NULL;
-  if (!pass || !pass->_api || !layout || !pipeline || !dynamicOffsets ||
-      groupIndex >= pipeline->bindGroupLayoutCount ||
-      pipeline->bindGroupLayouts[groupIndex] != priv->layout ||
-      !pipeline->backendBindings || !pipeline->backendBindings[groupIndex]) {
+
+  if (!pass || !pass->_api || !layout || !pipeline || !dynamicOffsets
+      || groupIndex >= pipeline->bindGroupLayoutCount
+      || pipeline->bindGroupLayouts[groupIndex] != priv->layout
+      || !pipeline->backendBindings || !pipeline->backendBindings[groupIndex]) {
     return MT_BIND_DYNAMIC_FAILED;
   }
 
   api = &pass->_api->rce;
+
   if (priv->count == 1u) {
-    const GPUBindGroupLayoutEntry *entry;
-    const GPUBindGroupBindingPriv *binding;
-    uint64_t                       offset;
-    uint32_t                       index;
+    singleBinding = priv->bindings;
 
-    binding = priv->bindings;
-    if (binding->kind != GPUBindKindBuffer || !binding->buffer ||
-        binding->layoutEntryIndex >= layout->count ||
-        binding->dynamicOffsetIndex >= dynamicOffsetCount) {
-      return MT_BIND_DYNAMIC_FAILED;
-    }
-    offset = binding->offset +
-             dynamicOffsets[binding->dynamicOffsetIndex];
-    if (offset < binding->offset ||
-        !gpuBufferRangeValid(binding->buffer, offset, binding->size)) {
+    if (singleBinding->kind != GPUBindKindBuffer || !singleBinding->buffer
+        || singleBinding->layoutEntryIndex >= layout->count
+        || singleBinding->dynamicOffsetIndex >= dynamicOffsetCount) {
       return MT_BIND_DYNAMIC_FAILED;
     }
 
-    entry = &layout->entries[binding->layoutEntryIndex];
-    index = pipeline->backendBindings[groupIndex][binding->layoutEntryIndex] +
-            binding->arrayIndex;
-    if (entry->visibility == GPU_SHADER_STAGE_FRAGMENT_BIT) {
-      mt_fragmentBuffer(pass, binding->buffer, offset, index);
+    singleOffset = singleBinding->offset +
+             dynamicOffsets[singleBinding->dynamicOffsetIndex];
+
+    if (singleOffset < singleBinding->offset
+        || !gpuBufferRangeValid(singleBinding->buffer, singleOffset, singleBinding->size)) {
+      return MT_BIND_DYNAMIC_FAILED;
+    }
+
+    singleEntry = &layout->entries[singleBinding->layoutEntryIndex];
+    singleIndex = pipeline->backendBindings[groupIndex][singleBinding->layoutEntryIndex] +
+            singleBinding->arrayIndex;
+
+    if (singleEntry->visibility == GPU_SHADER_STAGE_FRAGMENT_BIT) {
+      mt_fragmentBuffer(pass, singleBinding->buffer, singleOffset, singleIndex);
       return MT_BIND_DYNAMIC_DONE;
     }
-    if (entry->visibility == GPU_SHADER_STAGE_VERTEX_BIT) {
-      mt_vertexBuffer(pass, binding->buffer, offset, index);
+
+    if (singleEntry->visibility == GPU_SHADER_STAGE_VERTEX_BIT) {
+      mt_vertexBuffer(pass, singleBinding->buffer, singleOffset, singleIndex);
       return MT_BIND_DYNAMIC_DONE;
     }
   }
 
-  for (uint32_t i = 0u; i < priv->count; i++) {
-    const GPUBindGroupLayoutEntry *entry;
-    const GPUBindGroupBindingPriv *binding;
-    uint64_t                       offset;
-    uint32_t                       index;
-
+  for (i = 0u; i < priv->count; i++) {
     binding = &priv->bindings[i];
-    if (binding->kind != GPUBindKindBuffer || !binding->buffer ||
-        binding->layoutEntryIndex >= layout->count ||
-        binding->dynamicOffsetIndex >= dynamicOffsetCount) {
+
+    if (binding->kind != GPUBindKindBuffer || !binding->buffer
+        || binding->layoutEntryIndex >= layout->count
+        || binding->dynamicOffsetIndex >= dynamicOffsetCount) {
       return MT_BIND_DYNAMIC_FAILED;
     }
+
     offset = binding->offset +
              dynamicOffsets[binding->dynamicOffsetIndex];
-    if (offset < binding->offset ||
-        !gpuBufferRangeValid(binding->buffer, offset, binding->size)) {
+
+    if (offset < binding->offset
+        || !gpuBufferRangeValid(binding->buffer, offset, binding->size)) {
       return MT_BIND_DYNAMIC_FAILED;
     }
 
     entry = &layout->entries[binding->layoutEntryIndex];
     index = pipeline->backendBindings[groupIndex][binding->layoutEntryIndex] +
             binding->arrayIndex;
-    if ((entry->visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0u &&
-        api->vertexBuffer) {
+
+    if ((entry->visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0u
+        && api->vertexBuffer) {
       api->vertexBuffer(pass, binding->buffer, offset, index);
     }
-    if ((entry->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u &&
-        api->fragmentBuffer) {
+
+    if ((entry->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u
+        && api->fragmentBuffer) {
       api->fragmentBuffer(pass, binding->buffer, offset, index);
     }
-    if ((entry->visibility & GPU_SHADER_STAGE_TASK_BIT) != 0u &&
-        api->taskBuffer) {
+
+    if ((entry->visibility & GPU_SHADER_STAGE_TASK_BIT) != 0u
+        && api->taskBuffer) {
       api->taskBuffer(pass, binding->buffer, offset, index);
     }
-    if ((entry->visibility & GPU_SHADER_STAGE_MESH_BIT) != 0u &&
-        api->meshBuffer) {
+
+    if ((entry->visibility & GPU_SHADER_STAGE_MESH_BIT) != 0u
+        && api->meshBuffer) {
       api->meshBuffer(pass, binding->buffer, offset, index);
     }
   }
+
   return MT_BIND_DYNAMIC_DONE;
 }
 
 static GPU_INLINE bool
-mt_bindStaticBuffer(GPURenderPassEncoder *pass,
+mt_bindStaticBuffer(GPURenderPassEncoder  *pass,
                     GPUPipelineLayoutPriv *pipeline,
                     uint32_t               groupIndex,
                     GPUBindGroupPriv      *priv) {
   GPUBindGroupBindingPriv *binding;
   MTRenderEncoder         *native;
+#if MT_HAS_METAL4
+  MTArgumentState         *arguments;
+#endif
   uint32_t                 index;
 
   binding = priv ? priv->singleBuffer : NULL;
   native  = pass ? pass->_priv : NULL;
-  if (!binding || !binding->buffer ||
-      binding->dynamicOffsetIndex != UINT32_MAX || !pipeline || !native ||
-      groupIndex >= pipeline->bindGroupLayoutCount ||
-      !pipeline->backendBindings ||
-      !pipeline->backendBindings[groupIndex]) {
+
+  if (!binding || !binding->buffer
+      || binding->dynamicOffsetIndex != UINT32_MAX || !pipeline || !native
+      || groupIndex >= pipeline->bindGroupLayoutCount
+      || !pipeline->backendBindings
+      || !pipeline->backendBindings[groupIndex]) {
     return false;
   }
 
@@ -816,8 +897,6 @@ mt_bindStaticBuffer(GPURenderPassEncoder *pass,
           binding->arrayIndex;
 #if MT_HAS_METAL4
   if (native->modern) {
-    MTArgumentState *arguments;
-
     arguments = priv->singleBufferStages == GPU_SHADER_STAGE_FRAGMENT_BIT
                   ? native->fragmentArguments
                   : native->vertexArguments;
@@ -834,10 +913,12 @@ mt_bindStaticBuffer(GPURenderPassEncoder *pass,
     mt_fragmentBuffer(pass, binding->buffer, binding->offset, index);
     return true;
   }
+
   if (priv->singleBufferStages == GPU_SHADER_STAGE_VERTEX_BIT) {
     mt_vertexBuffer(pass, binding->buffer, binding->offset, index);
     return true;
   }
+
   return false;
 }
 
@@ -846,164 +927,176 @@ mt_bindRenderGroupStatic(GPURenderPassEncoder *pass,
                          GPUPipelineLayout    *pipelineLayout,
                          uint32_t              groupIndex,
                          GPUBindGroup         *group) {
-  GPUBindGroupLayoutPriv *layout;
-  GPUBindGroupPriv       *priv;
-  GPUPipelineLayoutPriv  *pipeline;
-  GPUApiRCE              *api;
+  GPUBindGroupLayoutPriv        *layout;
+  GPUBindGroupPriv              *priv;
+  GPUPipelineLayoutPriv         *pipeline;
+  GPUApiRCE                     *api;
+  const GPUBindGroupLayoutEntry *singleEntry;
+  const GPUBindGroupBindingPriv *singleBinding;
+  const GPUBindGroupLayoutEntry *entry;
+  const GPUBindGroupBindingPriv *binding;
+  uint32_t                       singleIndex;
+  uint32_t                       i;
+  uint32_t                       index;
 
   priv     = group ? group->_priv : NULL;
   layout   = priv && priv->layout ? priv->layout->_priv : NULL;
   pipeline = pipelineLayout ? pipelineLayout->_priv : NULL;
-  if (!pass || !pass->_api || !priv || !layout || !pipeline ||
-      groupIndex >= pipeline->bindGroupLayoutCount ||
-      pipeline->bindGroupLayouts[groupIndex] != priv->layout ||
-      (layout->count > 0u &&
-       (!pipeline->backendBindings || !pipeline->backendBindings[groupIndex]))) {
+
+  if (!pass || !pass->_api || !priv || !layout || !pipeline
+      || groupIndex >= pipeline->bindGroupLayoutCount
+      || pipeline->bindGroupLayouts[groupIndex] != priv->layout
+      || (layout->count > 0u
+          && (!pipeline->backendBindings || !pipeline->backendBindings[groupIndex]))) {
     return false;
   }
 
-  if (priv->singleBuffer &&
-      priv->singleBuffer->dynamicOffsetIndex == UINT32_MAX) {
+  if (priv->singleBuffer
+      && priv->singleBuffer->dynamicOffsetIndex == UINT32_MAX) {
     return mt_bindStaticBuffer(pass, pipeline, groupIndex, priv);
   }
 
   if (priv->count == 1u) {
-    const GPUBindGroupLayoutEntry *entry;
-    const GPUBindGroupBindingPriv *binding;
-    uint32_t                       index;
+    singleBinding = priv->bindings;
 
-    binding = priv->bindings;
-    if (binding->kind == GPUBindKindBuffer && binding->buffer &&
-        binding->layoutEntryIndex < layout->count) {
-      entry = &layout->entries[binding->layoutEntryIndex];
-      index = pipeline->backendBindings[groupIndex]
-                                       [binding->layoutEntryIndex] +
-              binding->arrayIndex;
-      if (entry->visibility == GPU_SHADER_STAGE_FRAGMENT_BIT) {
-        mt_fragmentBuffer(pass, binding->buffer, binding->offset, index);
+    if (singleBinding->kind == GPUBindKindBuffer && singleBinding->buffer
+        && singleBinding->layoutEntryIndex < layout->count) {
+      singleEntry = &layout->entries[singleBinding->layoutEntryIndex];
+      singleIndex = pipeline->backendBindings[groupIndex]
+                                       [singleBinding->layoutEntryIndex] +
+              singleBinding->arrayIndex;
+
+      if (singleEntry->visibility == GPU_SHADER_STAGE_FRAGMENT_BIT) {
+        mt_fragmentBuffer(pass, singleBinding->buffer, singleBinding->offset, singleIndex);
         return true;
       }
-      if (entry->visibility == GPU_SHADER_STAGE_VERTEX_BIT) {
-        mt_vertexBuffer(pass, binding->buffer, binding->offset, index);
+
+      if (singleEntry->visibility == GPU_SHADER_STAGE_VERTEX_BIT) {
+        mt_vertexBuffer(pass, singleBinding->buffer, singleBinding->offset, singleIndex);
         return true;
       }
     }
   }
 
   api = &pass->_api->rce;
-  for (uint32_t i = 0u; i < priv->count; i++) {
-    const GPUBindGroupLayoutEntry *entry;
-    const GPUBindGroupBindingPriv *binding;
-    uint32_t                       index;
 
+  for (i = 0u; i < priv->count; i++) {
     binding = &priv->bindings[i];
+
     if (binding->layoutEntryIndex >= layout->count) {
       return false;
     }
+
     entry = &layout->entries[binding->layoutEntryIndex];
     index = pipeline->backendBindings[groupIndex][binding->layoutEntryIndex] +
             binding->arrayIndex;
 
     if ((entry->visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0u) {
-      if (binding->kind == GPUBindKindBuffer && binding->buffer &&
-          api->vertexBuffer) {
+      if (binding->kind == GPUBindKindBuffer && binding->buffer
+          && api->vertexBuffer) {
         api->vertexBuffer(pass, binding->buffer, binding->offset, index);
-      } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
-                 api->setVertexTexture) {
+      } else if (binding->kind == GPUBindKindTexture && binding->textureView
+                 && api->setVertexTexture) {
         api->setVertexTexture(pass, binding->textureView, index);
-      } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
-                 api->setVertexSampler) {
+      } else if (binding->kind == GPUBindKindSampler && binding->sampler
+                 && api->setVertexSampler) {
         api->setVertexSampler(pass, binding->sampler, index);
-      } else if (binding->kind == GPUBindKindAccelerationStructure &&
-                 binding->accelerationStructure &&
-                 api->setVertexAccelerationStructure) {
-        api->setVertexAccelerationStructure(
-          pass,
-          binding->accelerationStructure,
-          index);
+      } else if (binding->kind == GPUBindKindAccelerationStructure
+                 && binding->accelerationStructure
+                 && api->setVertexAccelerationStructure) {
+        api->setVertexAccelerationStructure(pass,
+                                            binding->accelerationStructure,
+                                            index);
       }
     }
+
     if ((entry->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u) {
-      if (binding->kind == GPUBindKindBuffer && binding->buffer &&
-          api->fragmentBuffer) {
+      if (binding->kind == GPUBindKindBuffer && binding->buffer
+          && api->fragmentBuffer) {
         api->fragmentBuffer(pass, binding->buffer, binding->offset, index);
-      } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
-                 api->setFragmentTexture) {
+      } else if (binding->kind == GPUBindKindTexture && binding->textureView
+                 && api->setFragmentTexture) {
         api->setFragmentTexture(pass, binding->textureView, index);
-      } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
-                 api->setFragmentSampler) {
+      } else if (binding->kind == GPUBindKindSampler && binding->sampler
+                 && api->setFragmentSampler) {
         api->setFragmentSampler(pass, binding->sampler, index);
-      } else if (binding->kind == GPUBindKindAccelerationStructure &&
-                 binding->accelerationStructure &&
-                 api->setFragmentAccelerationStructure) {
-        api->setFragmentAccelerationStructure(
-          pass,
-          binding->accelerationStructure,
-          index);
+      } else if (binding->kind == GPUBindKindAccelerationStructure
+                 && binding->accelerationStructure
+                 && api->setFragmentAccelerationStructure) {
+        api->setFragmentAccelerationStructure(pass,
+                                              binding->accelerationStructure,
+                                              index);
       }
     }
+
     if ((entry->visibility & GPU_SHADER_STAGE_TASK_BIT) != 0u) {
-      if (binding->kind == GPUBindKindBuffer && binding->buffer &&
-          api->taskBuffer) {
+      if (binding->kind == GPUBindKindBuffer && binding->buffer
+          && api->taskBuffer) {
         api->taskBuffer(pass, binding->buffer, binding->offset, index);
-      } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
-                 api->setTaskTexture) {
+      } else if (binding->kind == GPUBindKindTexture && binding->textureView
+                 && api->setTaskTexture) {
         api->setTaskTexture(pass, binding->textureView, index);
-      } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
-                 api->setTaskSampler) {
+      } else if (binding->kind == GPUBindKindSampler && binding->sampler
+                 && api->setTaskSampler) {
         api->setTaskSampler(pass, binding->sampler, index);
       }
     }
+
     if ((entry->visibility & GPU_SHADER_STAGE_MESH_BIT) != 0u) {
-      if (binding->kind == GPUBindKindBuffer && binding->buffer &&
-          api->meshBuffer) {
+      if (binding->kind == GPUBindKindBuffer && binding->buffer
+          && api->meshBuffer) {
         api->meshBuffer(pass, binding->buffer, binding->offset, index);
-      } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
-                 api->setMeshTexture) {
+      } else if (binding->kind == GPUBindKindTexture && binding->textureView
+                 && api->setMeshTexture) {
         api->setMeshTexture(pass, binding->textureView, index);
-      } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
-                 api->setMeshSampler) {
+      } else if (binding->kind == GPUBindKindSampler && binding->sampler
+                 && api->setMeshSampler) {
         api->setMeshSampler(pass, binding->sampler, index);
       }
     }
   }
+
   return true;
 }
 
 static void
 mt_bindComputeBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   MTBufferDescriptorArray *record;
-  MTBindContext            *bind;
-  GPUApiCompute            *api;
-  uint32_t                  index;
+  MTBindContext           *bind;
+  GPUApiCompute           *api;
+  uint32_t                 index;
 
-  if (!ctx || !binding ||
-      (binding->visibility & GPU_SHADER_STAGE_COMPUTE_BIT) == 0u) {
+  if (!ctx || !binding
+      || (binding->visibility & GPU_SHADER_STAGE_COMPUTE_BIT) == 0u) {
     return;
   }
+
   bind  = ctx;
   index = binding->binding + binding->arrayIndex;
+
   if (!bind->valid || !bind->compute || !bind->compute->_api) {
     return;
   }
+
   api = &bind->compute->_api->compute;
 
   record = mt_bufferDescriptorArray(bind->native,
                                     binding->layoutEntryIndex);
+
   if (record) {
     mt_bindComputeArgumentBuffer(bind, record, binding);
-  } else if (binding->kind == GPUBindKindBuffer && binding->buffer &&
-             api->buffer) {
+  } else if (binding->kind == GPUBindKindBuffer && binding->buffer
+             && api->buffer) {
     api->buffer(bind->compute, binding->buffer, binding->offset, index);
-  } else if (binding->kind == GPUBindKindTexture && binding->textureView &&
-             api->texture) {
+  } else if (binding->kind == GPUBindKindTexture && binding->textureView
+             && api->texture) {
     api->texture(bind->compute, binding->textureView, index);
-  } else if (binding->kind == GPUBindKindSampler && binding->sampler &&
-             api->sampler) {
+  } else if (binding->kind == GPUBindKindSampler && binding->sampler
+             && api->sampler) {
     api->sampler(bind->compute, binding->sampler, index);
-  } else if (binding->kind == GPUBindKindAccelerationStructure &&
-             binding->accelerationStructure &&
-             api->accelerationStructure) {
+  } else if (binding->kind == GPUBindKindAccelerationStructure
+             && binding->accelerationStructure
+             && api->accelerationStructure) {
     api->accelerationStructure(bind->compute,
                                binding->accelerationStructure,
                                index);
@@ -1017,22 +1110,25 @@ mt_bindRenderGroup(GPURenderPassEncoder *pass,
                    GPUBindGroup         *group,
                    uint32_t              dynamicOffsetCount,
                    const uint32_t       *dynamicOffsets) {
-  GPUBindGroupPriv    *priv;
-  MTBindContext        ctx;
-  MTBindDynamicStatus  result;
+  MTBindContext       ctx;
+  GPUBindGroupPriv   *priv;
+  MTBindDynamicStatus result;
 
   priv = group ? group->_priv : NULL;
-  if (dynamicOffsetCount == 0u && priv && priv->dynamicOffsetCount == 0u &&
-      !priv->bindless &&
-      (!group->_native || ((MTBindGroup *)group->_native)->arrayCount == 0u)) {
+
+  if (dynamicOffsetCount == 0u && priv && priv->dynamicOffsetCount == 0u
+      && !priv->bindless
+      && (!group->_native || ((MTBindGroup *)group->_native)->arrayCount == 0u)) {
     return mt_bindRenderGroupStatic(pass, pipelineLayout, groupIndex, group);
   }
+
   result = mt_bindRenderDynamicBuffers(pass,
                                        pipelineLayout,
                                        groupIndex,
                                        group,
                                        dynamicOffsetCount,
                                        dynamicOffsets);
+
   if (result != MT_BIND_DYNAMIC_FALLBACK) {
     return result == MT_BIND_DYNAMIC_DONE;
   }
@@ -1041,14 +1137,15 @@ mt_bindRenderGroup(GPURenderPassEncoder *pass,
   ctx.render = pass;
   ctx.native = group ? group->_native : NULL;
   ctx.valid  = true;
+
   return gpuForEachBindGroupBindingWithDynamicOffsets(pipelineLayout,
-                                                       groupIndex,
-                                                       group,
-                                                       dynamicOffsetCount,
-                                                       dynamicOffsets,
-                                                       mt_bindRenderBinding,
-                                                       &ctx) &&
-         ctx.valid;
+                                                      groupIndex,
+                                                      group,
+                                                      dynamicOffsetCount,
+                                                      dynamicOffsets,
+                                                      mt_bindRenderBinding,
+                                                      &ctx)
+         && ctx.valid;
 }
 
 static bool
@@ -1064,14 +1161,15 @@ mt_bindComputeGroup(GPUComputePassEncoder *pass,
   ctx.compute = pass;
   ctx.native  = group ? group->_native : NULL;
   ctx.valid   = true;
+
   return gpuForEachBindGroupBindingWithDynamicOffsets(pipelineLayout,
-                                                       groupIndex,
-                                                       group,
-                                                       dynamicOffsetCount,
-                                                       dynamicOffsets,
-                                                       mt_bindComputeBinding,
-                                                       &ctx) &&
-         ctx.valid;
+                                                      groupIndex,
+                                                      group,
+                                                      dynamicOffsetCount,
+                                                      dynamicOffsets,
+                                                      mt_bindComputeBinding,
+                                                      &ctx)
+         && ctx.valid;
 }
 
 GPU_HIDE

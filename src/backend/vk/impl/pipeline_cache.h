@@ -42,10 +42,10 @@ vk_createComputePipelineCached(GPUDeviceVk                       *device,
 #ifdef VK_KHR_ray_tracing_pipeline
 GPU_HIDE
 VkResult
-vk_createRayPipelineCached(GPUDeviceVk                            *device,
-                           GPUPipelineCache                       *cache,
+vk_createRayPipelineCached(GPUDeviceVk                             *device,
+                           GPUPipelineCache                        *cache,
                            const VkRayTracingPipelineCreateInfoKHR *info,
-                           VkPipeline                             *pipeline);
+                           VkPipeline                              *pipeline);
 #endif
 
 #endif /* vk_pipeline_cache_h */

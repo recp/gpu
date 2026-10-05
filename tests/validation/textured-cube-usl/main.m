@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <AppKit/AppKit.h>
 #import <dispatch/dispatch.h>
 #import <QuartzCore/QuartzCore.h>
@@ -13,20 +29,6 @@
 #ifndef GPU_SAMPLE_BACKEND
 #  define GPU_SAMPLE_BACKEND GPU_BACKEND_METAL
 #endif
-
-static NSString *
-CubeWindowTitle(void) {
-  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN
-           ? @"GPU Vulkan USL Rotating Cube"
-           : @"GPU Metal USL Rotating Cube";
-}
-
-static const char *
-CubeStatsLabel(void) {
-  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN
-           ? "GPU Vulkan textured cube"
-           : "GPU Metal textured cube";
-}
 
 @interface TexturedCubeApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
 @private
@@ -55,17 +57,28 @@ CubeStatsLabel(void) {
   NSInteger          _exitAfterFrames;
   NSInteger          _submittedFrames;
   NSInteger          _completedFrames;
-  NSTimeInterval      _animationStart;
-  uint32_t            _drawableWidth;
-  uint32_t            _drawableHeight;
-  BOOL                _assertZeroAlloc;
-  BOOL                _statsFailed;
-  BOOL                _terminating;
-  mat4                _viewProjection;
+  NSTimeInterval     _animationStart;
+  uint32_t           _drawableWidth;
+  uint32_t           _drawableHeight;
+  BOOL               _assertZeroAlloc;
+  BOOL               _statsFailed;
+  BOOL               _terminating;
+  mat4               _viewProjection;
 }
+
 - (void)frameCompleted;
 - (BOOL)statsFailed;
 @end
+
+static NSString*
+CubeWindowTitle(void) {
+  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN ? @"GPU Vulkan USL Rotating Cube" : @"GPU Metal USL Rotating Cube";
+}
+
+static const char*
+CubeStatsLabel(void) {
+  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN ? "GPU Vulkan textured cube" : "GPU Metal textured cube";
+}
 
 static void
 TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
@@ -91,9 +104,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   scale           = _window.backingScaleFactor ?: 1.0f;
   _drawableWidth  = (uint32_t)(_view.bounds.size.width * scale);
   _drawableHeight = (uint32_t)(_view.bounds.size.height * scale);
-  CubeBuildViewProjection(_drawableHeight > 0u
-                            ? (float)_drawableWidth / (float)_drawableHeight
-                            : 1.0f,
+  CubeBuildViewProjection(_drawableHeight > 0u ? (float)_drawableWidth / (float)_drawableHeight : 1.0f,
                           _viewProjection);
 }
 
@@ -104,12 +115,13 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUTextureView          *view;
 
   [self updateDrawableSize];
+
   if (_drawableWidth == 0u || _drawableHeight == 0u) {
     return NO;
   }
 
-  texture = NULL;
-  view    = NULL;
+  texture                      = NULL;
+  view                         = NULL;
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "textured-cube-depth";
@@ -121,6 +133,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
+
   if (GPUCreateTexture(_device, &textureInfo, &texture) != GPU_OK) {
     return NO;
   }
@@ -132,6 +145,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   viewInfo.format           = GPU_FORMAT_DEPTH32_FLOAT;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK) {
     GPUDestroyTexture(texture);
     return NO;
@@ -141,6 +155,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUDestroyTexture(_depthTexture);
   _depthTexture = texture;
   _depthView    = view;
+
   return YES;
 }
 
@@ -151,22 +166,22 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUDepthStencilState        depth         = {0};
   GPURenderPipelineCreateInfo info          = {0};
 
-  attributes[0].format          = GPU_VERTEX_FORMAT_FLOAT32X3;
-  attributes[0].offset          = offsetof(CubeVertex, position);
+  attributes[0].format         = GPU_VERTEX_FORMAT_FLOAT32X3;
+  attributes[0].offset         = offsetof(CubeVertex, position);
   attributes[0].shaderLocation = 0u;
-  attributes[1].format          = GPU_VERTEX_FORMAT_FLOAT32X3;
-  attributes[1].offset          = offsetof(CubeVertex, normal);
+  attributes[1].format         = GPU_VERTEX_FORMAT_FLOAT32X3;
+  attributes[1].offset         = offsetof(CubeVertex, normal);
   attributes[1].shaderLocation = 1u;
-  attributes[2].format          = GPU_VERTEX_FORMAT_FLOAT32X2;
-  attributes[2].offset          = offsetof(CubeVertex, uv);
+  attributes[2].format         = GPU_VERTEX_FORMAT_FLOAT32X2;
+  attributes[2].offset         = offsetof(CubeVertex, uv);
   attributes[2].shaderLocation = 2u;
-  vertexLayout.pAttributes      = attributes;
-  vertexLayout.strideBytes      = sizeof(CubeVertex);
-  vertexLayout.attributeCount   = 3u;
-  vertexLayout.stepMode         = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.pAttributes     = attributes;
+  vertexLayout.strideBytes     = sizeof(CubeVertex);
+  vertexLayout.attributeCount  = 3u;
+  vertexLayout.stepMode        = GPU_VERTEX_STEP_MODE_VERTEX;
 
-  color.format          = GPUGetSwapchainFormat(_swapchain);
-  color.blend.writeMask = GPU_COLOR_WRITE_ALL;
+  color.format           = GPUGetSwapchainFormat(_swapchain);
+  color.blend.writeMask  = GPU_COLOR_WRITE_ALL;
   depth.depthCompare     = GPU_COMPARE_LESS;
   depth.depthTestEnable  = true;
   depth.depthWriteEnable = true;
@@ -189,6 +204,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   info.frontFace                = GPU_FRONT_FACE_CCW;
   info.multisample.sampleCount  = 1u;
   info.multisample.sampleMask   = UINT32_MAX;
+
   return GPUCreateRenderPipeline(_device, &info, &_pipeline) == GPU_OK;
 }
 
@@ -203,52 +219,56 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   info.label            = "textured-cube-vertices";
   info.sizeBytes        = sizeof(kCubeVertices);
   info.usage            = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(_device, &info, &_vertexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(_queue,
-                          _vertexBuffer,
-                          0u,
-                          kCubeVertices,
-                          sizeof(kCubeVertices)) != GPU_OK) {
+
+  if (GPUCreateBuffer(_device, &info, &_vertexBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(_queue,
+                             _vertexBuffer,
+                             0u,
+                             kCubeVertices,
+                             sizeof(kCubeVertices)) != GPU_OK) {
     return NO;
   }
 
   info.label     = "textured-cube-indices";
   info.sizeBytes = sizeof(kCubeIndices);
   info.usage     = GPU_BUFFER_USAGE_INDEX | GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(_device, &info, &_indexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(_queue,
-                          _indexBuffer,
-                          0u,
-                          kCubeIndices,
-                          sizeof(kCubeIndices)) != GPU_OK) {
+
+  if (GPUCreateBuffer(_device, &info, &_indexBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(_queue,
+                             _indexBuffer,
+                             0u,
+                             kCubeIndices,
+                             sizeof(kCubeIndices)) != GPU_OK) {
     return NO;
   }
 
   info.label     = "textured-cube-uniforms";
   info.sizeBytes = sizeof(uniforms);
   info.usage     = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(_device, &info, &_uniformBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(_queue,
-                          _uniformBuffer,
-                          0u,
-                          &uniforms,
-                          sizeof(uniforms)) != GPU_OK) {
+
+  if (GPUCreateBuffer(_device, &info, &_uniformBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(_queue,
+                             _uniformBuffer,
+                             0u,
+                             &uniforms,
+                             sizeof(uniforms)) != GPU_OK) {
     return NO;
   }
+
   return YES;
 }
 
 - (BOOL)createMaterial {
-  uint8_t                       pixels[CUBE_CHECKER_SIZE *
+  uint8_t                  pixels[CUBE_CHECKER_SIZE *
                                        CUBE_CHECKER_SIZE * 4u];
-  GPUTextureCreateInfo          textureInfo       = {0};
-  GPUTextureWriteRegion         writeRegion       = {0};
-  GPUTextureViewCreateInfo      viewInfo          = {0};
-  GPUSamplerCreateInfo          samplerInfo       = {0};
-  GPUBindGroupEntry             materialEntries[2] = {0};
-  GPUBindGroupEntry             samplerEntry      = {0};
-  GPUBindGroupCreateInfo        materialInfo      = {0};
-  GPUBindGroupCreateInfo        samplerGroupInfo  = {0};
+  GPUTextureCreateInfo     textureInfo        = {0};
+  GPUTextureWriteRegion    writeRegion        = {0};
+  GPUTextureViewCreateInfo viewInfo           = {0};
+  GPUSamplerCreateInfo     samplerInfo        = {0};
+  GPUBindGroupEntry        materialEntries[2] = {0};
+  GPUBindGroupEntry        samplerEntry       = {0};
+  GPUBindGroupCreateInfo   materialInfo       = {0};
+  GPUBindGroupCreateInfo   samplerGroupInfo   = {0};
 
   CubeFillChecker(pixels);
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
@@ -263,6 +283,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_DST;
+
   if (GPUCreateTexture(_device, &textureInfo, &_texture) != GPU_OK) {
     return NO;
   }
@@ -274,6 +295,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   writeRegion.layerCount   = 1u;
   writeRegion.bytesPerRow  = CUBE_CHECKER_SIZE * 4u;
   writeRegion.rowsPerImage = CUBE_CHECKER_SIZE;
+
   if (GPUQueueWriteTexture(_queue,
                            _texture,
                            &writeRegion,
@@ -289,6 +311,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(_texture, &viewInfo, &_textureView) != GPU_OK) {
     return NO;
   }
@@ -302,6 +325,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_REPEAT;
   samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_REPEAT;
   samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_REPEAT;
+
   if (GPUCreateSampler(_device,
                        &samplerInfo,
                        false,
@@ -322,6 +346,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   materialInfo.layout              = _shaderLayout->bindGroupLayouts[0];
   materialInfo.pEntries            = materialEntries;
   materialInfo.entryCount          = 2u;
+
   if (GPUCreateBindGroup(_device,
                          &materialInfo,
                          &_materialGroup) != GPU_OK) {
@@ -349,24 +374,28 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_SAMPLE_BACKEND;
   instanceInfo.enableValidation = GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN;
+
   if (GPUCreateInstance(&instanceInfo, &_instance) != GPU_OK || !_instance) {
     NSLog(@"GPU: failed to create cube instance");
     return NO;
   }
 
   _adapter = GPUSampleSelectAdapter(_instance);
+
   if (!_adapter) {
     NSLog(@"GPU: failed to get cube adapter");
     return NO;
   }
 
   _device = GPUCreateDeviceWithDefaultQueues(_adapter);
+
   if (!_device) {
     NSLog(@"GPU: failed to create cube device");
     return NO;
   }
 
   _queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0u);
+
   if (!_queue) {
     NSLog(@"GPU: failed to get cube queue");
     return NO;
@@ -377,6 +406,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                                         (__bridge void *)_view,
                                         GPU_SURFACE_APPLE_NSVIEW,
                                         _window.backingScaleFactor ?: 1.0f);
+
   if (!_surface) {
     NSLog(@"GPU: failed to create cube surface");
     return NO;
@@ -386,26 +416,30 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                                          _surface,
                                          (uint32_t)_view.bounds.size.width,
                                          (uint32_t)_view.bounds.size.height);
+
   if (!_swapchain) {
     NSLog(@"GPU: failed to create cube swapchain");
     return NO;
   }
+
   if (!GPUSampleLoadUSL(_device,
                         @"textured_cube.us",
                         2u,
                         &_library,
-                        &_shaderLayout) ||
-      !_shaderLayout->bindGroupLayouts[0] ||
-      !_shaderLayout->bindGroupLayouts[1]) {
+                        &_shaderLayout)
+      || !_shaderLayout->bindGroupLayouts[0]
+      || !_shaderLayout->bindGroupLayouts[1]) {
     return NO;
   }
-  if (![self createDepthTarget] ||
-      ![self createPipeline] ||
-      ![self createGeometry] ||
-      ![self createMaterial]) {
+
+  if (![self createDepthTarget]
+      || ![self createPipeline]
+      || ![self createGeometry]
+      || ![self createMaterial]) {
     NSLog(@"GPU: failed to initialize textured cube resources");
     return NO;
   }
+
   return YES;
 }
 
@@ -415,6 +449,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   seconds = (float)(CACurrentMediaTime() - _animationStart);
   CubeBuildUniforms(seconds, 0.0f, 1.0f, _viewProjection, &uniforms);
+
   return GPUQueueWriteBuffer(_queue,
                              _uniformBuffer,
                              0u,
@@ -423,34 +458,39 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (void)renderFrame {
-  GPUFrame                           *frame;
-  GPUCommandBuffer                   *cmdb;
-  GPURenderPassEncoder               *pass;
   GPUBufferBinding                    vertexBuffer = {0};
   GPURenderPassColorAttachment        color        = {0};
   GPURenderPassDepthStencilAttachment depth        = {0};
   GPURenderPassCreateInfo             passInfo     = {0};
+  GPUFrame                           *frame;
+  GPUCommandBuffer                   *cmdb;
+  GPURenderPassEncoder               *pass;
   GPUResult                           result;
 
   if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
     return;
   }
-  if (!GPUSampleRecoverSwapchain(_swapchain, _view) ||
-      ![self updateUniforms]) {
+
+  if (!GPUSampleRecoverSwapchain(_swapchain, _view)
+      || ![self updateUniforms]) {
     return;
   }
 
   frame = GPUBeginFrame(_swapchain);
+
   if (!frame) {
     return;
   }
+
   cmdb = NULL;
   pass = NULL;
+
   if (GPUAcquireCommandBuffer(_queue,
                               "textured-cube-frame",
                               &cmdb) != GPU_OK || !cmdb) {
     goto cleanup;
   }
+
   if (_exitAfterFrames > 0) {
     GPUSetCommandBufferCompletionHandler(cmdb,
                                          (__bridge void *)self,
@@ -464,12 +504,12 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   color.clearColor.float32[1] = 0.018f;
   color.clearColor.float32[2] = 0.048f;
   color.clearColor.float32[3] = 1.0f;
-  depth.view                  = _depthView;
-  depth.depthLoadOp           = GPU_LOAD_OP_CLEAR;
-  depth.depthStoreOp          = GPU_STORE_OP_DONT_CARE;
-  depth.stencilLoadOp         = GPU_LOAD_OP_DONT_CARE;
-  depth.stencilStoreOp        = GPU_STORE_OP_DONT_CARE;
-  depth.clearDepth            = 1.0f;
+  depth.view           = _depthView;
+  depth.depthLoadOp    = GPU_LOAD_OP_CLEAR;
+  depth.depthStoreOp   = GPU_STORE_OP_DONT_CARE;
+  depth.stencilLoadOp  = GPU_LOAD_OP_DONT_CARE;
+  depth.stencilStoreOp = GPU_STORE_OP_DONT_CARE;
+  depth.clearDepth     = 1.0f;
   passInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize        = sizeof(passInfo);
   passInfo.label                   = "textured-cube-pass";
@@ -477,6 +517,7 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   passInfo.pDepthStencilAttachment = &depth;
   passInfo.colorAttachmentCount    = 1u;
   pass = GPUBeginRenderPass(cmdb, &passInfo);
+
   if (!pass) {
     goto cleanup;
   }
@@ -492,12 +533,14 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   pass   = NULL;
   result = GPUFinishFrame(_queue, cmdb, frame);
   frame  = NULL;
+
   if (result != GPU_OK) {
     NSLog(@"GPUFinishFrame failed: %d", result);
     return;
   }
 
   _submittedFrames++;
+
   if (!GPUSampleCheckZeroAlloc(_device,
                                (uint32_t)_submittedFrames,
                                _assertZeroAlloc,
@@ -507,29 +550,33 @@ TexturedCubeFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     [_timer invalidate];
     _timer = nil;
     [NSApp terminate:nil];
-  } else if (_exitAfterFrames > 0 &&
-             _submittedFrames >= _exitAfterFrames) {
+  } else if (_exitAfterFrames > 0
+             && _submittedFrames >= _exitAfterFrames) {
     [_timer invalidate];
     _timer = nil;
   }
+
   return;
 
 cleanup:
   if (pass) {
     GPUEndRenderPass(pass);
   }
+
   if (cmdb) {
     (void)GPUDiscardCommandBuffer(cmdb);
   }
+
   GPUEndFrame(frame);
 }
 
 - (void)frameCompleted {
   dispatch_async(dispatch_get_main_queue(), ^{
     self->_completedFrames++;
-    if (self->_exitAfterFrames > 0 &&
-        self->_completedFrames >= self->_exitAfterFrames &&
-        !self->_terminating) {
+
+    if (self->_exitAfterFrames > 0
+        && self->_completedFrames >= self->_exitAfterFrames
+        && !self->_terminating) {
       self->_terminating = YES;
       [self->_timer invalidate];
       self->_timer = nil;
@@ -540,6 +587,7 @@ cleanup:
 
 - (void)tick:(NSTimer *)timer {
   (void)timer;
+
   if (!_terminating) {
     [self renderFrame];
   }
@@ -589,21 +637,25 @@ cleanup:
   const char *exitAfterFrames;
 
   (void)notification;
+
   if (![self setupWindow] || ![self setupGPU]) {
     [NSApp terminate:nil];
     return;
   }
 
   exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+
   if (exitAfterFrames && exitAfterFrames[0] != '\0') {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
+
     if (_exitAfterFrames < 1) {
       _exitAfterFrames = 1;
     }
   }
+
   _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
   _animationStart  = CACurrentMediaTime();
-  _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
+  _timer           = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
                                    target:self
                                  selector:@selector(tick:)
                                  userInfo:nil
@@ -635,11 +687,13 @@ cleanup:
   if (!_swapchain || _terminating) {
     return;
   }
+
   width  = (uint32_t)_view.bounds.size.width;
   height = (uint32_t)_view.bounds.size.height;
-  if (width > 0u && height > 0u &&
-      GPUResizeSwapchain(_swapchain, width, height) == GPU_OK &&
-      [self createDepthTarget]) {
+
+  if (width > 0u && height > 0u
+      && GPUResizeSwapchain(_swapchain, width, height) == GPU_OK
+      && [self createDepthTarget]) {
     [self renderFrame];
   }
 }
@@ -668,6 +722,7 @@ main(int argc, const char *argv[]) {
   int result;
 
   result = 0;
+
   @autoreleasepool {
     TexturedCubeApp *delegate;
 
@@ -680,5 +735,6 @@ main(int argc, const char *argv[]) {
     [NSApp run];
     result = [delegate statsFailed] ? 1 : 0;
   }
+
   return result;
 }

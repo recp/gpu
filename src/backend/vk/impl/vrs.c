@@ -19,21 +19,25 @@
 
 static void
 vk_getVRSCapabilities(const GPUAdapter      *adapter,
-                      GPUVRSCapabilitiesEXT *outCaps) {
+                     GPUVRSCapabilitiesEXT *outCaps) {
   GPUAdapterVk *native;
 
   native = adapter ? adapter->_priv : NULL;
+
   if (!native || !outCaps) {
     return;
   }
 
   memset(outCaps, 0, sizeof(*outCaps));
+
   if (native->vrsDrawRate) {
     outCaps->modes |= GPU_VRS_DRAW_RATE_BIT_EXT;
   }
+
   if (native->vrsAttachment) {
     outCaps->modes |= GPU_VRS_ATTACHMENT_BIT_EXT;
   }
+
   outCaps->rates                         = native->vrsRates;
   outCaps->combiners                     = native->vrsCombiners;
   outCaps->minAttachmentTexelSize.width  = native->minVRSTexelSize.width;

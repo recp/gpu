@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <gpu/gpu.h>
 
 #include <stddef.h>
@@ -48,13 +64,11 @@ GPU_ASSERT_CHAIN_FIRST(GPUIntersectionFunctionTableCreateInfoEXT);
 GPU_ASSERT_CHAIN_FIRST(GPUExecutionGraphCreateInfoEXT);
 GPU_ASSERT_CHAIN_FIRST(GPUExecutionGraphInstanceCreateInfoEXT);
 
-_Static_assert(
-  offsetof(GPUTransientAllocatorConfig, ringBytesPerFrame) <
+_Static_assert(offsetof(GPUTransientAllocatorConfig, ringBytesPerFrame) <
     offsetof(GPUTransientAllocatorConfig, chunkBytes),
   "transient allocator 64-bit fields must stay packed"
 );
-_Static_assert(
-  offsetof(GPUTransientAllocatorConfig, chunkBytes) <
+_Static_assert(offsetof(GPUTransientAllocatorConfig, chunkBytes) <
     offsetof(GPUTransientAllocatorConfig, framesInFlight),
   "transient allocator 64-bit fields must stay packed"
 );
@@ -101,23 +115,19 @@ GPU_ASSERT_64BIT_SIZE(GPUExecutionGraphInstanceCreateInfoEXT, 40u);
 GPU_ASSERT_64BIT_SIZE(GPUExecutionGraphEntryEXT, 12u);
 GPU_ASSERT_64BIT_SIZE(GPUExecutionGraphInputEXT, 32u);
 GPU_ASSERT_64BIT_SIZE(GPUExecutionGraphBufferInputEXT, 40u);
-_Static_assert(
-  offsetof(GPUQueueSubmitExInfo, ppCommandBuffers) <
+_Static_assert(offsetof(GPUQueueSubmitExInfo, ppCommandBuffers) <
     offsetof(GPUQueueSubmitExInfo, pWaits),
   "submit pointers must follow command, wait, signal order"
 );
-_Static_assert(
-  offsetof(GPUQueueSubmitExInfo, pWaits) <
+_Static_assert(offsetof(GPUQueueSubmitExInfo, pWaits) <
     offsetof(GPUQueueSubmitExInfo, pSignals),
   "submit pointers must follow command, wait, signal order"
 );
-_Static_assert(
-  offsetof(GPUQueueSubmitExInfo, commandBufferCount) <
+_Static_assert(offsetof(GPUQueueSubmitExInfo, commandBufferCount) <
     offsetof(GPUQueueSubmitExInfo, waitCount),
   "submit counts must follow command, wait, signal order"
 );
-_Static_assert(
-  offsetof(GPUQueueSubmitExInfo, waitCount) <
+_Static_assert(offsetof(GPUQueueSubmitExInfo, waitCount) <
     offsetof(GPUQueueSubmitExInfo, signalCount),
   "submit counts must follow command, wait, signal order"
 );

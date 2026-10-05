@@ -19,13 +19,14 @@
 #include <stdio.h>
 
 static int
-expect_profile(const char       *name,
-               uint32_t          major,
-               uint32_t          minor,
-               USLTargetProfile  expected) {
+expect_profile(const char      *name,
+               uint32_t         major,
+               uint32_t         minor,
+               USLTargetProfile expected) {
   USLTargetProfile actual;
 
   actual = gpu_uslVulkanProfile(major, minor);
+
   if (actual == expected) {
     return 1;
   }
@@ -41,31 +42,38 @@ expect_profile(const char       *name,
 int
 main(void) {
   USLCapabilityAtomDesc atom;
-  USLTargetSpec target;
-  int           ok;
+  USLTargetSpec         target;
+  int                   ok;
 
   ok = gpu_uslDefaultTarget(GPU_BACKEND_VULKAN, &target);
   ok &= target.profile == USL_TARGET_PROFILE_VULKAN_1_0;
   ok &= expect_profile("invalid",
-                       0u, 0u,
+                       0u,
+                       0u,
                        USL_TARGET_PROFILE_NONE);
   ok &= expect_profile("Vulkan 1.0",
-                       1u, 0u,
+                       1u,
+                       0u,
                        USL_TARGET_PROFILE_VULKAN_1_0);
   ok &= expect_profile("Vulkan 1.1",
-                       1u, 1u,
+                       1u,
+                       1u,
                        USL_TARGET_PROFILE_VULKAN_1_1);
   ok &= expect_profile("Vulkan 1.2",
-                       1u, 2u,
+                       1u,
+                       2u,
                        USL_TARGET_PROFILE_VULKAN_1_2);
   ok &= expect_profile("Vulkan 1.3",
-                       1u, 3u,
+                       1u,
+                       3u,
                        USL_TARGET_PROFILE_VULKAN_1_3);
   ok &= expect_profile("Vulkan 1.4",
-                       1u, 4u,
+                       1u,
+                       4u,
                        USL_TARGET_PROFILE_VULKAN_1_4);
   ok &= expect_profile("future Vulkan",
-                       2u, 0u,
+                       2u,
+                       0u,
                        USL_TARGET_PROFILE_VULKAN_1_4);
 #if defined(_WIN32) || defined(WIN32)
   ok &= gpu_uslVulkanHalfRoundtrip(0x10deu, 0x1fbcu, 2500657152u);

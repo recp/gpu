@@ -31,31 +31,38 @@ gpuCacheFileBegin(const char        *path,
                   GPUCacheFileGuard *guard) {
   char   *lockPath;
   size_t  pathLength;
+#if !defined(_WIN32) && !defined(WIN32)
+  int     descriptor;
+#endif
 
   if (!guard) {
     return false;
   }
+
   guard->native = (intptr_t)-1;
   guard->locked = false;
+
   if (!path) {
     return false;
   }
 
   pathLength = strlen(path);
+
   if (pathLength > SIZE_MAX - sizeof(".lock")) {
     return false;
   }
-  lockPath = malloc(pathLength + sizeof(".lock"));
-  if (!lockPath) {
+
+  if (!(lockPath = malloc(pathLength + sizeof(".lock")))) {
     return false;
   }
+
   memcpy(lockPath, path, pathLength);
   memcpy(lockPath + pathLength, ".lock", sizeof(".lock"));
 
 #if defined(_WIN32) || defined(WIN32)
   {
-    HANDLE     handle;
     OVERLAPPED overlap = {0};
+    HANDLE     handle;
 
     handle = CreateFileA(lockPath,
                          GENERIC_READ | GENERIC_WRITE,
@@ -65,69 +72,71 @@ gpuCacheFileBegin(const char        *path,
                          FILE_ATTRIBUTE_NORMAL,
                          NULL);
     free(lockPath);
-    if (handle == INVALID_HANDLE_VALUE ||
-        !LockFileEx(handle,
-                    LOCKFILE_EXCLUSIVE_LOCK,
-                    0u,
-                    MAXDWORD,
-                    MAXDWORD,
-                    &overlap)) {
+
+    if (handle == INVALID_HANDLE_VALUE
+        || !LockFileEx(handle,
+                       LOCKFILE_EXCLUSIVE_LOCK,
+                       0u,
+                       MAXDWORD,
+                       MAXDWORD,
+                       &overlap)) {
       if (handle != INVALID_HANDLE_VALUE) {
         CloseHandle(handle);
       }
       return false;
     }
+
     guard->native = (intptr_t)handle;
   }
 #else
-  {
-    int descriptor;
+  descriptor = open(lockPath, O_CREAT | O_RDWR, 0600);
+  free(lockPath);
 
-    descriptor = open(lockPath, O_CREAT | O_RDWR, 0600);
-    free(lockPath);
-    if (descriptor < 0 || flock(descriptor, LOCK_EX) != 0) {
-      if (descriptor >= 0) {
-        close(descriptor);
-      }
-      return false;
+  if (descriptor < 0 || flock(descriptor, LOCK_EX) != 0) {
+    if (descriptor >= 0) {
+      close(descriptor);
     }
-    guard->native = (intptr_t)descriptor;
+    return false;
   }
+
+  guard->native = (intptr_t)descriptor;
 #endif
   guard->locked = true;
+
   return true;
 }
 
 GPU_HIDE
 void
 gpuCacheFileEnd(GPUCacheFileGuard *guard) {
+#if !defined(_WIN32) && !defined(WIN32)
+  int descriptor;
+#endif
+
   if (!guard || !guard->locked) {
     return;
   }
+
 #if defined(_WIN32) || defined(WIN32)
   {
-    HANDLE     handle;
     OVERLAPPED overlap = {0};
+    HANDLE     handle;
 
     handle = (HANDLE)guard->native;
     UnlockFileEx(handle, 0u, MAXDWORD, MAXDWORD, &overlap);
     CloseHandle(handle);
   }
 #else
-  {
-    int descriptor;
-
-    descriptor = (int)guard->native;
-    flock(descriptor, LOCK_UN);
-    close(descriptor);
-  }
+  descriptor = (int)guard->native;
+  flock(descriptor, LOCK_UN);
+  close(descriptor);
 #endif
   guard->native = (intptr_t)-1;
   guard->locked = false;
 }
 
 GPU_HIDE
-char *
+char*
 gpuCacheFileTemporaryPath(const char *path, const void *identity) {
   char   *temporaryPath;
   size_t  pathLength;
@@ -136,25 +145,30 @@ gpuCacheFileTemporaryPath(const char *path, const void *identity) {
   if (!path) {
     return NULL;
   }
+
   pathLength = strlen(path);
+
   if (pathLength > SIZE_MAX - 64u) {
     return NULL;
   }
-  temporaryPath = malloc(pathLength + 64u);
-  if (!temporaryPath) {
+
+  if (!(temporaryPath = malloc(pathLength + 64u))) {
     return NULL;
   }
+
 #if defined(_WIN32) || defined(WIN32)
   processId = _getpid();
 #else
   processId = (int)getpid();
 #endif
+
   snprintf(temporaryPath,
            pathLength + 64u,
            "%s.tmp.%d.%p",
            path,
            processId,
            identity);
+
   return temporaryPath;
 }
 
@@ -164,6 +178,7 @@ gpuCacheFileReplace(const char *source, const char *destination) {
   if (!source || !destination) {
     return false;
   }
+
 #if defined(_WIN32) || defined(WIN32)
   return MoveFileExA(source,
                      destination,

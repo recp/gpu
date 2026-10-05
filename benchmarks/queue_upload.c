@@ -33,13 +33,13 @@ typedef struct QueueUploadConfig {
 } QueueUploadConfig;
 
 typedef struct QueueUpload {
-  GPUInstance     *instance;
-  GPUAdapter      *adapter;
-  GPUDevice       *device;
-  GPUQueue        *queue;
-  GPUBuffer       *buffer;
-  GPUFence        *fence;
-  void            *bytes;
+  GPUInstance *instance;
+  GPUAdapter  *adapter;
+  GPUDevice   *device;
+  GPUQueue    *queue;
+  GPUBuffer   *buffer;
+  GPUFence    *fence;
+  void        *bytes;
 } QueueUpload;
 
 static bool
@@ -58,38 +58,43 @@ queue_uploadConfig(int argc, char *argv[], QueueUploadConfig *config) {
   config->backend       = GPU_BACKEND_DEFAULT;
   config->writeCount    = QUEUE_UPLOAD_DEFAULT_WRITES;
   config->bytesPerWrite = QUEUE_UPLOAD_DEFAULT_BYTES;
-  if ((argc > 1 && !bench_parseBackend(argv[1], &config->backend)) ||
-      (argc > 2 && !bench_parseU32(argv[2], 1u, &config->writeCount)) ||
-      (argc > 3 && !bench_parseU32(argv[3], 1u, &config->bytesPerWrite))) {
+
+  if ((argc > 1 && !bench_parseBackend(argv[1], &config->backend))
+      || (argc > 2 && !bench_parseU32(argv[2], 1u, &config->writeCount))
+      || (argc > 3 && !bench_parseU32(argv[3], 1u, &config->bytesPerWrite))) {
     fprintf(stderr, "invalid queue-upload benchmark arguments\n");
     return false;
   }
+
   return true;
 }
 
 static bool
 queue_wait(QueueUpload *upload) {
-  GPUCommandBuffer  *cmdb;
   GPUCommandBuffer  *buffers[1];
   GPUQueueSubmitInfo submitInfo;
+  GPUCommandBuffer  *cmdb;
 
   memset(&submitInfo, 0, sizeof(submitInfo));
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(upload->queue,
                               "queue-upload-wait",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+                              &cmdb) != GPU_OK
+      || !cmdb) {
     return false;
   }
 
-  buffers[0]                    = cmdb;
+  buffers[0] = cmdb;
+
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = buffers;
   submitInfo.fence              = upload->fence;
-  return GPUQueueSubmit(upload->queue, &submitInfo) == GPU_OK &&
-         GPUWaitFence(upload->fence, UINT64_MAX) == GPU_OK;
+
+  return GPUQueueSubmit(upload->queue, &submitInfo) == GPU_OK
+         && GPUWaitFence(upload->fence, UINT64_MAX) == GPU_OK;
 }
 
 static bool
@@ -109,21 +114,21 @@ queue_uploadInit(QueueUpload             *upload,
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = config->backend;
-  if (GPUCreateInstance(&instanceInfo, &upload->instance) != GPU_OK ||
-      !upload->instance) {
+
+  if (GPUCreateInstance(&instanceInfo, &upload->instance) != GPU_OK
+      || !upload->instance) {
     return false;
   }
 
-  upload->adapter = bench_createAdapter(upload->instance);
-  if (!upload->adapter) {
+  if (!(upload->adapter = bench_createAdapter(upload->instance))) {
     return false;
   }
-  upload->device  = bench_createDevice(upload->adapter, NULL);
-  if (!upload->device) {
+
+  if (!(upload->device = bench_createDevice(upload->adapter, NULL))) {
     return false;
   }
-  upload->queue   = GPUGetQueue(upload->device, GPU_QUEUE_GRAPHICS, 0u);
-  if (!upload->queue) {
+
+  if (!(upload->queue = GPUGetQueue(upload->device, GPU_QUEUE_GRAPHICS, 0u))) {
     return false;
   }
 
@@ -131,23 +136,25 @@ queue_uploadInit(QueueUpload             *upload,
   runtimeInfo.chain.structSize = sizeof(runtimeInfo);
   runtimeInfo.validationMode   = GPU_VALIDATION_OFF;
   runtimeInfo.enableStats      = true;
-  bufferInfo.chain.sType       = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  bufferInfo.chain.structSize  = sizeof(bufferInfo);
-  bufferInfo.label             = "queue-upload-target";
-  bufferInfo.sizeBytes         = config->bytesPerWrite;
-  bufferInfo.usage             = GPU_BUFFER_USAGE_COPY_DST;
-  upload->bytes                = malloc(config->bytesPerWrite);
-  if (!upload->bytes ||
-      GPUConfigureRuntime(upload->device, &runtimeInfo) != GPU_OK ||
-      GPUGetAdapterProperties(upload->adapter, properties) != GPU_OK ||
-      GPUCreateBuffer(upload->device, &bufferInfo, &upload->buffer) != GPU_OK ||
-      !upload->buffer ||
-      GPUCreateFence(upload->device, NULL, &upload->fence) != GPU_OK ||
-      !upload->fence) {
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "queue-upload-target";
+  bufferInfo.sizeBytes        = config->bytesPerWrite;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST;
+
+  if (!(upload->bytes = malloc(config->bytesPerWrite))
+      || GPUConfigureRuntime(upload->device, &runtimeInfo) != GPU_OK
+      || GPUGetAdapterProperties(upload->adapter, properties) != GPU_OK
+      || GPUCreateBuffer(upload->device, &bufferInfo, &upload->buffer) != GPU_OK
+      || !upload->buffer
+      || GPUCreateFence(upload->device, NULL, &upload->fence) != GPU_OK
+      || !upload->fence) {
     return false;
   }
 
   memset(upload->bytes, 0x5a, config->bytesPerWrite);
+
   return true;
 }
 
@@ -173,14 +180,16 @@ main(int argc, char *argv[]) {
   uint64_t             totalBytes;
   double               elapsed;
   double               begin;
+  uint32_t             i;
   bool                 drained;
   bool                 ok;
 
   memset(&upload, 0, sizeof(upload));
   memset(&properties, 0, sizeof(properties));
   memset(&stats, 0, sizeof(stats));
-  if (!queue_uploadConfig(argc, argv, &config) ||
-      !queue_uploadInit(&upload, &config, &properties)) {
+
+  if (!queue_uploadConfig(argc, argv, &config)
+      || !queue_uploadInit(&upload, &config, &properties)) {
     fprintf(stderr, "failed to initialize queue-upload benchmark\n");
     queue_uploadCleanup(&upload);
     return EXIT_FAILURE;
@@ -190,17 +199,19 @@ main(int argc, char *argv[]) {
                            upload.buffer,
                            0u,
                            upload.bytes,
-                           config.bytesPerWrite) == GPU_OK &&
-       queue_wait(&upload);
+                           config.bytesPerWrite) == GPU_OK
+       && queue_wait(&upload);
   GPUResetStats(upload.device);
   begin = bench_now();
-  for (uint32_t i = 0u; ok && i < config.writeCount; i++) {
+
+  for (i = 0u; ok && i < config.writeCount; i++) {
     ok = GPUQueueWriteBuffer(upload.queue,
                              upload.buffer,
                              0u,
                              upload.bytes,
                              config.bytesPerWrite) == GPU_OK;
   }
+
   drained = queue_wait(&upload);
   ok      = ok && drained;
   elapsed = bench_now() - begin;
@@ -218,18 +229,18 @@ main(int argc, char *argv[]) {
            (double)totalBytes / (1024.0 * 1024.0));
     printf("elapsed: %.3f ms, throughput: %.2f MiB/s\n",
            elapsed * 1e3,
-           elapsed > 0.0
-             ? (double)totalBytes / (1024.0 * 1024.0) / elapsed
-             : 0.0);
+           elapsed > 0.0 ? (double)totalBytes / (1024.0 * 1024.0) / elapsed : 0.0);
     printf("upload stalls: %" PRIu64 " (%.2f%% of writes)\n",
            stats.uploadStallCount,
            (double)stats.uploadStallCount * 100.0 / config.writeCount);
   }
 
   queue_uploadCleanup(&upload);
+
   if (!ok) {
     fprintf(stderr, "queue-upload benchmark failed\n");
     return EXIT_FAILURE;
   }
+
   return EXIT_SUCCESS;
 }

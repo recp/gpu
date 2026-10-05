@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef gpu_sample_cube_data_h
 #define gpu_sample_cube_data_h
 
@@ -75,24 +91,25 @@ _Static_assert(sizeof(CubeUniforms) == 128u,
                "cube uniform layout must match two float4x4 matrices");
 _Static_assert(sizeof(CubeVertex) == 32u,
                "cube vertex layout must match the pipeline stride");
-_Static_assert(sizeof(kCubeIndices) / sizeof(kCubeIndices[0]) ==
-                 CUBE_INDEX_COUNT,
+_Static_assert(sizeof(kCubeIndices) / sizeof(kCubeIndices[0]) == CUBE_INDEX_COUNT,
                "cube index count must match the draw call");
 
 static inline void
 CubeBuildViewProjection(float aspect, mat4 dest) {
-  vec3  eye;
-  vec3  center = {0.0f, 0.0f, 0.0f};
-  vec3  up     = {0.0f, 1.0f, 0.0f};
-  mat4  view;
-  mat4  projection;
+  mat4 view;
+  mat4 projection;
+  vec3 eye;
+  vec3 center = {0.0f, 0.0f, 0.0f};
+  vec3 up     = {0.0f, 1.0f, 0.0f};
 
   if (aspect <= 0.0f) {
     aspect = 1.0f;
   }
+
   eye[0] = 0.0f;
   eye[1] = 0.0f;
   eye[2] = aspect < 1.0f ? 4.5f / aspect : 4.5f;
+
   glm_lookat(eye, center, up, view);
   glm_perspective(glm_rad(48.0f), aspect, 0.1f, 100.0f, projection);
   glm_mat4_mul(projection, view, dest);
@@ -116,18 +133,16 @@ CubeBuildUniforms(float         yaw,
 
 static inline void
 CubeFillChecker(uint8_t *pixels) {
-  uint32_t x;
-  uint32_t y;
+  const uint8_t *color;
+  uint32_t       offset;
+  uint32_t       x;
+  uint32_t       y;
 
   for (y = 0u; y < CUBE_CHECKER_SIZE; y++) {
     for (x = 0u; x < CUBE_CHECKER_SIZE; x++) {
-      const uint8_t *color;
-      uint32_t       offset;
-
-      color = (((x / 4u) ^ (y / 4u)) & 1u)
-                ? kCubeCheckerOrange
-                : kCubeCheckerBlue;
+      color  = (((x / 4u) ^ (y / 4u)) & 1u) ? kCubeCheckerOrange : kCubeCheckerBlue;
       offset = (y * CUBE_CHECKER_SIZE + x) * 4u;
+
       pixels[offset + 0u] = color[0];
       pixels[offset + 1u] = color[1];
       pixels[offset + 2u] = color[2];

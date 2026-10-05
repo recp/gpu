@@ -19,9 +19,41 @@
 #include "../../../api/compute_internal.h"
 #include "pipeline_cache.h"
 
-static GPUComputeEncoderDX12 *
+static GPUComputeEncoderDX12*
 dx12__computeEncoder(GPUComputePassEncoder *encoder) {
   return encoder ? encoder->_priv : NULL;
+}
+
+static bool
+dx12__dispatchIndirect(GPUComputePassEncoder *encoder,
+                       GPUBuffer             *argsBuffer,
+                       uint64_t               argsOffset,
+                       uint32_t               dispatchCount,
+                       uint32_t               strideBytes) {
+  GPUComputeEncoderDX12 *native;
+  GPUBufferDX12         *buffer;
+
+  native = dx12__computeEncoder(encoder);
+  buffer = argsBuffer ? argsBuffer->_priv : NULL;
+
+  if (!native || !native->device || !native->commandList || !buffer
+      || !buffer->resource || !native->device->dispatchSignature
+      || !dx12_transitionBuffer(native->commandList,
+                                buffer,
+                                D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT)
+      || strideBytes != (uint32_t)sizeof(D3D12_DISPATCH_ARGUMENTS)) {
+    return false;
+  }
+
+  native->commandList->lpVtbl->ExecuteIndirect(native->commandList,
+                                               native->device->dispatchSignature,
+                                               dispatchCount,
+                                               buffer->resource,
+                                               argsOffset,
+                                               NULL,
+                                               0u);
+
+  return true;
 }
 
 GPU_HIDE
@@ -29,6 +61,9 @@ GPUResult
 dx12_createComputePipeline(GPUDevice                          *device,
                            const GPUComputePipelineCreateInfo *info,
                            GPUComputePipeline                 *pipeline) {
+  D3D12_COMPUTE_PIPELINE_STATE_DESC  desc = {0};
+  DX12ShaderCode                    shaderCode = {0};
+  DX12PipelineKey                   rootKey;
   GPUDeviceDX12                    *deviceDX12;
   GPUShaderLibrary                 *library;
   GPUShaderLibraryDX12             *libraryDX12;
@@ -36,29 +71,28 @@ dx12_createComputePipeline(GPUDevice                          *device,
   GPUComputePipelineState          *state;
   GPUComputePipelineDX12           *native;
   ID3D12RootSignature              *rootSignature;
-  D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {0};
-  DX12ShaderCode           shaderCode = {0};
-  DX12PipelineKey          rootKey;
-  uint64_t                 entryMask;
-  HRESULT                  result;
+  uint64_t                          entryMask;
+  HRESULT                           result;
 
-  deviceDX12 = device ? device->_priv : NULL;
+  deviceDX12  = device ? device->_priv : NULL;
   library     = info ? info->library : NULL;
   libraryDX12 = library ? library->_priv : NULL;
-  layout     = info && info->layout ? info->layout->_native : NULL;
-  if (!deviceDX12 || !deviceDX12->d3dDevice || !libraryDX12 ||
-      !libraryDX12->source || !layout || !layout->rootSignature ||
-      !info->entryPoint || !info->entryPoint[0] || !pipeline) {
+  layout      = info && info->layout ? info->layout->_native : NULL;
+
+  if (!deviceDX12 || !deviceDX12->d3dDevice || !libraryDX12
+      || !libraryDX12->source || !layout || !layout->rootSignature
+      || !info->entryPoint || !info->entryPoint[0] || !pipeline) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  state = calloc(1, sizeof(*state) + sizeof(*native));
-  if (!state) {
+  if (!(state = calloc(1, sizeof(*state) + sizeof(*native)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
-  native = (GPUComputePipelineDX12 *)(state + 1);
+
+  native        = (GPUComputePipelineDX12 *)(state + 1);
   rootSignature = NULL;
-  entryMask = gpuShaderEntryBit(info->library, info->entryPoint);
+  entryMask     = gpuShaderEntryBit(info->library, info->entryPoint);
+
   if (dx12_createShaderRootSignature(device,
                                      info->layout,
                                      info->library,
@@ -79,30 +113,32 @@ dx12_createComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  desc.pRootSignature      = rootSignature;
-  desc.CS.pShaderBytecode  = shaderCode.data;
-  desc.CS.BytecodeLength   = shaderCode.size;
+  desc.pRootSignature     = rootSignature;
+  desc.CS.pShaderBytecode = shaderCode.data;
+  desc.CS.BytecodeLength  = shaderCode.size;
+
   result = dx12_createComputePSO(info->cache,
-                                 deviceDX12,
-                                 &desc,
-                                 &rootKey,
-                                 &native->pipelineState) == GPU_OK
-             ? S_OK
-             : E_FAIL;
+                                deviceDX12,
+                                &desc,
+                                &rootKey,
+                                &native->pipelineState) == GPU_OK ? S_OK : E_FAIL;
+
   dx12_freeShaderCode(&shaderCode);
+
   if (FAILED(result) || !native->pipelineState) {
     rootSignature->lpVtbl->Release(rootSignature);
     free(state);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  native->rootSignature = rootSignature;
+  native->rootSignature   = rootSignature;
   state->_priv            = native;
   state->workgroupSize[0] = 1u;
   state->workgroupSize[1] = 1u;
   state->workgroupSize[2] = 1u;
   pipeline->_priv         = native;
   pipeline->_state        = state;
+
   return GPU_OK;
 }
 
@@ -118,53 +154,57 @@ dx12_destroyComputePipeline(GPUComputePipeline *pipeline) {
 
   state  = pipeline->_state;
   native = state ? state->_priv : NULL;
+
   if (native) {
     if (native->pipelineState) {
       native->pipelineState->lpVtbl->Release(native->pipelineState);
     }
+
     if (native->rootSignature) {
       native->rootSignature->lpVtbl->Release(native->rootSignature);
     }
   }
+
   free(state);
   free(pipeline);
 }
 
 GPU_HIDE
-GPUComputePassEncoder *
+GPUComputePassEncoder*
 dx12_computeCommandEncoder(GPUCommandBuffer               *cmdb,
                            const GPUComputePassCreateInfo *info) {
-  GPUDeviceDX12           *device;
-  GPUCommandBufferDX12    *command;
-  GPUComputePassEncoder   *encoder;
-  GPUComputeEncoderDX12   *native;
+  GPUDeviceDX12         *device;
+  GPUCommandBufferDX12  *command;
+  GPUComputePassEncoder *encoder;
+  GPUComputeEncoderDX12 *native;
 
-  device  = cmdb && cmdb->_queue && cmdb->_queue->_device
-              ? cmdb->_queue->_device->_priv
-              : NULL;
+  device  = cmdb && cmdb->_queue && cmdb->_queue->_device ? cmdb->_queue->_device->_priv : NULL;
   command = cmdb ? cmdb->_priv : NULL;
+
   if (!device || !command || !command->commandList) {
     return NULL;
   }
 
   encoder = &command->computeEncoder;
   native  = &command->computeState;
+
   memset(encoder, 0, sizeof(*encoder));
   memset(native, 0, sizeof(*native));
+
   native->device           = device;
   native->commandList      = command->commandList;
 #if GPU_DX12_HAS_EXECUTION_GRAPHS
   native->commandList10    = command->commandList10;
 #endif
-  native->debugEventActive = dx12_beginDebugEvent(
-    gpuCommandBufferDevice(cmdb),
-    native->commandList,
-    info->label
-  );
+  native->debugEventActive = dx12_beginDebugEvent(gpuCommandBufferDevice(cmdb),
+                                                  native->commandList,
+                                                  info->label);
+
   encoder->_priv             = native;
   encoder->_workgroupSize[0] = 1u;
   encoder->_workgroupSize[1] = 1u;
   encoder->_workgroupSize[2] = 1u;
+
   return encoder;
 }
 
@@ -178,24 +218,28 @@ dx12_setComputePipelineState(GPUComputePassEncoder   *encoder,
 
   native   = dx12__computeEncoder(encoder);
   pipeline = pipelineState ? pipelineState->_priv : NULL;
-  if (!native || !native->commandList || !pipeline ||
-      !pipeline->pipelineState || !pipeline->rootSignature) {
+
+  if (!native || !native->commandList || !pipeline
+      || !pipeline->pipelineState || !pipeline->rootSignature) {
     return;
   }
 
   rootChanged = native->rootSignature != pipeline->rootSignature;
+
   if (rootChanged) {
-    native->commandList->lpVtbl->SetComputeRootSignature(
-      native->commandList,
-      pipeline->rootSignature
-    );
+    native->commandList->lpVtbl->SetComputeRootSignature(native->commandList,
+                                                         pipeline->rootSignature);
   }
+
   native->commandList->lpVtbl->SetPipelineState(native->commandList,
                                                 pipeline->pipelineState);
+
   native->rootSignature = pipeline->rootSignature;
+
   if (rootChanged) {
     dx12_rebindComputeGroups(encoder);
   }
+
   encoder->_workgroupSize[0] = pipelineState->workgroupSize[0];
   encoder->_workgroupSize[1] = pipelineState->workgroupSize[1];
   encoder->_workgroupSize[2] = pipelineState->workgroupSize[2];
@@ -210,22 +254,19 @@ dx12_computePushConstants(GPUComputePassEncoder *encoder,
   GPUPipelineLayoutDX12 *layout;
 
   native = dx12__computeEncoder(encoder);
-  layout = encoder && encoder->_pipelineLayout
-             ? encoder->_pipelineLayout->_native
-             : NULL;
-  if (!native || !native->commandList || !layout || !data ||
-      layout->pushConstantRootParameter == UINT32_MAX ||
-      sizeBytes != layout->pushConstantDwordCount * 4u) {
+  layout = encoder && encoder->_pipelineLayout ? encoder->_pipelineLayout->_native : NULL;
+
+  if (!native || !native->commandList || !layout || !data
+      || layout->pushConstantRootParameter == UINT32_MAX
+      || sizeBytes != layout->pushConstantDwordCount * 4u) {
     return;
   }
 
-  native->commandList->lpVtbl->SetComputeRoot32BitConstants(
-    native->commandList,
-    layout->pushConstantRootParameter,
-    layout->pushConstantDwordCount,
-    data,
-    0u
-  );
+  native->commandList->lpVtbl->SetComputeRoot32BitConstants(native->commandList,
+                                                            layout->pushConstantRootParameter,
+                                                            layout->pushConstantDwordCount,
+                                                            data,
+                                                            0u);
 }
 
 GPU_HIDE
@@ -236,44 +277,11 @@ dx12_dispatch(GPUComputePassEncoder *encoder,
               uint32_t               z) {
   GPUComputeEncoderDX12 *native;
 
-  native = dx12__computeEncoder(encoder);
-  if (!native || !native->commandList) {
+  if (!(native = dx12__computeEncoder(encoder)) || !native->commandList) {
     return;
   }
 
   native->commandList->lpVtbl->Dispatch(native->commandList, x, y, z);
-}
-
-static bool
-dx12__dispatchIndirect(GPUComputePassEncoder *encoder,
-                       GPUBuffer             *argsBuffer,
-                       uint64_t               argsOffset,
-                       uint32_t               dispatchCount,
-                       uint32_t               strideBytes) {
-  GPUComputeEncoderDX12 *native;
-  GPUBufferDX12         *buffer;
-
-  native = dx12__computeEncoder(encoder);
-  buffer = argsBuffer ? argsBuffer->_priv : NULL;
-  if (!native || !native->device || !native->commandList || !buffer ||
-      !buffer->resource || !native->device->dispatchSignature ||
-      !dx12_transitionBuffer(native->commandList,
-                             buffer,
-                             D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT) ||
-      strideBytes != (uint32_t)sizeof(D3D12_DISPATCH_ARGUMENTS)) {
-    return false;
-  }
-
-  native->commandList->lpVtbl->ExecuteIndirect(
-    native->commandList,
-    native->device->dispatchSignature,
-    dispatchCount,
-    buffer->resource,
-    argsOffset,
-    NULL,
-    0u
-  );
-  return true;
 }
 
 GPU_HIDE
@@ -307,8 +315,7 @@ void
 dx12_endComputeEncoding(GPUComputePassEncoder *encoder) {
   GPUComputeEncoderDX12 *native;
 
-  native = dx12__computeEncoder(encoder);
-  if (!native) {
+  if (!(native = dx12__computeEncoder(encoder))) {
     return;
   }
 
@@ -317,17 +324,17 @@ dx12_endComputeEncoding(GPUComputePassEncoder *encoder) {
                        native->commandList);
   }
 
-  native->device           = NULL;
-  native->commandList      = NULL;
+  native->device                 = NULL;
+  native->commandList            = NULL;
 #if GPU_DX12_HAS_EXECUTION_GRAPHS
-  native->commandList10    = NULL;
+  native->commandList10          = NULL;
 #endif
-  native->rootSignature    = NULL;
-  native->resourceHeap     = NULL;
-  native->samplerHeap      = NULL;
-  native->executionGraph   = NULL;
+  native->rootSignature          = NULL;
+  native->resourceHeap           = NULL;
+  native->samplerHeap            = NULL;
+  native->executionGraph         = NULL;
   native->executionGraphInstance = NULL;
-  native->debugEventActive = false;
+  native->debugEventActive       = false;
 }
 
 GPU_HIDE

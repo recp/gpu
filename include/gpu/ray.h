@@ -31,12 +31,12 @@ extern "C" {
 
 typedef struct GPUAccelerationStructureEXT            GPUAccelerationStructureEXT;
 typedef struct GPUAccelerationStructurePassEncoderEXT GPUAccelerationStructurePassEncoderEXT;
-typedef struct GPUIntersectionFunctionTableEXT         GPUIntersectionFunctionTableEXT;
-typedef struct GPURayTracingPipelineEXT                GPURayTracingPipelineEXT;
-typedef struct GPUShaderTableEXT                       GPUShaderTableEXT;
-typedef struct GPURayTracingPassEncoderEXT             GPURayTracingPassEncoderEXT;
-typedef struct GPUComputePipeline                      GPUComputePipeline;
-typedef struct GPUComputePassEncoder                   GPUComputePassEncoder;
+typedef struct GPUIntersectionFunctionTableEXT        GPUIntersectionFunctionTableEXT;
+typedef struct GPURayTracingPipelineEXT               GPURayTracingPipelineEXT;
+typedef struct GPUShaderTableEXT                      GPUShaderTableEXT;
+typedef struct GPURayTracingPassEncoderEXT            GPURayTracingPassEncoderEXT;
+typedef struct GPUComputePipeline                     GPUComputePipeline;
+typedef struct GPUComputePassEncoder                  GPUComputePassEncoder;
 
 #ifndef GPU_RENDER_ENCODER_TYPES_DEFINED
 #define GPU_RENDER_ENCODER_TYPES_DEFINED
@@ -78,16 +78,16 @@ typedef enum GPUAccelerationStructureGeometryTypeEXT {
 } GPUAccelerationStructureGeometryTypeEXT;
 
 typedef struct GPUAccelerationStructureTriangleGeometryEXT {
-  GPUBuffer                                   *vertexBuffer;
-  GPUBuffer                                   *indexBuffer;
-  uint64_t                                     vertexOffset;
-  uint64_t                                     indexOffset;
-  uint32_t                                     vertexCount;
-  uint32_t                                     vertexStride;
-  uint32_t                                     indexCount;
-  GPUVertexFormat                              vertexFormat;
-  GPUIndexType                                 indexType;
-  GPUAccelerationStructureGeometryFlagsEXT     flags;
+  GPUBuffer                               *vertexBuffer;
+  GPUBuffer                               *indexBuffer;
+  uint64_t                                 vertexOffset;
+  uint64_t                                 indexOffset;
+  uint32_t                                 vertexCount;
+  uint32_t                                 vertexStride;
+  uint32_t                                 indexCount;
+  GPUVertexFormat                          vertexFormat;
+  GPUIndexType                             indexType;
+  GPUAccelerationStructureGeometryFlagsEXT flags;
 } GPUAccelerationStructureTriangleGeometryEXT;
 
 typedef struct GPUAccelerationStructureAABBGeometryEXT {
@@ -107,20 +107,20 @@ typedef struct GPUAccelerationStructureGeometryEXT {
 } GPUAccelerationStructureGeometryEXT;
 
 typedef struct GPUAccelerationStructureInstanceEXT {
-  GPUAccelerationStructureEXT              *structure;
-  float                                     transform[3][4];
-  uint32_t                                  hitGroupOffset;
-  GPUAccelerationStructureInstanceFlagsEXT  flags;
-  uint8_t                                   mask;
+  GPUAccelerationStructureEXT             *structure;
+  float                                    transform[3][4];
+  uint32_t                                 hitGroupOffset;
+  GPUAccelerationStructureInstanceFlagsEXT flags;
+  uint8_t                                  mask;
 } GPUAccelerationStructureInstanceEXT;
 
 typedef struct GPUAccelerationStructureBuildInfoEXT {
-  GPUChainedStruct                       chain;
-  const char                            *label;
-  GPUAccelerationStructureEXT           *source;
-  GPUAccelerationStructureTypeEXT        type;
-  GPUAccelerationStructureBuildFlagsEXT  flags;
-  GPUAccelerationStructureBuildModeEXT   mode;
+  GPUChainedStruct                      chain;
+  const char                           *label;
+  GPUAccelerationStructureEXT          *source;
+  GPUAccelerationStructureTypeEXT       type;
+  GPUAccelerationStructureBuildFlagsEXT flags;
+  GPUAccelerationStructureBuildModeEXT  mode;
   union {
     struct {
       const GPUAccelerationStructureGeometryEXT *pGeometries;
@@ -134,10 +134,10 @@ typedef struct GPUAccelerationStructureBuildInfoEXT {
 } GPUAccelerationStructureBuildInfoEXT;
 
 typedef struct GPUAccelerationStructureCreateInfoEXT {
-  GPUChainedStruct                 chain;
-  const char                      *label;
-  GPUAccelerationStructureTypeEXT  type;
-  uint64_t                         sizeBytes;
+  GPUChainedStruct                chain;
+  const char                     *label;
+  GPUAccelerationStructureTypeEXT type;
+  uint64_t                        sizeBytes;
 } GPUAccelerationStructureCreateInfoEXT;
 
 typedef struct GPUAccelerationStructureSizesEXT {
@@ -146,45 +146,9 @@ typedef struct GPUAccelerationStructureSizesEXT {
   uint64_t updateScratchSize;
 } GPUAccelerationStructureSizesEXT;
 
-GPU_EXPORT
-GPUResult
-GPUGetAccelerationStructureSizesEXT(
-  GPUDevice                                    *device,
-  const GPUAccelerationStructureBuildInfoEXT  *info,
-  GPUAccelerationStructureSizesEXT            *outSizes);
-
-GPU_EXPORT
-GPUResult
-GPUCreateAccelerationStructureEXT(
-  GPUDevice                                    *device,
-  const GPUAccelerationStructureCreateInfoEXT *info,
-  GPUAccelerationStructureEXT                **outStructure);
-
-GPU_EXPORT
-void
-GPUDestroyAccelerationStructureEXT(GPUAccelerationStructureEXT *structure);
-
-GPU_EXPORT
-GPUAccelerationStructurePassEncoderEXT *
-GPUBeginAccelerationStructurePassEXT(GPUCommandBuffer *cmdb,
-                                     const char       *label);
-
-GPU_EXPORT
-GPUResult
-GPUBuildAccelerationStructureEXT(
-  GPUAccelerationStructurePassEncoderEXT     *pass,
-  GPUAccelerationStructureEXT                *dst,
-  const GPUAccelerationStructureBuildInfoEXT *info,
-  GPUBuffer                                  *scratchBuffer,
-  uint64_t                                    scratchOffset);
-
-GPU_EXPORT
-void
-GPUEndAccelerationStructurePassEXT(GPUAccelerationStructurePassEncoderEXT *pass);
-
 typedef struct GPUIntersectionFunctionEXT {
-  const char          *entryPoint;
-  GPUShaderStageFlags  stage;
+  const char         *entryPoint;
+  GPUShaderStageFlags stage;
 } GPUIntersectionFunctionEXT;
 
 typedef struct GPUIntersectionFunctionPipelineEXT {
@@ -200,6 +164,84 @@ typedef struct GPUIntersectionFunctionTableCreateInfoEXT {
   GPURenderPipeline  *renderPipeline;
   GPUShaderStageFlags stage;
 } GPUIntersectionFunctionTableCreateInfoEXT;
+
+typedef enum GPURayTracingShaderGroupTypeEXT {
+  GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT        = 0,
+  GPU_RAY_TRACING_SHADER_GROUP_TRIANGLES_HIT_EXT  = 1,
+  GPU_RAY_TRACING_SHADER_GROUP_PROCEDURAL_HIT_EXT = 2
+} GPURayTracingShaderGroupTypeEXT;
+
+typedef struct GPURayTracingShaderGroupEXT {
+  const char                     *generalEntry;
+  const char                     *closestHitEntry;
+  const char                     *anyHitEntry;
+  const char                     *intersectionEntry;
+  GPURayTracingShaderGroupTypeEXT type;
+  GPUShaderStageFlags             generalStage;
+} GPURayTracingShaderGroupEXT;
+
+typedef struct GPURayTracingPipelineCreateInfoEXT {
+  GPUChainedStruct                   chain;
+  const char                        *label;
+  GPUShaderLibrary                  *library;
+  GPUPipelineLayout                 *layout;
+  GPUPipelineCache                  *cache;
+  const GPURayTracingShaderGroupEXT *pGroups;
+  uint32_t                           groupCount;
+  uint32_t                           maxRecursionDepth;
+  uint32_t                           maxPayloadSizeBytes;      /* 0 = infer from shader metadata. */
+  uint32_t                           maxHitAttributeSizeBytes; /* 0 = infer from shader metadata. */
+} GPURayTracingPipelineCreateInfoEXT;
+
+typedef struct GPUShaderTableRecordEXT {
+  uint32_t groupIndex;
+} GPUShaderTableRecordEXT;
+
+typedef struct GPUShaderTableCreateInfoEXT {
+  GPUChainedStruct               chain;
+  const char                    *label;
+  GPURayTracingPipelineEXT      *pipeline;
+  const GPUShaderTableRecordEXT *pRayGenerationRecord;
+  const GPUShaderTableRecordEXT *pMissRecords;
+  const GPUShaderTableRecordEXT *pHitGroupRecords;
+  const GPUShaderTableRecordEXT *pCallableRecords;
+  uint32_t                       missRecordCount;
+  uint32_t                       hitGroupRecordCount;
+  uint32_t                       callableRecordCount;
+} GPUShaderTableCreateInfoEXT;
+
+GPU_EXPORT
+GPUResult
+GPUGetAccelerationStructureSizesEXT(GPUDevice                                  *device,
+                                    const GPUAccelerationStructureBuildInfoEXT *info,
+                                    GPUAccelerationStructureSizesEXT           *outSizes);
+
+GPU_EXPORT
+GPUResult
+GPUCreateAccelerationStructureEXT(GPUDevice                                   *device,
+                                  const GPUAccelerationStructureCreateInfoEXT *info,
+                                  GPUAccelerationStructureEXT                **outStructure);
+
+GPU_EXPORT
+void
+GPUDestroyAccelerationStructureEXT(GPUAccelerationStructureEXT *structure);
+
+GPU_EXPORT
+GPUAccelerationStructurePassEncoderEXT*
+GPUBeginAccelerationStructurePassEXT(GPUCommandBuffer *cmdb,
+                                     const char       *label);
+
+GPU_EXPORT
+GPUResult
+GPUBuildAccelerationStructureEXT(GPUAccelerationStructurePassEncoderEXT     *pass,
+                                 GPUAccelerationStructureEXT                *dst,
+                                 const GPUAccelerationStructureBuildInfoEXT *info,
+                                 GPUBuffer                                  *scratchBuffer,
+                                 uint64_t                                    scratchOffset);
+
+GPU_EXPORT
+void
+GPUEndAccelerationStructurePassEXT(GPUAccelerationStructurePassEncoderEXT *pass);
 
 GPU_EXPORT
 GPUResult
@@ -230,51 +272,6 @@ GPUBindRenderIntersectionFunctionTableEXT(GPURenderPassEncoder            *pass,
                                           uint32_t                         index,
                                           GPUIntersectionFunctionTableEXT *table);
 
-typedef enum GPURayTracingShaderGroupTypeEXT {
-  GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT          = 0,
-  GPU_RAY_TRACING_SHADER_GROUP_TRIANGLES_HIT_EXT    = 1,
-  GPU_RAY_TRACING_SHADER_GROUP_PROCEDURAL_HIT_EXT   = 2
-} GPURayTracingShaderGroupTypeEXT;
-
-typedef struct GPURayTracingShaderGroupEXT {
-  const char                       *generalEntry;
-  const char                       *closestHitEntry;
-  const char                       *anyHitEntry;
-  const char                       *intersectionEntry;
-  GPURayTracingShaderGroupTypeEXT   type;
-  GPUShaderStageFlags               generalStage;
-} GPURayTracingShaderGroupEXT;
-
-typedef struct GPURayTracingPipelineCreateInfoEXT {
-  GPUChainedStruct                    chain;
-  const char                         *label;
-  GPUShaderLibrary                   *library;
-  GPUPipelineLayout                  *layout;
-  GPUPipelineCache                   *cache;
-  const GPURayTracingShaderGroupEXT  *pGroups;
-  uint32_t                            groupCount;
-  uint32_t                            maxRecursionDepth;
-  uint32_t                            maxPayloadSizeBytes;      /* 0 = infer from shader metadata. */
-  uint32_t                            maxHitAttributeSizeBytes; /* 0 = infer from shader metadata. */
-} GPURayTracingPipelineCreateInfoEXT;
-
-typedef struct GPUShaderTableRecordEXT {
-  uint32_t groupIndex;
-} GPUShaderTableRecordEXT;
-
-typedef struct GPUShaderTableCreateInfoEXT {
-  GPUChainedStruct               chain;
-  const char                    *label;
-  GPURayTracingPipelineEXT      *pipeline;
-  const GPUShaderTableRecordEXT *pRayGenerationRecord;
-  const GPUShaderTableRecordEXT *pMissRecords;
-  const GPUShaderTableRecordEXT *pHitGroupRecords;
-  const GPUShaderTableRecordEXT *pCallableRecords;
-  uint32_t                       missRecordCount;
-  uint32_t                       hitGroupRecordCount;
-  uint32_t                       callableRecordCount;
-} GPUShaderTableCreateInfoEXT;
-
 GPU_EXPORT
 GPUResult
 GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
@@ -296,7 +293,7 @@ void
 GPUDestroyShaderTableEXT(GPUShaderTableEXT *table);
 
 GPU_EXPORT
-GPURayTracingPassEncoderEXT *
+GPURayTracingPassEncoderEXT*
 GPUBeginRayTracingPassEXT(GPUCommandBuffer *cmdb, const char *label);
 
 GPU_EXPORT
@@ -307,10 +304,10 @@ GPUBindRayTracingPipelineEXT(GPURayTracingPassEncoderEXT *pass,
 GPU_EXPORT
 void
 GPUBindRayTracingGroupEXT(GPURayTracingPassEncoderEXT *pass,
-                          uint32_t                      groupIndex,
-                          GPUBindGroup                 *group,
-                          uint32_t                      dynamicOffsetCount,
-                          const uint32_t               *pDynamicOffsets);
+                          uint32_t                     groupIndex,
+                          GPUBindGroup                *group,
+                          uint32_t                     dynamicOffsetCount,
+                          const uint32_t              *pDynamicOffsets);
 
 GPU_EXPORT
 void

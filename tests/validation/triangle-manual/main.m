@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <AppKit/AppKit.h>
 #include <dispatch/dispatch.h>
 #include <math.h>
@@ -16,71 +32,78 @@ typedef struct FragmentUniforms {
   float tint[4];
 } FragmentUniforms;
 
+@interface TriangleApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
+@private
+  NSWindow *_window;
+  NSView   *_view;
+
+  GPUInstance        *_instance;
+  GPUAdapter         *_adapter;
+  GPUDevice          *_device;
+  GPUQueue           *_queue;
+  GPUSurface         *_surface;
+  GPUSwapchain       *_swapchain;
+  GPUShaderLibrary   *_library;
+  GPURenderPipeline  *_pipeline;
+  GPUBuffer          *_vertexBuffer;
+  GPUBuffer          *_fragmentUniformBuffer;
+  GPUBindGroupLayout *_fragmentLayout;
+  GPUPipelineLayout  *_pipelineLayout;
+  GPUBindGroup       *_fragmentGroup;
+  NSTimer            *_timer;
+  NSTimeInterval      _animationStart;
+  NSInteger           _exitAfterFrames;
+  NSInteger           _submittedFrames;
+  NSInteger           _completedFrames;
+  NSInteger           _resizeAfterFrames;
+  BOOL                _terminating;
+  BOOL                _resizeRequested;
+  BOOL                _resizeReady;
+  BOOL                _renderedAfterResize;
+  BOOL                _testFailed;
+}
+
+- (void)frameCompleted;
+- (BOOL)testFailed;
+@end
+
 static const TriangleVertex kTriangleVertices[] = {
   { {  0.0f,  0.65f }, { 1.0f, 0.2f, 0.2f, 1.0f } },
   { { -0.7f, -0.65f }, { 0.2f, 1.0f, 0.2f, 1.0f } },
   { {  0.7f, -0.65f }, { 0.2f, 0.4f, 1.0f, 1.0f } },
 };
 
-static GPUAdapter *
+static GPUAdapter*
 SelectAdapter(GPUInstance *instance) {
-  GPUAdapter *adapter = NULL;
-  uint32_t adapterCount = 1;
-  GPUResult result;
+  GPUAdapter *adapter      = NULL;
+  uint32_t    adapterCount = 1;
+  GPUResult   result;
 
   result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !adapter) {
     return NULL;
   }
+
   return adapter;
 }
 
-@interface TriangleApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
-@private
-  NSWindow *_window;
-  NSView *_view;
-
-  GPUInstance *_instance;
-  GPUAdapter *_adapter;
-  GPUDevice *_device;
-  GPUQueue        *_queue;
-  GPUSurface *_surface;
-  GPUSwapchain *_swapchain;
-  GPUShaderLibrary *_library;
-  GPURenderPipeline *_pipeline;
-  GPUBuffer *_vertexBuffer;
-  GPUBuffer *_fragmentUniformBuffer;
-  GPUBindGroupLayout *_fragmentLayout;
-  GPUPipelineLayout *_pipelineLayout;
-  GPUBindGroup *_fragmentGroup;
-  NSTimer *_timer;
-  NSTimeInterval _animationStart;
-  NSInteger _exitAfterFrames;
-  NSInteger _submittedFrames;
-  NSInteger _completedFrames;
-  NSInteger _resizeAfterFrames;
-  BOOL _terminating;
-  BOOL _resizeRequested;
-  BOOL _resizeReady;
-  BOOL _renderedAfterResize;
-  BOOL _testFailed;
-}
-- (void)frameCompleted;
-- (BOOL)testFailed;
-@end
-
 static void
 TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
+  TriangleApp *app;
+
   (void)cmdb;
-  TriangleApp *app = (__bridge TriangleApp *)sender;
+  app = (__bridge TriangleApp *)sender;
   [app frameCompleted];
 }
 
 @implementation TriangleApp
 
 - (BOOL)setupWindow {
-  NSRect frame = NSMakeRect(0, 0, 960, 640);
+  NSRect frame;
+
+  frame = NSMakeRect(0, 0, 960, 640);
 
   _window = [[NSWindow alloc] initWithContentRect:frame
                                         styleMask:(NSWindowStyleMaskTitled |
@@ -88,14 +111,16 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                                                    NSWindowStyleMaskResizable)
                                           backing:NSBackingStoreBuffered
                                             defer:NO];
+
   if (!_window) {
     return NO;
   }
 
-  _window.title = @"GPU Manual Triangle Tint";
+  _window.title    = @"GPU Manual Triangle Tint";
   _window.delegate = self;
 
   _view = [[NSView alloc] initWithFrame:frame];
+
   if (!_view) {
     return NO;
   }
@@ -109,13 +134,13 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (BOOL)setupGPU {
-  NSString *shaderText;
-  NSString *shaderPath;
-  NSString *executablePath;
-  NSString *sampleDir;
-
-  GPUSwapchainCreateInfo swapchainInfo = {0};
-  GPUShaderLibraryCreateInfo shaderInfo = {0};
+  GPUSwapchainCreateInfo     swapchainInfo = {0};
+  GPUShaderLibraryCreateInfo shaderInfo    = {0};
+  NSString                  *shaderText;
+  NSString                  *shaderPath;
+  NSString                  *executablePath;
+  NSString                  *sampleDir;
+  char                      *buffer;
 
   if (GPUCreateInstance(NULL, &_instance) != GPU_OK || !_instance) {
     NSLog(@"GPU: failed to create instance");
@@ -123,18 +148,21 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   _adapter = SelectAdapter(_instance);
+
   if (!_adapter) {
     NSLog(@"GPU: failed to get adapter");
     return NO;
   }
 
   _device = GPUCreateDeviceWithDefaultQueues(_adapter);
+
   if (!_device) {
     NSLog(@"GPU: failed to create device");
     return NO;
   }
 
   _queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0);
+
   if (!_queue) {
     NSLog(@"GPU: failed to get command queue");
     return NO;
@@ -145,6 +173,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                                         (__bridge void *)_view,
                                         GPU_SURFACE_APPLE_NSVIEW,
                                         _window.backingScaleFactor ?: 1.0f);
+
   if (!_surface) {
     NSLog(@"GPU: failed to create surface");
     return NO;
@@ -167,38 +196,43 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
   {
     uint32_t sizeBytes = 0;
+
     _NSGetExecutablePath(NULL, &sizeBytes);
-    char *buffer = malloc(sizeBytes);
-    if (!buffer) {
+
+    if (!(buffer = malloc(sizeBytes))) {
       return NO;
     }
+
     if (_NSGetExecutablePath(buffer, &sizeBytes) != 0) {
       free(buffer);
       return NO;
     }
+
     executablePath = [[NSFileManager defaultManager]
                       stringWithFileSystemRepresentation:buffer
                       length:strlen(buffer)];
     free(buffer);
   }
 
-  sampleDir = [executablePath stringByDeletingLastPathComponent];
+  sampleDir  = [executablePath stringByDeletingLastPathComponent];
   shaderPath = [sampleDir stringByAppendingPathComponent:@"triangle.usl.metal"];
   shaderText = [NSString stringWithContentsOfFile:shaderPath
                                          encoding:NSUTF8StringEncoding
                                             error:nil];
+
   if (!shaderText) {
     NSLog(@"GPU: failed to load shader source at %@", shaderPath);
     return NO;
   }
 
-  shaderInfo.label = "triangle.usl.metal";
-  shaderInfo.chain.sType = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
+  shaderInfo.label            = "triangle.usl.metal";
+  shaderInfo.chain.sType      = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
   shaderInfo.chain.structSize = sizeof(shaderInfo);
-  shaderInfo.sourceKind = GPU_SHADER_SOURCE_MSL_TEXT;
-  shaderInfo.sourceData = shaderText.UTF8String;
-  shaderInfo.sourceSize = (uint64_t)[shaderText lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
-  shaderInfo.sourcePathHint = shaderPath.UTF8String;
+  shaderInfo.sourceKind       = GPU_SHADER_SOURCE_MSL_TEXT;
+  shaderInfo.sourceData       = shaderText.UTF8String;
+  shaderInfo.sourceSize       = (uint64_t)[shaderText lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
+  shaderInfo.sourcePathHint   = shaderPath.UTF8String;
+
   if (GPUCreateShaderLibrary(_device, &shaderInfo, &_library) != 0) {
     NSLog(@"GPU: failed to create shader library");
     return NO;
@@ -220,6 +254,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .entryCount = 1,
     .pEntries = group0Entries
   };
+
   if (GPUCreateBindGroupLayout(_device, &group0LayoutInfo, &_fragmentLayout) != GPU_OK) {
     NSLog(@"GPU: failed to create fragment bind layout");
     return NO;
@@ -235,6 +270,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .pushConstantSizeBytes = 0,
     .pushConstantStages = 0
   };
+
   if (GPUCreatePipelineLayout(_device, &pipelineLayoutInfo, &_pipelineLayout) != GPU_OK) {
     NSLog(@"GPU: failed to create pipeline layout");
     return NO;
@@ -288,6 +324,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .frontFace = GPU_FRONT_FACE_CCW,
     .multisample = multisample
   };
+
   if (GPUCreateRenderPipeline(_device, &pipelineInfo, &_pipeline) != GPU_OK) {
     NSLog(@"GPU: failed to create render pipeline");
     return NO;
@@ -300,6 +337,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .sizeBytes = sizeof(kTriangleVertices),
     .usage = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST
   };
+
   if (GPUCreateBuffer(_device, &vertexBufferInfo, &_vertexBuffer) != GPU_OK) {
     NSLog(@"GPU: failed to create vertex buffer");
     return NO;
@@ -321,6 +359,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .sizeBytes = sizeof(FragmentUniforms),
     .usage = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST
   };
+
   if (GPUCreateBuffer(_device, &uniformBufferInfo, &_fragmentUniformBuffer) != GPU_OK) {
     NSLog(@"GPU: failed to create fragment uniform buffer");
     return NO;
@@ -345,6 +384,7 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .entryCount = 1,
     .pEntries = group0Bindings
   };
+
   if (GPUCreateBindGroup(_device, &group0Info, &_fragmentGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create fragment bind group");
     return NO;
@@ -355,9 +395,9 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
 - (void)updateFragmentUniforms {
   FragmentUniforms uniforms;
-  float time;
+  float            time;
 
-  time = (float)(CACurrentMediaTime() - _animationStart);
+  time             = (float)(CACurrentMediaTime() - _animationStart);
   uniforms.tint[0] = 0.6f + 0.4f * sinf(time * 1.1f);
   uniforms.tint[1] = 0.6f + 0.4f * sinf(time * 1.7f + 2.1f);
   uniforms.tint[2] = 0.6f + 0.4f * sinf(time * 1.3f + 4.2f);
@@ -370,15 +410,16 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (void)renderFrame {
-  GPUFrame *frame = NULL;
-  GPUCommandBuffer *cmdb = NULL;
-  GPUResult submitResult = GPU_OK;
-  GPURenderPassEncoder *encoder = NULL;
-  GPURenderPassColorAttachment color = {0};
-  GPURenderPassCreateInfo rp = {0};
-  GPUBufferBinding vertexBuffer = {0};
+  GPUFrame                    *frame        = NULL;
+  GPUCommandBuffer            *cmdb         = NULL;
+  GPUResult                    submitResult = GPU_OK;
+  GPURenderPassEncoder        *encoder      = NULL;
+  GPURenderPassColorAttachment color        = {0};
+  GPURenderPassCreateInfo      rp           = {0};
+  GPUBufferBinding             vertexBuffer = {0};
 
   frame = GPUBeginFrame(_swapchain);
+
   if (!frame) {
     return;
   }
@@ -386,23 +427,25 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (GPUAcquireCommandBuffer(_queue, "main-frame", &cmdb) != GPU_OK || !cmdb) {
     goto cleanup;
   }
+
   if (_exitAfterFrames > 0) {
     GPUSetCommandBufferCompletionHandler(cmdb, (__bridge void *)self, TriangleFrameComplete);
   }
 
-  color.view = GPUFrameGetTargetView(frame);
-  color.loadOp = GPU_LOAD_OP_CLEAR;
-  color.storeOp = GPU_STORE_OP_STORE;
+  color.view                  = GPUFrameGetTargetView(frame);
+  color.loadOp                = GPU_LOAD_OP_CLEAR;
+  color.storeOp               = GPU_STORE_OP_STORE;
   color.clearColor.float32[0] = 0.0f;
   color.clearColor.float32[1] = 0.0f;
   color.clearColor.float32[2] = 0.0f;
   color.clearColor.float32[3] = 1.0f;
 
-  rp.label = "triangle-manual-pass";
+  rp.label                = "triangle-manual-pass";
   rp.colorAttachmentCount = 1;
-  rp.pColorAttachments = &color;
+  rp.pColorAttachments    = &color;
 
   encoder = GPUBeginRenderPass(cmdb, &rp);
+
   if (!encoder) {
     goto cleanup;
   }
@@ -417,23 +460,27 @@ TriangleFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUBindRenderGroup(encoder, 0, _fragmentGroup, 0, NULL);
   GPUDraw(encoder, 3, 1, 0, 0);
   GPUEndRenderPass(encoder);
-  encoder = NULL;
+  encoder      = NULL;
   submitResult = GPUFinishFrame(_queue, cmdb, frame);
-  frame = NULL;
+  frame        = NULL;
+
   if (submitResult != GPU_OK) {
     NSLog(@"GPUFinishFrame failed: %d", submitResult);
   } else {
     _submittedFrames++;
+
     if (_resizeReady) {
       _renderedAfterResize = YES;
     }
-    if (_resizeAfterFrames > 0 && !_resizeRequested &&
-        _submittedFrames >= _resizeAfterFrames) {
+
+    if (_resizeAfterFrames > 0 && !_resizeRequested
+        && _submittedFrames >= _resizeAfterFrames) {
       _resizeRequested = YES;
       dispatch_async(dispatch_get_main_queue(), ^{
         [self->_window setContentSize:NSMakeSize(800.0, 520.0)];
       });
     }
+
     if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
       [_timer invalidate];
       _timer = nil;
@@ -444,19 +491,22 @@ cleanup:
   if (encoder) {
     GPUEndRenderPass(encoder);
   }
+
   GPUEndFrame(frame);
 }
 
 - (void)frameCompleted {
   dispatch_async(dispatch_get_main_queue(), ^{
     self->_completedFrames++;
-    if (self->_exitAfterFrames > 0 &&
-        self->_completedFrames >= self->_exitAfterFrames &&
-        !self->_terminating) {
-      if (self->_resizeAfterFrames > 0 &&
-          (!self->_resizeReady || !self->_renderedAfterResize)) {
+
+    if (self->_exitAfterFrames > 0
+        && self->_completedFrames >= self->_exitAfterFrames
+        && !self->_terminating) {
+      if (self->_resizeAfterFrames > 0
+          && (!self->_resizeReady || !self->_renderedAfterResize)) {
         self->_testFailed = YES;
       }
+
       self->_terminating = YES;
       [self->_timer invalidate];
       self->_timer = nil;
@@ -467,9 +517,11 @@ cleanup:
 
 - (void)tick:(NSTimer *)timer {
   (void)timer;
+
   if (_terminating) {
     return;
   }
+
   [self renderFrame];
 }
 
@@ -478,47 +530,57 @@ cleanup:
     GPUDestroyBindGroup(_fragmentGroup);
     _fragmentGroup = NULL;
   }
+
   if (_pipeline) {
     GPUDestroyRenderPipeline(_pipeline);
     _pipeline = NULL;
   }
+
   if (_fragmentUniformBuffer) {
     GPUDestroyBuffer(_fragmentUniformBuffer);
     _fragmentUniformBuffer = NULL;
   }
+
   if (_vertexBuffer) {
     GPUDestroyBuffer(_vertexBuffer);
     _vertexBuffer = NULL;
   }
+
   if (_pipelineLayout) {
     GPUDestroyPipelineLayout(_pipelineLayout);
     _pipelineLayout = NULL;
   }
+
   if (_fragmentLayout) {
     GPUDestroyBindGroupLayout(_fragmentLayout);
     _fragmentLayout = NULL;
   }
+
   if (_library) {
     GPUDestroyShaderLibrary(_library);
     _library = NULL;
   }
+
   if (_swapchain) {
     GPUDestroySwapchain(_swapchain);
     _swapchain = NULL;
   }
+
   if (_surface) {
     GPUDestroySurface(_surface);
     _surface = NULL;
   }
+
   if (_device) {
     GPUDestroyDevice(_device);
     _device = NULL;
-    _queue = NULL;
+    _queue  = NULL;
   }
+
   if (_instance) {
     GPUDestroyInstance(_instance);
     _instance = NULL;
-    _adapter = NULL;
+    _adapter  = NULL;
   }
 }
 
@@ -539,22 +601,27 @@ cleanup:
   }
 
   exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+
   if (exitAfterFrames && exitAfterFrames[0] != '\0') {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
+
     if (_exitAfterFrames < 1) {
       _exitAfterFrames = 1;
     }
   }
+
   resizeAfterFrames = getenv("GPU_SAMPLE_RESIZE_AFTER_FRAMES");
+
   if (resizeAfterFrames && resizeAfterFrames[0] != '\0') {
     _resizeAfterFrames = strtol(resizeAfterFrames, NULL, 10);
+
     if (_resizeAfterFrames < 1) {
       _resizeAfterFrames = 1;
     }
   }
 
   _animationStart = CACurrentMediaTime();
-  _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
+  _timer          = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
                                    target:self
                                  selector:@selector(tick:)
                                  userInfo:nil
@@ -582,10 +649,11 @@ cleanup:
 
 - (void)windowDidResize:(NSNotification *)notification {
   GPUResult result;
-  uint32_t width;
-  uint32_t height;
+  uint32_t  width;
+  uint32_t  height;
 
   (void)notification;
+
   if (!_swapchain || _terminating) {
     return;
   }
@@ -595,20 +663,22 @@ cleanup:
   result = width > 0u && height > 0u
              ? GPUResizeSwapchain(_swapchain, width, height)
              : GPU_ERROR_INVALID_ARGUMENT;
+
   if (result == GPU_OK) {
     if (_resizeRequested) {
-      _resizeReady = GPUGetSwapchainStatus(_swapchain) ==
-                     GPU_SWAPCHAIN_STATUS_READY;
+      _resizeReady = GPUGetSwapchainStatus(_swapchain) == GPU_SWAPCHAIN_STATUS_READY;
+
       if (!_resizeReady) {
-        _testFailed = YES;
+        _testFailed  = YES;
         _terminating = YES;
         [NSApp terminate:nil];
         return;
       }
     }
+
     [self renderFrame];
   } else if (_resizeRequested) {
-    _testFailed = YES;
+    _testFailed  = YES;
     _terminating = YES;
     [NSApp terminate:nil];
   }
@@ -623,10 +693,12 @@ cleanup:
 
 @end
 
-int main(int argc, const char * argv[]) {
+int
+main(int argc, const char * argv[]) {
   int result;
 
   result = 0;
+
   @autoreleasepool {
     TriangleApp *delegate;
 
@@ -640,5 +712,6 @@ int main(int argc, const char * argv[]) {
     [NSApp run];
     result = [delegate testFailed] ? 1 : 0;
   }
+
   return result;
 }

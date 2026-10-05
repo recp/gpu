@@ -1,14 +1,44 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <UIKit/UIKit.h>
 
 #include <stdint.h>
 
 #import "../../../include/gpu/gpu.h"
 
-int gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath);
-int gpu_test_intersection_function_table(GPUAdapter *adapter,
-                                         const char *bytecodePath);
+@interface RayQueryViewController : UIViewController {
+@private
+  UILabel *_statusLabel;
+  BOOL     _started;
+}
 
-static GPUAdapter *
+@end
+
+@interface RayQueryAppDelegate : UIResponder <UIApplicationDelegate>
+@property(nonatomic, strong) UIWindow *window;
+@end
+
+int
+gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath);
+int
+gpu_test_intersection_function_table(GPUAdapter *adapter,
+                                     const char *bytecodePath);
+
+static GPUAdapter*
 SelectAdapter(GPUInstance *instance) {
   GPUAdapter *adapter;
   uint32_t    count;
@@ -17,19 +47,14 @@ SelectAdapter(GPUInstance *instance) {
   adapter = NULL;
   count   = 1u;
   result  = GPUEnumerateAdapters(instance, &count, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !adapter) {
     return NULL;
   }
+
   return adapter;
 }
-
-@interface RayQueryViewController : UIViewController {
-@private
-  UILabel *_statusLabel;
-  BOOL     _started;
-}
-@end
 
 @implementation RayQueryViewController
 
@@ -42,11 +67,11 @@ SelectAdapter(GPUInstance *instance) {
   NSURL *intersectionURL;
   NSURL *rayQueryURL;
 
-  rayQueryURL = [NSBundle.mainBundle URLForResource:@"ray_query"
-                                     withExtension:@"us"];
-  intersectionURL =
-    [NSBundle.mainBundle URLForResource:@"intersection_function"
-                          withExtension:@"us"];
+  rayQueryURL     = [NSBundle.mainBundle URLForResource:@"ray_query"
+                                          withExtension:@"us"];
+  intersectionURL = [NSBundle.mainBundle URLForResource:@"intersection_function"
+                                          withExtension:@"us"];
+
   if (!rayQueryURL || !intersectionURL) {
     [self setStatus:@"RAY ARTIFACT MISSING" color:UIColor.redColor];
     return;
@@ -66,24 +91,22 @@ SelectAdapter(GPUInstance *instance) {
     intersectionSupported = NO;
     intersectionPassed    = NO;
     rayQueryPassed        = NO;
+
     if (GPUCreateInstance(NULL, &instance) == GPU_OK && instance) {
       adapter               = SelectAdapter(instance);
-      supported             = adapter &&
-        GPUIsFeatureSupported(adapter, GPU_FEATURE_RAY_QUERY);
-      intersectionSupported = adapter &&
-        GPUIsFeatureSupported(adapter,
-                              GPU_FEATURE_INTERSECTION_FUNCTION_TABLE);
+      supported             = adapter && GPUIsFeatureSupported(adapter, GPU_FEATURE_RAY_QUERY);
+      intersectionSupported = adapter
+                              && GPUIsFeatureSupported(adapter,
+                                                       GPU_FEATURE_INTERSECTION_FUNCTION_TABLE);
+
       if (supported && intersectionSupported) {
-        rayQueryPassed = gpu_test_ray_query(
-          adapter,
-          rayQueryURL.fileSystemRepresentation
-        );
-        intersectionPassed = gpu_test_intersection_function_table(
-          adapter,
-          intersectionURL.fileSystemRepresentation
-        );
+        rayQueryPassed     = gpu_test_ray_query(adapter,
+                                                rayQueryURL.fileSystemRepresentation);
+        intersectionPassed = gpu_test_intersection_function_table(adapter,
+                                                                  intersectionURL.fileSystemRepresentation);
       }
     }
+
     GPUDestroyInstance(instance);
 
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -109,8 +132,9 @@ SelectAdapter(GPUInstance *instance) {
 
   _statusLabel = [UILabel new];
   _statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
+
   _statusLabel.font          = [UIFont monospacedSystemFontOfSize:24.0
-                                                          weight:UIFontWeightBold];
+                                                           weight:UIFontWeightBold];
   _statusLabel.text          = @"RAY + IFT RUNNING";
   _statusLabel.textColor     = UIColor.blackColor;
   _statusLabel.textAlignment = NSTextAlignmentCenter;
@@ -123,16 +147,13 @@ SelectAdapter(GPUInstance *instance) {
 
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
+
   if (!_started) {
     _started = YES;
     [self runCheck];
   }
 }
 
-@end
-
-@interface RayQueryAppDelegate : UIResponder <UIApplicationDelegate>
-@property(nonatomic, strong) UIWindow *window;
 @end
 
 @implementation RayQueryAppDelegate
@@ -143,10 +164,12 @@ SelectAdapter(GPUInstance *instance) {
 
   (void)application;
   (void)launchOptions;
-  controller = [RayQueryViewController new];
-  self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
+
+  controller                     = [RayQueryViewController new];
+  self.window                    = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.rootViewController = controller;
   [self.window makeKeyAndVisible];
+
   return YES;
 }
 

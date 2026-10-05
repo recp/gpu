@@ -63,7 +63,7 @@ typedef struct GPUSamplerFeedbackDecodeInfoEXT {
 
 GPU_EXPORT
 GPUResult
-GPUGetSamplerFeedbackPropertiesEXT(const GPUAdapter                 *adapter,
+GPUGetSamplerFeedbackPropertiesEXT(const GPUAdapter                *adapter,
                                    GPUSamplerFeedbackPropertiesEXT *outProperties);
 
 GPU_EXPORT
@@ -78,7 +78,7 @@ GPUDestroySamplerFeedbackMapEXT(GPUSamplerFeedbackMapEXT *map);
 
 GPU_EXPORT
 GPUResult
-GPUGetSamplerFeedbackDecodeInfoEXT(const GPUSamplerFeedbackMapEXT *map,
+GPUGetSamplerFeedbackDecodeInfoEXT(const GPUSamplerFeedbackMapEXT  *map,
                                    GPUSamplerFeedbackDecodeInfoEXT *outInfo);
 
 GPU_EXPORT

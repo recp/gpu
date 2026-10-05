@@ -23,40 +23,34 @@ extern "C" {
 #include <gpu/vrs.h>
 
 typedef struct GPUApiVRS {
-  void (*getCapabilities)(const GPUAdapter      *adapter,
-                          GPUVRSCapabilitiesEXT *outCaps);
-  GPUResult (*createRateMap)(
-    GPUDevice                                  *device,
-    const GPURasterizationRateMapCreateInfoEXT *info,
-    GPURasterizationRateMapEXT                **outMap
-  );
+  void (*getCapabilities)(const GPUAdapter *adapter, GPUVRSCapabilitiesEXT *outCaps);
+
+  GPUResult
+  (*createRateMap)(GPUDevice                                  *device,
+                   const GPURasterizationRateMapCreateInfoEXT *info,
+                   GPURasterizationRateMapEXT                **outMap);
+
   void (*destroyRateMap)(GPURasterizationRateMapEXT *map);
-  GPUResult (*getRateMapPhysicalSize)(
-    const GPURasterizationRateMapEXT *map,
-    uint32_t                           layer,
-    GPUExtent2D                       *outSize
-  );
-  GPUResult (*mapRateMapScreenToPhysical)(
-    const GPURasterizationRateMapEXT *map,
-    uint32_t                           layer,
-    GPUCoordinate2D                    screen,
-    GPUCoordinate2D                   *outPhysical
-  );
-  GPUResult (*mapRateMapPhysicalToScreen)(
-    const GPURasterizationRateMapEXT *map,
-    uint32_t                           layer,
-    GPUCoordinate2D                    physical,
-    GPUCoordinate2D                   *outScreen
-  );
-  GPUResult (*getRateMapParameterInfo)(
-    const GPURasterizationRateMapEXT         *map,
-    GPURasterizationRateMapParameterInfoEXT  *outInfo
-  );
-  GPUResult (*copyRateMapParameters)(
-    const GPURasterizationRateMapEXT *map,
-    GPUBuffer                        *buffer,
-    uint64_t                          offset
-  );
+
+  GPUResult (*getRateMapPhysicalSize)(const GPURasterizationRateMapEXT *map, uint32_t layer, GPUExtent2D *outSize);
+
+  GPUResult
+  (*mapRateMapScreenToPhysical)(const GPURasterizationRateMapEXT *map,
+                                uint32_t                          layer,
+                                GPUCoordinate2D                   screen,
+                                GPUCoordinate2D                  *outPhysical);
+
+  GPUResult
+  (*mapRateMapPhysicalToScreen)(const GPURasterizationRateMapEXT *map,
+                                uint32_t                          layer,
+                                GPUCoordinate2D                   physical,
+                                GPUCoordinate2D                  *outScreen);
+
+  GPUResult
+  (*getRateMapParameterInfo)(const GPURasterizationRateMapEXT        *map,
+                             GPURasterizationRateMapParameterInfoEXT *outInfo);
+
+  GPUResult (*copyRateMapParameters)(const GPURasterizationRateMapEXT *map, GPUBuffer *buffer, uint64_t offset);
 } GPUApiVRS;
 
 #ifdef __cplusplus

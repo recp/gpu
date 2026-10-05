@@ -66,6 +66,7 @@ enum {
 typedef enum GPUShadingRateCombinerEXT {
   GPU_SHADING_RATE_COMBINER_KEEP_EXT = 0,
   GPU_SHADING_RATE_COMBINER_REPLACE_EXT,
+
   /* MIN/MAX select the component-wise fragment footprint. */
   GPU_SHADING_RATE_COMBINER_MIN_EXT,
   GPU_SHADING_RATE_COMBINER_MAX_EXT
@@ -110,8 +111,8 @@ typedef struct GPURasterizationRateMapCreateInfoEXT {
 } GPURasterizationRateMapCreateInfoEXT;
 
 typedef struct GPURasterizationRateMapRenderPassEXT {
-  GPUChainedStruct             chain;
-  GPURasterizationRateMapEXT  *map;
+  GPUChainedStruct            chain;
+  GPURasterizationRateMapEXT *map;
 } GPURasterizationRateMapRenderPassEXT;
 
 typedef struct GPURasterizationRateMapParameterInfoEXT {
@@ -126,11 +127,9 @@ GPUGetVRSCapabilitiesEXT(const GPUAdapter      *adapter,
 
 GPU_EXPORT
 GPUResult
-GPUCreateRasterizationRateMapEXT(
-  GPUDevice                                  *device,
-  const GPURasterizationRateMapCreateInfoEXT *info,
-  GPURasterizationRateMapEXT                **outMap
-);
+GPUCreateRasterizationRateMapEXT(GPUDevice                                  *device,
+                                 const GPURasterizationRateMapCreateInfoEXT *info,
+                                 GPURasterizationRateMapEXT                **outMap);
 
 GPU_EXPORT
 void
@@ -138,57 +137,45 @@ GPUDestroyRasterizationRateMapEXT(GPURasterizationRateMapEXT *map);
 
 GPU_EXPORT
 GPUResult
-GPUGetRasterizationRateMapPhysicalSizeEXT(
-  const GPURasterizationRateMapEXT *map,
-  uint32_t                          layer,
-  GPUExtent2D                      *outSize
-);
+GPUGetRasterizationRateMapPhysicalSizeEXT(const GPURasterizationRateMapEXT *map,
+                                          uint32_t                          layer,
+                                          GPUExtent2D                      *outSize);
 
 /* maps logical screen coordinates into the physical intermediate target. */
 GPU_EXPORT
 GPUResult
-GPUMapRasterizationRateScreenToPhysicalEXT(
-  const GPURasterizationRateMapEXT *map,
-  uint32_t                          layer,
-  GPUCoordinate2D                   screen,
-  GPUCoordinate2D                  *outPhysical
-);
+GPUMapRasterizationRateScreenToPhysicalEXT(const GPURasterizationRateMapEXT *map,
+                                           uint32_t                          layer,
+                                           GPUCoordinate2D                   screen,
+                                           GPUCoordinate2D                  *outPhysical);
 
 /* maps physical intermediate coordinates back into logical screen space. */
 GPU_EXPORT
 GPUResult
-GPUMapRasterizationRatePhysicalToScreenEXT(
-  const GPURasterizationRateMapEXT *map,
-  uint32_t                          layer,
-  GPUCoordinate2D                   physical,
-  GPUCoordinate2D                  *outScreen
-);
+GPUMapRasterizationRatePhysicalToScreenEXT(const GPURasterizationRateMapEXT *map,
+                                           uint32_t                          layer,
+                                           GPUCoordinate2D                   physical,
+                                           GPUCoordinate2D                  *outScreen);
 
 /* returns the size and alignment of shader-visible map parameters. */
 GPU_EXPORT
 GPUResult
-GPUGetRasterizationRateMapParameterInfoEXT(
-  const GPURasterizationRateMapEXT         *map,
-  GPURasterizationRateMapParameterInfoEXT  *outInfo
-);
+GPUGetRasterizationRateMapParameterInfoEXT(const GPURasterizationRateMapEXT        *map,
+                                           GPURasterizationRateMapParameterInfoEXT *outInfo);
 
 /* copies parameters to an aligned GPU_BUFFER_USAGE_UNIFORM range. */
 GPU_EXPORT
 GPUResult
-GPUCopyRasterizationRateMapParametersEXT(
-  const GPURasterizationRateMapEXT *map,
-  GPUBuffer                        *buffer,
-  uint64_t                          offset
-);
+GPUCopyRasterizationRateMapParametersEXT(const GPURasterizationRateMapEXT *map,
+                                         GPUBuffer                        *buffer,
+                                         uint64_t                          offset);
 
 GPU_EXPORT
 void
-GPUSetFragmentShadingRateEXT(
-  GPURenderPassEncoder      *pass,
-  GPUShadingRateEXT          rate,
-  GPUShadingRateCombinerEXT  primitiveCombiner,
-  GPUShadingRateCombinerEXT  attachmentCombiner
-);
+GPUSetFragmentShadingRateEXT(GPURenderPassEncoder     *pass,
+                             GPUShadingRateEXT         rate,
+                             GPUShadingRateCombinerEXT primitiveCombiner,
+                             GPUShadingRateCombinerEXT attachmentCombiner);
 
 #ifdef __cplusplus
 }

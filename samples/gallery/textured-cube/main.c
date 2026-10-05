@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 #include "../../common/sample_orbit.h"
 #include "CubeData.h"
@@ -47,6 +63,7 @@ create_depth_target(WebGPUTexturedCube *state,
 
   texture = NULL;
   view    = NULL;
+
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "textured-cube-depth";
@@ -58,6 +75,7 @@ create_depth_target(WebGPUTexturedCube *state,
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
+
   if (GPUCreateTexture(state->device, &textureInfo, &texture) != GPU_OK) {
     return 0;
   }
@@ -69,6 +87,7 @@ create_depth_target(WebGPUTexturedCube *state,
   viewInfo.format           = GPU_FORMAT_DEPTH32_FLOAT;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK) {
     GPUDestroyTexture(texture);
     return 0;
@@ -78,6 +97,7 @@ create_depth_target(WebGPUTexturedCube *state,
   GPUDestroyTexture(state->depthTexture);
   state->depthTexture = texture;
   state->depthView    = view;
+
   return 1;
 }
 
@@ -88,79 +108,90 @@ resize_canvas(WebGPUTexturedCube *state) {
 
   oldWidth  = state->width;
   oldHeight = state->height;
+
   if (!resize_webgpu_canvas(state->swapchain,
                             &state->width,
                             &state->height)) {
     return 0;
   }
+
   if (oldWidth == state->width && oldHeight == state->height) {
     return 1;
   }
-  if (state->swapchain &&
-      !create_depth_target(state, state->width, state->height)) {
+
+  if (state->swapchain
+      && !create_depth_target(state, state->width, state->height)) {
     state->width  = 0u;
     state->height = 0u;
     return 0;
   }
+
   CubeBuildViewProjection(gpu_sample_aspect_ratio(state->width, state->height),
                           state->viewProjection);
+
   return 1;
 }
 
 static int
 create_pipeline(WebGPUTexturedCube *state) {
   GPUVertexAttribute          attributes[3] = {0};
-  GPUVertexBufferLayout       vertexLayout  = {0};
-  GPUColorTargetState         color         = {0};
-  GPUDepthStencilState        depth         = {0};
   GPURenderPipelineCreateInfo info          = {0};
+  GPUDepthStencilState        depth         = {0};
+  GPUColorTargetState         color         = {0};
+  GPUVertexBufferLayout       vertexLayout  = {0};
   void                       *artifact;
   uint64_t                    artifactSize;
   GPUResult                   result;
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/textured_cube.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /textured_cube.us", 1);
     return 0;
   }
+
   result = GPUCreateShaderLibraryFromUSL(state->device,
                                          artifact,
                                          artifactSize,
                                          &state->library);
   free(artifact);
+
   if (result != GPU_OK || !state->library) {
     set_status("GPU: failed to compile the textured cube artifact", 1);
     return 0;
   }
+
   if (GPUCreateShaderLayout(state->device,
                             state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 2u ||
-      !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0] ||
-      !state->shaderLayout->bindGroupLayouts[1]) {
+                            &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 2u
+      || !state->shaderLayout->bindGroupLayouts
+      || !state->shaderLayout->bindGroupLayouts[0]
+      || !state->shaderLayout->bindGroupLayouts[1]) {
     set_status("GPU: unexpected textured cube reflection", 1);
     return 0;
   }
 
-  attributes[0].format          = GPU_VERTEX_FORMAT_FLOAT32X3;
-  attributes[0].offset          = offsetof(CubeVertex, position);
+  attributes[0].format         = GPU_VERTEX_FORMAT_FLOAT32X3;
+  attributes[0].offset         = offsetof(CubeVertex, position);
   attributes[0].shaderLocation = 0u;
-  attributes[1].format          = GPU_VERTEX_FORMAT_FLOAT32X3;
-  attributes[1].offset          = offsetof(CubeVertex, normal);
+  attributes[1].format         = GPU_VERTEX_FORMAT_FLOAT32X3;
+  attributes[1].offset         = offsetof(CubeVertex, normal);
   attributes[1].shaderLocation = 1u;
-  attributes[2].format          = GPU_VERTEX_FORMAT_FLOAT32X2;
-  attributes[2].offset          = offsetof(CubeVertex, uv);
+  attributes[2].format         = GPU_VERTEX_FORMAT_FLOAT32X2;
+  attributes[2].offset         = offsetof(CubeVertex, uv);
   attributes[2].shaderLocation = 2u;
-  vertexLayout.pAttributes      = attributes;
-  vertexLayout.strideBytes      = sizeof(CubeVertex);
-  vertexLayout.attributeCount   = 3u;
-  vertexLayout.stepMode         = GPU_VERTEX_STEP_MODE_VERTEX;
+
+  vertexLayout.pAttributes    = attributes;
+  vertexLayout.strideBytes    = sizeof(CubeVertex);
+  vertexLayout.attributeCount = 3u;
+  vertexLayout.stepMode       = GPU_VERTEX_STEP_MODE_VERTEX;
 
   color.format          = GPUGetSwapchainFormat(state->swapchain);
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
+
   depth.depthCompare     = GPU_COMPARE_LESS;
   depth.depthTestEnable  = true;
   depth.depthWriteEnable = true;
@@ -183,11 +214,14 @@ create_pipeline(WebGPUTexturedCube *state) {
   info.frontFace                = GPU_FRONT_FACE_CCW;
   info.multisample.sampleCount  = 1u;
   info.multisample.sampleMask   = UINT32_MAX;
+
   result = GPUCreateRenderPipeline(state->device, &info, &state->pipeline);
+
   if (result != GPU_OK || !state->pipeline) {
     set_status("GPU: failed to create the textured cube pipeline", 1);
     return 0;
   }
+
   return 1;
 }
 
@@ -207,55 +241,59 @@ create_geometry(WebGPUTexturedCube *state) {
   info.label            = "textured-cube-vertices";
   info.sizeBytes        = sizeof(kCubeVertices);
   info.usage            = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(state->device, &info, &state->vertexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->vertexBuffer,
-                          0u,
-                          kCubeVertices,
-                          sizeof(kCubeVertices)) != GPU_OK) {
+
+  if (GPUCreateBuffer(state->device, &info, &state->vertexBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->vertexBuffer,
+                             0u,
+                             kCubeVertices,
+                             sizeof(kCubeVertices)) != GPU_OK) {
     return 0;
   }
 
   info.label     = "textured-cube-indices";
   info.sizeBytes = sizeof(kCubeIndices);
   info.usage     = GPU_BUFFER_USAGE_INDEX | GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(state->device, &info, &state->indexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->indexBuffer,
-                          0u,
-                          kCubeIndices,
-                          sizeof(kCubeIndices)) != GPU_OK) {
+
+  if (GPUCreateBuffer(state->device, &info, &state->indexBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->indexBuffer,
+                             0u,
+                             kCubeIndices,
+                             sizeof(kCubeIndices)) != GPU_OK) {
     return 0;
   }
 
   info.label     = "textured-cube-uniforms";
   info.sizeBytes = sizeof(uniforms);
   info.usage     = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(state->device, &info, &state->uniformBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->uniformBuffer,
-                          0u,
-                          &uniforms,
-                          sizeof(uniforms)) != GPU_OK) {
+
+  if (GPUCreateBuffer(state->device, &info, &state->uniformBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->uniformBuffer,
+                             0u,
+                             &uniforms,
+                             sizeof(uniforms)) != GPU_OK) {
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_material(WebGPUTexturedCube *state) {
-  uint8_t                       pixels[CUBE_CHECKER_SIZE *
-                                       CUBE_CHECKER_SIZE * 4u];
-  GPUTextureCreateInfo          textureInfo       = {0};
-  GPUTextureWriteRegion         writeRegion       = {0};
-  GPUTextureViewCreateInfo      viewInfo          = {0};
-  GPUSamplerCreateInfo          samplerInfo       = {0};
-  GPUBindGroupEntry            materialEntries[2] = {0};
-  GPUBindGroupEntry             samplerEntry      = {0};
-  GPUBindGroupCreateInfo        materialInfo      = {0};
-  GPUBindGroupCreateInfo        samplerGroupInfo  = {0};
+  uint8_t                  pixels[CUBE_CHECKER_SIZE * CUBE_CHECKER_SIZE * 4u];
+  GPUBindGroupEntry        materialEntries[2] = {0};
+  GPUTextureCreateInfo     textureInfo        = {0};
+  GPUSamplerCreateInfo     samplerInfo        = {0};
+  GPUBindGroupCreateInfo   materialInfo       = {0};
+  GPUBindGroupCreateInfo   samplerGroupInfo   = {0};
+  GPUBindGroupEntry        samplerEntry       = {0};
+  GPUTextureViewCreateInfo viewInfo           = {0};
+  GPUTextureWriteRegion    writeRegion        = {0};
 
   CubeFillChecker(pixels);
+
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "textured-cube-checker";
@@ -266,8 +304,8 @@ create_material(WebGPUTexturedCube *state) {
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
-  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
-                                 GPU_TEXTURE_USAGE_COPY_DST;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
+
   if (GPUCreateTexture(state->device,
                        &textureInfo,
                        &state->texture) != GPU_OK) {
@@ -281,6 +319,7 @@ create_material(WebGPUTexturedCube *state) {
   writeRegion.layerCount   = 1u;
   writeRegion.bytesPerRow  = CUBE_CHECKER_SIZE * 4u;
   writeRegion.rowsPerImage = CUBE_CHECKER_SIZE;
+
   if (GPUQueueWriteTexture(state->queue,
                            state->texture,
                            &writeRegion,
@@ -296,6 +335,7 @@ create_material(WebGPUTexturedCube *state) {
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(state->texture,
                            &viewInfo,
                            &state->textureView) != GPU_OK) {
@@ -311,6 +351,7 @@ create_material(WebGPUTexturedCube *state) {
   samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_REPEAT;
   samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_REPEAT;
   samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_REPEAT;
+
   if (GPUCreateSampler(state->device,
                        &samplerInfo,
                        false,
@@ -325,32 +366,37 @@ create_material(WebGPUTexturedCube *state) {
   materialEntries[1].textureView   = state->textureView;
   materialEntries[1].binding       = 1u;
   materialEntries[1].bindingType   = GPU_BINDING_SAMPLED_TEXTURE;
-  materialInfo.chain.sType         = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
-  materialInfo.chain.structSize    = sizeof(materialInfo);
-  materialInfo.label               = "textured-cube-group0";
-  materialInfo.layout              = state->shaderLayout->bindGroupLayouts[0];
-  materialInfo.pEntries            = materialEntries;
-  materialInfo.entryCount          = 2u;
+
+  materialInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  materialInfo.chain.structSize = sizeof(materialInfo);
+  materialInfo.label            = "textured-cube-group0";
+  materialInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
+  materialInfo.pEntries         = materialEntries;
+  materialInfo.entryCount       = 2u;
+
   if (GPUCreateBindGroup(state->device,
                          &materialInfo,
                          &state->materialGroup) != GPU_OK) {
     return 0;
   }
 
-  samplerEntry.sampler           = state->sampler;
-  samplerEntry.binding           = 0u;
-  samplerEntry.bindingType       = GPU_BINDING_SAMPLER;
+  samplerEntry.sampler     = state->sampler;
+  samplerEntry.binding     = 0u;
+  samplerEntry.bindingType = GPU_BINDING_SAMPLER;
+
   samplerGroupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   samplerGroupInfo.chain.structSize = sizeof(samplerGroupInfo);
   samplerGroupInfo.label            = "textured-cube-group1";
   samplerGroupInfo.layout           = state->shaderLayout->bindGroupLayouts[1];
   samplerGroupInfo.pEntries         = &samplerEntry;
   samplerGroupInfo.entryCount       = 1u;
+
   if (GPUCreateBindGroup(state->device,
                          &samplerGroupInfo,
                          &state->samplerGroup) != GPU_OK) {
     return 0;
   }
+
   return 1;
 }
 
@@ -364,6 +410,7 @@ update_uniforms(WebGPUTexturedCube *state) {
                     state->orbit.zoom,
                     state->viewProjection,
                     &uniforms);
+
   return GPUQueueWriteBuffer(state->queue,
                              state->uniformBuffer,
                              0u,
@@ -373,25 +420,29 @@ update_uniforms(WebGPUTexturedCube *state) {
 
 static void
 render_frame(void *userData) {
-  WebGPUTexturedCube                *state;
-  GPUFrame                          *frame;
-  GPUCommandBuffer                  *cmdb;
-  GPURenderPassEncoder              *pass;
-  GPUBufferBinding                   vertexBuffer = {0};
-  GPURenderPassColorAttachment       color        = {0};
-  GPURenderPassDepthStencilAttachment depth       = {0};
-  GPURenderPassCreateInfo            passInfo     = {0};
+  GPUCommandBuffer                   *cmdb;
+  GPUFrameStats                       stats;
+  GPUBufferBinding                    vertexBuffer = {0};
+  GPURenderPassColorAttachment        color        = {0};
+  GPURenderPassCreateInfo             passInfo     = {0};
+  GPURenderPassDepthStencilAttachment depth        = {0};
+  WebGPUTexturedCube                 *state;
+  GPUFrame                           *frame;
+  GPURenderPassEncoder               *pass;
 
   state = userData;
+
   if (!resize_canvas(state) || !update_uniforms(state)) {
     set_status("GPU: failed to update textured cube frame", 1);
     emscripten_cancel_main_loop();
     return;
   }
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) return;
+  if (!(frame = GPUBeginFrame(state->swapchain)))
+    return;
+
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(state->queue,
                               "textured-cube-webgpu-frame",
                               &cmdb) != GPU_OK || !cmdb) {
@@ -406,26 +457,29 @@ render_frame(void *userData) {
   color.clearColor.float32[1] = 0.018f;
   color.clearColor.float32[2] = 0.048f;
   color.clearColor.float32[3] = 1.0f;
-  depth.view                  = state->depthView;
-  depth.depthLoadOp           = GPU_LOAD_OP_CLEAR;
-  depth.depthStoreOp          = GPU_STORE_OP_DONT_CARE;
-  depth.stencilLoadOp         = GPU_LOAD_OP_DONT_CARE;
-  depth.stencilStoreOp        = GPU_STORE_OP_DONT_CARE;
-  depth.clearDepth            = 1.0f;
+
+  depth.view           = state->depthView;
+  depth.depthLoadOp    = GPU_LOAD_OP_CLEAR;
+  depth.depthStoreOp   = GPU_STORE_OP_DONT_CARE;
+  depth.stencilLoadOp  = GPU_LOAD_OP_DONT_CARE;
+  depth.stencilStoreOp = GPU_STORE_OP_DONT_CARE;
+  depth.clearDepth     = 1.0f;
+
   passInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize        = sizeof(passInfo);
   passInfo.label                   = "textured-cube-webgpu-pass";
   passInfo.pColorAttachments       = &color;
   passInfo.pDepthStencilAttachment = &depth;
   passInfo.colorAttachmentCount    = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
   }
 
   vertexBuffer.buffer = state->vertexBuffer;
+
   GPUBindRenderPipeline(pass, state->pipeline);
   GPUBindRenderGroup(pass, 0u, state->materialGroup, 0u, NULL);
   GPUBindRenderGroup(pass, 1u, state->samplerGroup, 0u, NULL);
@@ -433,15 +487,15 @@ render_frame(void *userData) {
   GPUBindIndexBuffer(pass, state->indexBuffer, 0u, GPU_INDEX_TYPE_UINT16);
   GPUDrawIndexed(pass, CUBE_INDEX_COUNT, 1u, 0u, 0, 0u);
   GPUEndRenderPass(pass);
+
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     set_status("GPU: failed to finish the textured cube frame", 1);
   } else {
-    GPUFrameStats stats;
-
     state->frameCount++;
-    if (state->frameCount > WARM_FRAME_COUNT &&
-        GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.hotPathAllocCount != 0u || stats.hotPathFreeCount != 0u)) {
+
+    if (state->frameCount > WARM_FRAME_COUNT
+        && GPUGetLastFrameStats(state->device, &stats) == GPU_OK
+        && (stats.hotPathAllocCount != 0u || stats.hotPathFreeCount != 0u)) {
       set_status("GPU: warm textured cube frame allocated wrapper memory", 1);
       emscripten_cancel_main_loop();
     }
@@ -449,14 +503,15 @@ render_frame(void *userData) {
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
+  GPURuntimeConfig    runtime = {0};
   WebGPUTexturedCube *state;
-  GPURuntimeConfig   runtime = {0};
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status(!adapter ? "GPU: failed to request WebGPU adapter"
                         : "GPU: failed to request WebGPU device",
@@ -467,35 +522,39 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (GPUConfigureRuntime(device, &runtime) != GPU_OK) {
     set_status("GPU: failed to configure WebGPU runtime stats", 1);
     return;
   }
 
   state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               state->adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
+                                              state->adapter,
+                                              (void *)"#canvas",
+                                              GPU_SURFACE_WEB_CANVAS,
+                                              1.0f);
+
   if (!state->queue || !state->surface || !resize_canvas(state)) {
     set_status("GPU: failed to create WebGPU queue or canvas surface", 1);
     return;
   }
 
   state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
+                                               state->surface,
+                                               state->width,
+                                               state->height);
   sample_orbit_init(&state->orbit, 0.0f, 0.0f, 0.72f, 0.43f);
-  if (!state->swapchain ||
-      !create_depth_target(state, state->width, state->height) ||
-      !create_pipeline(state) ||
-      !create_geometry(state) ||
-      !create_material(state)) {
+
+  if (!state->swapchain
+      || !create_depth_target(state, state->width, state->height)
+      || !create_pipeline(state)
+      || !create_geometry(state)
+      || !create_material(state)) {
     set_status("GPU: failed to initialize textured cube resources", 1);
     return;
   }
@@ -515,7 +574,9 @@ main(void) {
   info.label            = "textured-cube-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create WebGPU instance", 1);
     return 1;
@@ -526,8 +587,10 @@ main(void) {
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   if (result != GPU_OK) {
     return 1;
   }
+
   return 0;
 }

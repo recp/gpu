@@ -31,41 +31,44 @@ GPUResult
 vk_createComputePipeline(GPUDevice                          *device,
                          const GPUComputePipelineCreateInfo *info,
                          GPUComputePipeline                 *pipeline) {
+  VkPipelineShaderStageCreateInfo stage        = {0};
+  VkComputePipelineCreateInfo     pipelineInfo = {0};
   GPUDeviceVk                    *deviceVk;
-  GPUShaderLibraryVk                   *library;
+  GPUShaderLibraryVk             *library;
   GPUPipelineLayoutVk            *layout;
   GPUComputePipelineState        *state;
   GPUComputePipelineVk           *native;
-  VkPipelineShaderStageCreateInfo stage        = {0};
-  VkComputePipelineCreateInfo     pipelineInfo = {0};
   uint64_t                        entryMask;
   VkResult                        result;
 
   deviceVk = device ? device->_priv : NULL;
   library  = info && info->library ? info->library->_priv : NULL;
   layout   = info && info->layout ? info->layout->_native : NULL;
-  if (!deviceVk || !library || !library->module ||
-      library->device != deviceVk->device ||
-      !layout || !layout->layout || layout->device != deviceVk->device ||
-      !info->entryPoint || !info->entryPoint[0] || !pipeline) {
+
+  if (!deviceVk || !library || !library->module
+      || library->device != deviceVk->device
+      || !layout || !layout->layout || layout->device != deviceVk->device
+      || !info->entryPoint || !info->entryPoint[0] || !pipeline) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  state = calloc(1, sizeof(*state) + sizeof(*native));
-  if (!state) {
+  if (!(state = calloc(1, sizeof(*state) + sizeof(*native)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native           = (GPUComputePipelineVk *)(state + 1);
-  native->device   = deviceVk->device;
-  entryMask = UINT64_MAX;
+  native         = (GPUComputePipelineVk *)(state + 1);
+  native->device = deviceVk->device;
+  entryMask      = UINT64_MAX;
+
   if (gpuShaderLibraryHasEntryResourceInfo(info->library)) {
     entryMask = gpuShaderEntryBit(info->library, info->entryPoint);
+
     if (entryMask == 0u) {
       free(state);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
+
   if (vk_createShaderLayout(device,
                             info->layout,
                             info->library,
@@ -74,10 +77,11 @@ vk_createComputePipeline(GPUDevice                          *device,
     free(state);
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  stage.sType      = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  stage.stage      = VK_SHADER_STAGE_COMPUTE_BIT;
-  stage.module     = library->module;
-  stage.pName      = info->entryPoint;
+
+  stage.sType         = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  stage.stage         = VK_SHADER_STAGE_COMPUTE_BIT;
+  stage.module        = library->module;
+  stage.pName         = info->entryPoint;
   pipelineInfo.sType  = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   pipelineInfo.stage  = stage;
   pipelineInfo.layout = native->shaderLayout.layout;
@@ -87,9 +91,10 @@ vk_createComputePipeline(GPUDevice                          *device,
   }
 #endif
   result = vk_createComputePipelineCached(deviceVk,
-                                           info->cache,
-                                           &pipelineInfo,
-                                           &native->pipeline);
+                                          info->cache,
+                                          &pipelineInfo,
+                                          &native->pipeline);
+
   if (result != VK_SUCCESS) {
     vk_destroyShaderLayout(&native->shaderLayout);
     free(state);
@@ -102,6 +107,7 @@ vk_createComputePipeline(GPUDevice                          *device,
   state->workgroupSize[2] = 1u;
   pipeline->_priv         = native;
   pipeline->_state        = state;
+
   return GPU_OK;
 }
 
@@ -117,12 +123,15 @@ vk_destroyComputePipeline(GPUComputePipeline *pipeline) {
 
   state  = pipeline->_state;
   native = state ? state->_priv : NULL;
+
   if (native && native->device && native->pipeline) {
     vkDestroyPipeline(native->device, native->pipeline, NULL);
   }
+
   if (native) {
     vk_destroyShaderLayout(&native->shaderLayout);
   }
+
   free(state);
   free(pipeline);
 }
@@ -131,11 +140,12 @@ GPU_HIDE
 GPUComputePassEncoder*
 vk_computeCommandEncoder(GPUCommandBuffer               *cmdb,
                          const GPUComputePassCreateInfo *info) {
-  GPUCommandBufferVk     *command;
-  GPUComputePassEncoder  *encoder;
-  GPUComputeEncoderVk    *native;
+  GPUCommandBufferVk    *command;
+  GPUComputePassEncoder *encoder;
+  GPUComputeEncoderVk   *native;
 
   command = cmdb ? cmdb->_priv : NULL;
+
   if (!command || !command->command) {
     return NULL;
   }
@@ -144,17 +154,16 @@ vk_computeCommandEncoder(GPUCommandBuffer               *cmdb,
   native  = &command->computeState;
   memset(encoder, 0, sizeof(*encoder));
   memset(native, 0, sizeof(*native));
-  native->command          = command->command;
-  native->bindPoint        = VK_PIPELINE_BIND_POINT_COMPUTE;
-  native->debugLabelActive = vk_beginDebugLabel(
-    gpuCommandBufferDevice(cmdb),
-    native->command,
-    info->label
-  );
+  native->command            = command->command;
+  native->bindPoint          = VK_PIPELINE_BIND_POINT_COMPUTE;
+  native->debugLabelActive   = vk_beginDebugLabel(gpuCommandBufferDevice(cmdb),
+                                                  native->command,
+                                                  info->label);
   encoder->_priv             = native;
   encoder->_workgroupSize[0] = 1u;
   encoder->_workgroupSize[1] = 1u;
   encoder->_workgroupSize[2] = 1u;
+
   return encoder;
 }
 
@@ -167,6 +176,7 @@ vk_setComputePipelineState(GPUComputePassEncoder   *encoder,
 
   native   = vk__computeEncoder(encoder);
   pipeline = pipelineState ? pipelineState->_priv : NULL;
+
   if (!native || !native->command || !pipeline || !pipeline->pipeline) {
     return;
   }
@@ -174,9 +184,11 @@ vk_setComputePipelineState(GPUComputePassEncoder   *encoder,
   vkCmdBindPipeline(native->command,
                     VK_PIPELINE_BIND_POINT_COMPUTE,
                     pipeline->pipeline);
+
   if (native->descriptors.pipelineLayout != pipeline->shaderLayout.baseLayout) {
     memset(native->descriptors.groups, 0, sizeof(native->descriptors.groups));
   }
+
   vk_bindShaderSamplers(native->command,
                         VK_PIPELINE_BIND_POINT_COMPUTE,
                         &pipeline->shaderLayout);
@@ -185,9 +197,9 @@ vk_setComputePipelineState(GPUComputePassEncoder   *encoder,
   native->bindPoint                  = VK_PIPELINE_BIND_POINT_COMPUTE;
   native->executionGraph             = NULL;
   native->executionGraphInstance     = NULL;
-  encoder->_workgroupSize[0] = pipelineState->workgroupSize[0];
-  encoder->_workgroupSize[1] = pipelineState->workgroupSize[1];
-  encoder->_workgroupSize[2] = pipelineState->workgroupSize[2];
+  encoder->_workgroupSize[0]         = pipelineState->workgroupSize[0];
+  encoder->_workgroupSize[1]         = pipelineState->workgroupSize[1];
+  encoder->_workgroupSize[2]         = pipelineState->workgroupSize[2];
 }
 
 GPU_HIDE
@@ -198,8 +210,9 @@ vk_computePushConstants(GPUComputePassEncoder *encoder,
   GPUComputeEncoderVk *native;
 
   native = vk__computeEncoder(encoder);
-  if (!native || !native->command || !native->pipelineLayout ||
-      !data || sizeBytes == 0u) {
+
+  if (!native || !native->command || !native->pipelineLayout
+      || !data || sizeBytes == 0u) {
     return;
   }
 
@@ -220,6 +233,7 @@ vk_dispatch(GPUComputePassEncoder *encoder,
   GPUComputeEncoderVk *native;
 
   native = vk__computeEncoder(encoder);
+
   if (!native || !native->command) {
     return;
   }
@@ -230,13 +244,14 @@ vk_dispatch(GPUComputePassEncoder *encoder,
 GPU_HIDE
 void
 vk_dispatchIndirect(GPUComputePassEncoder *encoder,
-                    GPUBuffer            *argsBuffer,
-                    uint64_t              argsOffset) {
+                    GPUBuffer             *argsBuffer,
+                    uint64_t               argsOffset) {
   GPUComputeEncoderVk *native;
   GPUBufferVk         *buffer;
 
   native = vk__computeEncoder(encoder);
   buffer = argsBuffer ? argsBuffer->_priv : NULL;
+
   if (!native || !native->command || !buffer || !buffer->buffer) {
     return;
   }
@@ -250,6 +265,7 @@ vk_endComputeEncoding(GPUComputePassEncoder *encoder) {
   GPUComputeEncoderVk *native;
 
   native = vk__computeEncoder(encoder);
+
   if (!native) {
     return;
   }
@@ -258,12 +274,12 @@ vk_endComputeEncoding(GPUComputePassEncoder *encoder) {
     vk_endDebugLabel(gpuCommandBufferDevice(encoder->_cmdb), native->command);
   }
 
-  native->command        = VK_NULL_HANDLE;
-  native->pipelineLayout = VK_NULL_HANDLE;
-  native->executionGraph = NULL;
+  native->command                = VK_NULL_HANDLE;
+  native->pipelineLayout         = VK_NULL_HANDLE;
+  native->executionGraph         = NULL;
   native->executionGraphInstance = NULL;
-  native->bindPoint      = VK_PIPELINE_BIND_POINT_COMPUTE;
-  native->debugLabelActive = false;
+  native->bindPoint              = VK_PIPELINE_BIND_POINT_COMPUTE;
+  native->debugLabelActive       = false;
 }
 
 GPU_HIDE

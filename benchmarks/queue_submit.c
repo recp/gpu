@@ -70,16 +70,18 @@ queue_submitConfig(int argc, char *argv[], QueueSubmitConfig *config) {
   config->batchSize  = QUEUE_SUBMIT_DEFAULT_BATCH;
   config->iterations = QUEUE_SUBMIT_DEFAULT_ITERATIONS;
   config->repeats    = QUEUE_SUBMIT_DEFAULT_REPEATS;
-  if ((argc > 1 && !bench_parseBackend(argv[1], &config->backend)) ||
-      (argc > 2 && !bench_parseU32(argv[2], 2u, &config->batchSize)) ||
-      (argc > 3 && !bench_parseU32(argv[3], 1u, &config->iterations)) ||
-      (argc > 4 && !bench_parseU32(argv[4], 1u, &config->repeats)) ||
-      config->batchSize > QUEUE_SUBMIT_MAX_BATCH ||
-      config->iterations > QUEUE_SUBMIT_MAX_ITERATIONS ||
-      config->repeats > QUEUE_SUBMIT_MAX_REPEATS) {
+
+  if ((argc > 1 && !bench_parseBackend(argv[1], &config->backend))
+      || (argc > 2 && !bench_parseU32(argv[2], 2u, &config->batchSize))
+      || (argc > 3 && !bench_parseU32(argv[3], 1u, &config->iterations))
+      || (argc > 4 && !bench_parseU32(argv[4], 1u, &config->repeats))
+      || config->batchSize > QUEUE_SUBMIT_MAX_BATCH
+      || config->iterations > QUEUE_SUBMIT_MAX_ITERATIONS
+      || config->repeats > QUEUE_SUBMIT_MAX_REPEATS) {
     fprintf(stderr, "invalid queue-submit benchmark arguments\n");
     return false;
   }
+
   return true;
 }
 
@@ -95,21 +97,21 @@ queue_submitInit(QueueSubmitBench        *bench,
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = config->backend;
-  if (GPUCreateInstance(&instanceInfo, &bench->instance) != GPU_OK ||
-      !bench->instance) {
+
+  if (GPUCreateInstance(&instanceInfo, &bench->instance) != GPU_OK
+      || !bench->instance) {
     return false;
   }
 
-  bench->adapter = bench_createAdapter(bench->instance);
-  if (!bench->adapter) {
+  if (!(bench->adapter = bench_createAdapter(bench->instance))) {
     return false;
   }
-  bench->device = bench_createDevice(bench->adapter, NULL);
-  if (!bench->device) {
+
+  if (!(bench->device = bench_createDevice(bench->adapter, NULL))) {
     return false;
   }
-  bench->queue = GPUGetQueue(bench->device, GPU_QUEUE_GRAPHICS, 0u);
-  if (!bench->queue) {
+
+  if (!(bench->queue = GPUGetQueue(bench->device, GPU_QUEUE_GRAPHICS, 0u))) {
     return false;
   }
 
@@ -117,10 +119,11 @@ queue_submitInit(QueueSubmitBench        *bench,
   runtimeInfo.chain.structSize = sizeof(runtimeInfo);
   runtimeInfo.validationMode   = GPU_VALIDATION_OFF;
   runtimeInfo.enableStats      = true;
-  return GPUConfigureRuntime(bench->device, &runtimeInfo) == GPU_OK &&
-         GPUGetAdapterProperties(bench->adapter, properties) == GPU_OK &&
-         GPUCreateFence(bench->device, NULL, &bench->fence) == GPU_OK &&
-         bench->fence;
+
+  return GPUConfigureRuntime(bench->device, &runtimeInfo) == GPU_OK
+         && GPUGetAdapterProperties(bench->adapter, properties) == GPU_OK
+         && GPUCreateFence(bench->device, NULL, &bench->fence) == GPU_OK
+         && bench->fence;
 }
 
 static void
@@ -135,49 +138,59 @@ queue_submitCleanup(QueueSubmitBench *bench) {
 }
 
 static bool
-queue_acquireBatch(QueueSubmitBench *bench,
+queue_acquireBatch(QueueSubmitBench  *bench,
                    GPUCommandBuffer **buffers,
-                   uint32_t          count) {
-  for (uint32_t i = 0u; i < count; i++) {
+                   uint32_t           count) {
+  uint32_t i;
+
+  for (i = 0u; i < count; i++) {
     buffers[i] = NULL;
+
     if (GPUAcquireCommandBuffer(bench->queue,
                                 "queue-submit-bench",
-                                &buffers[i]) != GPU_OK ||
-        !buffers[i]) {
+                                &buffers[i]) != GPU_OK
+        || !buffers[i]) {
       return false;
     }
   }
+
   return true;
 }
 
 static bool
-queue_submitSeparate(QueueSubmitBench *bench,
+queue_submitSeparate(QueueSubmitBench  *bench,
                      GPUCommandBuffer **buffers,
-                     uint32_t          count,
-                     double           *elapsed) {
+                     uint32_t           count,
+                     double            *elapsed) {
   GPUQueueSubmitInfo info = {0};
   double             begin;
+  uint32_t           i;
 
   info.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   info.chain.structSize   = sizeof(info);
   info.commandBufferCount = 1u;
-  begin                   = bench_now();
-  for (uint32_t i = 0u; i < count; i++) {
+
+  begin = bench_now();
+
+  for (i = 0u; i < count; i++) {
     info.ppCommandBuffers = &buffers[i];
     info.fence            = i + 1u == count ? bench->fence : NULL;
+
     if (GPUQueueSubmit(bench->queue, &info) != GPU_OK) {
       return false;
     }
   }
+
   *elapsed = bench_now() - begin;
+
   return GPUWaitFence(bench->fence, UINT64_MAX) == GPU_OK;
 }
 
 static bool
-queue_submitBatch(QueueSubmitBench *bench,
+queue_submitBatch(QueueSubmitBench  *bench,
                   GPUCommandBuffer **buffers,
-                  uint32_t          count,
-                  double           *elapsed) {
+                  uint32_t           count,
+                  double            *elapsed) {
   GPUQueueSubmitInfo info = {0};
   double             begin;
 
@@ -186,11 +199,15 @@ queue_submitBatch(QueueSubmitBench *bench,
   info.commandBufferCount = count;
   info.ppCommandBuffers   = buffers;
   info.fence              = bench->fence;
-  begin                   = bench_now();
+
+  begin = bench_now();
+
   if (GPUQueueSubmit(bench->queue, &info) != GPU_OK) {
     return false;
   }
+
   *elapsed = bench_now() - begin;
+
   return GPUWaitFence(bench->fence, UINT64_MAX) == GPU_OK;
 }
 
@@ -202,13 +219,15 @@ queue_submitRun(QueueSubmitBench *bench,
                 double           *samples) {
   GPUCommandBuffer *buffers[QUEUE_SUBMIT_MAX_BATCH];
   double            elapsed;
+  uint32_t          i;
 
-  for (uint32_t i = 0u; i < iterations; i++) {
+  for (i = 0u; i < iterations; i++) {
     if (!queue_acquireBatch(bench, buffers, batchSize)) {
       return false;
     }
 
     elapsed = 0.0;
+
     if (path == QUEUE_SUBMIT_SEPARATE) {
       if (!queue_submitSeparate(bench, buffers, batchSize, &elapsed)) {
         return false;
@@ -216,10 +235,12 @@ queue_submitRun(QueueSubmitBench *bench,
     } else if (!queue_submitBatch(bench, buffers, batchSize, &elapsed)) {
       return false;
     }
+
     if (samples) {
       samples[i] = elapsed * 1e9 / batchSize;
     }
   }
+
   return true;
 }
 
@@ -235,27 +256,33 @@ main(int argc, char *argv[]) {
   double               p99[QUEUE_SUBMIT_PATH_COUNT];
   double               reduction;
   size_t               sampleCount;
+  uint32_t             path;
+  uint32_t             previous;
+  uint32_t             repeat;
   bool                 ok;
 
   memset(&bench, 0, sizeof(bench));
   memset(&properties, 0, sizeof(properties));
   memset(&stats, 0, sizeof(stats));
   memset(samples, 0, sizeof(samples));
-  if (!queue_submitConfig(argc, argv, &config) ||
-      !queue_submitInit(&bench, &config, &properties)) {
+
+  if (!queue_submitConfig(argc, argv, &config)
+      || !queue_submitInit(&bench, &config, &properties)) {
     fprintf(stderr, "failed to initialize queue-submit benchmark\n");
     queue_submitCleanup(&bench);
     return EXIT_FAILURE;
   }
 
   sampleCount = (size_t)config.iterations * config.repeats;
-  for (uint32_t path = 0u; path < QUEUE_SUBMIT_PATH_COUNT; path++) {
-    samples[path] = calloc(sampleCount, sizeof(*samples[path]));
-    if (!samples[path]) {
+
+  for (path = 0u; path < QUEUE_SUBMIT_PATH_COUNT; path++) {
+    if (!(samples[path] = calloc(sampleCount, sizeof(*samples[path])))) {
       fprintf(stderr, "failed to allocate queue-submit samples\n");
-      for (uint32_t previous = 0u; previous < path; previous++) {
+
+      for (previous = 0u; previous < path; previous++) {
         free(samples[previous]);
       }
+
       queue_submitCleanup(&bench);
       return EXIT_FAILURE;
     }
@@ -265,34 +292,35 @@ main(int argc, char *argv[]) {
                        QUEUE_SUBMIT_SEPARATE,
                        config.batchSize,
                        QUEUE_SUBMIT_WARMUP_ITERATIONS,
-                       NULL) &&
-       queue_submitRun(&bench,
-                       QUEUE_SUBMIT_BATCH,
-                       config.batchSize,
-                       QUEUE_SUBMIT_WARMUP_ITERATIONS,
-                       NULL);
+                       NULL)
+       && queue_submitRun(&bench,
+                          QUEUE_SUBMIT_BATCH,
+                          config.batchSize,
+                          QUEUE_SUBMIT_WARMUP_ITERATIONS,
+                          NULL);
   GPUResetStats(bench.device);
-  for (uint32_t repeat = 0u; ok && repeat < config.repeats; repeat++) {
+
+  for (repeat = 0u; ok && repeat < config.repeats; repeat++) {
     if ((repeat & 1u) == 0u) {
-      for (uint32_t path = 0u; path < QUEUE_SUBMIT_PATH_COUNT; path++) {
+      for (path = 0u; path < QUEUE_SUBMIT_PATH_COUNT; path++) {
         ok = queue_submitRun(&bench,
                              (QueueSubmitPath)path,
                              config.batchSize,
                              config.iterations,
-                             &samples[path][(size_t)repeat *
-                                            config.iterations]);
+                             &samples[path][(size_t)repeat * config.iterations]);
+
         if (!ok) {
           break;
         }
       }
     } else {
-      for (uint32_t path = QUEUE_SUBMIT_PATH_COUNT; path-- > 0u;) {
+      for (path = QUEUE_SUBMIT_PATH_COUNT; path-- > 0u;) {
         ok = queue_submitRun(&bench,
                              (QueueSubmitPath)path,
                              config.batchSize,
                              config.iterations,
-                             &samples[path][(size_t)repeat *
-                                            config.iterations]);
+                             &samples[path][(size_t)repeat * config.iterations]);
+
         if (!ok) {
           break;
         }
@@ -301,13 +329,14 @@ main(int argc, char *argv[]) {
   }
 
   stats = bench.device->currentFrameStats;
-  ok    = ok && stats.hotPathAllocCount == 0u &&
-          stats.hotPathFreeCount == 0u;
-  for (uint32_t path = 0u; path < QUEUE_SUBMIT_PATH_COUNT; path++) {
+  ok    = ok && stats.hotPathAllocCount == 0u && stats.hotPathFreeCount == 0u;
+
+  for (path = 0u; path < QUEUE_SUBMIT_PATH_COUNT; path++) {
     median[path] = bench_percentile(samples[path], sampleCount, 0.50);
     p95[path]    = bench_percentile(samples[path], sampleCount, 0.95);
     p99[path]    = bench_percentile(samples[path], sampleCount, 0.99);
   }
+
   reduction = median[QUEUE_SUBMIT_SEPARATE] > 0.0
                 ? (1.0 - median[QUEUE_SUBMIT_BATCH] /
                          median[QUEUE_SUBMIT_SEPARATE]) * 100.0
@@ -336,10 +365,12 @@ main(int argc, char *argv[]) {
            stats.hotPathFreeCount);
   }
 
-  for (uint32_t path = 0u; path < QUEUE_SUBMIT_PATH_COUNT; path++) {
+  for (path = 0u; path < QUEUE_SUBMIT_PATH_COUNT; path++) {
     free(samples[path]);
   }
+
   queue_submitCleanup(&bench);
+
   if (!ok) {
     fprintf(stderr,
             "queue-submit benchmark failed: %" PRIu64
@@ -348,5 +379,6 @@ main(int argc, char *argv[]) {
             stats.hotPathFreeCount);
     return EXIT_FAILURE;
   }
+
   return EXIT_SUCCESS;
 }

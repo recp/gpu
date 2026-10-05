@@ -18,12 +18,12 @@
 #include "../../../api/compute_internal.h"
 #include "../../../api/render/pipeline_internal.h"
 
-static GPUAccelerationStructureMT *
+static GPUAccelerationStructureMT*
 mt_rayStructure(GPUAccelerationStructureEXT *structure) {
   return structure ? structure->_priv : NULL;
 }
 
-static MTRayQueryEncoder *
+static MTRayQueryEncoder*
 mt_rayEncoder(GPUAccelerationStructurePassEncoderEXT *pass) {
   return pass ? pass->_priv : NULL;
 }
@@ -38,6 +38,7 @@ mt_rayNativeStructure(GPUAccelerationStructureEXT *structure) {
   GPUAccelerationStructureMT *native;
 
   native = mt_rayStructure(structure);
+
   return native ? native->structure : nil;
 }
 
@@ -45,11 +46,11 @@ static void
 mt_useModernTableBuffers(GPUCommandBuffer            *cmdb,
                          MTIntersectionFunctionTable *table) {
   uint32_t mask;
+  uint32_t index;
 
   mask = table->bufferMask;
-  while (mask != 0u) {
-    uint32_t index;
 
+  while (mask != 0u) {
     index = (uint32_t)__builtin_ctz(mask);
     mask &= mask - 1u;
     mt_useAllocation(cmdb, table->buffers[index]);
@@ -57,14 +58,14 @@ mt_useModernTableBuffers(GPUCommandBuffer            *cmdb,
 }
 
 static void
-mt_useComputeTableBuffers(id<MTLComputeCommandEncoder>  encoder,
-                          MTIntersectionFunctionTable  *table) {
+mt_useComputeTableBuffers(id<MTLComputeCommandEncoder> encoder,
+                          MTIntersectionFunctionTable *table) {
   uint32_t mask;
+  uint32_t index;
 
   mask = table->bufferMask;
-  while (mask != 0u) {
-    uint32_t index;
 
+  while (mask != 0u) {
     index = (uint32_t)__builtin_ctz(mask);
     mask &= mask - 1u;
     [encoder useResource:table->buffers[index]
@@ -77,42 +78,15 @@ mt_useRenderTableBuffers(id<MTLRenderCommandEncoder>  encoder,
                          MTIntersectionFunctionTable *table,
                          MTLRenderStages              stages) {
   uint32_t mask;
+  uint32_t index;
 
   mask = table->bufferMask;
-  while (mask != 0u) {
-    uint32_t index;
 
+  while (mask != 0u) {
     index = (uint32_t)__builtin_ctz(mask);
     mask &= mask - 1u;
     [encoder useResource:table->buffers[index]
                    usage:MTLResourceUsageRead | MTLResourceUsageWrite
-                  stages:stages];
-  }
-}
-
-GPU_HIDE
-void
-mt_useComputeRayResources(id<MTLComputeCommandEncoder> encoder,
-                          GPUAccelerationStructureMT   *structure) {
-  if (!encoder || !structure || !structure->classicInstances) {
-    return;
-  }
-  for (id<MTLAccelerationStructure> child in structure->classicInstances) {
-    [encoder useResource:child usage:MTLResourceUsageRead];
-  }
-}
-
-GPU_HIDE
-void
-mt_useRenderRayResources(id<MTLRenderCommandEncoder> encoder,
-                         GPUAccelerationStructureMT  *structure,
-                         MTLRenderStages              stages) {
-  if (!encoder || !structure || !structure->classicInstances) {
-    return;
-  }
-  for (id<MTLAccelerationStructure> child in structure->classicInstances) {
-    [encoder useResource:child
-                   usage:MTLResourceUsageRead
                   stages:stages];
   }
 }
@@ -122,9 +96,11 @@ mt_rayUsage(GPUAccelerationStructureBuildFlagsEXT flags) {
   MTLAccelerationStructureUsage usage;
 
   usage = MTLAccelerationStructureUsageNone;
+
   if ((flags & GPU_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_EXT) != 0u) {
     usage |= MTLAccelerationStructureUsageRefit;
   }
+
   if ((flags & GPU_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_EXT) != 0u) {
     usage |= MTLAccelerationStructureUsagePreferFastBuild;
   }
@@ -135,6 +111,7 @@ mt_rayUsage(GPUAccelerationStructureBuildFlagsEXT flags) {
     }
   }
 #endif
+
   return usage;
 }
 
@@ -143,23 +120,29 @@ mt_rayInstanceOptions(GPUAccelerationStructureInstanceFlagsEXT flags) {
   MTLAccelerationStructureInstanceOptions options;
 
   options = MTLAccelerationStructureInstanceOptionTriangleFrontFacingWindingCounterClockwise;
+
   if ((flags & GPU_ACCELERATION_STRUCTURE_INSTANCE_DISABLE_CULL_BIT_EXT) != 0u) {
     options |= MTLAccelerationStructureInstanceOptionDisableTriangleCulling;
   }
+
   if ((flags & GPU_ACCELERATION_STRUCTURE_INSTANCE_FORCE_OPAQUE_BIT_EXT) != 0u) {
     options |= MTLAccelerationStructureInstanceOptionOpaque;
   }
-  if ((flags &
-       GPU_ACCELERATION_STRUCTURE_INSTANCE_FORCE_NON_OPAQUE_BIT_EXT) != 0u) {
+
+  if ((flags & GPU_ACCELERATION_STRUCTURE_INSTANCE_FORCE_NON_OPAQUE_BIT_EXT) != 0u) {
     options |= MTLAccelerationStructureInstanceOptionNonOpaque;
   }
+
   return options;
 }
 
 static void
 mt_rayTransform(MTLPackedFloat4x3 *dst, const float src[3][4]) {
-  for (uint32_t column = 0u; column < 4u; column++) {
-    for (uint32_t row = 0u; row < 3u; row++) {
+  uint32_t column;
+  uint32_t row;
+
+  for (column = 0u; column < 4u; column++) {
+    for (row = 0u; row < 3u; row++) {
       dst->columns[column].elements[row] = src[row][column];
     }
   }
@@ -168,140 +151,138 @@ mt_rayTransform(MTLPackedFloat4x3 *dst, const float src[3][4]) {
 static id
 mt_rayNewClassicGeometry(GPUAccelerationStructureGeometryTypeEXT type) {
   return type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT
-           ? [MTLAccelerationStructureBoundingBoxGeometryDescriptor descriptor]
-           : [MTLAccelerationStructureTriangleGeometryDescriptor descriptor];
+                ? [MTLAccelerationStructureBoundingBoxGeometryDescriptor descriptor]
+                : [MTLAccelerationStructureTriangleGeometryDescriptor descriptor];
 }
 
 static bool
 mt_rayClassicGeometryMatches(id                                      descriptor,
                              GPUAccelerationStructureGeometryTypeEXT type) {
   return type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT
-           ? [descriptor isKindOfClass:
-               [MTLAccelerationStructureBoundingBoxGeometryDescriptor class]]
-           : [descriptor isKindOfClass:
-               [MTLAccelerationStructureTriangleGeometryDescriptor class]];
+                ? [descriptor isKindOfClass:[MTLAccelerationStructureBoundingBoxGeometryDescriptor class]]
+                : [descriptor isKindOfClass:[MTLAccelerationStructureTriangleGeometryDescriptor class]];
 }
 
 static void
-mt_rayFillClassicGeometry(id                                    descriptor,
+mt_rayFillClassicGeometry(id                                         descriptor,
                           const GPUAccelerationStructureGeometryEXT *source,
-                          uint32_t                              geometryIndex) {
-  MTLAccelerationStructureGeometryDescriptor *base;
+                          uint32_t                                   geometryIndex) {
+  MTLAccelerationStructureGeometryDescriptor            *base;
+  MTLAccelerationStructureBoundingBoxGeometryDescriptor *boxGeometry;
+  MTLAccelerationStructureTriangleGeometryDescriptor    *triangleGeometry;
 
   base                                 = descriptor;
   base.intersectionFunctionTableOffset = geometryIndex;
-  if (source->type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT) {
-    MTLAccelerationStructureBoundingBoxGeometryDescriptor *geometry;
 
-    geometry                         = descriptor;
-    geometry.boundingBoxBuffer       = mt_rayBuffer(source->aabbs.buffer);
-    geometry.boundingBoxBufferOffset = (NSUInteger)source->aabbs.offset;
-    geometry.boundingBoxStride       = source->aabbs.stride;
-    geometry.boundingBoxCount        = source->aabbs.count;
-    geometry.opaque =
-      (source->aabbs.flags &
-       GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
+  if (source->type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT) {
+    boxGeometry                         = descriptor;
+    boxGeometry.boundingBoxBuffer       = mt_rayBuffer(source->aabbs.buffer);
+    boxGeometry.boundingBoxBufferOffset = (NSUInteger)source->aabbs.offset;
+    boxGeometry.boundingBoxStride       = source->aabbs.stride;
+    boxGeometry.boundingBoxCount        = source->aabbs.count;
+
+    boxGeometry.opaque = (source->aabbs.flags & GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
     return;
   }
 
   {
-    MTLAccelerationStructureTriangleGeometryDescriptor *geometry;
+    triangleGeometry                    = descriptor;
+    triangleGeometry.vertexBuffer       = mt_rayBuffer(source->triangles.vertexBuffer);
+    triangleGeometry.vertexBufferOffset = (NSUInteger)source->triangles.vertexOffset;
+    triangleGeometry.vertexStride       = source->triangles.vertexStride;
+    triangleGeometry.vertexFormat       = MTLAttributeFormatFloat3;
 
-    geometry                    = descriptor;
-    geometry.vertexBuffer       = mt_rayBuffer(source->triangles.vertexBuffer);
-    geometry.vertexBufferOffset = (NSUInteger)source->triangles.vertexOffset;
-    geometry.vertexStride       = source->triangles.vertexStride;
-    geometry.vertexFormat       = MTLAttributeFormatFloat3;
-    geometry.opaque =
-      (source->triangles.flags &
-       GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
+    triangleGeometry.opaque = (source->triangles.flags & GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
+
     if (source->triangles.indexBuffer) {
-      geometry.indexBuffer = mt_rayBuffer(source->triangles.indexBuffer);
-      geometry.indexBufferOffset =
-        (NSUInteger)source->triangles.indexOffset;
-      geometry.indexType =
-        source->triangles.indexType == GPU_INDEX_TYPE_UINT32
-          ? MTLIndexTypeUInt32
-          : MTLIndexTypeUInt16;
-      geometry.triangleCount = source->triangles.indexCount / 3u;
+      triangleGeometry.indexBuffer       = mt_rayBuffer(source->triangles.indexBuffer);
+      triangleGeometry.indexBufferOffset = (NSUInteger)source->triangles.indexOffset;
+      triangleGeometry.indexType         = source->triangles.indexType == GPU_INDEX_TYPE_UINT32
+                                           ? MTLIndexTypeUInt32
+                                           : MTLIndexTypeUInt16;
+      triangleGeometry.triangleCount     = source->triangles.indexCount / 3u;
     } else {
-      geometry.indexBuffer       = nil;
-      geometry.indexBufferOffset = 0u;
-      geometry.triangleCount     = source->triangles.vertexCount / 3u;
+      triangleGeometry.indexBuffer       = nil;
+      triangleGeometry.indexBufferOffset = 0u;
+      triangleGeometry.triangleCount     = source->triangles.vertexCount / 3u;
     }
   }
 }
 
-static MTLAccelerationStructureDescriptor *
+static MTLAccelerationStructureDescriptor*
 mt_rayClassicDescriptor(const GPUAccelerationStructureBuildInfoEXT *info) {
+  MTLPrimitiveAccelerationStructureDescriptor *blasDescriptor;
+  NSMutableArray                              *geometries;
+  id                                           geometry;
+  MTLInstanceAccelerationStructureDescriptor  *tlasDescriptor;
+  NSMutableArray                              *instances;
+  uint32_t                                     geometryIndex;
+  uint32_t                                     instanceIndex;
+
   if (info->type == GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT) {
-    MTLPrimitiveAccelerationStructureDescriptor *descriptor;
-    NSMutableArray                              *geometries;
+    geometries = [NSMutableArray arrayWithCapacity:info->bottomLevel.geometryCount];
 
-    geometries = [NSMutableArray
-      arrayWithCapacity:info->bottomLevel.geometryCount];
-    for (uint32_t i = 0u; i < info->bottomLevel.geometryCount; i++) {
-      id geometry;
-
-      geometry =
-        mt_rayNewClassicGeometry(info->bottomLevel.pGeometries[i].type);
+    for (geometryIndex = 0u; geometryIndex < info->bottomLevel.geometryCount; geometryIndex++) {
+      geometry = mt_rayNewClassicGeometry(info->bottomLevel.pGeometries[geometryIndex].type);
       mt_rayFillClassicGeometry(geometry,
-                                &info->bottomLevel.pGeometries[i],
-                                i);
+                                &info->bottomLevel.pGeometries[geometryIndex],
+                                geometryIndex);
       [geometries addObject:geometry];
     }
-    descriptor = [MTLPrimitiveAccelerationStructureDescriptor descriptor];
-    descriptor.geometryDescriptors = geometries;
-    descriptor.usage = mt_rayUsage(info->flags);
-    return descriptor;
+
+    blasDescriptor                     = [MTLPrimitiveAccelerationStructureDescriptor descriptor];
+    blasDescriptor.geometryDescriptors = geometries;
+    blasDescriptor.usage               = mt_rayUsage(info->flags);
+
+    return blasDescriptor;
   }
 
   {
-    MTLInstanceAccelerationStructureDescriptor *descriptor;
-    NSMutableArray                             *instances;
+    instances = [NSMutableArray arrayWithCapacity:info->topLevel.instanceCount];
 
-    instances = [NSMutableArray
-      arrayWithCapacity:info->topLevel.instanceCount];
-    for (uint32_t i = 0u; i < info->topLevel.instanceCount; i++) {
-      [instances addObject:
-        mt_rayNativeStructure(info->topLevel.pInstances[i].structure)];
+    for (instanceIndex = 0u; instanceIndex < info->topLevel.instanceCount; instanceIndex++) {
+      [instances addObject:mt_rayNativeStructure(info->topLevel.pInstances[instanceIndex].structure)];
     }
-    descriptor = [MTLInstanceAccelerationStructureDescriptor descriptor];
-    descriptor.instancedAccelerationStructures = instances;
-    descriptor.instanceCount                   = info->topLevel.instanceCount;
-    descriptor.instanceDescriptorType =
-      MTLAccelerationStructureInstanceDescriptorTypeDefault;
-    descriptor.usage = mt_rayUsage(info->flags);
-    return descriptor;
+
+    tlasDescriptor                                 = [MTLInstanceAccelerationStructureDescriptor descriptor];
+    tlasDescriptor.instancedAccelerationStructures = instances;
+    tlasDescriptor.instanceCount                   = info->topLevel.instanceCount;
+    tlasDescriptor.instanceDescriptorType          = MTLAccelerationStructureInstanceDescriptorTypeDefault;
+    tlasDescriptor.usage                           = mt_rayUsage(info->flags);
+
+    return tlasDescriptor;
   }
 }
 
 static bool
-mt_rayEnsureInstanceBuffer(GPUDeviceMT                 *device,
-                           GPUAccelerationStructureMT  *native,
-                           uint64_t                     sizeBytes,
-                           const char                  *label) {
+mt_rayEnsureInstanceBuffer(GPUDeviceMT                *device,
+                           GPUAccelerationStructureMT *native,
+                           uint64_t                    sizeBytes,
+                           const char                 *label) {
   id<MTLBuffer> buffer;
   uint64_t      capacity;
 
   if (sizeBytes <= native->instanceCapacity && native->instanceBuffer) {
     return true;
   }
+
   capacity = native->instanceCapacity ? native->instanceCapacity : 256u;
+
   while (capacity < sizeBytes) {
     if (capacity > UINT64_MAX / 2u) {
       capacity = sizeBytes;
       break;
     }
+
     capacity *= 2u;
   }
+
   if (capacity > NSUIntegerMax) {
     return false;
   }
 
-  buffer = [device->device newBufferWithLength:(NSUInteger)capacity
-                                       options:MTLResourceStorageModeShared];
-  if (!buffer) {
+  if (!(buffer = [device->device newBufferWithLength:(NSUInteger)capacity
+                                             options:MTLResourceStorageModeShared])) {
     return false;
   }
 #if GPU_BUILD_WITH_DEBUG_MARKERS
@@ -314,72 +295,75 @@ mt_rayEnsureInstanceBuffer(GPUDeviceMT                 *device,
   [native->instanceBuffer release];
   native->instanceBuffer   = buffer;
   native->instanceCapacity = capacity;
+
   return true;
 }
 
 static bool
-mt_rayPrepareClassicBLAS(
-  GPUAccelerationStructureMT                 *native,
-  const GPUAccelerationStructureBuildInfoEXT *info) {
+mt_rayPrepareClassicBLAS(GPUAccelerationStructureMT                 *native,
+                         const GPUAccelerationStructureBuildInfoEXT *info) {
   MTLPrimitiveAccelerationStructureDescriptor *descriptor;
+  const GPUAccelerationStructureGeometryEXT   *source;
+  id                                           geometry;
+  uint32_t                                     index;
+  uint32_t                                     i;
 
   if (!native->classicGeometry) {
-    native->classicGeometry = [[NSMutableArray alloc]
-      initWithCapacity:info->bottomLevel.geometryCount];
+    native->classicGeometry = [[NSMutableArray alloc] initWithCapacity:info->bottomLevel.geometryCount];
   }
   while (native->classicGeometry.count < info->bottomLevel.geometryCount) {
-    uint32_t index;
-
     index = (uint32_t)native->classicGeometry.count;
-    [native->classicGeometry addObject:
-      mt_rayNewClassicGeometry(info->bottomLevel.pGeometries[index].type)];
+    [native->classicGeometry addObject:mt_rayNewClassicGeometry(info->bottomLevel.pGeometries[index].type)];
   }
   while (native->classicGeometry.count > info->bottomLevel.geometryCount) {
     [native->classicGeometry removeLastObject];
   }
-  for (uint32_t i = 0u; i < info->bottomLevel.geometryCount; i++) {
-    const GPUAccelerationStructureGeometryEXT *source;
-    id                                         geometry;
 
+  for (i = 0u; i < info->bottomLevel.geometryCount; i++) {
     source   = &info->bottomLevel.pGeometries[i];
     geometry = native->classicGeometry[i];
+
     if (!mt_rayClassicGeometryMatches(geometry, source->type)) {
       geometry = mt_rayNewClassicGeometry(source->type);
       [native->classicGeometry replaceObjectAtIndex:i withObject:geometry];
     }
+
     mt_rayFillClassicGeometry(geometry, source, i);
   }
 
   if (!native->classicDescriptor) {
-    native->classicDescriptor =
-      [[MTLPrimitiveAccelerationStructureDescriptor descriptor] retain];
+    native->classicDescriptor = [[MTLPrimitiveAccelerationStructureDescriptor descriptor] retain];
   }
-  descriptor = (MTLPrimitiveAccelerationStructureDescriptor *)
+
+  descriptor                     = (MTLPrimitiveAccelerationStructureDescriptor *)
     native->classicDescriptor;
   descriptor.geometryDescriptors = native->classicGeometry;
   descriptor.usage               = mt_rayUsage(info->flags);
+
   return true;
 }
 
 static bool
-mt_rayPrepareClassicTLAS(
-  GPUDeviceMT                                  *device,
-  GPUAccelerationStructureMT                  *native,
-  const GPUAccelerationStructureBuildInfoEXT  *info) {
+mt_rayPrepareClassicTLAS(GPUDeviceMT                                *device,
+                         GPUAccelerationStructureMT                 *native,
+                         const GPUAccelerationStructureBuildInfoEXT *info) {
   MTLInstanceAccelerationStructureDescriptor *descriptor;
   MTLAccelerationStructureInstanceDescriptor *instances;
+  const GPUAccelerationStructureInstanceEXT  *source;
   uint64_t                                    sizeBytes;
+  uint32_t                                    i;
 
   sizeBytes = (uint64_t)info->topLevel.instanceCount * sizeof(*instances);
+
   if (!mt_rayEnsureInstanceBuffer(device,
                                   native,
                                   sizeBytes,
                                   "gpu-ray-instance-buffer")) {
     return false;
   }
+
   if (!native->classicInstances) {
-    native->classicInstances = [[NSMutableArray alloc]
-      initWithCapacity:info->topLevel.instanceCount];
+    native->classicInstances = [[NSMutableArray alloc] initWithCapacity:info->topLevel.instanceCount];
   }
   while (native->classicInstances.count < info->topLevel.instanceCount) {
     [native->classicInstances addObject:[NSNull null]];
@@ -390,252 +374,597 @@ mt_rayPrepareClassicTLAS(
 
   instances = (MTLAccelerationStructureInstanceDescriptor *)
     native->instanceBuffer.contents;
-  for (uint32_t i = 0u; i < info->topLevel.instanceCount; i++) {
-    const GPUAccelerationStructureInstanceEXT *source;
 
+  for (i = 0u; i < info->topLevel.instanceCount; i++) {
     source = &info->topLevel.pInstances[i];
     mt_rayTransform(&instances[i].transformationMatrix, source->transform);
-    instances[i].options = mt_rayInstanceOptions(source->flags);
-    instances[i].mask = source->mask ? source->mask : 0xffu;
+    instances[i].options                         = mt_rayInstanceOptions(source->flags);
+    instances[i].mask                            = source->mask ? source->mask : 0xffu;
     instances[i].intersectionFunctionTableOffset = source->hitGroupOffset;
-    instances[i].accelerationStructureIndex       = i;
-    native->classicInstances[i] = mt_rayNativeStructure(source->structure);
+    instances[i].accelerationStructureIndex      = i;
+    native->classicInstances[i]                  = mt_rayNativeStructure(source->structure);
   }
 
   if (!native->classicDescriptor) {
-    native->classicDescriptor =
-      [[MTLInstanceAccelerationStructureDescriptor descriptor] retain];
+    native->classicDescriptor = [[MTLInstanceAccelerationStructureDescriptor descriptor] retain];
   }
-  descriptor = (MTLInstanceAccelerationStructureDescriptor *)
+
+  descriptor                                 = (MTLInstanceAccelerationStructureDescriptor *)
     native->classicDescriptor;
-  descriptor.instanceDescriptorBuffer       = native->instanceBuffer;
-  descriptor.instanceDescriptorBufferOffset = 0u;
-  descriptor.instanceDescriptorStride       = sizeof(*instances);
-  descriptor.instanceCount                  = info->topLevel.instanceCount;
+  descriptor.instanceDescriptorBuffer        = native->instanceBuffer;
+  descriptor.instanceDescriptorBufferOffset  = 0u;
+  descriptor.instanceDescriptorStride        = sizeof(*instances);
+  descriptor.instanceCount                   = info->topLevel.instanceCount;
   descriptor.instancedAccelerationStructures = native->classicInstances;
-  descriptor.instanceDescriptorType =
-    MTLAccelerationStructureInstanceDescriptorTypeDefault;
-  descriptor.usage = mt_rayUsage(info->flags);
+  descriptor.instanceDescriptorType          = MTLAccelerationStructureInstanceDescriptorTypeDefault;
+  descriptor.usage                           = mt_rayUsage(info->flags);
+
   return true;
 }
 
 #if MT_HAS_METAL4
+
 static MTL4BufferRange
 mt_rayRange(GPUBuffer *buffer, uint64_t offset) {
   MTL4BufferRange range;
 
   range.bufferAddress = buffer ? buffer->_gpuAddress + offset : 0u;
-  range.length = buffer && offset <= buffer->sizeBytes
-                   ? buffer->sizeBytes - offset
-                   : 0u;
+  range.length        = buffer && offset <= buffer->sizeBytes ? buffer->sizeBytes - offset : 0u;
+
   return range;
 }
 
 static id
 mt_rayNewModernGeometry(GPUAccelerationStructureGeometryTypeEXT type) {
   return type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT
-           ? [MTL4AccelerationStructureBoundingBoxGeometryDescriptor new]
-           : [MTL4AccelerationStructureTriangleGeometryDescriptor new];
+                ? [MTL4AccelerationStructureBoundingBoxGeometryDescriptor new]
+                : [MTL4AccelerationStructureTriangleGeometryDescriptor new];
 }
 
 static bool
 mt_rayModernGeometryMatches(id                                      descriptor,
                             GPUAccelerationStructureGeometryTypeEXT type) {
   return type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT
-           ? [descriptor isKindOfClass:
-               [MTL4AccelerationStructureBoundingBoxGeometryDescriptor class]]
-           : [descriptor isKindOfClass:
-               [MTL4AccelerationStructureTriangleGeometryDescriptor class]];
+                ? [descriptor isKindOfClass:[MTL4AccelerationStructureBoundingBoxGeometryDescriptor class]]
+                : [descriptor isKindOfClass:[MTL4AccelerationStructureTriangleGeometryDescriptor class]];
 }
 
 static void
-mt_rayFillModernGeometry(id                                    descriptor,
+mt_rayFillModernGeometry(id                                         descriptor,
                          const GPUAccelerationStructureGeometryEXT *source,
-                         uint32_t                              geometryIndex) {
-  MTL4AccelerationStructureGeometryDescriptor *base;
+                         uint32_t                                   geometryIndex) {
+  MTL4AccelerationStructureGeometryDescriptor            *base;
+  MTL4AccelerationStructureBoundingBoxGeometryDescriptor *boxGeometry;
+  MTL4AccelerationStructureTriangleGeometryDescriptor    *triangleGeometry;
 
   base                                 = descriptor;
   base.intersectionFunctionTableOffset = geometryIndex;
-  if (source->type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT) {
-    MTL4AccelerationStructureBoundingBoxGeometryDescriptor *geometry;
 
-    geometry                   = descriptor;
-    geometry.boundingBoxBuffer = mt_rayRange(source->aabbs.buffer,
-                                             source->aabbs.offset);
-    geometry.boundingBoxStride = source->aabbs.stride;
-    geometry.boundingBoxCount  = source->aabbs.count;
-    geometry.opaque =
-      (source->aabbs.flags &
-       GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
+  if (source->type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT) {
+    boxGeometry                   = descriptor;
+    boxGeometry.boundingBoxBuffer = mt_rayRange(source->aabbs.buffer,
+                                                source->aabbs.offset);
+    boxGeometry.boundingBoxStride = source->aabbs.stride;
+    boxGeometry.boundingBoxCount  = source->aabbs.count;
+
+    boxGeometry.opaque = (source->aabbs.flags & GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
     return;
   }
 
   {
-    MTL4AccelerationStructureTriangleGeometryDescriptor *geometry;
+    triangleGeometry              = descriptor;
+    triangleGeometry.vertexBuffer = mt_rayRange(source->triangles.vertexBuffer,
+                                                source->triangles.vertexOffset);
+    triangleGeometry.vertexStride = source->triangles.vertexStride;
+    triangleGeometry.vertexFormat = MTLAttributeFormatFloat3;
 
-    geometry              = descriptor;
-    geometry.vertexBuffer = mt_rayRange(source->triangles.vertexBuffer,
-                                        source->triangles.vertexOffset);
-    geometry.vertexStride = source->triangles.vertexStride;
-    geometry.vertexFormat = MTLAttributeFormatFloat3;
-    geometry.opaque =
-      (source->triangles.flags &
-       GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
+    triangleGeometry.opaque = (source->triangles.flags & GPU_ACCELERATION_STRUCTURE_GEOMETRY_NON_OPAQUE_BIT_EXT) == 0u;
+
     if (source->triangles.indexBuffer) {
-      geometry.indexBuffer = mt_rayRange(source->triangles.indexBuffer,
-                                         source->triangles.indexOffset);
-      geometry.indexType =
-        source->triangles.indexType == GPU_INDEX_TYPE_UINT32
-          ? MTLIndexTypeUInt32
-          : MTLIndexTypeUInt16;
-      geometry.triangleCount = source->triangles.indexCount / 3u;
+      triangleGeometry.indexBuffer   = mt_rayRange(source->triangles.indexBuffer,
+                                                   source->triangles.indexOffset);
+      triangleGeometry.indexType     = source->triangles.indexType == GPU_INDEX_TYPE_UINT32
+                                       ? MTLIndexTypeUInt32
+                                       : MTLIndexTypeUInt16;
+      triangleGeometry.triangleCount = source->triangles.indexCount / 3u;
     } else {
-      geometry.indexBuffer   = (MTL4BufferRange){0};
-      geometry.triangleCount = source->triangles.vertexCount / 3u;
+      triangleGeometry.indexBuffer   = (MTL4BufferRange){0};
+      triangleGeometry.triangleCount = source->triangles.vertexCount / 3u;
     }
   }
 }
 
 static bool
-mt_rayPrepareModernBLAS(
-  GPUAccelerationStructureMT                 *native,
-  const GPUAccelerationStructureBuildInfoEXT *info) {
+mt_rayPrepareModernBLAS(GPUAccelerationStructureMT                 *native,
+                        const GPUAccelerationStructureBuildInfoEXT *info) {
   MTL4PrimitiveAccelerationStructureDescriptor *descriptor;
+  id                                            newGeometry;
+  const GPUAccelerationStructureGeometryEXT    *source;
+  id                                            geometry;
+  uint32_t                                      index;
+  uint32_t                                      i;
 
   if (!native->modernGeometry) {
-    native->modernGeometry = [[NSMutableArray alloc]
-      initWithCapacity:info->bottomLevel.geometryCount];
+    native->modernGeometry = [[NSMutableArray alloc] initWithCapacity:info->bottomLevel.geometryCount];
   }
   while (native->modernGeometry.count < info->bottomLevel.geometryCount) {
-    uint32_t index;
-    id       geometry;
-
-    index    = (uint32_t)native->modernGeometry.count;
-    geometry =
-      mt_rayNewModernGeometry(info->bottomLevel.pGeometries[index].type);
-    [native->modernGeometry addObject:geometry];
-    [geometry release];
+    index       = (uint32_t)native->modernGeometry.count;
+    newGeometry = mt_rayNewModernGeometry(info->bottomLevel.pGeometries[index].type);
+    [native->modernGeometry addObject:newGeometry];
+    [newGeometry release];
   }
   while (native->modernGeometry.count > info->bottomLevel.geometryCount) {
     [native->modernGeometry removeLastObject];
   }
-  for (uint32_t i = 0u; i < info->bottomLevel.geometryCount; i++) {
-    const GPUAccelerationStructureGeometryEXT *source;
-    id                                         geometry;
 
+  for (i = 0u; i < info->bottomLevel.geometryCount; i++) {
     source   = &info->bottomLevel.pGeometries[i];
     geometry = native->modernGeometry[i];
+
     if (!mt_rayModernGeometryMatches(geometry, source->type)) {
       geometry = mt_rayNewModernGeometry(source->type);
       [native->modernGeometry replaceObjectAtIndex:i withObject:geometry];
       [geometry release];
     }
+
     mt_rayFillModernGeometry(geometry, source, i);
   }
+
   if (!native->modernDescriptor) {
-    native->modernDescriptor =
-      [MTL4PrimitiveAccelerationStructureDescriptor new];
+    native->modernDescriptor = [MTL4PrimitiveAccelerationStructureDescriptor new];
   }
-  descriptor = native->modernDescriptor;
+
+  descriptor                     = native->modernDescriptor;
   descriptor.geometryDescriptors = native->modernGeometry;
   descriptor.usage               = mt_rayUsage(info->flags);
+
   return true;
 }
 
 static bool
-mt_rayPrepareModernTLAS(
-  GPUDeviceMT                                  *device,
-  GPUAccelerationStructureMT                  *native,
-  const GPUAccelerationStructureBuildInfoEXT  *info) {
-  MTL4InstanceAccelerationStructureDescriptor      *descriptor;
+mt_rayPrepareModernTLAS(GPUDeviceMT                                *device,
+                        GPUAccelerationStructureMT                 *native,
+                        const GPUAccelerationStructureBuildInfoEXT *info) {
+  MTL4InstanceAccelerationStructureDescriptor        *descriptor;
   MTLIndirectAccelerationStructureInstanceDescriptor *instances;
-  uint64_t                                           sizeBytes;
+  const GPUAccelerationStructureInstanceEXT          *source;
+  id<MTLAccelerationStructure>                        structure;
+  uint64_t                                            sizeBytes;
+  uint32_t                                            i;
 
   sizeBytes = (uint64_t)info->topLevel.instanceCount * sizeof(*instances);
+
   if (!mt_rayEnsureInstanceBuffer(device,
                                   native,
                                   sizeBytes,
                                   "gpu-ray-indirect-instance-buffer")) {
     return false;
   }
+
   instances = (MTLIndirectAccelerationStructureInstanceDescriptor *)
     native->instanceBuffer.contents;
-  for (uint32_t i = 0u; i < info->topLevel.instanceCount; i++) {
-    const GPUAccelerationStructureInstanceEXT *source;
-    id<MTLAccelerationStructure>               structure;
 
+  for (i = 0u; i < info->topLevel.instanceCount; i++) {
     source    = &info->topLevel.pInstances[i];
     structure = mt_rayNativeStructure(source->structure);
     mt_rayTransform(&instances[i].transformationMatrix, source->transform);
-    instances[i].options = mt_rayInstanceOptions(source->flags);
-    instances[i].mask = source->mask ? source->mask : 0xffu;
+    instances[i].options                         = mt_rayInstanceOptions(source->flags);
+    instances[i].mask                            = source->mask ? source->mask : 0xffu;
     instances[i].intersectionFunctionTableOffset = source->hitGroupOffset;
-    instances[i].userID = i;
-    instances[i].accelerationStructureID = structure.gpuResourceID;
+    instances[i].userID                          = i;
+    instances[i].accelerationStructureID         = structure.gpuResourceID;
   }
 
   if (!native->modernDescriptor) {
-    native->modernDescriptor =
-      [MTL4InstanceAccelerationStructureDescriptor new];
+    native->modernDescriptor = [MTL4InstanceAccelerationStructureDescriptor new];
   }
-  descriptor = native->modernDescriptor;
+
+  descriptor                          = native->modernDescriptor;
   descriptor.instanceDescriptorBuffer = (MTL4BufferRange){
     .bufferAddress = native->instanceBuffer.gpuAddress,
     .length        = native->instanceCapacity
   };
   descriptor.instanceDescriptorStride = sizeof(*instances);
   descriptor.instanceCount            = info->topLevel.instanceCount;
-  descriptor.instanceDescriptorType =
-    MTLAccelerationStructureInstanceDescriptorTypeIndirect;
-  descriptor.usage = mt_rayUsage(info->flags);
+  descriptor.instanceDescriptorType   = MTLAccelerationStructureInstanceDescriptorTypeIndirect;
+  descriptor.usage                    = mt_rayUsage(info->flags);
+
   return true;
 }
+
 #endif
+
+static void
+mt_rayUseBuildResources(GPUAccelerationStructurePassEncoderEXT     *pass,
+                        GPUAccelerationStructureEXT                *dst,
+                        const GPUAccelerationStructureBuildInfoEXT *info,
+                        GPUBuffer                                  *scratchBuffer) {
+  const GPUAccelerationStructureGeometryEXT *geometry;
+  GPUAccelerationStructureMT                *native;
+  uint32_t                                   geometryIndex;
+  uint32_t                                   instanceIndex;
+
+  mt_useAllocation(pass->cmdb, mt_rayBuffer(scratchBuffer));
+  mt_useAllocation(pass->cmdb, mt_rayNativeStructure(dst));
+
+  if (info->source) {
+    mt_useAllocation(pass->cmdb, mt_rayNativeStructure(info->source));
+  }
+
+  if (info->type == GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT) {
+    for (geometryIndex = 0u; geometryIndex < info->bottomLevel.geometryCount; geometryIndex++) {
+      geometry = &info->bottomLevel.pGeometries[geometryIndex];
+
+      if (geometry->type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT) {
+        mt_useAllocation(pass->cmdb, mt_rayBuffer(geometry->aabbs.buffer));
+      } else {
+        mt_useAllocation(pass->cmdb,
+                         mt_rayBuffer(geometry->triangles.vertexBuffer));
+        mt_useAllocation(pass->cmdb,
+                         mt_rayBuffer(geometry->triangles.indexBuffer));
+      }
+    }
+
+  } else {
+    native = mt_rayStructure(dst);
+    mt_useAllocation(pass->cmdb, native ? native->instanceBuffer : nil);
+
+    for (instanceIndex = 0u; instanceIndex < info->topLevel.instanceCount; instanceIndex++) {
+      mt_useAllocation(pass->cmdb,
+                       mt_rayNativeStructure(info->topLevel.pInstances[instanceIndex].structure));
+    }
+  }
+}
+
+static GPUResult
+mt_createIntersectionFunctionTable(GPUDevice                                       *device,
+                                   const GPUIntersectionFunctionTableCreateInfoEXT *info,
+                                   GPUIntersectionFunctionTableEXT                 *table) {
+  MTLIntersectionFunctionTableDescriptor *descriptor;
+  MTIntersectionFunctionTable            *native;
+  NSArray                                *functions;
+  MTComputePipelineDesc                  *computeDesc;
+  GPUComputePipelineState                *computeState;
+  id<MTLFunctionHandle>                   computeHandle;
+  MTRenderPipelineDesc                   *renderDesc;
+  MTRenderPipelineState                  *renderState;
+  id<MTLFunctionHandle>                   renderHandle;
+  NSUInteger                              computeIndex;
+  MTLRenderStages                         stage;
+  NSUInteger                              renderIndex;
+
+  GPU__UNUSED(device);
+
+  if (!(native = calloc(1, sizeof(*native)))) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  functions = nil;
+
+  if (info->computePipeline) {
+    computeDesc  = info->computePipeline->_priv;
+    computeState = info->computePipeline->_state;
+
+    if (!computeDesc || !computeState || !computeState->_priv) {
+      free(native);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+
+    functions = computeDesc->intersectionFunctions;
+
+    if (@available(macOS 11.0, iOS 14.0, *)) {
+      descriptor               = [MTLIntersectionFunctionTableDescriptor new];
+      descriptor.functionCount = functions.count;
+      native->table            = [(id<MTLComputePipelineState>)computeState->_priv
+        newIntersectionFunctionTableWithDescriptor:descriptor];
+      [descriptor release];
+
+      if (native->table) {
+        for (computeIndex = 0u; computeIndex < functions.count; computeIndex++) {
+          if (!(computeHandle = [(id<MTLComputePipelineState>)computeState->_priv
+            functionHandleWithFunction:functions[computeIndex]])) {
+            [native->table release];
+            free(native);
+            return GPU_ERROR_BACKEND_FAILURE;
+          }
+
+          [native->table setFunction:computeHandle atIndex:computeIndex];
+        }
+      }
+    }
+
+  } else {
+    renderDesc  = info->renderPipeline->_priv;
+    renderState = info->renderPipeline->_state;
+    stage       = info->stage == GPU_SHADER_STAGE_VERTEX_BIT ? MTLRenderStageVertex : MTLRenderStageFragment;
+
+    if (!renderDesc || !renderState || !renderState->render) {
+      free(native);
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+
+    functions = info->stage == GPU_SHADER_STAGE_VERTEX_BIT
+                ? renderDesc->vertexIntersectionFunctions
+                : renderDesc->fragmentIntersectionFunctions;
+
+    if (@available(macOS 12.0, iOS 15.0, *)) {
+      descriptor               = [MTLIntersectionFunctionTableDescriptor new];
+      descriptor.functionCount = functions.count;
+      native->table            = [renderState->render newIntersectionFunctionTableWithDescriptor:descriptor
+                                                                                           stage:stage];
+      [descriptor release];
+
+      if (native->table) {
+        for (renderIndex = 0u; renderIndex < functions.count; renderIndex++) {
+          if (!(renderHandle = [renderState->render functionHandleWithFunction:functions[renderIndex]
+                                                                         stage:stage])) {
+            [native->table release];
+            free(native);
+            return GPU_ERROR_BACKEND_FAILURE;
+          }
+
+          [native->table setFunction:renderHandle atIndex:renderIndex];
+        }
+      }
+    }
+  }
+
+  if (!native->table || functions.count == 0u) {
+    [native->table release];
+    free(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  if (gpuDeviceDebugMarkersEnabled(device)
+      && info->label && info->label[0] != '\0') {
+    native->table.label = [NSString stringWithUTF8String:info->label];
+  }
+#endif
+  native->stage = info->stage;
+  table->_priv  = native;
+
+  return GPU_OK;
+}
+
+static void
+mt_destroyIntersectionFunctionTable(GPUIntersectionFunctionTableEXT *table) {
+  MTIntersectionFunctionTable *native;
+  uint32_t                     mask;
+  uint32_t                     index;
+
+  native = table ? table->_priv : NULL;
+
+  if (!native) {
+    return;
+  }
+
+  mask = native->bufferMask;
+
+  while (mask != 0u) {
+    index = (uint32_t)__builtin_ctz(mask);
+    mask &= mask - 1u;
+    [native->buffers[index] release];
+  }
+
+  [native->table release];
+  free(native);
+  table->_priv = NULL;
+}
+
+static GPUResult
+mt_setIntersectionFunctionTableBuffer(GPUIntersectionFunctionTableEXT *table,
+                                      uint32_t                         index,
+                                      GPUBuffer                       *buffer,
+                                      uint64_t                         offset) {
+  MTIntersectionFunctionTable *native;
+
+  native = table ? table->_priv : NULL;
+
+  if (!native || !native->table || index >= MT_BIND_GROUP_BUFFER_COUNT) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  [native->table setBuffer:mt_rayBuffer(buffer)
+                    offset:(NSUInteger)offset
+                   atIndex:index];
+  [native->buffers[index] release];
+  native->buffers[index] = [mt_rayBuffer(buffer) retain];
+
+  if (buffer) {
+    native->bufferMask |= 1u << index;
+  } else {
+    native->bufferMask &= ~(1u << index);
+  }
+
+  return GPU_OK;
+}
+
+static void
+mt_bindComputeIntersectionFunctionTable(GPUComputePassEncoder           *pass,
+                                        uint32_t                         index,
+                                        GPUIntersectionFunctionTableEXT *table) {
+  MTIntersectionFunctionTable *nativeTable;
+  MTComputeEncoder            *native;
+  uint32_t                     slotBit;
+
+  nativeTable = table ? table->_priv : NULL;
+  native      = pass ? pass->_priv : NULL;
+
+  if (!nativeTable || !nativeTable->table || !native
+      || index >= MT_BIND_GROUP_BUFFER_COUNT) {
+    return;
+  }
+
+  slotBit = 1u << index;
+
+  if ((native->intersectionTableMask & slotBit) != 0u
+      && native->intersectionTables[index] == nativeTable->table) {
+    return;
+  }
+
+#if MT_HAS_METAL4
+  if (native->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [(id<MTL4ArgumentTable>)native->arguments->table setResource:nativeTable->table.gpuResourceID
+                                                     atBufferIndex:index];
+      native->arguments->resourceMask |= slotBit;
+      mt_useAllocation(pass->_cmdb, nativeTable->table);
+      mt_useModernTableBuffers(pass->_cmdb, nativeTable);
+    }
+  } else
+#endif
+  {
+    [native->classic setIntersectionFunctionTable:nativeTable->table
+                                    atBufferIndex:index];
+    mt_useComputeTableBuffers(native->classic, nativeTable);
+  }
+
+  native->intersectionTables[index] = nativeTable->table;
+  native->intersectionTableMask    |= slotBit;
+}
+
+static void
+mt_bindRenderIntersectionFunctionTable(GPURenderPassEncoder            *pass,
+                                       uint32_t                         index,
+                                       GPUIntersectionFunctionTableEXT *table) {
+  MTIntersectionFunctionTable *nativeTable;
+  MTRenderEncoder             *native;
+  MTArgumentState             *arguments;
+  id                          *tables;
+  uint32_t                    *mask;
+  MTLRenderStages              stages;
+  uint32_t                     slotBit;
+
+  nativeTable = table ? table->_priv : NULL;
+  native      = pass ? pass->_priv : NULL;
+
+  if (!nativeTable || !nativeTable->table || !native
+      || index >= MT_BIND_GROUP_BUFFER_COUNT) {
+    return;
+  }
+
+  if (nativeTable->stage == GPU_SHADER_STAGE_VERTEX_BIT) {
+    arguments = native->vertexArguments;
+    tables    = native->vertexIntersectionTables;
+    mask      = &native->vertexIntersectionTableMask;
+  } else {
+    arguments = native->fragmentArguments;
+    tables    = native->fragmentIntersectionTables;
+    mask      = &native->fragmentIntersectionTableMask;
+  }
+
+  slotBit = 1u << index;
+
+  if ((*mask & slotBit) != 0u && tables[index] == nativeTable->table) {
+    return;
+  }
+
+#if MT_HAS_METAL4
+  if (native->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      [(id<MTL4ArgumentTable>)arguments->table setResource:nativeTable->table.gpuResourceID
+                                             atBufferIndex:index];
+      arguments->resourceMask |= slotBit;
+      mt_useAllocation(pass->_cmdb, nativeTable->table);
+      mt_useModernTableBuffers(pass->_cmdb, nativeTable);
+    }
+  } else
+#endif
+  if (nativeTable->stage == GPU_SHADER_STAGE_VERTEX_BIT) {
+    [native->classic setVertexIntersectionFunctionTable:nativeTable->table
+                                          atBufferIndex:index];
+  } else {
+    [native->classic setFragmentIntersectionFunctionTable:nativeTable->table
+                                            atBufferIndex:index];
+  }
+
+  if (native->classic) {
+    stages = nativeTable->stage == GPU_SHADER_STAGE_VERTEX_BIT ? MTLRenderStageVertex : MTLRenderStageFragment;
+    mt_useRenderTableBuffers(native->classic, nativeTable, stages);
+  }
+
+  tables[index] = nativeTable->table;
+  *mask        |= slotBit;
+}
+
+GPU_HIDE
+void
+mt_useComputeRayResources(id<MTLComputeCommandEncoder> encoder,
+                          GPUAccelerationStructureMT  *structure) {
+  id<MTLAccelerationStructure> child;
+
+  if (!encoder || !structure || !structure->classicInstances) {
+    return;
+  }
+
+  for (child in structure->classicInstances) {
+    [encoder useResource:child usage:MTLResourceUsageRead];
+  }
+}
+
+GPU_HIDE
+void
+mt_useRenderRayResources(id<MTLRenderCommandEncoder> encoder,
+                         GPUAccelerationStructureMT *structure,
+                         MTLRenderStages             stages) {
+  id<MTLAccelerationStructure> child;
+
+  if (!encoder || !structure || !structure->classicInstances) {
+    return;
+  }
+
+  for (child in structure->classicInstances) {
+    [encoder useResource:child
+                   usage:MTLResourceUsageRead
+                  stages:stages];
+  }
+}
 
 GPU_HIDE
 GPUResult
-mt_getAccelerationStructureSizes(
-  GPUDevice                                    *device,
-  const GPUAccelerationStructureBuildInfoEXT  *info,
-  GPUAccelerationStructureSizesEXT            *outSizes) {
-  GPUDeviceMT                       *deviceMT;
+mt_getAccelerationStructureSizes(GPUDevice                                  *device,
+                                 const GPUAccelerationStructureBuildInfoEXT *info,
+                                 GPUAccelerationStructureSizesEXT           *outSizes) {
+  MTLAccelerationStructureSizes       sizes;
+  GPUDeviceMT                        *deviceMT;
   MTLAccelerationStructureDescriptor *descriptor;
-  MTLAccelerationStructureSizes      sizes;
 
   deviceMT   = device->_priv;
   descriptor = mt_rayClassicDescriptor(info);
+
   if (!deviceMT || !descriptor) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  sizes = [deviceMT->device
-    accelerationStructureSizesWithDescriptor:descriptor];
+
+  sizes = [deviceMT->device accelerationStructureSizesWithDescriptor:descriptor];
   outSizes->accelerationStructureSize = sizes.accelerationStructureSize;
   outSizes->buildScratchSize          = sizes.buildScratchBufferSize;
   outSizes->updateScratchSize         = sizes.refitScratchBufferSize;
-  return outSizes->accelerationStructureSize > 0u
-           ? GPU_OK
-           : GPU_ERROR_BACKEND_FAILURE;
+
+  return outSizes->accelerationStructureSize > 0u ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 }
 
 GPU_HIDE
 GPUResult
-mt_createAccelerationStructure(
-  GPUDevice                                    *device,
-  const GPUAccelerationStructureCreateInfoEXT *info,
-  GPUAccelerationStructureEXT                 *structure) {
+mt_createAccelerationStructure(GPUDevice                                   *device,
+                               const GPUAccelerationStructureCreateInfoEXT *info,
+                               GPUAccelerationStructureEXT                 *structure) {
   GPUAccelerationStructureMT *native;
-  GPUDeviceMT                  *deviceMT;
+  GPUDeviceMT                *deviceMT;
 
   deviceMT = device->_priv;
+
   if (!deviceMT || info->sizeBytes > NSUIntegerMax) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  native = calloc(1, sizeof(*native));
-  if (!native) {
+
+  if (!(native = calloc(1, sizeof(*native)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
-  native->structure = [deviceMT->device
-    newAccelerationStructureWithSize:(NSUInteger)info->sizeBytes];
+
+  native->structure = [deviceMT->device newAccelerationStructureWithSize:(NSUInteger)info->sizeBytes];
+
   if (!native->structure) {
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
@@ -646,6 +975,7 @@ mt_createAccelerationStructure(
   }
 #endif
   structure->_priv = native;
+
   return GPU_OK;
 }
 
@@ -655,9 +985,11 @@ mt_destroyAccelerationStructure(GPUAccelerationStructureEXT *structure) {
   GPUAccelerationStructureMT *native;
 
   native = mt_rayStructure(structure);
+
   if (!native) {
     return;
   }
+
   [native->modernDescriptor release];
   [native->classicDescriptor release];
   [native->classicInstances release];
@@ -670,16 +1002,21 @@ mt_destroyAccelerationStructure(GPUAccelerationStructureEXT *structure) {
 }
 
 GPU_HIDE
-GPUAccelerationStructurePassEncoderEXT *
+GPUAccelerationStructurePassEncoderEXT*
 mt_beginAccelerationStructurePass(GPUCommandBuffer *cmdb, const char *label) {
-  MTCommandBuffer                           *command;
-  MTRayQueryEncoder                        *native;
-  GPUAccelerationStructurePassEncoderEXT   *pass;
+  MTCommandBuffer                        *command;
+  MTRayQueryEncoder                      *native;
+  GPUAccelerationStructurePassEncoderEXT *pass;
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  NSString                               *nativeLabel;
+#endif
 
   command = mt_commandBuffer(cmdb);
+
   if (!command) {
     return NULL;
   }
+
   pass   = &command->rayQueryEncoder;
   native = &command->rayQueryState;
   memset(pass, 0, sizeof(*pass));
@@ -695,19 +1032,18 @@ mt_beginAccelerationStructurePass(GPUCommandBuffer *cmdb, const char *label) {
 #endif
   {
     @autoreleasepool {
-      native->classic = [[command->classic
-        accelerationStructureCommandEncoder] retain];
+      native->classic = [[command->classic accelerationStructureCommandEncoder] retain];
     }
+
     mt_applyPendingBarrier(cmdb, native->classic);
   }
+
   if (!native->classic && !native->modern) {
     return NULL;
   }
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   if (label && label[0] != '\0') {
-    NSString *nativeLabel;
-
-    nativeLabel = [NSString stringWithUTF8String:label];
+    nativeLabel           = [NSString stringWithUTF8String:label];
     native->classic.label = nativeLabel;
 #if MT_HAS_METAL4
     if (@available(macOS 26.0, iOS 26.0, *)) {
@@ -719,141 +1055,109 @@ mt_beginAccelerationStructurePass(GPUCommandBuffer *cmdb, const char *label) {
   GPU__UNUSED(label);
 #endif
   pass->_priv = native;
+
   return pass;
-}
-
-static void
-mt_rayUseBuildResources(
-  GPUAccelerationStructurePassEncoderEXT     *pass,
-  GPUAccelerationStructureEXT                *dst,
-  const GPUAccelerationStructureBuildInfoEXT *info,
-  GPUBuffer                                   *scratchBuffer) {
-  mt_useAllocation(pass->cmdb, mt_rayBuffer(scratchBuffer));
-  mt_useAllocation(pass->cmdb, mt_rayNativeStructure(dst));
-  if (info->source) {
-    mt_useAllocation(pass->cmdb, mt_rayNativeStructure(info->source));
-  }
-  if (info->type == GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT) {
-    for (uint32_t i = 0u; i < info->bottomLevel.geometryCount; i++) {
-      const GPUAccelerationStructureGeometryEXT *geometry;
-
-      geometry = &info->bottomLevel.pGeometries[i];
-      if (geometry->type == GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT) {
-        mt_useAllocation(pass->cmdb, mt_rayBuffer(geometry->aabbs.buffer));
-      } else {
-        mt_useAllocation(pass->cmdb,
-                         mt_rayBuffer(geometry->triangles.vertexBuffer));
-        mt_useAllocation(pass->cmdb,
-                         mt_rayBuffer(geometry->triangles.indexBuffer));
-      }
-    }
-  } else {
-    GPUAccelerationStructureMT *native;
-
-    native = mt_rayStructure(dst);
-    mt_useAllocation(pass->cmdb, native ? native->instanceBuffer : nil);
-    for (uint32_t i = 0u; i < info->topLevel.instanceCount; i++) {
-      mt_useAllocation(
-        pass->cmdb,
-        mt_rayNativeStructure(info->topLevel.pInstances[i].structure));
-    }
-  }
 }
 
 GPU_HIDE
 GPUResult
-mt_buildAccelerationStructure(
-  GPUAccelerationStructurePassEncoderEXT     *pass,
-  GPUAccelerationStructureEXT                *dst,
-  const GPUAccelerationStructureBuildInfoEXT *info,
-  GPUBuffer                                   *scratchBuffer,
-  uint64_t                                     scratchOffset) {
-  GPUAccelerationStructureMT *native;
-  GPUDeviceMT                  *device;
-  MTRayQueryEncoder            *encoder;
+mt_buildAccelerationStructure(GPUAccelerationStructurePassEncoderEXT     *pass,
+                              GPUAccelerationStructureEXT                *dst,
+                              const GPUAccelerationStructureBuildInfoEXT *info,
+                              GPUBuffer                                  *scratchBuffer,
+                              uint64_t                                    scratchOffset) {
+#if MT_HAS_METAL4
+  MTL4BufferRange                      scratch;
+#endif
+  GPUAccelerationStructureMT          *native;
+  GPUDeviceMT                         *device;
+  MTRayQueryEncoder                   *encoder;
+#if MT_HAS_METAL4
+  MTL4AccelerationStructureDescriptor *descriptor;
+  bool                                 modernPrepared;
+#endif
+  bool                                 classicPrepared;
 
   native  = mt_rayStructure(dst);
   device  = pass && pass->device ? pass->device->_priv : NULL;
   encoder = mt_rayEncoder(pass);
+
   if (!native || !device || !encoder) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
 #if MT_HAS_METAL4
   if (encoder->modern) {
-    MTL4AccelerationStructureDescriptor *descriptor;
-    MTL4BufferRange                      scratch;
-
     if (@available(macOS 26.0, iOS 26.0, *)) {
-      bool prepared;
+      modernPrepared = info->type == GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT
+                       ? mt_rayPrepareModernBLAS(native, info)
+                       : mt_rayPrepareModernTLAS(device, native, info);
 
-      prepared = info->type == GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT
-                   ? mt_rayPrepareModernBLAS(native, info)
-                   : mt_rayPrepareModernTLAS(device, native, info);
-      if (!prepared) {
+      if (!modernPrepared) {
         return GPU_ERROR_OUT_OF_MEMORY;
       }
+
       descriptor = native->modernDescriptor;
       scratch    = mt_rayRange(scratchBuffer, scratchOffset);
       mt_rayUseBuildResources(pass, dst, info, scratchBuffer);
+
       if (encoder->hasBuild) {
-        [(id<MTL4ComputeCommandEncoder>)encoder->modern
-          barrierAfterEncoderStages:MTLStageAccelerationStructure
-                  beforeEncoderStages:MTLStageAccelerationStructure
-                    visibilityOptions:MTL4VisibilityOptionDevice];
+        [(id<MTL4ComputeCommandEncoder>)encoder->modern barrierAfterEncoderStages:MTLStageAccelerationStructure
+                                                              beforeEncoderStages:MTLStageAccelerationStructure
+                                                                visibilityOptions:MTL4VisibilityOptionDevice];
       }
+
       if (info->mode == GPU_ACCELERATION_STRUCTURE_UPDATE_EXT) {
-        [(id<MTL4ComputeCommandEncoder>)encoder->modern
-          refitAccelerationStructure:mt_rayNativeStructure(info->source)
-                              descriptor:descriptor
-                             destination:native->structure
-                           scratchBuffer:scratch];
+        [(id<MTL4ComputeCommandEncoder>)encoder->modern refitAccelerationStructure:mt_rayNativeStructure(info->source)
+                                                                        descriptor:descriptor
+                                                                       destination:native->structure
+                                                                     scratchBuffer:scratch];
       } else {
-        [(id<MTL4ComputeCommandEncoder>)encoder->modern
-          buildAccelerationStructure:native->structure
-                          descriptor:descriptor
-                       scratchBuffer:scratch];
+        [(id<MTL4ComputeCommandEncoder>)encoder->modern buildAccelerationStructure:native->structure
+                                                                        descriptor:descriptor
+                                                                     scratchBuffer:scratch];
       }
+
       encoder->hasBuild = true;
+
       return GPU_OK;
     }
   }
 #endif
 
   {
-    bool prepared;
+    classicPrepared = info->type == GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT
+                      ? mt_rayPrepareClassicBLAS(native, info)
+                      : mt_rayPrepareClassicTLAS(device, native, info);
 
-    prepared = info->type == GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT
-                 ? mt_rayPrepareClassicBLAS(native, info)
-                 : mt_rayPrepareClassicTLAS(device, native, info);
-    if (!prepared) {
+    if (!classicPrepared) {
       return GPU_ERROR_OUT_OF_MEMORY;
     }
+
     if (info->mode == GPU_ACCELERATION_STRUCTURE_UPDATE_EXT) {
-      [encoder->classic
-        refitAccelerationStructure:mt_rayNativeStructure(info->source)
-                          descriptor:native->classicDescriptor
-                         destination:native->structure
-                       scratchBuffer:mt_rayBuffer(scratchBuffer)
-                 scratchBufferOffset:(NSUInteger)scratchOffset];
+      [encoder->classic refitAccelerationStructure:mt_rayNativeStructure(info->source)
+                                        descriptor:native->classicDescriptor
+                                       destination:native->structure
+                                     scratchBuffer:mt_rayBuffer(scratchBuffer)
+                               scratchBufferOffset:(NSUInteger)scratchOffset];
     } else {
-      [encoder->classic
-        buildAccelerationStructure:native->structure
-                        descriptor:native->classicDescriptor
-                     scratchBuffer:mt_rayBuffer(scratchBuffer)
-               scratchBufferOffset:(NSUInteger)scratchOffset];
+      [encoder->classic buildAccelerationStructure:native->structure
+                                        descriptor:native->classicDescriptor
+                                     scratchBuffer:mt_rayBuffer(scratchBuffer)
+                               scratchBufferOffset:(NSUInteger)scratchOffset];
     }
   }
+
   return GPU_OK;
 }
 
 GPU_HIDE
 void
-mt_endAccelerationStructurePass(
-  GPUAccelerationStructurePassEncoderEXT *pass) {
+mt_endAccelerationStructurePass(GPUAccelerationStructurePassEncoderEXT *pass) {
   MTRayQueryEncoder *native;
 
   native = mt_rayEncoder(pass);
+
   if (!native) {
     return;
   }
@@ -861,11 +1165,11 @@ mt_endAccelerationStructurePass(
   if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       if (native->hasBuild) {
-        [(id<MTL4ComputeCommandEncoder>)native->modern
-          barrierAfterStages:MTLStageAccelerationStructure
-           beforeQueueStages:MTLStageAll
-           visibilityOptions:MTL4VisibilityOptionDevice];
+        [(id<MTL4ComputeCommandEncoder>)native->modern barrierAfterStages:MTLStageAccelerationStructure
+                                                        beforeQueueStages:MTLStageAll
+                                                        visibilityOptions:MTL4VisibilityOptionDevice];
       }
+
       [(id<MTL4ComputeCommandEncoder>)native->modern endEncoding];
     }
   } else
@@ -874,286 +1178,23 @@ mt_endAccelerationStructurePass(
     [native->classic endEncoding];
     [native->classic release];
   }
+
   native->classic = nil;
   native->modern  = nil;
-}
-
-static GPUResult
-mt_createIntersectionFunctionTable(
-  GPUDevice                                       *device,
-  const GPUIntersectionFunctionTableCreateInfoEXT *info,
-  GPUIntersectionFunctionTableEXT                 *table) {
-  MTLIntersectionFunctionTableDescriptor *descriptor;
-  MTIntersectionFunctionTable            *native;
-  NSArray                                *functions;
-
-  GPU__UNUSED(device);
-  native = calloc(1, sizeof(*native));
-  if (!native) {
-    return GPU_ERROR_OUT_OF_MEMORY;
-  }
-
-  functions = nil;
-  if (info->computePipeline) {
-    MTComputePipelineDesc   *pipelineDesc;
-    GPUComputePipelineState *pipelineState;
-
-    pipelineDesc  = info->computePipeline->_priv;
-    pipelineState = info->computePipeline->_state;
-    if (!pipelineDesc || !pipelineState || !pipelineState->_priv) {
-      free(native);
-      return GPU_ERROR_INVALID_ARGUMENT;
-    }
-    functions = pipelineDesc->intersectionFunctions;
-    if (@available(macOS 11.0, iOS 14.0, *)) {
-      descriptor               = [MTLIntersectionFunctionTableDescriptor new];
-      descriptor.functionCount = functions.count;
-      native->table = [(id<MTLComputePipelineState>)pipelineState->_priv
-        newIntersectionFunctionTableWithDescriptor:descriptor];
-      [descriptor release];
-      if (native->table) {
-        for (NSUInteger i = 0u; i < functions.count; i++) {
-          id<MTLFunctionHandle> handle;
-
-          handle = [(id<MTLComputePipelineState>)pipelineState->_priv
-            functionHandleWithFunction:functions[i]];
-          if (!handle) {
-            [native->table release];
-            free(native);
-            return GPU_ERROR_BACKEND_FAILURE;
-          }
-          [native->table setFunction:handle atIndex:i];
-        }
-      }
-    }
-  } else {
-    MTRenderPipelineDesc  *pipelineDesc;
-    MTRenderPipelineState *pipelineState;
-    MTLRenderStages        stage;
-
-    pipelineDesc  = info->renderPipeline->_priv;
-    pipelineState = info->renderPipeline->_state;
-    stage = info->stage == GPU_SHADER_STAGE_VERTEX_BIT
-              ? MTLRenderStageVertex
-              : MTLRenderStageFragment;
-    if (!pipelineDesc || !pipelineState || !pipelineState->render) {
-      free(native);
-      return GPU_ERROR_INVALID_ARGUMENT;
-    }
-    functions = info->stage == GPU_SHADER_STAGE_VERTEX_BIT
-                  ? pipelineDesc->vertexIntersectionFunctions
-                  : pipelineDesc->fragmentIntersectionFunctions;
-    if (@available(macOS 12.0, iOS 15.0, *)) {
-      descriptor               = [MTLIntersectionFunctionTableDescriptor new];
-      descriptor.functionCount = functions.count;
-      native->table = [pipelineState->render
-        newIntersectionFunctionTableWithDescriptor:descriptor
-                                             stage:stage];
-      [descriptor release];
-      if (native->table) {
-        for (NSUInteger i = 0u; i < functions.count; i++) {
-          id<MTLFunctionHandle> handle;
-
-          handle = [pipelineState->render
-            functionHandleWithFunction:functions[i]
-                                 stage:stage];
-          if (!handle) {
-            [native->table release];
-            free(native);
-            return GPU_ERROR_BACKEND_FAILURE;
-          }
-          [native->table setFunction:handle atIndex:i];
-        }
-      }
-    }
-  }
-  if (!native->table || functions.count == 0u) {
-    [native->table release];
-    free(native);
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-
-#if GPU_BUILD_WITH_DEBUG_MARKERS
-  if (gpuDeviceDebugMarkersEnabled(device) &&
-      info->label && info->label[0] != '\0') {
-    native->table.label = [NSString stringWithUTF8String:info->label];
-  }
-#endif
-  native->stage = info->stage;
-  table->_priv  = native;
-  return GPU_OK;
-}
-
-static void
-mt_destroyIntersectionFunctionTable(GPUIntersectionFunctionTableEXT *table) {
-  MTIntersectionFunctionTable *native;
-  uint32_t                     mask;
-
-  native = table ? table->_priv : NULL;
-  if (!native) {
-    return;
-  }
-  mask = native->bufferMask;
-  while (mask != 0u) {
-    uint32_t index;
-
-    index = (uint32_t)__builtin_ctz(mask);
-    mask &= mask - 1u;
-    [native->buffers[index] release];
-  }
-  [native->table release];
-  free(native);
-  table->_priv = NULL;
-}
-
-static GPUResult
-mt_setIntersectionFunctionTableBuffer(
-  GPUIntersectionFunctionTableEXT *table,
-  uint32_t                         index,
-  GPUBuffer                       *buffer,
-  uint64_t                         offset) {
-  MTIntersectionFunctionTable *native;
-
-  native = table ? table->_priv : NULL;
-  if (!native || !native->table || index >= MT_BIND_GROUP_BUFFER_COUNT) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  [native->table setBuffer:mt_rayBuffer(buffer)
-                    offset:(NSUInteger)offset
-                   atIndex:index];
-  [native->buffers[index] release];
-  native->buffers[index] = [mt_rayBuffer(buffer) retain];
-  if (buffer) {
-    native->bufferMask |= 1u << index;
-  } else {
-    native->bufferMask &= ~(1u << index);
-  }
-  return GPU_OK;
-}
-
-static void
-mt_bindComputeIntersectionFunctionTable(
-  GPUComputePassEncoder           *pass,
-  uint32_t                         index,
-  GPUIntersectionFunctionTableEXT *table) {
-  MTIntersectionFunctionTable *nativeTable;
-  MTComputeEncoder            *native;
-  uint32_t                      slotBit;
-
-  nativeTable = table ? table->_priv : NULL;
-  native      = pass ? pass->_priv : NULL;
-  if (!nativeTable || !nativeTable->table || !native ||
-      index >= MT_BIND_GROUP_BUFFER_COUNT) {
-    return;
-  }
-  slotBit = 1u << index;
-  if ((native->intersectionTableMask & slotBit) != 0u &&
-      native->intersectionTables[index] == nativeTable->table) {
-    return;
-  }
-
-#if MT_HAS_METAL4
-  if (native->modern) {
-    if (@available(macOS 26.0, iOS 26.0, *)) {
-      [(id<MTL4ArgumentTable>)native->arguments->table
-        setResource:nativeTable->table.gpuResourceID
-      atBufferIndex:index];
-      native->arguments->resourceMask |= slotBit;
-      mt_useAllocation(pass->_cmdb, nativeTable->table);
-      mt_useModernTableBuffers(pass->_cmdb, nativeTable);
-    }
-  } else
-#endif
-  {
-    [native->classic setIntersectionFunctionTable:nativeTable->table
-                                     atBufferIndex:index];
-    mt_useComputeTableBuffers(native->classic, nativeTable);
-  }
-  native->intersectionTables[index] = nativeTable->table;
-  native->intersectionTableMask    |= slotBit;
-}
-
-static void
-mt_bindRenderIntersectionFunctionTable(
-  GPURenderPassEncoder            *pass,
-  uint32_t                         index,
-  GPUIntersectionFunctionTableEXT *table) {
-  MTIntersectionFunctionTable *nativeTable;
-  MTRenderEncoder             *native;
-  MTArgumentState             *arguments;
-  id                          *tables;
-  uint32_t                    *mask;
-  uint32_t                     slotBit;
-
-  nativeTable = table ? table->_priv : NULL;
-  native      = pass ? pass->_priv : NULL;
-  if (!nativeTable || !nativeTable->table || !native ||
-      index >= MT_BIND_GROUP_BUFFER_COUNT) {
-    return;
-  }
-
-  if (nativeTable->stage == GPU_SHADER_STAGE_VERTEX_BIT) {
-    arguments = native->vertexArguments;
-    tables    = native->vertexIntersectionTables;
-    mask      = &native->vertexIntersectionTableMask;
-  } else {
-    arguments = native->fragmentArguments;
-    tables    = native->fragmentIntersectionTables;
-    mask      = &native->fragmentIntersectionTableMask;
-  }
-  slotBit = 1u << index;
-  if ((*mask & slotBit) != 0u && tables[index] == nativeTable->table) {
-    return;
-  }
-
-#if MT_HAS_METAL4
-  if (native->modern) {
-    if (@available(macOS 26.0, iOS 26.0, *)) {
-      [(id<MTL4ArgumentTable>)arguments->table
-        setResource:nativeTable->table.gpuResourceID
-      atBufferIndex:index];
-      arguments->resourceMask |= slotBit;
-      mt_useAllocation(pass->_cmdb, nativeTable->table);
-      mt_useModernTableBuffers(pass->_cmdb, nativeTable);
-    }
-  } else
-#endif
-  if (nativeTable->stage == GPU_SHADER_STAGE_VERTEX_BIT) {
-    [native->classic setVertexIntersectionFunctionTable:nativeTable->table
-                                          atBufferIndex:index];
-  } else {
-    [native->classic setFragmentIntersectionFunctionTable:nativeTable->table
-                                            atBufferIndex:index];
-  }
-  if (native->classic) {
-    MTLRenderStages stages;
-
-    stages = nativeTable->stage == GPU_SHADER_STAGE_VERTEX_BIT
-               ? MTLRenderStageVertex
-               : MTLRenderStageFragment;
-    mt_useRenderTableBuffers(native->classic, nativeTable, stages);
-  }
-  tables[index] = nativeTable->table;
-  *mask        |= slotBit;
 }
 
 GPU_HIDE
 void
 mt_initRayQuery(GPUApiRayQuery *api) {
-  api->getSizes  = mt_getAccelerationStructureSizes;
-  api->create    = mt_createAccelerationStructure;
-  api->destroy   = mt_destroyAccelerationStructure;
-  api->beginPass = mt_beginAccelerationStructurePass;
-  api->build     = mt_buildAccelerationStructure;
-  api->endPass   = mt_endAccelerationStructurePass;
-  api->createIntersectionFunctionTable =
-    mt_createIntersectionFunctionTable;
-  api->destroyIntersectionFunctionTable =
-    mt_destroyIntersectionFunctionTable;
-  api->setIntersectionFunctionTableBuffer =
-    mt_setIntersectionFunctionTableBuffer;
-  api->bindComputeIntersectionFunctionTable =
-    mt_bindComputeIntersectionFunctionTable;
-  api->bindRenderIntersectionFunctionTable =
-    mt_bindRenderIntersectionFunctionTable;
+  api->getSizes                             = mt_getAccelerationStructureSizes;
+  api->create                               = mt_createAccelerationStructure;
+  api->destroy                              = mt_destroyAccelerationStructure;
+  api->beginPass                            = mt_beginAccelerationStructurePass;
+  api->build                                = mt_buildAccelerationStructure;
+  api->endPass                              = mt_endAccelerationStructurePass;
+  api->createIntersectionFunctionTable      = mt_createIntersectionFunctionTable;
+  api->destroyIntersectionFunctionTable     = mt_destroyIntersectionFunctionTable;
+  api->setIntersectionFunctionTableBuffer   = mt_setIntersectionFunctionTableBuffer;
+  api->bindComputeIntersectionFunctionTable = mt_bindComputeIntersectionFunctionTable;
+  api->bindRenderIntersectionFunctionTable  = mt_bindRenderIntersectionFunctionTable;
 }

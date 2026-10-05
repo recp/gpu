@@ -1,30 +1,38 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 #include "../../src/api/device_internal.h"
 
 #include <stddef.h>
 
 enum {
-  GPU_SOURCE_SAMPLER_VIEW_WIDTH     = 4u,
-  GPU_SOURCE_SAMPLER_VIEW_HEIGHT    = 4u,
-  GPU_SOURCE_SAMPLER_BASE_WIDTH     = GPU_SOURCE_SAMPLER_VIEW_WIDTH * 2u,
-  GPU_SOURCE_SAMPLER_BASE_HEIGHT    = GPU_SOURCE_SAMPLER_VIEW_HEIGHT * 2u,
-  GPU_SOURCE_SAMPLER_VIEW_BYTES     = GPU_SOURCE_SAMPLER_VIEW_WIDTH *
-                                      GPU_SOURCE_SAMPLER_VIEW_HEIGHT * 4u,
-  GPU_SOURCE_SAMPLER_BASE_BYTES     = GPU_SOURCE_SAMPLER_BASE_WIDTH *
-                                      GPU_SOURCE_SAMPLER_BASE_HEIGHT * 4u,
-  GPU_SOURCE_SAMPLER_ROW_PITCH      = 256u,
-  GPU_SOURCE_SAMPLER_READBACK_BYTES = GPU_SOURCE_SAMPLER_ROW_PITCH *
-                                      GPU_SOURCE_SAMPLER_VIEW_HEIGHT,
-
-  GPU_SOURCE_SAMPLER_WARM_ITERATIONS = 16u,
-  GPU_SOURCE_SAMPLER_WARM_BIND_REQUESTS =
-    GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 5u,
-  GPU_SOURCE_SAMPLER_WARM_BIND_EMISSIONS =
-    GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 3u,
-  GPU_SOURCE_SAMPLER_WARM_STATE_REQUESTS =
-    GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 8u,
-  GPU_SOURCE_SAMPLER_WARM_STATE_EMISSIONS =
-    GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 4u
+  GPU_SOURCE_SAMPLER_VIEW_WIDTH           = 4u,
+  GPU_SOURCE_SAMPLER_VIEW_HEIGHT          = 4u,
+  GPU_SOURCE_SAMPLER_BASE_WIDTH           = GPU_SOURCE_SAMPLER_VIEW_WIDTH * 2u,
+  GPU_SOURCE_SAMPLER_BASE_HEIGHT          = GPU_SOURCE_SAMPLER_VIEW_HEIGHT * 2u,
+  GPU_SOURCE_SAMPLER_VIEW_BYTES           = GPU_SOURCE_SAMPLER_VIEW_WIDTH * GPU_SOURCE_SAMPLER_VIEW_HEIGHT * 4u,
+  GPU_SOURCE_SAMPLER_BASE_BYTES           = GPU_SOURCE_SAMPLER_BASE_WIDTH * GPU_SOURCE_SAMPLER_BASE_HEIGHT * 4u,
+  GPU_SOURCE_SAMPLER_ROW_PITCH            = 256u,
+  GPU_SOURCE_SAMPLER_READBACK_BYTES       = GPU_SOURCE_SAMPLER_ROW_PITCH * GPU_SOURCE_SAMPLER_VIEW_HEIGHT,
+  GPU_SOURCE_SAMPLER_WARM_ITERATIONS      = 16u,
+  GPU_SOURCE_SAMPLER_WARM_BIND_REQUESTS   = GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 5u,
+  GPU_SOURCE_SAMPLER_WARM_BIND_EMISSIONS  = GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 3u,
+  GPU_SOURCE_SAMPLER_WARM_STATE_REQUESTS  = GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 8u,
+  GPU_SOURCE_SAMPLER_WARM_STATE_EMISSIONS = GPU_SOURCE_SAMPLER_WARM_ITERATIONS * 4u
 };
 
 typedef struct SourceSamplerUniforms {
@@ -52,19 +60,20 @@ submit_source_sampler_draw(GPUQueue                *queue,
                            GPUBuffer               *vertexBuffer,
                            GPURenderPassCreateInfo *passInfo,
                            GPUFence                *fence) {
-  GPUCommandBuffer         *cmdb;
-  GPUCommandBuffer         *submitBuffers[1];
-  GPURenderPassEncoder     *renderPass;
-  GPUBufferBinding          vertexBinding = {0};
-  GPUQueueSubmitInfo        submitInfo   = {0};
-  GPUDynamicStateApplyInfo  dynamicState = {0};
+  GPUCommandBuffer        *cmdb;
+  GPUCommandBuffer        *submitBuffers[1];
+  GPURenderPassEncoder    *renderPass;
+  GPUBufferBinding         vertexBinding = {0};
+  GPUQueueSubmitInfo       submitInfo    = {0};
+  GPUDynamicStateApplyInfo dynamicState  = {0};
 
   cmdb       = NULL;
   renderPass = NULL;
+
   if (GPUAcquireCommandBuffer(queue,
                               "api-source-sampler-warm",
-                              &cmdb) != GPU_OK ||
-      !cmdb || !(renderPass = GPUBeginRenderPass(cmdb, passInfo))) {
+                              &cmdb) != GPU_OK
+      || !cmdb || !(renderPass = GPUBeginRenderPass(cmdb, passInfo))) {
     return 0;
   }
 
@@ -74,12 +83,12 @@ submit_source_sampler_draw(GPUQueue                *queue,
   GPUBindVertexBuffers(renderPass, 0u, 1u, &vertexBinding);
   GPUBindRenderGroup(renderPass, 1u, group, 0u, NULL);
   GPUBindRenderGroup(renderPass, 1u, group, 0u, NULL);
-  dynamicState.chain.sType      = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
-  dynamicState.chain.structSize = sizeof(dynamicState);
-  dynamicState.mask             = GPU_DYNAMIC_STATE_VIEWPORT_BIT |
-                                  GPU_DYNAMIC_STATE_SCISSOR_BIT |
-                                  GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT |
-                                  GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+  dynamicState.chain.sType       = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
+  dynamicState.chain.structSize  = sizeof(dynamicState);
+  dynamicState.mask              = GPU_DYNAMIC_STATE_VIEWPORT_BIT |
+                                   GPU_DYNAMIC_STATE_SCISSOR_BIT |
+                                   GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT |
+                                   GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
   dynamicState.viewport.width    = 4.0f;
   dynamicState.viewport.height   = 4.0f;
   dynamicState.viewport.maxDepth = 1.0f;
@@ -99,80 +108,84 @@ submit_source_sampler_draw(GPUQueue                *queue,
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = submitBuffers;
   submitInfo.fence              = fence;
-  return GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
-         GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+
+  return GPUQueueSubmit(queue, &submitInfo) == GPU_OK
+         && GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
 }
 
 int
 gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
-  const uint32_t sourceWidth  = GPU_SOURCE_SAMPLER_VIEW_WIDTH;
-  const uint32_t sourceHeight = GPU_SOURCE_SAMPLER_VIEW_HEIGHT;
-  const uint32_t width        = GPU_SOURCE_SAMPLER_VIEW_WIDTH;
-  const uint32_t height       = GPU_SOURCE_SAMPLER_VIEW_HEIGHT;
-  const uint32_t rowPitch     = GPU_SOURCE_SAMPLER_ROW_PITCH;
-  const uint64_t imageBytes   = (uint64_t)rowPitch * height;
-  GPUQueue                         *queue;
-  GPUShaderLibrary                 *library;
-  GPUShaderLayout                  *shaderLayout;
-  GPURenderPipeline                *pipeline;
-  GPURenderPipeline                *pipelineSwitch;
-  GPUBindGroup                     *group;
-  GPUTexture                       *sampledTexture;
-  GPUTexture                       *targetTexture;
-  GPUTextureView                   *sampledView;
-  GPUTextureView                   *targetView;
-  GPUBuffer                        *uploadBuffer;
-  GPUBuffer                        *vertexBuffer;
-  GPUBuffer                        *uniformBuffer;
-  GPUBuffer                        *readbackBuffer;
-  GPUCommandBuffer                 *cmdb;
-  GPUCommandBuffer                 *submitBuffers[1];
-  GPURenderPassEncoder             *renderPass;
-  GPUTransferPassEncoder           *copyPass;
-  GPUFence                         *fence;
-  void                             *bytecode;
-  GPUColorTargetState               colorTarget = {0};
-  GPURenderPipelineCreateInfo       pipelineInfo = {0};
-  GPUVertexAttribute                vertexAttributes[2] = {0};
-  GPUVertexBufferLayout             vertexLayout = {0};
-  GPUTextureCreateInfo              textureInfo = {0};
-  GPUTextureViewCreateInfo          viewInfo = {0};
-  GPUTextureWriteRegion             writeRegion = {0};
-  GPUBindGroupEntry                 groupEntries[2] = {0};
-  GPUBindGroupCreateInfo            groupInfo = {0};
-  GPUBufferCreateInfo               bufferInfo = {0};
-  GPURenderPassColorAttachment      color = {0};
-  GPURenderPassCreateInfo           passInfo = {0};
-  GPUScissorRect                    leftScissor = {0};
-  GPUScissorRect                    rightScissor = {0};
-  GPUTextureBarrier                 textureBarrier = {0};
-  GPUBarrierBatch                   barrierBatch = {0};
-  GPUBufferTextureCopyRegion        copyRegion = {0};
-  GPUQueueSubmitInfo                submitInfo = {0};
-  const GPUBindGroupLayoutEntry    *layoutEntries;
-  uint8_t                           greenPixels[GPU_SOURCE_SAMPLER_BASE_BYTES];
-  uint8_t                           bluePixels[GPU_SOURCE_SAMPLER_VIEW_BYTES];
-  uint8_t                           redPixels[GPU_SOURCE_SAMPLER_VIEW_BYTES];
-  uint8_t pixels[GPU_SOURCE_SAMPLER_READBACK_BYTES] = {0};
-  const SourceSamplerUniforms       uniforms = { { 0.5f, 1.0f, 1.0f, 1.0f } };
-  uint64_t                          bytecodeSize;
-  uint32_t                          layoutEntryCount;
-  size_t                            leftOffset;
-  size_t                            rightOffset;
-  bool                              foundImmutableSampler;
-  bool                              foundTexture;
-  bool                              foundUniform;
-  bool                              savedStatsEnabled;
-  bool                              webgpu;
-  int                               ok;
+  const uint32_t                 sourceWidth  = GPU_SOURCE_SAMPLER_VIEW_WIDTH;
+  const uint32_t                 sourceHeight = GPU_SOURCE_SAMPLER_VIEW_HEIGHT;
+  const uint32_t                 width        = GPU_SOURCE_SAMPLER_VIEW_WIDTH;
+  const uint32_t                 height       = GPU_SOURCE_SAMPLER_VIEW_HEIGHT;
+  const uint32_t                 rowPitch     = GPU_SOURCE_SAMPLER_ROW_PITCH;
+  const uint64_t                 imageBytes   = (uint64_t)rowPitch * height;
+  GPUQueue                      *queue;
+  GPUShaderLibrary              *library;
+  GPUShaderLayout               *shaderLayout;
+  GPURenderPipeline             *pipeline;
+  GPURenderPipeline             *pipelineSwitch;
+  GPUBindGroup                  *group;
+  GPUTexture                    *sampledTexture;
+  GPUTexture                    *targetTexture;
+  GPUTextureView                *sampledView;
+  GPUTextureView                *targetView;
+  GPUBuffer                     *uploadBuffer;
+  GPUBuffer                     *vertexBuffer;
+  GPUBuffer                     *uniformBuffer;
+  GPUBuffer                     *readbackBuffer;
+  GPUCommandBuffer              *cmdb;
+  GPUCommandBuffer              *submitBuffers[1];
+  GPURenderPassEncoder          *renderPass;
+  GPUTransferPassEncoder        *copyPass;
+  GPUFence                      *fence;
+  void                          *bytecode;
+  GPUColorTargetState            colorTarget         = {0};
+  GPURenderPipelineCreateInfo    pipelineInfo        = {0};
+  GPUVertexAttribute             vertexAttributes[2] = {0};
+  GPUVertexBufferLayout          vertexLayout        = {0};
+  GPUTextureCreateInfo           textureInfo         = {0};
+  GPUTextureViewCreateInfo       viewInfo            = {0};
+  GPUTextureWriteRegion          writeRegion         = {0};
+  GPUBindGroupEntry              groupEntries[2]     = {0};
+  GPUBindGroupCreateInfo         groupInfo           = {0};
+  GPUBufferCreateInfo            bufferInfo          = {0};
+  GPURenderPassColorAttachment   color               = {0};
+  GPURenderPassCreateInfo        passInfo            = {0};
+  GPUScissorRect                 leftScissor         = {0};
+  GPUScissorRect                 rightScissor        = {0};
+  GPUTextureBarrier              textureBarrier      = {0};
+  GPUBarrierBatch                barrierBatch        = {0};
+  GPUBufferTextureCopyRegion     copyRegion          = {0};
+  GPUQueueSubmitInfo             submitInfo          = {0};
+  const GPUBindGroupLayoutEntry *layoutEntries;
+  uint8_t                        greenPixels[GPU_SOURCE_SAMPLER_BASE_BYTES];
+  uint8_t                        bluePixels[GPU_SOURCE_SAMPLER_VIEW_BYTES];
+  uint8_t                        redPixels[GPU_SOURCE_SAMPLER_VIEW_BYTES];
+  uint8_t                        pixels[GPU_SOURCE_SAMPLER_READBACK_BYTES] = {0};
+
+  const SourceSamplerUniforms    uniforms = { { 0.5f, 1.0f, 1.0f, 1.0f } };
+  uint64_t                       bytecodeSize;
+  uint32_t                       layoutEntryCount;
+  size_t                         leftOffset;
+  size_t                         rightOffset;
+  bool                           foundImmutableSampler;
+  bool                           foundTexture;
+  bool                           foundUniform;
+  bool                           savedStatsEnabled;
+  bool                           webgpu;
+  int                            ok;
 
   if (!device || !bytecodePath) {
     return 0;
   }
 
-  savedStatsEnabled                 = device->runtimeConfig.enableStats;
+  savedStatsEnabled = device->runtimeConfig.enableStats;
+
   device->runtimeConfig.enableStats = true;
-  webgpu = device->_api && device->_api->backend == GPU_BACKEND_WEBGPU;
+
+  webgpu         = device->_api && device->_api->backend == GPU_BACKEND_WEBGPU;
   queue          = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   library        = NULL;
   shaderLayout   = NULL;
@@ -193,76 +206,80 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   fence          = NULL;
   bytecodeSize   = 0u;
   bytecode       = gpu_test_read_file(bytecodePath, &bytecodeSize);
-  ok             = queue && bytecode;
+  ok = queue && bytecode;
+
   if (!ok) {
     fprintf(stderr, "source sampler fixture setup failed\n");
     goto cleanup;
   }
 
-  for (uint32_t i = 0u;
-       i < GPU_SOURCE_SAMPLER_BASE_WIDTH * GPU_SOURCE_SAMPLER_BASE_HEIGHT;
-       i++) {
-    greenPixels[i * 4u + 0u] = 0u;
-    greenPixels[i * 4u + 1u] = 255u;
-    greenPixels[i * 4u + 2u] = 0u;
-    greenPixels[i * 4u + 3u] = 255u;
+  for (uint32_t basePixel = 0u;
+       basePixel < GPU_SOURCE_SAMPLER_BASE_WIDTH * GPU_SOURCE_SAMPLER_BASE_HEIGHT;
+       basePixel++) {
+    greenPixels[basePixel * 4u + 0u] = 0u;
+    greenPixels[basePixel * 4u + 1u] = 255u;
+    greenPixels[basePixel * 4u + 2u] = 0u;
+    greenPixels[basePixel * 4u + 3u] = 255u;
   }
-  for (uint32_t i = 0u; i < sourceWidth * sourceHeight; i++) {
-    bluePixels[i * 4u + 0u] = 0u;
-    bluePixels[i * 4u + 1u] = 0u;
-    bluePixels[i * 4u + 2u] = 255u;
-    bluePixels[i * 4u + 3u] = 255u;
-    redPixels[i * 4u + 0u]  = 255u;
-    redPixels[i * 4u + 1u]  = 0u;
-    redPixels[i * 4u + 2u]  = 0u;
-    redPixels[i * 4u + 3u]  = 255u;
+
+  for (uint32_t viewPixel = 0u; viewPixel < sourceWidth * sourceHeight; viewPixel++) {
+    bluePixels[viewPixel * 4u + 0u] = 0u;
+    bluePixels[viewPixel * 4u + 1u] = 0u;
+    bluePixels[viewPixel * 4u + 2u] = 255u;
+    bluePixels[viewPixel * 4u + 3u] = 255u;
+    redPixels[viewPixel * 4u + 0u]  = 255u;
+    redPixels[viewPixel * 4u + 1u]  = 0u;
+    redPixels[viewPixel * 4u + 2u]  = 0u;
+    redPixels[viewPixel * 4u + 3u]  = 255u;
   }
 
   if (GPUCreateShaderLibraryFromUSL(device,
                                     bytecode,
                                     bytecodeSize,
-                                    &library) != GPU_OK ||
-      !library ||
-      GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !shaderLayout || shaderLayout->bindGroupLayoutCount != 2u ||
-      !shaderLayout->bindGroupLayouts ||
-      !shaderLayout->bindGroupLayouts[0] ||
-      !shaderLayout->bindGroupLayouts[1] ||
-      !shaderLayout->pipelineLayout) {
+                                    &library) != GPU_OK
+      || !library
+      || GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK
+      || !shaderLayout || shaderLayout->bindGroupLayoutCount != 2u
+      || !shaderLayout->bindGroupLayouts
+      || !shaderLayout->bindGroupLayouts[0]
+      || !shaderLayout->bindGroupLayouts[1]
+      || !shaderLayout->pipelineLayout) {
     fprintf(stderr, "source sampler shader layout creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
-  layoutEntries = GPUGetBindGroupLayoutEntries(
-    shaderLayout->bindGroupLayouts[1],
-    &layoutEntryCount
-  );
+  layoutEntries         = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[1],
+                                                       &layoutEntryCount);
   foundTexture          = false;
   foundUniform          = false;
   foundImmutableSampler = false;
-  for (uint32_t i = 0u; layoutEntries && i < layoutEntryCount; i++) {
-    if (layoutEntries[i].binding == 0u &&
-        layoutEntries[i].bindingType == GPU_BINDING_SAMPLED_TEXTURE &&
-        layoutEntries[i].visibility == GPU_SHADER_STAGE_FRAGMENT_BIT) {
+
+  for (uint32_t layoutIndex = 0u; layoutEntries && layoutIndex < layoutEntryCount; layoutIndex++) {
+    if (layoutEntries[layoutIndex].binding == 0u
+        && layoutEntries[layoutIndex].bindingType == GPU_BINDING_SAMPLED_TEXTURE
+        && layoutEntries[layoutIndex].visibility == GPU_SHADER_STAGE_FRAGMENT_BIT) {
       foundTexture = true;
     }
-    if (layoutEntries[i].binding == 1u &&
-        layoutEntries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
-        layoutEntries[i].visibility == GPU_SHADER_STAGE_FRAGMENT_BIT) {
+
+    if (layoutEntries[layoutIndex].binding == 1u
+        && layoutEntries[layoutIndex].bindingType == GPU_BINDING_UNIFORM_BUFFER
+        && layoutEntries[layoutIndex].visibility == GPU_SHADER_STAGE_FRAGMENT_BIT) {
       foundUniform = true;
     }
-    if (layoutEntries[i].binding == 2u &&
-        layoutEntries[i].bindingType == GPU_BINDING_SAMPLER &&
-        layoutEntries[i].visibility == GPU_SHADER_STAGE_FRAGMENT_BIT &&
-        layoutEntries[i].immutableSampler &&
-        layoutEntries[i].immutableSamplerDesc.maxAnisotropy == 8u) {
+
+    if (layoutEntries[layoutIndex].binding == 2u
+        && layoutEntries[layoutIndex].bindingType == GPU_BINDING_SAMPLER
+        && layoutEntries[layoutIndex].visibility == GPU_SHADER_STAGE_FRAGMENT_BIT
+        && layoutEntries[layoutIndex].immutableSampler
+        && layoutEntries[layoutIndex].immutableSamplerDesc.maxAnisotropy == 8u) {
       foundImmutableSampler = true;
     }
   }
-  if (layoutEntryCount != 2u + (uint32_t)webgpu ||
-      !foundTexture || !foundUniform ||
-      foundImmutableSampler != webgpu) {
+
+  if (layoutEntryCount != 2u + (uint32_t)webgpu
+      || !foundTexture || !foundUniform
+      || foundImmutableSampler != webgpu) {
     fprintf(stderr, "source sampler shader layout mismatch\n");
     ok = 0;
     goto cleanup;
@@ -280,8 +297,9 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_DST;
-  if (GPUCreateTexture(device, &textureInfo, &sampledTexture) != GPU_OK ||
-      !sampledTexture) {
+
+  if (GPUCreateTexture(device, &textureInfo, &sampledTexture) != GPU_OK
+      || !sampledTexture) {
     fprintf(stderr, "source sampler texture creation failed\n");
     ok = 0;
     goto cleanup;
@@ -294,6 +312,7 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   writeRegion.layerCount     = 1u;
   writeRegion.bytesPerRow    = GPU_SOURCE_SAMPLER_BASE_WIDTH * 4u;
   writeRegion.rowsPerImage   = GPU_SOURCE_SAMPLER_BASE_HEIGHT;
+
   if (GPUQueueWriteTexture(queue,
                            sampledTexture,
                            &writeRegion,
@@ -303,12 +322,14 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
     ok = 0;
     goto cleanup;
   }
+
   writeRegion.mipLevel       = 1u;
   writeRegion.width          = sourceWidth;
   writeRegion.height         = sourceHeight;
   writeRegion.baseArrayLayer = 0u;
   writeRegion.bytesPerRow    = sourceWidth * 4u;
   writeRegion.rowsPerImage   = sourceHeight;
+
   if (GPUQueueWriteTexture(queue,
                            sampledTexture,
                            &writeRegion,
@@ -318,37 +339,40 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
     ok = 0;
     goto cleanup;
   }
+
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "api-source-sampler-upload";
   bufferInfo.sizeBytes        = sizeof(redPixels);
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(device, &bufferInfo, &uploadBuffer) != GPU_OK ||
-      !uploadBuffer ||
-      GPUQueueWriteBuffer(queue,
-                          uploadBuffer,
-                          0u,
-                          redPixels,
-                          sizeof(redPixels)) != GPU_OK ||
-      GPUAcquireCommandBuffer(queue,
-                              "api-source-sampler-upload",
-                              &cmdb) != GPU_OK ||
-      !cmdb ||
-      !(copyPass = GPUBeginTransferPass(cmdb,
-                                        "api-source-sampler-upload"))) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &uploadBuffer) != GPU_OK
+      || !uploadBuffer
+      || GPUQueueWriteBuffer(queue,
+                             uploadBuffer,
+                             0u,
+                             redPixels,
+                             sizeof(redPixels)) != GPU_OK
+      || GPUAcquireCommandBuffer(queue,
+                                 "api-source-sampler-upload",
+                                 &cmdb) != GPU_OK
+      || !cmdb
+      || !(copyPass = GPUBeginTransferPass(cmdb,
+                                           "api-source-sampler-upload"))) {
     fprintf(stderr, "source sampler transfer upload setup failed\n");
     ok = 0;
     goto cleanup;
   }
-  copyRegion.bytesPerRow                          = sourceWidth * 4u;
-  copyRegion.rowsPerImage                         = sourceHeight;
-  copyRegion.texture.texture.mipLevel             = 1u;
-  copyRegion.texture.texture.baseArrayLayer       = 1u;
-  copyRegion.texture.width                        = sourceWidth;
-  copyRegion.texture.height                       = sourceHeight;
-  copyRegion.texture.depth                        = 1u;
-  copyRegion.texture.layerCount                   = 1u;
+
+  copyRegion.bytesPerRow                    = sourceWidth * 4u;
+  copyRegion.rowsPerImage                   = sourceHeight;
+  copyRegion.texture.texture.mipLevel       = 1u;
+  copyRegion.texture.texture.baseArrayLayer = 1u;
+  copyRegion.texture.width                  = sourceWidth;
+  copyRegion.texture.height                 = sourceHeight;
+  copyRegion.texture.depth                  = 1u;
+  copyRegion.texture.layerCount             = 1u;
   GPUCopyBufferToTexture(copyPass,
                          uploadBuffer,
                          sampledTexture,
@@ -356,17 +380,17 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
-  textureBarrier.texture    = sampledTexture;
-  textureBarrier.srcAccess  = GPU_ACCESS_TRANSFER_WRITE;
-  textureBarrier.dstAccess  = GPU_ACCESS_SHADER_READ;
-  textureBarrier.baseMip    = 1u;
-  textureBarrier.mipCount   = 1u;
-  textureBarrier.baseLayer  = 1u;
-  textureBarrier.layerCount = 1u;
-  barrierBatch.pTextureBarriers      = &textureBarrier;
-  barrierBatch.srcStages             = GPU_STAGE_TRANSFER;
-  barrierBatch.dstStages             = GPU_STAGE_FRAGMENT;
-  barrierBatch.textureBarrierCount   = 1u;
+  textureBarrier.texture           = sampledTexture;
+  textureBarrier.srcAccess         = GPU_ACCESS_TRANSFER_WRITE;
+  textureBarrier.dstAccess         = GPU_ACCESS_SHADER_READ;
+  textureBarrier.baseMip           = 1u;
+  textureBarrier.mipCount          = 1u;
+  textureBarrier.baseLayer         = 1u;
+  textureBarrier.layerCount        = 1u;
+  barrierBatch.pTextureBarriers    = &textureBarrier;
+  barrierBatch.srcStages           = GPU_STAGE_TRANSFER;
+  barrierBatch.dstStages           = GPU_STAGE_FRAGMENT;
+  barrierBatch.textureBarrierCount = 1u;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
   submitBuffers[0]              = cmdb;
@@ -374,24 +398,27 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = submitBuffers;
+
   if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
     fprintf(stderr, "source sampler transfer upload failed\n");
     ok = 0;
     goto cleanup;
   }
+
   cmdb = NULL;
 
   bufferInfo.label     = "api-source-sampler-vertices";
   bufferInfo.sizeBytes = sizeof(sourceSamplerVertices);
   bufferInfo.usage     = GPU_BUFFER_USAGE_VERTEX |
                          GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(device, &bufferInfo, &vertexBuffer) != GPU_OK ||
-      !vertexBuffer ||
-      GPUQueueWriteBuffer(queue,
-                          vertexBuffer,
-                          0u,
-                          sourceSamplerVertices,
-                          sizeof(sourceSamplerVertices)) != GPU_OK) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &vertexBuffer) != GPU_OK
+      || !vertexBuffer
+      || GPUQueueWriteBuffer(queue,
+                             vertexBuffer,
+                             0u,
+                             sourceSamplerVertices,
+                             sizeof(sourceSamplerVertices)) != GPU_OK) {
     fprintf(stderr, "source sampler vertex buffer creation failed\n");
     ok = 0;
     goto cleanup;
@@ -406,8 +433,9 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   viewInfo.mipLevelCount    = 1u;
   viewInfo.baseArrayLayer   = 1u;
   viewInfo.arrayLayerCount  = 1u;
-  if (GPUCreateTextureView(sampledTexture, &viewInfo, &sampledView) != GPU_OK ||
-      !sampledView) {
+
+  if (GPUCreateTextureView(sampledTexture, &viewInfo, &sampledView) != GPU_OK
+      || !sampledView) {
     fprintf(stderr, "source sampler texture view creation failed\n");
     ok = 0;
     goto cleanup;
@@ -419,13 +447,14 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   bufferInfo.sizeBytes        = sizeof(uniforms);
   bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(device, &bufferInfo, &uniformBuffer) != GPU_OK ||
-      !uniformBuffer ||
-      GPUQueueWriteBuffer(queue,
-                          uniformBuffer,
-                          0u,
-                          &uniforms,
-                          sizeof(uniforms)) != GPU_OK) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &uniformBuffer) != GPU_OK
+      || !uniformBuffer
+      || GPUQueueWriteBuffer(queue,
+                             uniformBuffer,
+                             0u,
+                             &uniforms,
+                             sizeof(uniforms)) != GPU_OK) {
     fprintf(stderr, "source sampler uniform buffer creation failed\n");
     ok = 0;
     goto cleanup;
@@ -438,57 +467,61 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   groupEntries[1].bindingType   = GPU_BINDING_UNIFORM_BUFFER;
   groupEntries[1].buffer.buffer = uniformBuffer;
   groupEntries[1].buffer.size   = sizeof(uniforms);
-  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
-  groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label            = "api-source-sampler-group";
-  groupInfo.layout           = shaderLayout->bindGroupLayouts[1];
-  groupInfo.entryCount       = 2u;
-  groupInfo.pEntries         = groupEntries;
+  groupInfo.chain.sType         = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize    = sizeof(groupInfo);
+  groupInfo.label               = "api-source-sampler-group";
+  groupInfo.layout              = shaderLayout->bindGroupLayouts[1];
+  groupInfo.entryCount          = 2u;
+  groupInfo.pEntries            = groupEntries;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "source sampler bind group creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
-  colorTarget.format          = GPU_FORMAT_RGBA8_UNORM;
-  colorTarget.blend.writeMask = GPU_COLOR_WRITE_ALL;
-  vertexAttributes[0].format         = GPU_VERTEX_FORMAT_FLOAT32X4;
-  vertexAttributes[0].shaderLocation = 0u;
-  vertexAttributes[0].offset         = offsetof(SourceSamplerVertex, position);
-  vertexAttributes[1].format         = GPU_VERTEX_FORMAT_FLOAT32X2;
-  vertexAttributes[1].shaderLocation = 1u;
-  vertexAttributes[1].offset         = offsetof(SourceSamplerVertex, uv);
-  vertexLayout.pAttributes    = vertexAttributes;
-  vertexLayout.strideBytes    = sizeof(SourceSamplerVertex);
-  vertexLayout.stepMode       = GPU_VERTEX_STEP_MODE_VERTEX;
-  vertexLayout.attributeCount = 2u;
-  pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
-  pipelineInfo.label            = "api-source-sampler-pipeline";
-  pipelineInfo.layout           = shaderLayout->pipelineLayout;
-  pipelineInfo.library          = library;
-  pipelineInfo.vertexEntry      = "source_sampler_vs";
-  pipelineInfo.fragmentEntry    = "source_sampler_fs";
-  pipelineInfo.colorTargetCount = 1u;
-  pipelineInfo.pColorTargets    = &colorTarget;
+  colorTarget.format                    = GPU_FORMAT_RGBA8_UNORM;
+  colorTarget.blend.writeMask           = GPU_COLOR_WRITE_ALL;
+  vertexAttributes[0].format            = GPU_VERTEX_FORMAT_FLOAT32X4;
+  vertexAttributes[0].shaderLocation    = 0u;
+  vertexAttributes[0].offset            = offsetof(SourceSamplerVertex, position);
+  vertexAttributes[1].format            = GPU_VERTEX_FORMAT_FLOAT32X2;
+  vertexAttributes[1].shaderLocation    = 1u;
+  vertexAttributes[1].offset            = offsetof(SourceSamplerVertex, uv);
+  vertexLayout.pAttributes              = vertexAttributes;
+  vertexLayout.strideBytes              = sizeof(SourceSamplerVertex);
+  vertexLayout.stepMode                 = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.attributeCount           = 2u;
+  pipelineInfo.chain.sType              = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize         = sizeof(pipelineInfo);
+  pipelineInfo.label                    = "api-source-sampler-pipeline";
+  pipelineInfo.layout                   = shaderLayout->pipelineLayout;
+  pipelineInfo.library                  = library;
+  pipelineInfo.vertexEntry              = "source_sampler_vs";
+  pipelineInfo.fragmentEntry            = "source_sampler_fs";
+  pipelineInfo.colorTargetCount         = 1u;
+  pipelineInfo.pColorTargets            = &colorTarget;
   pipelineInfo.vertex.pBufferLayouts    = &vertexLayout;
   pipelineInfo.vertex.bufferLayoutCount = 1u;
-  pipelineInfo.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  pipelineInfo.cullMode                = GPU_CULL_MODE_NONE;
-  pipelineInfo.frontFace               = GPU_FRONT_FACE_CCW;
-  pipelineInfo.multisample.sampleCount = 1u;
-  pipelineInfo.multisample.sampleMask  = UINT32_MAX;
-  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
+  pipelineInfo.primitiveTopology        = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineInfo.cullMode                 = GPU_CULL_MODE_NONE;
+  pipelineInfo.frontFace                = GPU_FRONT_FACE_CCW;
+  pipelineInfo.multisample.sampleCount  = 1u;
+  pipelineInfo.multisample.sampleMask   = UINT32_MAX;
+
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK
+      || !pipeline) {
     fprintf(stderr, "source sampler render pipeline creation failed\n");
     ok = 0;
     goto cleanup;
   }
+
   pipelineInfo.label = "api-source-sampler-pipeline-switch";
+
   if (GPUCreateRenderPipeline(device,
                               &pipelineInfo,
-                              &pipelineSwitch) != GPU_OK ||
-      !pipelineSwitch) {
+                              &pipelineSwitch) != GPU_OK
+      || !pipelineSwitch) {
     fprintf(stderr, "source sampler switch pipeline creation failed\n");
     ok = 0;
     goto cleanup;
@@ -501,8 +534,9 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   textureInfo.mipLevelCount = 1u;
   textureInfo.usage         = GPU_TEXTURE_USAGE_COLOR_TARGET |
                               GPU_TEXTURE_USAGE_COPY_SRC;
-  if (GPUCreateTexture(device, &textureInfo, &targetTexture) != GPU_OK ||
-      !targetTexture) {
+
+  if (GPUCreateTexture(device, &textureInfo, &targetTexture) != GPU_OK
+      || !targetTexture) {
     fprintf(stderr, "source sampler target creation failed\n");
     ok = 0;
     goto cleanup;
@@ -512,8 +546,9 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   viewInfo.viewType       = GPU_TEXTURE_VIEW_2D;
   viewInfo.baseMipLevel   = 0u;
   viewInfo.baseArrayLayer = 0u;
-  if (GPUCreateTextureView(targetTexture, &viewInfo, &targetView) != GPU_OK ||
-      !targetView) {
+
+  if (GPUCreateTextureView(targetTexture, &viewInfo, &targetView) != GPU_OK
+      || !targetView) {
     fprintf(stderr, "source sampler target view creation failed\n");
     ok = 0;
     goto cleanup;
@@ -525,8 +560,9 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   bufferInfo.sizeBytes        = imageBytes;
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
                                 GPU_BUFFER_USAGE_COPY_SRC;
-  if (GPUCreateBuffer(device, &bufferInfo, &readbackBuffer) != GPU_OK ||
-      !readbackBuffer) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &readbackBuffer) != GPU_OK
+      || !readbackBuffer) {
     fprintf(stderr, "source sampler readback buffer creation failed\n");
     ok = 0;
     goto cleanup;
@@ -534,8 +570,8 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
 
   if (GPUAcquireCommandBuffer(queue,
                               "api-source-sampler-draw",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+                              &cmdb) != GPU_OK
+      || !cmdb) {
     fprintf(stderr, "source sampler command buffer acquisition failed\n");
     ok = 0;
     goto cleanup;
@@ -550,20 +586,22 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   passInfo.label                = "api-source-sampler-draw";
   passInfo.colorAttachmentCount = 1u;
   passInfo.pColorAttachments    = &color;
-  renderPass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!renderPass) {
+
+  if (!(renderPass = GPUBeginRenderPass(cmdb, &passInfo))) {
     fprintf(stderr, "source sampler render pass creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
   GPUBindRenderPipeline(renderPass, pipeline);
+
   {
     GPUBufferBinding vertexBinding = {0};
 
     vertexBinding.buffer = vertexBuffer;
     GPUBindVertexBuffers(renderPass, 0u, 1u, &vertexBinding);
   }
+
   GPUBindRenderGroup(renderPass, 1u, group, 0u, NULL);
   leftScissor.width  = width / 2u;
   leftScissor.height = height;
@@ -578,33 +616,33 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   GPUEndRenderPass(renderPass);
   renderPass = NULL;
 
-  textureBarrier.texture    = targetTexture;
-  textureBarrier.srcAccess  = GPU_ACCESS_COLOR_WRITE;
-  textureBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
-  textureBarrier.baseMip    = 0u;
-  textureBarrier.mipCount   = 1u;
-  textureBarrier.baseLayer  = 0u;
-  textureBarrier.layerCount = 1u;
-  barrierBatch.pTextureBarriers      = &textureBarrier;
-  barrierBatch.srcStages             = GPU_STAGE_FRAGMENT;
-  barrierBatch.dstStages             = GPU_STAGE_TRANSFER;
-  barrierBatch.textureBarrierCount   = 1u;
+  textureBarrier.texture           = targetTexture;
+  textureBarrier.srcAccess         = GPU_ACCESS_COLOR_WRITE;
+  textureBarrier.dstAccess         = GPU_ACCESS_TRANSFER_READ;
+  textureBarrier.baseMip           = 0u;
+  textureBarrier.mipCount          = 1u;
+  textureBarrier.baseLayer         = 0u;
+  textureBarrier.layerCount        = 1u;
+  barrierBatch.pTextureBarriers    = &textureBarrier;
+  barrierBatch.srcStages           = GPU_STAGE_FRAGMENT;
+  barrierBatch.dstStages           = GPU_STAGE_TRANSFER;
+  barrierBatch.textureBarrierCount = 1u;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginTransferPass(cmdb, "api-source-sampler-readback");
-  if (!copyPass) {
+  if (!(copyPass = GPUBeginTransferPass(cmdb, "api-source-sampler-readback"))) {
     fprintf(stderr, "source sampler copy pass creation failed\n");
     ok = 0;
     goto cleanup;
   }
-  copyRegion.bytesPerRow                          = rowPitch;
-  copyRegion.rowsPerImage                         = height;
-  copyRegion.texture.texture.mipLevel             = 0u;
-  copyRegion.texture.texture.baseArrayLayer       = 0u;
-  copyRegion.texture.width                        = width;
-  copyRegion.texture.height                       = height;
-  copyRegion.texture.depth                        = 1u;
-  copyRegion.texture.layerCount                   = 1u;
+
+  copyRegion.bytesPerRow                    = rowPitch;
+  copyRegion.rowsPerImage                   = height;
+  copyRegion.texture.texture.mipLevel       = 0u;
+  copyRegion.texture.texture.baseArrayLayer = 0u;
+  copyRegion.texture.width                  = width;
+  copyRegion.texture.height                 = height;
+  copyRegion.texture.depth                  = 1u;
+  copyRegion.texture.layerCount             = 1u;
   GPUCopyTextureToBuffer(copyPass,
                          targetTexture,
                          readbackBuffer,
@@ -624,13 +662,15 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = submitBuffers;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "source sampler draw submission failed\n");
     cmdb = NULL;
     ok = 0;
     goto cleanup;
   }
+
   cmdb = NULL;
 
   if (GPUQueueReadBuffer(queue,
@@ -645,16 +685,18 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
 
   leftOffset  = (size_t)2u * rowPitch + 1u * 4u;
   rightOffset = (size_t)2u * rowPitch + 2u * 4u;
-  ok = pixels[leftOffset + 0u] >= 126u &&
-       pixels[leftOffset + 0u] <= 129u &&
-       pixels[leftOffset + 1u] <= 2u &&
-       pixels[leftOffset + 2u] <= 2u &&
-       pixels[leftOffset + 3u] >= 250u &&
-       pixels[rightOffset + 0u] >= 126u &&
-       pixels[rightOffset + 0u] <= 129u &&
-       pixels[rightOffset + 1u] <= 2u &&
-       pixels[rightOffset + 2u] <= 2u &&
-       pixels[rightOffset + 3u] >= 250u;
+
+  ok = pixels[leftOffset + 0u] >= 126u
+       && pixels[leftOffset + 0u] <= 129u
+       && pixels[leftOffset + 1u] <= 2u
+       && pixels[leftOffset + 2u] <= 2u
+       && pixels[leftOffset + 3u] >= 250u
+       && pixels[rightOffset + 0u] >= 126u
+       && pixels[rightOffset + 0u] <= 129u
+       && pixels[rightOffset + 1u] <= 2u
+       && pixels[rightOffset + 2u] <= 2u
+       && pixels[rightOffset + 3u] >= 250u;
+
   if (!ok) {
     fprintf(stderr,
             "source sampler pipeline switch mismatch: "
@@ -671,7 +713,8 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
   }
 
   GPUResetStats(device);
-  for (uint32_t i = 0u; i < GPU_SOURCE_SAMPLER_WARM_ITERATIONS; i++) {
+
+  for (uint32_t warmupIndex = 0u; warmupIndex < GPU_SOURCE_SAMPLER_WARM_ITERATIONS; warmupIndex++) {
     if (!submit_source_sampler_draw(queue,
                                     pipeline,
                                     group,
@@ -683,20 +726,16 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
       goto cleanup;
     }
   }
-  if (device->currentFrameStats.hotPathAllocCount != 0u ||
-      device->currentFrameStats.hotPathAllocBytes != 0u ||
-      device->currentFrameStats.hotPathFreeCount != 0u ||
-      device->currentFrameStats.hotPathFreeBytes != 0u ||
-      device->currentFrameStats.requestedBindCalls !=
-        GPU_SOURCE_SAMPLER_WARM_BIND_REQUESTS ||
-      device->currentFrameStats.emittedBindCalls !=
-        GPU_SOURCE_SAMPLER_WARM_BIND_EMISSIONS ||
-      device->currentFrameStats.requestedStateCalls !=
-        GPU_SOURCE_SAMPLER_WARM_STATE_REQUESTS ||
-      device->currentFrameStats.emittedStateCalls !=
-        GPU_SOURCE_SAMPLER_WARM_STATE_EMISSIONS ||
-      device->currentFrameStats.drawCalls !=
-        GPU_SOURCE_SAMPLER_WARM_ITERATIONS) {
+
+  if (device->currentFrameStats.hotPathAllocCount != 0u
+      || device->currentFrameStats.hotPathAllocBytes != 0u
+      || device->currentFrameStats.hotPathFreeCount != 0u
+      || device->currentFrameStats.hotPathFreeBytes != 0u
+      || device->currentFrameStats.requestedBindCalls != GPU_SOURCE_SAMPLER_WARM_BIND_REQUESTS
+      || device->currentFrameStats.emittedBindCalls != GPU_SOURCE_SAMPLER_WARM_BIND_EMISSIONS
+      || device->currentFrameStats.requestedStateCalls != GPU_SOURCE_SAMPLER_WARM_STATE_REQUESTS
+      || device->currentFrameStats.emittedStateCalls != GPU_SOURCE_SAMPLER_WARM_STATE_EMISSIONS
+      || device->currentFrameStats.drawCalls != GPU_SOURCE_SAMPLER_WARM_ITERATIONS) {
     fprintf(stderr,
             "source sampler warm path allocated: %llu/%llu bytes, "
             "%llu/%llu bytes freed; binds %u/%u; state %u/%u; draws %u\n",

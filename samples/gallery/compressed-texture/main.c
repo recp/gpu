@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 #include <stdio.h>
@@ -83,7 +99,10 @@ device_error(GPUDevice                *device,
 
   (void)device;
   state = userData;
-  if (!state || !error || state->failed) return;
+
+  if (!state || !error || state->failed)
+    return;
+
   state->failed = true;
   set_status(error->message ? error->message : "GPU: unknown device error", 1);
   emscripten_cancel_main_loop();
@@ -97,18 +116,21 @@ resize_canvas(WebGPUCompressedTexture *state) {
 
   oldWidth  = state->width;
   oldHeight = state->height;
+
   if (!resize_webgpu_canvas(state->swapchain,
                             &state->width,
                             &state->height)) {
     return 0;
   }
-  if (!state->uniformBuffer ||
-      (oldWidth == state->width && oldHeight == state->height)) {
+
+  if (!state->uniformBuffer
+      || (oldWidth == state->width && oldHeight == state->height)) {
     return 1;
   }
-  uniforms.scale[0] = 0.78f /
-                      gpu_sample_aspect_ratio(state->width, state->height);
+
+  uniforms.scale[0] = 0.78f / gpu_sample_aspect_ratio(state->width, state->height);
   uniforms.scale[1] = 0.78f;
+
   return GPUQueueWriteBuffer(state->queue,
                              state->uniformBuffer,
                              0u,
@@ -116,19 +138,21 @@ resize_canvas(WebGPUCompressedTexture *state) {
                              sizeof(uniforms)) == GPU_OK;
 }
 
-static const CompressedSource *
+static const CompressedSource*
 select_source(const WebGPUCompressedTexture *state) {
   GPUFormatCapabilities caps;
+  uint32_t              i;
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(kSources); i++) {
+  for (i = 0u; i < GPU_ARRAY_LEN(kSources); i++) {
     if (GPUGetFormatCapabilities(state->adapter,
                                  kSources[i].format,
-                                 &caps) == GPU_OK &&
-        caps.sampled &&
-        caps.filterable) {
+                                 &caps) == GPU_OK
+        && caps.sampled
+        && caps.filterable) {
       return &kSources[i];
     }
   }
+
   return NULL;
 }
 
@@ -140,26 +164,30 @@ create_shader(WebGPUCompressedTexture *state) {
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/compressed_texture.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read compressed_texture.us", 1);
     return 0;
   }
+
   result = GPUCreateShaderLibraryFromUSL(state->device,
                                          artifact,
                                          artifactSize,
                                          &state->library);
   free(artifact);
-  if (result != GPU_OK || !state->library ||
-      GPUCreateShaderLayout(state->device,
-                            state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 1u ||
-      !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0]) {
+
+  if (result != GPU_OK || !state->library
+      || GPUCreateShaderLayout(state->device,
+                               state->library,
+                               &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 1u
+      || !state->shaderLayout->bindGroupLayouts
+      || !state->shaderLayout->bindGroupLayouts[0]) {
     set_status("GPU: unexpected compressed-texture reflection", 1);
     return 0;
   }
+
   return 1;
 }
 
@@ -170,6 +198,7 @@ create_pipeline(WebGPUCompressedTexture *state) {
 
   color.format          = GPUGetSwapchainFormat(state->swapchain);
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
+
   info.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   info.chain.structSize        = sizeof(info);
   info.label                   = "webgpu-compressed-texture-pipeline";
@@ -184,61 +213,64 @@ create_pipeline(WebGPUCompressedTexture *state) {
   info.frontFace               = GPU_FRONT_FACE_CCW;
   info.multisample.sampleCount = 1u;
   info.multisample.sampleMask  = UINT32_MAX;
+
   if (GPUCreateRenderPipeline(state->device,
                               &info,
-                              &state->pipeline) != GPU_OK ||
-      !state->pipeline) {
+                              &state->pipeline) != GPU_OK
+      || !state->pipeline) {
     set_status("GPU: failed to create compressed-texture pipeline", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_resources(WebGPUCompressedTexture *state) {
-  const CompressedSource  *source;
-  CompressedUniforms       uniforms;
-  GPUBufferCreateInfo      bufferInfo  = {0};
-  GPUTextureCreateInfo     textureInfo = {0};
-  GPUTextureViewCreateInfo viewInfo    = {0};
-  GPUTextureWriteRegion    write       = {0};
-  GPUSamplerCreateInfo     samplerInfo = {0};
   GPUBindGroupEntry        entries[3]  = {0};
+  GPUTextureCreateInfo     textureInfo = {0};
+  GPUSamplerCreateInfo     samplerInfo = {0};
+  GPUTextureViewCreateInfo viewInfo    = {0};
   GPUBindGroupCreateInfo   groupInfo   = {0};
+  GPUBufferCreateInfo      bufferInfo  = {0};
+  GPUTextureWriteRegion    write       = {0};
+  CompressedUniforms       uniforms;
+  const CompressedSource  *source;
   void                    *data;
   uint64_t                 sizeBytes;
 
-  source = select_source(state);
-  if (!source) {
+  if (!(source = select_source(state))) {
     set_status("GPU: no portable sampled texture format available", 1);
     return 0;
   }
+
   data      = NULL;
   sizeBytes = 0u;
-  if (!read_file(source->path, &data, &sizeBytes) ||
-      sizeBytes != source->sizeBytes) {
+
+  if (!read_file(source->path, &data, &sizeBytes)
+      || sizeBytes != source->sizeBytes) {
     free(data);
     set_status("GPU: invalid compressed texture payload", 1);
     return 0;
   }
 
-  uniforms.scale[0] = 0.78f /
-                      gpu_sample_aspect_ratio(state->width, state->height);
+  uniforms.scale[0] = 0.78f / gpu_sample_aspect_ratio(state->width, state->height);
   uniforms.scale[1] = 0.78f;
+
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "webgpu-compressed-texture-uniforms";
   bufferInfo.sizeBytes        = sizeof(uniforms);
-  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
-                                GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(state->device,
                       &bufferInfo,
-                      &state->uniformBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->uniformBuffer,
-                          0u,
-                          &uniforms,
-                          sizeof(uniforms)) != GPU_OK) {
+                      &state->uniformBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->uniformBuffer,
+                             0u,
+                             &uniforms,
+                             sizeof(uniforms)) != GPU_OK) {
     free(data);
     set_status("GPU: failed to create compressed-texture uniforms", 1);
     return 0;
@@ -254,12 +286,12 @@ create_resources(WebGPUCompressedTexture *state) {
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
-  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
-                                 GPU_TEXTURE_USAGE_COPY_DST;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
+
   if (GPUCreateTexture(state->device,
                        &textureInfo,
-                       &state->texture) != GPU_OK ||
-      !state->texture) {
+                       &state->texture) != GPU_OK
+      || !state->texture) {
     free(data);
     set_status("GPU: failed to create selected texture format", 1);
     return 0;
@@ -272,6 +304,7 @@ create_resources(WebGPUCompressedTexture *state) {
   write.layerCount   = 1u;
   write.bytesPerRow  = source->bytesPerRow;
   write.rowsPerImage = COMPRESSED_TEXTURE_SIZE;
+
   if (GPUQueueWriteTexture(state->queue,
                            state->texture,
                            &write,
@@ -281,6 +314,7 @@ create_resources(WebGPUCompressedTexture *state) {
     set_status("GPU: failed to upload selected texture format", 1);
     return 0;
   }
+
   free(data);
 
   viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
@@ -290,10 +324,11 @@ create_resources(WebGPUCompressedTexture *state) {
   viewInfo.format           = source->format;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(state->texture,
                            &viewInfo,
-                           &state->textureView) != GPU_OK ||
-      !state->textureView) {
+                           &state->textureView) != GPU_OK
+      || !state->textureView) {
     set_status("GPU: failed to create selected texture view", 1);
     return 0;
   }
@@ -307,11 +342,12 @@ create_resources(WebGPUCompressedTexture *state) {
   samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+
   if (GPUCreateSampler(state->device,
                        &samplerInfo,
                        false,
-                       &state->sampler) != GPU_OK ||
-      !state->sampler) {
+                       &state->sampler) != GPU_OK
+      || !state->sampler) {
     set_status("GPU: failed to create compressed-texture sampler", 1);
     return 0;
   }
@@ -326,45 +362,52 @@ create_resources(WebGPUCompressedTexture *state) {
   entries[2].sampler       = state->sampler;
   entries[2].binding       = 2u;
   entries[2].bindingType   = GPU_BINDING_SAMPLER;
+
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "webgpu-compressed-texture-group";
   groupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
   groupInfo.pEntries         = entries;
   groupInfo.entryCount       = GPU_ARRAY_LEN(entries);
+
   if (GPUCreateBindGroup(state->device,
                          &groupInfo,
-                         &state->bindGroup) != GPU_OK ||
-      !state->bindGroup) {
+                         &state->bindGroup) != GPU_OK
+      || !state->bindGroup) {
     set_status("GPU: failed to create compressed-texture bind group", 1);
     return 0;
   }
+
   state->selectedFormat = source->name;
+
   return 1;
 }
 
 static void
 render_frame(void *userData) {
-  WebGPUCompressedTexture      *state;
-  GPUFrame                     *frame;
-  GPUCommandBuffer             *cmdb;
-  GPURenderPassEncoder         *pass;
-  GPURenderPassColorAttachment  color    = {0};
-  GPURenderPassCreateInfo       passInfo = {0};
+  GPURenderPassColorAttachment color    = {0};
+  GPURenderPassCreateInfo      passInfo = {0};
+  WebGPUCompressedTexture     *state;
+  GPUFrame                    *frame;
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassEncoder        *pass;
 
   state = userData;
+
   if (!resize_canvas(state)) {
     set_status("GPU: failed to resize compressed-texture sample", 1);
     emscripten_cancel_main_loop();
     return;
   }
+
   frame = GPUBeginFrame(state->swapchain);
   cmdb  = NULL;
-  if (!frame ||
-      GPUAcquireCommandBuffer(state->queue,
-                              "webgpu-compressed-texture-frame",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+
+  if (!frame
+      || GPUAcquireCommandBuffer(state->queue,
+                                 "webgpu-compressed-texture-frame",
+                                 &cmdb) != GPU_OK
+      || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
@@ -376,17 +419,19 @@ render_frame(void *userData) {
   color.clearColor.float32[1] = 0.014f;
   color.clearColor.float32[2] = 0.034f;
   color.clearColor.float32[3] = 1.0f;
-  passInfo.chain.sType         = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  passInfo.chain.structSize    = sizeof(passInfo);
+
+  passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.structSize     = sizeof(passInfo);
   passInfo.label                = "webgpu-compressed-texture-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
   }
+
   GPUBindRenderPipeline(pass, state->pipeline);
   GPUBindRenderGroup(pass, 0u, state->bindGroup, 0u, NULL);
   GPUDraw(pass, 4u, 1u, 0u, 0u);
@@ -397,14 +442,16 @@ render_frame(void *userData) {
     emscripten_cancel_main_loop();
     return;
   }
+
   state->frameCount++;
+
   if (state->frameCount > WARM_FRAME_COUNT) {
     GPUFrameStats stats;
 
-    if (GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.drawCalls != 1u ||
-         stats.hotPathAllocCount != 0u ||
-         stats.hotPathFreeCount != 0u)) {
+    if (GPUGetLastFrameStats(state->device, &stats) == GPU_OK
+        && (stats.drawCalls != 1u
+         || stats.hotPathAllocCount != 0u
+         || stats.hotPathFreeCount != 0u)) {
       set_status("GPU: compressed-texture warm path regression", 1);
       emscripten_cancel_main_loop();
     }
@@ -412,52 +459,57 @@ render_frame(void *userData) {
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
-  WebGPUCompressedTexture *state;
-  GPURuntimeConfig         runtime = {0};
   char                     status[128];
+  GPURuntimeConfig         runtime = {0};
+  WebGPUCompressedTexture *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status("GPU: failed to request WebGPU device", 1);
     return;
   }
+
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
-  if (!state->queue ||
-      GPUConfigureRuntime(device, &runtime) != GPU_OK ||
-      GPUSetDeviceErrorCallback(device,
-                                device_error,
-                                state) != GPU_OK) {
+
+  if (!state->queue
+      || GPUConfigureRuntime(device, &runtime) != GPU_OK
+      || GPUSetDeviceErrorCallback(device,
+                                   device_error,
+                                   state) != GPU_OK) {
     set_status("GPU: failed to configure compressed-texture runtime", 1);
     return;
   }
 
   state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
+                                              adapter,
+                                              (void *)"#canvas",
+                                              GPU_SURFACE_WEB_CANVAS,
+                                              1.0f);
+
   if (!state->surface || !resize_canvas(state)) {
     set_status("GPU: failed to create compressed-texture surface", 1);
     return;
   }
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain ||
-      !create_shader(state) ||
-      !create_pipeline(state) ||
-      !create_resources(state)) {
+
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))
+      || !create_shader(state)
+      || !create_pipeline(state)
+      || !create_resources(state)) {
     return;
   }
 
@@ -480,15 +532,19 @@ main(void) {
   info.label            = "compressed-texture-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create WebGPU instance", 1);
     return 1;
   }
+
   set_status("GPU: requesting WebGPU device", 0);
   result = request_webgpu_device(app.instance,
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   return result == GPU_OK ? 0 : 1;
 }

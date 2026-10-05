@@ -21,13 +21,13 @@
 #include "device_internal.h"
 
 struct GPUSampler {
-  GPUDevice *device;
-  void      *_priv;
-  uint64_t   _gpuResourceID;
+  GPUDevice     *device;
+  void          *_priv;
+  uint64_t       _gpuResourceID;
   GPUSamplerDesc desc;
 };
 
-static inline GPUApi *
+static inline GPUApi*
 gpuSamplerApi(const GPUSampler *sampler) {
   return sampler ? gpuDeviceApi(sampler->device) : NULL;
 }

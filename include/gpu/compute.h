@@ -47,9 +47,9 @@ typedef struct GPUComputePassCreateInfo {
 
 GPU_EXPORT
 GPUResult
-GPUCreateComputePipeline(GPUDevice                          * __restrict device,
-                         const GPUComputePipelineCreateInfo * __restrict info,
-                         GPUComputePipeline                ** __restrict outPipeline);
+GPUCreateComputePipeline(GPUDevice                          *__restrict device,
+                         const GPUComputePipelineCreateInfo *__restrict info,
+                         GPUComputePipeline                **__restrict outPipeline);
 
 GPU_EXPORT
 void
@@ -94,16 +94,16 @@ GPUDispatch(GPUComputePassEncoder *pass,
 GPU_EXPORT
 void
 GPUDispatchIndirect(GPUComputePassEncoder *pass,
-                    GPUBuffer            *argsBuffer,
-                    uint64_t              argsOffset);
+                    GPUBuffer             *argsBuffer,
+                    uint64_t               argsOffset);
 
 GPU_EXPORT
 void
 GPUMultiDispatchIndirect(GPUComputePassEncoder *pass,
-                         GPUBuffer            *argsBuffer,
-                         uint64_t              argsOffset,
-                         uint32_t              dispatchCount,
-                         uint32_t              strideBytes);
+                         GPUBuffer             *argsBuffer,
+                         uint64_t               argsOffset,
+                         uint32_t               dispatchCount,
+                         uint32_t               strideBytes);
 
 GPU_EXPORT
 void

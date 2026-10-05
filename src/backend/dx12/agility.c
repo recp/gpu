@@ -25,21 +25,21 @@
 #  define GPU_DX12_AGILITY_SDK_NUMBER D3D12_SDK_VERSION
 #endif
 
+static const wchar_t suffix[] = L"D3D12\\";
 static const uint8_t dx12_agilityModuleAnchor;
 
-static char *
+static char*
 dx12_agilityPath(void) {
-  static const wchar_t suffix[] = L"D3D12\\";
-  HMODULE               module;
-  wchar_t              *widePath;
-  char                 *path;
-  DWORD                 capacity;
-  DWORD                 length;
-  int                   pathSize;
+  HMODULE  module;
+  wchar_t *widePath, *tail;
+  char    *path;
+  DWORD    capacity, length;
+  int      pathSize;
 
   module   = NULL;
   widePath = NULL;
   path     = NULL;
+
   if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                           (LPCWSTR)(const void *)&dx12_agilityModuleAnchor,
@@ -48,50 +48,57 @@ dx12_agilityPath(void) {
   }
 
   capacity = 512u;
+
   for (;;) {
     wchar_t *next;
 
-    next = realloc(widePath, (size_t)capacity * sizeof(*widePath));
-    if (!next) {
+    if (!(next = realloc(widePath, (size_t)capacity * sizeof(*widePath)))) {
       free(widePath);
       return NULL;
     }
+
     widePath = next;
     length   = GetModuleFileNameW(module, widePath, capacity);
+
     if (length == 0u) {
       free(widePath);
       return NULL;
     }
+
     if (length < capacity - 1u) {
       break;
     }
+
     if (capacity >= 32768u) {
       free(widePath);
       return NULL;
     }
+
     capacity *= 2u;
   }
 
-  while (length > 0u &&
-         widePath[length - 1u] != L'\\' &&
-         widePath[length - 1u] != L'/') {
+  while (length > 0u
+         && widePath[length - 1u] != L'\\'
+         && widePath[length - 1u] != L'/') {
     length--;
   }
+
   if (length == 0u) {
     free(widePath);
     return NULL;
   }
-  if (length + GPU_ARRAY_LEN(suffix) > capacity) {
-    wchar_t *next;
 
+  if (length + GPU_ARRAY_LEN(suffix) > capacity) {
     capacity = length + (DWORD)GPU_ARRAY_LEN(suffix);
-    next = realloc(widePath, (size_t)capacity * sizeof(*widePath));
-    if (!next) {
+
+    if (!(tail = realloc(widePath, (size_t)capacity * sizeof(*widePath)))) {
       free(widePath);
       return NULL;
     }
-    widePath = next;
+
+    widePath = tail;
   }
+
   memcpy(widePath + length, suffix, sizeof(suffix));
 
   pathSize = WideCharToMultiByte(CP_UTF8,
@@ -102,47 +109,51 @@ dx12_agilityPath(void) {
                                  0,
                                  NULL,
                                  NULL);
+
   if (pathSize <= 0) {
     free(widePath);
     return NULL;
   }
-  path = malloc((size_t)pathSize);
-  if (!path ||
-      WideCharToMultiByte(CP_UTF8,
-                          WC_ERR_INVALID_CHARS,
-                          widePath,
-                          -1,
-                          path,
-                          pathSize,
-                          NULL,
-                          NULL) != pathSize) {
+
+  if (!(path = malloc((size_t)pathSize))
+      || WideCharToMultiByte(CP_UTF8,
+                             WC_ERR_INVALID_CHARS,
+                             widePath,
+                             -1,
+                             path,
+                             pathSize,
+                             NULL,
+                             NULL) != pathSize) {
     free(path);
     path = NULL;
   }
+
   free(widePath);
+
   return path;
 }
 
 static bool
-dx12_newAgilityFactory(uint32_t                featureCount,
-                       const IID              *features,
-                       bool                    reportFailure,
-                       ID3D12DeviceFactory   **outFactory) {
+dx12_newAgilityFactory(uint32_t              featureCount,
+                       const IID            *features,
+                       bool                  reportFailure,
+                       ID3D12DeviceFactory **outFactory) {
   ID3D12SDKConfiguration1 *configuration;
   ID3D12DeviceFactory     *factory;
-  const char              *operation;
-  char                    *path;
-  HRESULT                  result;
+  const char             *operation;
+  char                   *path;
+  HRESULT                 result;
 
   if (!outFactory || (featureCount > 0u && !features)) {
     return false;
   }
+
   *outFactory   = NULL;
   configuration = NULL;
   factory       = NULL;
   operation     = "query configuration";
-  path          = dx12_agilityPath();
-  if (!path) {
+
+  if (!(path = dx12_agilityPath())) {
     fprintf(stderr, "GPU: failed to locate the app-local Agility SDK\n");
     return false;
   }
@@ -150,56 +161,63 @@ dx12_newAgilityFactory(uint32_t                featureCount,
   result = D3D12GetInterface(&CLSID_D3D12SDKConfiguration,
                              &IID_ID3D12SDKConfiguration1,
                              (void **)&configuration);
+
   if (SUCCEEDED(result)) {
     operation = "create device factory";
-    result = configuration->lpVtbl->CreateDeviceFactory(
-      configuration,
-      GPU_DX12_AGILITY_SDK_NUMBER,
-      path,
-      &IID_ID3D12DeviceFactory,
-      (void **)&factory
-    );
+    result    = configuration->lpVtbl->CreateDeviceFactory(configuration,
+                                                           GPU_DX12_AGILITY_SDK_NUMBER,
+                                                           path,
+                                                           &IID_ID3D12DeviceFactory,
+                                                           (void **)&factory);
   }
+
   if (SUCCEEDED(result)) {
     operation = "configure device factory";
-    result = factory->lpVtbl->SetFlags(
-      factory,
-      D3D12_DEVICE_FACTORY_FLAG_ALLOW_RETURNING_EXISTING_DEVICE
-    );
+    result    = factory->lpVtbl->SetFlags(factory,
+                                          D3D12_DEVICE_FACTORY_FLAG_ALLOW_RETURNING_EXISTING_DEVICE);
   }
+
   if (SUCCEEDED(result) && featureCount > 0u) {
     operation = "enable experimental features";
-    result = factory->lpVtbl->EnableExperimentalFeatures(factory,
-                                                         featureCount,
-                                                         features,
-                                                         NULL,
-                                                         NULL);
+    result    = factory->lpVtbl->EnableExperimentalFeatures(factory,
+                                                            featureCount,
+                                                            features,
+                                                            NULL,
+                                                            NULL);
   }
+
   if (configuration) {
     configuration->lpVtbl->Release(configuration);
   }
+
   free(path);
+
   if (FAILED(result) || !factory) {
     if (factory) {
       factory->lpVtbl->Release(factory);
     }
+
     if (!reportFailure) {
       return false;
     }
+
     fprintf(stderr,
             "GPU: failed to %s for DirectX 12 Agility SDK %u (0x%08lx)\n",
             operation,
             (unsigned int)GPU_DX12_AGILITY_SDK_NUMBER,
             (unsigned long)result);
+
     if (result == D3D12_ERROR_INVALID_REDIST) {
       fprintf(stderr,
               "GPU: verify the app-local D3D12Core version, path, and target "
               "architecture\n");
     }
+
     return false;
   }
 
   *outFactory = factory;
+
   return true;
 }
 
@@ -223,34 +241,32 @@ dx12_createExperimentalFactory(uint32_t              featureCount,
 GPU_HIDE
 HRESULT
 dx12_createNativeDevice(ID3D12DeviceFactory *factory,
-                        IUnknown             *adapter,
-                        REFIID                iid,
-                        void                **outDevice) {
+                        IUnknown            *adapter,
+                        REFIID               iid,
+                        void               **outDevice) {
   if (!factory || !outDevice) {
     return E_INVALIDARG;
   }
-  return factory->lpVtbl->CreateDevice(
-    factory,
-    adapter,
-    D3D_FEATURE_LEVEL_11_0,
-    iid,
-    outDevice
-  );
+
+  return factory->lpVtbl->CreateDevice(factory,
+                                       adapter,
+                                       D3D_FEATURE_LEVEL_11_0,
+                                       iid,
+                                       outDevice);
 }
 
 GPU_HIDE
 HRESULT
 dx12_getConfigurationInterface(ID3D12DeviceFactory *factory,
-                               REFCLSID              classId,
-                               REFIID                interfaceId,
-                               void                **outInterface) {
+                               REFCLSID             classId,
+                               REFIID               interfaceId,
+                               void               **outInterface) {
   if (!factory || !outInterface) {
     return E_INVALIDARG;
   }
-  return factory->lpVtbl->GetConfigurationInterface(
-    factory,
-    classId,
-    interfaceId,
-    outInterface
-  );
+
+  return factory->lpVtbl->GetConfigurationInterface(factory,
+                                                    classId,
+                                                    interfaceId,
+                                                    outInterface);
 }

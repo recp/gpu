@@ -109,13 +109,13 @@ typedef struct GPUChainedStruct {
 } GPUChainedStruct;
 
 typedef enum GPUResult {
-  GPU_OK = 0,
-  GPU_ERROR_INVALID_ARGUMENT = -1,
-  GPU_ERROR_UNSUPPORTED = -2,
-  GPU_ERROR_OUT_OF_MEMORY = -3,
-  GPU_ERROR_BACKEND_FAILURE = -4,
+  GPU_OK                          = 0,
+  GPU_ERROR_INVALID_ARGUMENT      = -1,
+  GPU_ERROR_UNSUPPORTED           = -2,
+  GPU_ERROR_OUT_OF_MEMORY         = -3,
+  GPU_ERROR_BACKEND_FAILURE       = -4,
   GPU_ERROR_INSUFFICIENT_CAPACITY = -5,
-  GPU_ERROR_TIMEOUT = -6
+  GPU_ERROR_TIMEOUT               = -6
 } GPUResult;
 
 typedef uint32_t GPUShaderStageFlags;
@@ -125,6 +125,7 @@ enum {
   GPU_SHADER_STAGE_COMPUTE_BIT  = 1u << 2,
   GPU_SHADER_STAGE_TASK_BIT     = 1u << 3,
   GPU_SHADER_STAGE_MESH_BIT     = 1u << 4,
+
   GPU_SHADER_STAGE_RAY_GENERATION_BIT = 1u << 5,
   GPU_SHADER_STAGE_MISS_BIT           = 1u << 6,
   GPU_SHADER_STAGE_CLOSEST_HIT_BIT    = 1u << 7,

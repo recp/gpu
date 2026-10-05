@@ -20,6 +20,103 @@
 #include "../../../api/render/pipeline_internal.h"
 #include "pipeline_cache.h"
 
+static const VkPrimitiveTopology vk_topologies[] = {
+  [GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST]  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+  [GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP] = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+  [GPU_PRIMITIVE_TOPOLOGY_LINE_LIST]      = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+  [GPU_PRIMITIVE_TOPOLOGY_LINE_STRIP]     = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
+  [GPU_PRIMITIVE_TOPOLOGY_POINT_LIST]     = VK_PRIMITIVE_TOPOLOGY_POINT_LIST
+};
+
+static const VkCompareOp vk_compareOps[] = {
+  [GPU_COMPARE_NEVER]         = VK_COMPARE_OP_NEVER,
+  [GPU_COMPARE_LESS]          = VK_COMPARE_OP_LESS,
+  [GPU_COMPARE_EQUAL]         = VK_COMPARE_OP_EQUAL,
+  [GPU_COMPARE_LESS_EQUAL]    = VK_COMPARE_OP_LESS_OR_EQUAL,
+  [GPU_COMPARE_GREATER]       = VK_COMPARE_OP_GREATER,
+  [GPU_COMPARE_NOT_EQUAL]     = VK_COMPARE_OP_NOT_EQUAL,
+  [GPU_COMPARE_GREATER_EQUAL] = VK_COMPARE_OP_GREATER_OR_EQUAL,
+  [GPU_COMPARE_ALWAYS]        = VK_COMPARE_OP_ALWAYS
+};
+
+static const VkSampleCountFlagBits vk_sampleCounts[] = {
+  [1] = VK_SAMPLE_COUNT_1_BIT,
+  [2] = VK_SAMPLE_COUNT_2_BIT,
+  [4] = VK_SAMPLE_COUNT_4_BIT,
+  [8] = VK_SAMPLE_COUNT_8_BIT
+};
+
+static const VkStencilOp vk_stencilOps[] = {
+  [GPU_STENCIL_OP_KEEP]            = VK_STENCIL_OP_KEEP,
+  [GPU_STENCIL_OP_ZERO]            = VK_STENCIL_OP_ZERO,
+  [GPU_STENCIL_OP_REPLACE]         = VK_STENCIL_OP_REPLACE,
+  [GPU_STENCIL_OP_INCREMENT_CLAMP] = VK_STENCIL_OP_INCREMENT_AND_CLAMP,
+  [GPU_STENCIL_OP_DECREMENT_CLAMP] = VK_STENCIL_OP_DECREMENT_AND_CLAMP,
+  [GPU_STENCIL_OP_INVERT]          = VK_STENCIL_OP_INVERT,
+  [GPU_STENCIL_OP_INCREMENT_WRAP]  = VK_STENCIL_OP_INCREMENT_AND_WRAP,
+  [GPU_STENCIL_OP_DECREMENT_WRAP]  = VK_STENCIL_OP_DECREMENT_AND_WRAP
+};
+
+static const VkFormat vk_vertexFormats[GPU_VERTEX_FORMAT_COUNT] = {
+  [GPU_VERTEX_FORMAT_UNDEFINED]       = VK_FORMAT_UNDEFINED,
+  [GPU_VERTEX_FORMAT_UINT8]           = VK_FORMAT_R8_UINT,
+  [GPU_VERTEX_FORMAT_UINT8X2]         = VK_FORMAT_R8G8_UINT,
+  [GPU_VERTEX_FORMAT_UINT8X4]         = VK_FORMAT_R8G8B8A8_UINT,
+  [GPU_VERTEX_FORMAT_SINT8]           = VK_FORMAT_R8_SINT,
+  [GPU_VERTEX_FORMAT_SINT8X2]         = VK_FORMAT_R8G8_SINT,
+  [GPU_VERTEX_FORMAT_SINT8X4]         = VK_FORMAT_R8G8B8A8_SINT,
+  [GPU_VERTEX_FORMAT_UNORM8]          = VK_FORMAT_R8_UNORM,
+  [GPU_VERTEX_FORMAT_UNORM8X2]        = VK_FORMAT_R8G8_UNORM,
+  [GPU_VERTEX_FORMAT_UNORM8X4]        = VK_FORMAT_R8G8B8A8_UNORM,
+  [GPU_VERTEX_FORMAT_SNORM8]          = VK_FORMAT_R8_SNORM,
+  [GPU_VERTEX_FORMAT_SNORM8X2]        = VK_FORMAT_R8G8_SNORM,
+  [GPU_VERTEX_FORMAT_SNORM8X4]        = VK_FORMAT_R8G8B8A8_SNORM,
+  [GPU_VERTEX_FORMAT_UINT16]          = VK_FORMAT_R16_UINT,
+  [GPU_VERTEX_FORMAT_UINT16X2]        = VK_FORMAT_R16G16_UINT,
+  [GPU_VERTEX_FORMAT_UINT16X4]        = VK_FORMAT_R16G16B16A16_UINT,
+  [GPU_VERTEX_FORMAT_SINT16]          = VK_FORMAT_R16_SINT,
+  [GPU_VERTEX_FORMAT_SINT16X2]        = VK_FORMAT_R16G16_SINT,
+  [GPU_VERTEX_FORMAT_SINT16X4]        = VK_FORMAT_R16G16B16A16_SINT,
+  [GPU_VERTEX_FORMAT_UNORM16]         = VK_FORMAT_R16_UNORM,
+  [GPU_VERTEX_FORMAT_UNORM16X2]       = VK_FORMAT_R16G16_UNORM,
+  [GPU_VERTEX_FORMAT_UNORM16X4]       = VK_FORMAT_R16G16B16A16_UNORM,
+  [GPU_VERTEX_FORMAT_SNORM16]         = VK_FORMAT_R16_SNORM,
+  [GPU_VERTEX_FORMAT_SNORM16X2]       = VK_FORMAT_R16G16_SNORM,
+  [GPU_VERTEX_FORMAT_SNORM16X4]       = VK_FORMAT_R16G16B16A16_SNORM,
+  [GPU_VERTEX_FORMAT_FLOAT16]         = VK_FORMAT_R16_SFLOAT,
+  [GPU_VERTEX_FORMAT_FLOAT16X2]       = VK_FORMAT_R16G16_SFLOAT,
+  [GPU_VERTEX_FORMAT_FLOAT16X4]       = VK_FORMAT_R16G16B16A16_SFLOAT,
+  [GPU_VERTEX_FORMAT_FLOAT32]         = VK_FORMAT_R32_SFLOAT,
+  [GPU_VERTEX_FORMAT_FLOAT32X2]       = VK_FORMAT_R32G32_SFLOAT,
+  [GPU_VERTEX_FORMAT_FLOAT32X3]       = VK_FORMAT_R32G32B32_SFLOAT,
+  [GPU_VERTEX_FORMAT_FLOAT32X4]       = VK_FORMAT_R32G32B32A32_SFLOAT,
+  [GPU_VERTEX_FORMAT_SINT32]          = VK_FORMAT_R32_SINT,
+  [GPU_VERTEX_FORMAT_SINT32X2]        = VK_FORMAT_R32G32_SINT,
+  [GPU_VERTEX_FORMAT_SINT32X3]        = VK_FORMAT_R32G32B32_SINT,
+  [GPU_VERTEX_FORMAT_SINT32X4]        = VK_FORMAT_R32G32B32A32_SINT,
+  [GPU_VERTEX_FORMAT_UINT32]          = VK_FORMAT_R32_UINT,
+  [GPU_VERTEX_FORMAT_UINT32X2]        = VK_FORMAT_R32G32_UINT,
+  [GPU_VERTEX_FORMAT_UINT32X3]        = VK_FORMAT_R32G32B32_UINT,
+  [GPU_VERTEX_FORMAT_UINT32X4]        = VK_FORMAT_R32G32B32A32_UINT,
+  [GPU_VERTEX_FORMAT_UNORM10_10_10_2] = VK_FORMAT_A2B10G10R10_UNORM_PACK32,
+  [GPU_VERTEX_FORMAT_UNORM8X4_BGRA]   = VK_FORMAT_B8G8R8A8_UNORM
+};
+
+static const VkBlendFactor vk_blendFactors[] = {
+  [GPU_BLEND_FACTOR_ZERO]                = VK_BLEND_FACTOR_ZERO,
+  [GPU_BLEND_FACTOR_ONE]                 = VK_BLEND_FACTOR_ONE,
+  [GPU_BLEND_FACTOR_SRC_ALPHA]           = VK_BLEND_FACTOR_SRC_ALPHA,
+  [GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA] = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA
+};
+
+static const VkBlendOp vk_blendOps[] = {
+  [GPU_BLEND_OP_ADD]              = VK_BLEND_OP_ADD,
+  [GPU_BLEND_OP_SUBTRACT]         = VK_BLEND_OP_SUBTRACT,
+  [GPU_BLEND_OP_REVERSE_SUBTRACT] = VK_BLEND_OP_REVERSE_SUBTRACT,
+  [GPU_BLEND_OP_MIN]              = VK_BLEND_OP_MIN,
+  [GPU_BLEND_OP_MAX]              = VK_BLEND_OP_MAX
+};
+
 static VkCullModeFlags
 vk__cullMode(GPUCullMode mode) {
   switch (mode) {
@@ -35,71 +132,29 @@ vk__cullMode(GPUCullMode mode) {
 
 static VkFrontFace
 vk__frontFace(GPUFrontFace face) {
-  return face == GPU_FRONT_FACE_CW ?
-    VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  return face == GPU_FRONT_FACE_CW ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE;
 }
 
 static VkPrimitiveTopology
 vk__primitiveTopology(GPUPrimitiveTopology topology) {
-  static const VkPrimitiveTopology topologies[] = {
-    [GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST]  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-    [GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP] = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
-    [GPU_PRIMITIVE_TOPOLOGY_LINE_LIST]      = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
-    [GPU_PRIMITIVE_TOPOLOGY_LINE_STRIP]     = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
-    [GPU_PRIMITIVE_TOPOLOGY_POINT_LIST]     = VK_PRIMITIVE_TOPOLOGY_POINT_LIST
-  };
-
-  return (uint32_t)topology < GPU_ARRAY_LEN(topologies)
-           ? topologies[topology]
+  return (uint32_t)topology < GPU_ARRAY_LEN(vk_topologies)
+           ? vk_topologies[topology]
            : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 }
 
 static VkCompareOp
 vk__compareOp(GPUCompareOp op) {
-  static const VkCompareOp operations[] = {
-    [GPU_COMPARE_NEVER]         = VK_COMPARE_OP_NEVER,
-    [GPU_COMPARE_LESS]          = VK_COMPARE_OP_LESS,
-    [GPU_COMPARE_EQUAL]         = VK_COMPARE_OP_EQUAL,
-    [GPU_COMPARE_LESS_EQUAL]    = VK_COMPARE_OP_LESS_OR_EQUAL,
-    [GPU_COMPARE_GREATER]       = VK_COMPARE_OP_GREATER,
-    [GPU_COMPARE_NOT_EQUAL]     = VK_COMPARE_OP_NOT_EQUAL,
-    [GPU_COMPARE_GREATER_EQUAL] = VK_COMPARE_OP_GREATER_OR_EQUAL,
-    [GPU_COMPARE_ALWAYS]        = VK_COMPARE_OP_ALWAYS
-  };
-
-  return (uint32_t)op < GPU_ARRAY_LEN(operations)
-           ? operations[op]
-           : VK_COMPARE_OP_NEVER;
+  return (uint32_t)op < GPU_ARRAY_LEN(vk_compareOps) ? vk_compareOps[op] : VK_COMPARE_OP_NEVER;
 }
 
 static VkSampleCountFlagBits
 vk__sampleCount(uint32_t count) {
-  static const VkSampleCountFlagBits counts[] = {
-    [1] = VK_SAMPLE_COUNT_1_BIT,
-    [2] = VK_SAMPLE_COUNT_2_BIT,
-    [4] = VK_SAMPLE_COUNT_4_BIT,
-    [8] = VK_SAMPLE_COUNT_8_BIT
-  };
-
-  return count < GPU_ARRAY_LEN(counts) ? counts[count] : 0;
+  return count < GPU_ARRAY_LEN(vk_sampleCounts) ? vk_sampleCounts[count] : 0;
 }
 
 static VkStencilOp
 vk__stencilOp(GPUStencilOp op) {
-  static const VkStencilOp operations[] = {
-    [GPU_STENCIL_OP_KEEP]            = VK_STENCIL_OP_KEEP,
-    [GPU_STENCIL_OP_ZERO]            = VK_STENCIL_OP_ZERO,
-    [GPU_STENCIL_OP_REPLACE]         = VK_STENCIL_OP_REPLACE,
-    [GPU_STENCIL_OP_INCREMENT_CLAMP] = VK_STENCIL_OP_INCREMENT_AND_CLAMP,
-    [GPU_STENCIL_OP_DECREMENT_CLAMP] = VK_STENCIL_OP_DECREMENT_AND_CLAMP,
-    [GPU_STENCIL_OP_INVERT]          = VK_STENCIL_OP_INVERT,
-    [GPU_STENCIL_OP_INCREMENT_WRAP]  = VK_STENCIL_OP_INCREMENT_AND_WRAP,
-    [GPU_STENCIL_OP_DECREMENT_WRAP]  = VK_STENCIL_OP_DECREMENT_AND_WRAP
-  };
-
-  return (uint32_t)op < GPU_ARRAY_LEN(operations)
-           ? operations[op]
-           : VK_STENCIL_OP_KEEP;
+  return (uint32_t)op < GPU_ARRAY_LEN(vk_stencilOps) ? vk_stencilOps[op] : VK_STENCIL_OP_KEEP;
 }
 
 static void
@@ -117,63 +172,20 @@ vk__fillStencilState(VkStencilOpState          *native,
 
 static bool
 vk__vertexFormat(GPUVertexFormat format, VkFormat *outFormat) {
-  static const VkFormat formats[GPU_VERTEX_FORMAT_COUNT] = {
-    [GPU_VERTEX_FORMAT_UNDEFINED]       = VK_FORMAT_UNDEFINED,
-    [GPU_VERTEX_FORMAT_UINT8]           = VK_FORMAT_R8_UINT,
-    [GPU_VERTEX_FORMAT_UINT8X2]         = VK_FORMAT_R8G8_UINT,
-    [GPU_VERTEX_FORMAT_UINT8X4]         = VK_FORMAT_R8G8B8A8_UINT,
-    [GPU_VERTEX_FORMAT_SINT8]           = VK_FORMAT_R8_SINT,
-    [GPU_VERTEX_FORMAT_SINT8X2]         = VK_FORMAT_R8G8_SINT,
-    [GPU_VERTEX_FORMAT_SINT8X4]         = VK_FORMAT_R8G8B8A8_SINT,
-    [GPU_VERTEX_FORMAT_UNORM8]          = VK_FORMAT_R8_UNORM,
-    [GPU_VERTEX_FORMAT_UNORM8X2]        = VK_FORMAT_R8G8_UNORM,
-    [GPU_VERTEX_FORMAT_UNORM8X4]        = VK_FORMAT_R8G8B8A8_UNORM,
-    [GPU_VERTEX_FORMAT_SNORM8]          = VK_FORMAT_R8_SNORM,
-    [GPU_VERTEX_FORMAT_SNORM8X2]        = VK_FORMAT_R8G8_SNORM,
-    [GPU_VERTEX_FORMAT_SNORM8X4]        = VK_FORMAT_R8G8B8A8_SNORM,
-    [GPU_VERTEX_FORMAT_UINT16]          = VK_FORMAT_R16_UINT,
-    [GPU_VERTEX_FORMAT_UINT16X2]        = VK_FORMAT_R16G16_UINT,
-    [GPU_VERTEX_FORMAT_UINT16X4]        = VK_FORMAT_R16G16B16A16_UINT,
-    [GPU_VERTEX_FORMAT_SINT16]          = VK_FORMAT_R16_SINT,
-    [GPU_VERTEX_FORMAT_SINT16X2]        = VK_FORMAT_R16G16_SINT,
-    [GPU_VERTEX_FORMAT_SINT16X4]        = VK_FORMAT_R16G16B16A16_SINT,
-    [GPU_VERTEX_FORMAT_UNORM16]         = VK_FORMAT_R16_UNORM,
-    [GPU_VERTEX_FORMAT_UNORM16X2]       = VK_FORMAT_R16G16_UNORM,
-    [GPU_VERTEX_FORMAT_UNORM16X4]       = VK_FORMAT_R16G16B16A16_UNORM,
-    [GPU_VERTEX_FORMAT_SNORM16]         = VK_FORMAT_R16_SNORM,
-    [GPU_VERTEX_FORMAT_SNORM16X2]       = VK_FORMAT_R16G16_SNORM,
-    [GPU_VERTEX_FORMAT_SNORM16X4]       = VK_FORMAT_R16G16B16A16_SNORM,
-    [GPU_VERTEX_FORMAT_FLOAT16]         = VK_FORMAT_R16_SFLOAT,
-    [GPU_VERTEX_FORMAT_FLOAT16X2]       = VK_FORMAT_R16G16_SFLOAT,
-    [GPU_VERTEX_FORMAT_FLOAT16X4]       = VK_FORMAT_R16G16B16A16_SFLOAT,
-    [GPU_VERTEX_FORMAT_FLOAT32]         = VK_FORMAT_R32_SFLOAT,
-    [GPU_VERTEX_FORMAT_FLOAT32X2]       = VK_FORMAT_R32G32_SFLOAT,
-    [GPU_VERTEX_FORMAT_FLOAT32X3]       = VK_FORMAT_R32G32B32_SFLOAT,
-    [GPU_VERTEX_FORMAT_FLOAT32X4]       = VK_FORMAT_R32G32B32A32_SFLOAT,
-    [GPU_VERTEX_FORMAT_SINT32]          = VK_FORMAT_R32_SINT,
-    [GPU_VERTEX_FORMAT_SINT32X2]        = VK_FORMAT_R32G32_SINT,
-    [GPU_VERTEX_FORMAT_SINT32X3]        = VK_FORMAT_R32G32B32_SINT,
-    [GPU_VERTEX_FORMAT_SINT32X4]        = VK_FORMAT_R32G32B32A32_SINT,
-    [GPU_VERTEX_FORMAT_UINT32]          = VK_FORMAT_R32_UINT,
-    [GPU_VERTEX_FORMAT_UINT32X2]        = VK_FORMAT_R32G32_UINT,
-    [GPU_VERTEX_FORMAT_UINT32X3]        = VK_FORMAT_R32G32B32_UINT,
-    [GPU_VERTEX_FORMAT_UINT32X4]        = VK_FORMAT_R32G32B32A32_UINT,
-    [GPU_VERTEX_FORMAT_UNORM10_10_10_2] =
-      VK_FORMAT_A2B10G10R10_UNORM_PACK32,
-    [GPU_VERTEX_FORMAT_UNORM8X4_BGRA]   = VK_FORMAT_B8G8R8A8_UNORM
-  };
   VkFormat result;
 
-  if (!outFormat || (uint32_t)format >= GPU_ARRAY_LEN(formats)) {
+  if (!outFormat || (uint32_t)format >= GPU_ARRAY_LEN(vk_vertexFormats)) {
     return false;
   }
 
-  result = formats[format];
+  result = vk_vertexFormats[format];
+
   if (result == VK_FORMAT_UNDEFINED) {
     return false;
   }
 
   *outFormat = result;
+
   return true;
 }
 
@@ -188,41 +200,30 @@ vk__colorMask(GPUColorWriteMaskFlags mask) {
   }
 
   result = 0u;
-  if ((mask & GPU_COLOR_WRITE_R) != 0u) result |= VK_COLOR_COMPONENT_R_BIT;
-  if ((mask & GPU_COLOR_WRITE_G) != 0u) result |= VK_COLOR_COMPONENT_G_BIT;
-  if ((mask & GPU_COLOR_WRITE_B) != 0u) result |= VK_COLOR_COMPONENT_B_BIT;
-  if ((mask & GPU_COLOR_WRITE_A) != 0u) result |= VK_COLOR_COMPONENT_A_BIT;
+
+  if ((mask & GPU_COLOR_WRITE_R) != 0u)
+    result |= VK_COLOR_COMPONENT_R_BIT;
+
+  if ((mask & GPU_COLOR_WRITE_G) != 0u)
+    result |= VK_COLOR_COMPONENT_G_BIT;
+
+  if ((mask & GPU_COLOR_WRITE_B) != 0u)
+    result |= VK_COLOR_COMPONENT_B_BIT;
+
+  if ((mask & GPU_COLOR_WRITE_A) != 0u)
+    result |= VK_COLOR_COMPONENT_A_BIT;
+
   return result;
 }
 
 static VkBlendFactor
 vk__blendFactor(GPUBlendFactor factor) {
-  static const VkBlendFactor factors[] = {
-    [GPU_BLEND_FACTOR_ZERO]                = VK_BLEND_FACTOR_ZERO,
-    [GPU_BLEND_FACTOR_ONE]                 = VK_BLEND_FACTOR_ONE,
-    [GPU_BLEND_FACTOR_SRC_ALPHA]           = VK_BLEND_FACTOR_SRC_ALPHA,
-    [GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA] =
-      VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA
-  };
-
-  return (uint32_t)factor < GPU_ARRAY_LEN(factors)
-           ? factors[factor]
-           : VK_BLEND_FACTOR_ZERO;
+  return (uint32_t)factor < GPU_ARRAY_LEN(vk_blendFactors) ? vk_blendFactors[factor] : VK_BLEND_FACTOR_ZERO;
 }
 
 static VkBlendOp
 vk__blendOp(GPUBlendOp op) {
-  static const VkBlendOp operations[] = {
-    [GPU_BLEND_OP_ADD]              = VK_BLEND_OP_ADD,
-    [GPU_BLEND_OP_SUBTRACT]         = VK_BLEND_OP_SUBTRACT,
-    [GPU_BLEND_OP_REVERSE_SUBTRACT] = VK_BLEND_OP_REVERSE_SUBTRACT,
-    [GPU_BLEND_OP_MIN]              = VK_BLEND_OP_MIN,
-    [GPU_BLEND_OP_MAX]              = VK_BLEND_OP_MAX
-  };
-
-  return (uint32_t)op < GPU_ARRAY_LEN(operations)
-           ? operations[op]
-           : VK_BLEND_OP_ADD;
+  return (uint32_t)op < GPU_ARRAY_LEN(vk_blendOps) ? vk_blendOps[op] : VK_BLEND_OP_ADD;
 }
 
 static const GPUMeshPipelineEXT*
@@ -230,18 +231,21 @@ vk__meshPipelineInfo(const GPURenderPipelineCreateInfo *info) {
   const GPUChainedStruct *chain;
 
   chain = info ? info->chain.pNext : NULL;
+
   while (chain) {
     if (chain->sType == GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT) {
       return (const GPUMeshPipelineEXT *)chain;
     }
+
     chain = chain->pNext;
   }
+
   return NULL;
 }
 
 static void
 vk__fillBlendState(VkPipelineColorBlendAttachmentState *native,
-                   const GPUBlendState                  *blend) {
+                   const GPUBlendState                 *blend) {
   native->blendEnable         = blend->enabled;
   native->srcColorBlendFactor = vk__blendFactor(blend->color.srcFactor);
   native->dstColorBlendFactor = vk__blendFactor(blend->color.dstFactor);
@@ -259,56 +263,56 @@ vk__createPipelineRenderPass(VkDevice              device,
                              VkFormat              depthStencilFormat,
                              VkSampleCountFlagBits sampleCount,
                              VkRenderPass         *outRenderPass) {
-  VkAttachmentDescription attachments[GPU_VK_MAX_RENDER_ATTACHMENTS] = {{0}};
-  VkAttachmentReference colorRefs[
-    GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS
-  ] = {{0}};
-  VkAttachmentReference resolveRefs[
-    GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS
-  ] = {{0}};
-  VkAttachmentReference  depthStencilRef = {0};
-  VkSubpassDescription   subpass         = {0};
-  VkSubpassDependency    dependency      = {0};
-  VkRenderPassCreateInfo info            = {0};
-  uint32_t               attachmentCount;
-  uint32_t               depthIndex;
+  VkAttachmentDescription  attachments[GPU_VK_MAX_RENDER_ATTACHMENTS]            = {{0}};
+  VkAttachmentReference    colorRefs[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS]   = {{0}};
+  VkAttachmentReference    resolveRefs[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS] = {{0}};
+
+  VkAttachmentReference    depthStencilRef = {0};
+  VkSubpassDescription     subpass         = {0};
+  VkSubpassDependency      dependency      = {0};
+  VkRenderPassCreateInfo   info            = {0};
+  VkAttachmentDescription *colorAttachment;
+  VkAttachmentDescription *resolveAttachment;
+  uint32_t                 attachmentCount;
+  uint32_t                 depthIndex;
+  uint32_t                 colorIndex;
+  uint32_t                 resolveIndex;
 
   attachmentCount = 0u;
-  for (uint32_t i = 0u; i < colorCount; i++) {
-    VkAttachmentDescription *attachment;
 
-    attachment                 = &attachments[attachmentCount];
-    attachment->format         = colorFormats[i];
-    attachment->samples        = sampleCount;
-    attachment->loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachment->storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
-    attachment->stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachment->stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachment->initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachment->finalLayout    = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    colorRefs[i].attachment    = attachmentCount++;
-    colorRefs[i].layout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    resolveRefs[i].attachment  = VK_ATTACHMENT_UNUSED;
-    resolveRefs[i].layout      = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  for (colorIndex = 0u; colorIndex < colorCount; colorIndex++) {
+    colorAttachment                    = &attachments[attachmentCount];
+    colorAttachment->format            = colorFormats[colorIndex];
+    colorAttachment->samples           = sampleCount;
+    colorAttachment->loadOp            = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment->storeOp           = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment->stencilLoadOp     = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment->stencilStoreOp    = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment->initialLayout     = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment->finalLayout       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorRefs[colorIndex].attachment   = attachmentCount++;
+    colorRefs[colorIndex].layout       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    resolveRefs[colorIndex].attachment = VK_ATTACHMENT_UNUSED;
+    resolveRefs[colorIndex].layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
   }
-  if (sampleCount > VK_SAMPLE_COUNT_1_BIT) {
-    for (uint32_t i = 0u; i < colorCount; i++) {
-      VkAttachmentDescription *attachment;
 
-      attachment                 = &attachments[attachmentCount];
-      attachment->format         = colorFormats[i];
-      attachment->samples        = VK_SAMPLE_COUNT_1_BIT;
-      attachment->loadOp         = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-      attachment->storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
-      attachment->stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-      attachment->stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-      attachment->initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-      attachment->finalLayout    = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-      resolveRefs[i].attachment  = attachmentCount++;
+  if (sampleCount > VK_SAMPLE_COUNT_1_BIT) {
+    for (resolveIndex = 0u; resolveIndex < colorCount; resolveIndex++) {
+      resolveAttachment                    = &attachments[attachmentCount];
+      resolveAttachment->format            = colorFormats[resolveIndex];
+      resolveAttachment->samples           = VK_SAMPLE_COUNT_1_BIT;
+      resolveAttachment->loadOp            = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      resolveAttachment->storeOp           = VK_ATTACHMENT_STORE_OP_STORE;
+      resolveAttachment->stencilLoadOp     = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      resolveAttachment->stencilStoreOp    = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+      resolveAttachment->initialLayout     = VK_IMAGE_LAYOUT_UNDEFINED;
+      resolveAttachment->finalLayout       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+      resolveRefs[resolveIndex].attachment = attachmentCount++;
     }
   }
+
   if (depthStencilFormat != VK_FORMAT_UNDEFINED) {
-    depthIndex = attachmentCount++;
+    depthIndex                             = attachmentCount++;
     attachments[depthIndex].format         = depthStencilFormat;
     attachments[depthIndex].samples        = sampleCount;
     attachments[depthIndex].loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -316,19 +320,16 @@ vk__createPipelineRenderPass(VkDevice              device,
     attachments[depthIndex].stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachments[depthIndex].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attachments[depthIndex].initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[depthIndex].finalLayout =
-      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    depthStencilRef.attachment = depthIndex;
-    depthStencilRef.layout =
-      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    subpass.pDepthStencilAttachment = &depthStencilRef;
+    attachments[depthIndex].finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    depthStencilRef.attachment             = depthIndex;
+    depthStencilRef.layout                 = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    subpass.pDepthStencilAttachment        = &depthStencilRef;
   }
 
   subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
   subpass.colorAttachmentCount = colorCount;
   subpass.pColorAttachments    = colorCount ? colorRefs : NULL;
-  subpass.pResolveAttachments  =
-    sampleCount > VK_SAMPLE_COUNT_1_BIT && colorCount ? resolveRefs : NULL;
+  subpass.pResolveAttachments  = sampleCount > VK_SAMPLE_COUNT_1_BIT && colorCount ? resolveRefs : NULL;
 
   dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
   dependency.dstSubpass    = 0u;
@@ -348,6 +349,7 @@ vk__createPipelineRenderPass(VkDevice              device,
   info.pSubpasses      = &subpass;
   info.dependencyCount = 1u;
   info.pDependencies   = &dependency;
+
   return vkCreateRenderPass(device, &info, NULL, outRenderPass);
 }
 
@@ -358,7 +360,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
                         uint32_t                           requiredBindGroupMask,
                         GPURenderPipeline                 *pipeline) {
   GPUDeviceVk                       *deviceVk;
-  GPUShaderLibraryVk                      *library;
+  GPUShaderLibraryVk                *library;
   GPUPipelineLayoutVk               *layout;
   GPURenderPipelineVk               *native;
   const GPUMeshPipelineEXT          *mesh;
@@ -369,74 +371,88 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkFormat                           depthFormat;
   VkFormat                           stencilFormat;
   VkFormat                           depthStencilFormat;
-  VkPipelineShaderStageCreateInfo    stages[3] = {{0}};
-  VkPipelineVertexInputStateCreateInfo vertexInput = {0};
-  VkPipelineInputAssemblyStateCreateInfo inputAssembly = {0};
-  VkPipelineViewportStateCreateInfo viewport = {0};
-  VkPipelineRasterizationStateCreateInfo raster = {0};
-  VkPipelineMultisampleStateCreateInfo multisample = {0};
-  VkPipelineDepthStencilStateCreateInfo depthStencil = {0};
-  VkPipelineColorBlendAttachmentState colorBlends[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS] = {{0}};
-  VkPipelineColorBlendStateCreateInfo blend = {0};
-  VkDynamicState                    dynamicStates[5];
-  VkPipelineDynamicStateCreateInfo  dynamic = {0};
-  VkPipelineRenderingCreateInfoKHR  rendering = {0};
-#ifdef VK_KHR_fragment_shading_rate
-  VkPipelineFragmentShadingRateStateCreateInfoKHR shadingRate = {0};
-#endif
-  VkGraphicsPipelineCreateInfo      pipelineInfo = {0};
-  uint64_t                          entryMask;
-  VkResult                          result;
-  uint32_t                          vertexAttributeCount;
-  uint32_t                          stageCount;
-  VkSampleCountFlagBits             sampleCount;
 
-  if (!device || !device->_priv || !info || !pipeline ||
-      !info->library || !info->library->_priv ||
-      !info->layout || !info->layout->_native) {
+  VkPipelineShaderStageCreateInfo stages[3] = {{0}};
+
+  VkPipelineVertexInputStateCreateInfo   vertexInput   = {0};
+  VkPipelineInputAssemblyStateCreateInfo inputAssembly = {0};
+  VkPipelineViewportStateCreateInfo      viewport      = {0};
+  VkPipelineRasterizationStateCreateInfo raster        = {0};
+  VkPipelineMultisampleStateCreateInfo   multisample   = {0};
+  VkPipelineDepthStencilStateCreateInfo  depthStencil  = {0};
+
+  VkPipelineColorBlendAttachmentState colorBlends[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS] = {{0}};
+
+  VkPipelineColorBlendStateCreateInfo             blend        = {0};
+  VkDynamicState                                  dynamicStates[5];
+  VkPipelineDynamicStateCreateInfo                dynamic      = {0};
+  VkPipelineRenderingCreateInfoKHR                rendering    = {0};
+#ifdef VK_KHR_fragment_shading_rate
+  VkPipelineFragmentShadingRateStateCreateInfoKHR shadingRate  = {0};
+#endif
+  VkGraphicsPipelineCreateInfo                    pipelineInfo = {0};
+  uint64_t                                        entryMask;
+  VkResult                                        result;
+  uint32_t                                        vertexAttributeCount;
+  uint32_t                                        stageCount;
+  VkSampleCountFlagBits                           sampleCount;
+
+  if (!device || !device->_priv || !info || !pipeline
+      || !info->library || !info->library->_priv
+      || !info->layout || !info->layout->_native) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
   deviceVk = device->_priv;
   mesh     = vk__meshPipelineInfo(info);
-  if (mesh && (!deviceVk->meshShader ||
-               (mesh->taskEntry && !deviceVk->taskShader))) {
+
+  if (mesh && (!deviceVk->meshShader
+               || (mesh->taskEntry && !deviceVk->taskShader))) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  sampleCount = vk__sampleCount(info->multisample.sampleCount
-                                  ? info->multisample.sampleCount
-                                  : 1u);
-  if (!sampleCount ||
-      (info->colorTargetCount > 0u &&
-       (deviceVk->colorSampleCounts & sampleCount) == 0u) ||
-      (info->depthStencilFormat != GPU_FORMAT_UNDEFINED &&
-       (deviceVk->depthSampleCounts & sampleCount) == 0u)) {
+
+  sampleCount = vk__sampleCount(info->multisample.sampleCount ? info->multisample.sampleCount : 1u);
+
+  if (!sampleCount
+      || (info->colorTargetCount > 0u
+          && (deviceVk->colorSampleCounts & sampleCount) == 0u)
+      || (info->depthStencilFormat != GPU_FORMAT_UNDEFINED
+          && (deviceVk->depthSampleCounts & sampleCount) == 0u)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
   for (uint32_t i = 0u; i < info->colorTargetCount; i++) {
     if (!vk_formatFromGPU(info->pColorTargets[i].format, &colorFormats[i])) {
       return GPU_ERROR_UNSUPPORTED;
     }
+
     vk__fillBlendState(&colorBlends[i], &info->pColorTargets[i].blend);
-    if (!deviceVk->independentBlend && i > 0u &&
-        memcmp(&colorBlends[0],
-               &colorBlends[i],
-               sizeof(colorBlends[i])) != 0) {
+
+    if (!deviceVk->independentBlend && i > 0u
+        && memcmp(&colorBlends[0],
+                  &colorBlends[i],
+                  sizeof(colorBlends[i])) != 0) {
       return GPU_ERROR_UNSUPPORTED;
     }
   }
+
   depthFormat        = VK_FORMAT_UNDEFINED;
   stencilFormat      = VK_FORMAT_UNDEFINED;
   depthStencilFormat = VK_FORMAT_UNDEFINED;
-  if (info->depthStencilFormat != GPU_FORMAT_UNDEFINED &&
-      !vk_formatFromGPU(info->depthStencilFormat, &depthStencilFormat)) {
-      return GPU_ERROR_UNSUPPORTED;
+
+  if (info->depthStencilFormat != GPU_FORMAT_UNDEFINED
+      && !vk_formatFromGPU(info->depthStencilFormat, &depthStencilFormat)) {
+    return GPU_ERROR_UNSUPPORTED;
   }
+
   depthFormat = depthStencilFormat;
-  if (info->depthStencilFormat == GPU_FORMAT_STENCIL8 ||
-      info->depthStencilFormat == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
-      info->depthStencilFormat == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8) {
+
+  if (info->depthStencilFormat == GPU_FORMAT_STENCIL8
+      || info->depthStencilFormat == GPU_FORMAT_DEPTH24_UNORM_STENCIL8
+      || info->depthStencilFormat == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8) {
     stencilFormat = depthFormat;
   }
+
   if (info->depthStencilFormat == GPU_FORMAT_STENCIL8) {
     depthFormat = VK_FORMAT_UNDEFINED;
   }
@@ -444,49 +460,53 @@ vk_createRenderPipeline(GPUDevice                         *device,
   vertexBindings       = NULL;
   vertexAttributes     = NULL;
   vertexAttributeCount = 0u;
+
   for (uint32_t i = 0u; i < info->vertex.bufferLayoutCount; i++) {
     if (info->vertex.pBufferLayouts[i].attributeCount >
         UINT32_MAX - vertexAttributeCount) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
+
     vertexAttributeCount += info->vertex.pBufferLayouts[i].attributeCount;
   }
+
   if (info->vertex.bufferLayoutCount > 0u) {
-    vertexBindings = calloc(info->vertex.bufferLayoutCount,
-                            sizeof(*vertexBindings));
-    if (!vertexBindings) {
+    if (!(vertexBindings = calloc(info->vertex.bufferLayoutCount,
+                                  sizeof(*vertexBindings)))) {
       return GPU_ERROR_OUT_OF_MEMORY;
     }
   }
+
   if (vertexAttributeCount > 0u) {
-    vertexAttributes = calloc(vertexAttributeCount,
-                              sizeof(*vertexAttributes));
-    if (!vertexAttributes) {
+    if (!(vertexAttributes = calloc(vertexAttributeCount,
+                                    sizeof(*vertexAttributes)))) {
       free(vertexBindings);
       return GPU_ERROR_OUT_OF_MEMORY;
     }
   }
 
   vertexAttributeCount = 0u;
+
   for (uint32_t i = 0u; i < info->vertex.bufferLayoutCount; i++) {
     const GPUVertexBufferLayout *bufferLayout;
 
-    bufferLayout = &info->vertex.pBufferLayouts[i];
+    bufferLayout                = &info->vertex.pBufferLayouts[i];
     vertexBindings[i].binding   = i;
     vertexBindings[i].stride    = bufferLayout->strideBytes;
-    vertexBindings[i].inputRate = bufferLayout->stepMode ==
-                                    GPU_VERTEX_STEP_MODE_INSTANCE
-                                      ? VK_VERTEX_INPUT_RATE_INSTANCE
-                                      : VK_VERTEX_INPUT_RATE_VERTEX;
+    vertexBindings[i].inputRate = bufferLayout->stepMode == GPU_VERTEX_STEP_MODE_INSTANCE
+                                   ? VK_VERTEX_INPUT_RATE_INSTANCE
+                                   : VK_VERTEX_INPUT_RATE_VERTEX;
+
     for (uint32_t j = 0u; j < bufferLayout->attributeCount; j++) {
-      const GPUVertexAttribute *attribute;
+      const GPUVertexAttribute          *attribute;
       VkVertexInputAttributeDescription *nativeAttribute;
 
-      attribute       = &bufferLayout->pAttributes[j];
-      nativeAttribute = &vertexAttributes[vertexAttributeCount++];
+      attribute                 = &bufferLayout->pAttributes[j];
+      nativeAttribute           = &vertexAttributes[vertexAttributeCount++];
       nativeAttribute->location = attribute->shaderLocation;
       nativeAttribute->binding  = i;
       nativeAttribute->offset   = attribute->offset;
+
       if (!vk__vertexFormat(attribute->format, &nativeAttribute->format)) {
         free(vertexAttributes);
         free(vertexBindings);
@@ -495,17 +515,17 @@ vk_createRenderPipeline(GPUDevice                         *device,
     }
   }
 
-  library  = info->library->_priv;
-  layout   = info->layout->_native;
+  library    = info->library->_priv;
+  layout     = info->layout->_native;
   depthState = info->pDepthStencilState;
+
   if (!layout->layout) {
     free(vertexAttributes);
     free(vertexBindings);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  native = calloc(1, sizeof(*native));
-  if (!native) {
+  if (!(native = calloc(1, sizeof(*native)))) {
     free(vertexAttributes);
     free(vertexBindings);
     return GPU_ERROR_OUT_OF_MEMORY;
@@ -513,15 +533,18 @@ vk_createRenderPipeline(GPUDevice                         *device,
 
   GPU__UNUSED(requiredBindGroupMask);
   native->device = deviceVk->device;
-  entryMask = UINT64_MAX;
+  entryMask      = UINT64_MAX;
+
   if (gpuShaderLibraryHasEntryResourceInfo(info->library)) {
     entryMask = gpuShaderEntryBit(info->library, info->fragmentEntry);
+
     if (mesh) {
       entryMask |= gpuShaderEntryBit(info->library, mesh->taskEntry);
       entryMask |= gpuShaderEntryBit(info->library, mesh->meshEntry);
     } else {
       entryMask |= gpuShaderEntryBit(info->library, info->vertexEntry);
     }
+
     if (entryMask == 0u) {
       free(vertexAttributes);
       free(vertexBindings);
@@ -529,6 +552,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
+
   if (vk_createShaderLayout(device,
                             info->layout,
                             info->library,
@@ -539,13 +563,14 @@ vk_createRenderPipeline(GPUDevice                         *device,
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  if (!deviceVk->dynamicRendering &&
-      vk__createPipelineRenderPass(native->device,
-                                   colorFormats,
-                                   info->colorTargetCount,
-                                   depthStencilFormat,
-                                   sampleCount,
-                                   &native->renderPass) != VK_SUCCESS) {
+
+  if (!deviceVk->dynamicRendering
+      && vk__createPipelineRenderPass(native->device,
+                                      colorFormats,
+                                      info->colorTargetCount,
+                                      depthStencilFormat,
+                                      sampleCount,
+                                      &native->renderPass) != VK_SUCCESS) {
     free(vertexAttributes);
     free(vertexBindings);
     vk_destroyShaderLayout(&native->shaderLayout);
@@ -554,18 +579,18 @@ vk_createRenderPipeline(GPUDevice                         *device,
   }
 
   stageCount = 0u;
+
   if (mesh) {
 #ifdef VK_EXT_mesh_shader
     if (mesh->taskEntry) {
-      stages[stageCount].sType =
-        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+      stages[stageCount].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
       stages[stageCount].stage  = VK_SHADER_STAGE_TASK_BIT_EXT;
       stages[stageCount].module = library->module;
       stages[stageCount].pName  = mesh->taskEntry;
       stageCount++;
     }
-    stages[stageCount].sType =
-      VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+
+    stages[stageCount].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[stageCount].stage  = VK_SHADER_STAGE_MESH_BIT_EXT;
     stages[stageCount].module = library->module;
     stages[stageCount].pName  = mesh->meshEntry;
@@ -579,24 +604,21 @@ vk_createRenderPipeline(GPUDevice                         *device,
     return GPU_ERROR_UNSUPPORTED;
 #endif
   } else {
-    stages[stageCount].sType =
-      VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[stageCount].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[stageCount].stage  = VK_SHADER_STAGE_VERTEX_BIT;
     stages[stageCount].module = library->module;
     stages[stageCount].pName  = info->vertexEntry;
     stageCount++;
   }
-  stages[stageCount].sType =
-    VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+
+  stages[stageCount].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   stages[stageCount].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
   stages[stageCount].module = library->module;
   stages[stageCount].pName  = info->fragmentEntry;
   stageCount++;
 
-  vertexInput.sType                           =
-    VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-  vertexInput.vertexBindingDescriptionCount   =
-    info->vertex.bufferLayoutCount;
+  vertexInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  vertexInput.vertexBindingDescriptionCount   = info->vertex.bufferLayoutCount;
   vertexInput.pVertexBindingDescriptions      = vertexBindings;
   vertexInput.vertexAttributeDescriptionCount = vertexAttributeCount;
   vertexInput.pVertexAttributeDescriptions    = vertexAttributes;
@@ -614,26 +636,20 @@ vk_createRenderPipeline(GPUDevice                         *device,
   raster.frontFace   = vk__frontFace(info->frontFace);
   raster.lineWidth   = 1.0f;
 
-  multisample.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-  multisample.rasterizationSamples = sampleCount;
-  multisample.alphaToCoverageEnable =
-    info->multisample.alphaToCoverageEnable;
-  multisample.pSampleMask          = info->multisample.sampleMask ?
-    &info->multisample.sampleMask : NULL;
+  multisample.sType                 = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisample.rasterizationSamples  = sampleCount;
+  multisample.alphaToCoverageEnable = info->multisample.alphaToCoverageEnable;
+  multisample.pSampleMask           = info->multisample.sampleMask ? &info->multisample.sampleMask : NULL;
 
-  depthStencil.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-  depthStencil.depthTestEnable =
-    depthState && (depthState->depthTestEnable ||
-                   depthState->depthWriteEnable);
-  depthStencil.depthWriteEnable =
-    depthState && depthState->depthWriteEnable;
-  depthStencil.depthCompareOp =
-    depthState && depthState->depthTestEnable
-      ? vk__compareOp(depthState->depthCompare)
-      : VK_COMPARE_OP_ALWAYS;
-  depthStencil.stencilTestEnable =
-    depthState && depthState->stencilTestEnable;
+  depthStencil.sType             = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depthStencil.depthTestEnable   = depthState && (depthState->depthTestEnable
+                                                  || depthState->depthWriteEnable);
+  depthStencil.depthWriteEnable  = depthState && depthState->depthWriteEnable;
+  depthStencil.depthCompareOp    = depthState && depthState->depthTestEnable
+                                    ? vk__compareOp(depthState->depthCompare)
+                                    : VK_COMPARE_OP_ALWAYS;
+  depthStencil.stencilTestEnable = depthState && depthState->stencilTestEnable;
+
   if (depthState) {
     vk__fillStencilState(&depthStencil.front,
                          &depthState->front,
@@ -657,20 +673,19 @@ vk_createRenderPipeline(GPUDevice                         *device,
   dynamic.dynamicStateCount = 4u;
 #ifdef VK_KHR_fragment_shading_rate
   if (deviceVk->vrsDrawRate) {
-    dynamicStates[dynamic.dynamicStateCount++] =
-      VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR;
+    dynamicStates[dynamic.dynamicStateCount++] = VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR;
   }
 #endif
-  dynamic.pDynamicStates    = dynamicStates;
+  dynamic.pDynamicStates = dynamicStates;
 
-  rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
-  rendering.colorAttachmentCount = info->colorTargetCount;
+  rendering.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
+  rendering.colorAttachmentCount    = info->colorTargetCount;
   rendering.pColorAttachmentFormats = colorFormats;
-  rendering.depthAttachmentFormat = depthFormat;
+  rendering.depthAttachmentFormat   = depthFormat;
   rendering.stencilAttachmentFormat = stencilFormat;
 
-  pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-  pipelineInfo.pNext               = NULL;
+  pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+  pipelineInfo.pNext = NULL;
 #ifdef VK_EXT_descriptor_buffer
   if (native->shaderLayout.descriptorBuffer) {
     pipelineInfo.flags |= VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
@@ -688,14 +703,11 @@ vk_createRenderPipeline(GPUDevice                         *device,
   }
 #ifdef VK_KHR_fragment_shading_rate
   if (deviceVk->vrsAttachment) {
-    shadingRate.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR;
+    shadingRate.sType          = VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR;
     shadingRate.pNext          = pipelineInfo.pNext;
-    shadingRate.fragmentSize   = (VkExtent2D){1u, 1u};
-    shadingRate.combinerOps[0] =
-      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
-    shadingRate.combinerOps[1] =
-      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR;
+    shadingRate.fragmentSize   = (VkExtent2D) {1u, 1u};
+    shadingRate.combinerOps[0] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+    shadingRate.combinerOps[1] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR;
     pipelineInfo.pNext         = &shadingRate;
   }
 #endif
@@ -714,10 +726,12 @@ vk_createRenderPipeline(GPUDevice                         *device,
                                        ? VK_NULL_HANDLE
                                        : native->renderPass;
   pipelineInfo.subpass             = 0u;
+
   result = vk_createGraphicsPipelineCached(deviceVk,
-                                            info->cache,
-                                            &pipelineInfo,
-                                            &native->pipeline);
+                                           info->cache,
+                                           &pipelineInfo,
+                                           &native->pipeline);
+
   if (result != VK_SUCCESS) {
     free(vertexAttributes);
     free(vertexBindings);
@@ -732,6 +746,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
 
   pipeline->_priv  = native;
   pipeline->_state = native;
+
   return GPU_OK;
 }
 
@@ -745,22 +760,26 @@ vk_destroyRenderPipeline(GPURenderPipeline *pipeline) {
   }
 
   native = pipeline->_priv;
+
   if (native) {
     if (native->pipeline) {
       vkDestroyPipeline(native->device, native->pipeline, NULL);
     }
+
     if (native->renderPass) {
       vkDestroyRenderPass(native->device, native->renderPass, NULL);
     }
+
     vk_destroyShaderLayout(&native->shaderLayout);
     free(native);
   }
+
   free(pipeline);
 }
 
 GPU_HIDE
 void
 vk_initRenderPipeline(GPUApiRender *api) {
-  api->createPipeline         = vk_createRenderPipeline;
+  api->createPipeline        = vk_createRenderPipeline;
   api->destroyRenderPipeline = vk_destroyRenderPipeline;
 }

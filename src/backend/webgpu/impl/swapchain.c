@@ -3,6 +3,15 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "../common.h"
@@ -17,14 +26,17 @@ webgpu_configureSwapchain(GPUSwapchain                 *swapchain,
 
   native  = gpu_webgpuSwapchain(swapchain);
   surface = gpu_webgpuSurface(info->surface);
+
   if (!native || !surface || !surface->surface) {
     return false;
   }
 
   native->format = gpu_webgpuFormat(info->format);
+
   if (native->format == WGPUTextureFormat_Undefined) {
     return false;
   }
+
   native->presentMode = gpu_webgpuPresentMode(info->presentMode);
   native->surface     = surface->surface;
 
@@ -36,14 +48,15 @@ webgpu_configureSwapchain(GPUSwapchain                 *swapchain,
   configuration.alphaMode   = WGPUCompositeAlphaMode_Auto;
   configuration.presentMode = native->presentMode;
   wgpuSurfaceConfigure(native->surface, &configuration);
+
   return true;
 }
 
-static GPUSwapchain *
-webgpu_createSwapchain(GPUApi                         *api,
-                       GPUDevice                      *device,
-                       GPUQueue                       *queue,
-                       const GPUSwapchainCreateInfo  *info) {
+static GPUSwapchain*
+webgpu_createSwapchain(GPUApi                       *api,
+                       GPUDevice                    *device,
+                       GPUQueue                     *queue,
+                       const GPUSwapchainCreateInfo *info) {
   GPUDeviceWebGPU    *deviceNative;
   GPUSwapchainWebGPU *native;
   GPUSwapchain       *swapchain;
@@ -51,12 +64,14 @@ webgpu_createSwapchain(GPUApi                         *api,
   GPU__UNUSED(api);
   GPU__UNUSED(queue);
   deviceNative = gpu_webgpuDevice(device);
+
   if (!deviceNative || !deviceNative->device || !info) {
     return NULL;
   }
 
   swapchain = calloc(1, sizeof(*swapchain));
   native    = calloc(1, sizeof(*native));
+
   if (!swapchain || !native) {
     free(native);
     free(swapchain);
@@ -65,11 +80,13 @@ webgpu_createSwapchain(GPUApi                         *api,
 
   swapchain->_priv = native;
   native->device   = deviceNative->device;
+
   if (!webgpu_configureSwapchain(swapchain, info)) {
     free(native);
     free(swapchain);
     return NULL;
   }
+
   return swapchain;
 }
 
@@ -79,6 +96,7 @@ webgpu_resizeSwapchain(GPUSwapchain *swapchain, GPUExtent2D size) {
   GPUSwapchainWebGPU      *native;
 
   native = gpu_webgpuSwapchain(swapchain);
+
   if (!native || !native->surface || native->acquired) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -91,6 +109,7 @@ webgpu_resizeSwapchain(GPUSwapchain *swapchain, GPUExtent2D size) {
   configuration.alphaMode   = WGPUCompositeAlphaMode_Auto;
   configuration.presentMode = native->presentMode;
   wgpuSurfaceConfigure(native->surface, &configuration);
+
   return GPU_OK;
 }
 
@@ -99,18 +118,23 @@ webgpu_destroySwapchain(GPUSwapchain *swapchain) {
   GPUSwapchainWebGPU *native;
 
   native = gpu_webgpuSwapchain(swapchain);
+
   if (native) {
     if (native->currentView) {
       wgpuTextureViewRelease(native->currentView);
     }
+
     if (native->currentTexture) {
       wgpuTextureRelease(native->currentTexture);
     }
+
     if (native->surface) {
       wgpuSurfaceUnconfigure(native->surface);
     }
+
     free(native);
   }
+
   free(swapchain);
 }
 

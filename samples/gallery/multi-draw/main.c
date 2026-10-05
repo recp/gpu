@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 #include <stdio.h>
@@ -46,17 +62,18 @@ resize_canvas(WebGPUMultiDraw *state) {
 
 static int
 create_resources(WebGPUMultiDraw *state) {
-  GPUVertexAttribute           attributes[2] = {0};
-  GPUVertexBufferLayout        vertexLayout = {0};
-  GPUColorTargetState          color        = {0};
-  GPURenderPipelineCreateInfo  pipelineInfo = {0};
-  GPUBufferCreateInfo          bufferInfo   = {0};
-  void                        *artifact;
-  uint64_t                     artifactSize;
-  GPUResult                    result;
+  GPUVertexAttribute          attributes[2] = {0};
+  GPURenderPipelineCreateInfo pipelineInfo  = {0};
+  GPUBufferCreateInfo         bufferInfo    = {0};
+  GPUColorTargetState         color         = {0};
+  GPUVertexBufferLayout       vertexLayout  = {0};
+  void                       *artifact;
+  uint64_t                    artifactSize;
+  GPUResult                   result;
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/multi_draw.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /multi_draw.us", 1);
     return 0;
@@ -67,15 +84,17 @@ create_resources(WebGPUMultiDraw *state) {
                                          artifactSize,
                                          &state->library);
   free(artifact);
+
   if (result != GPU_OK || !state->library) {
     set_status("GPU: failed to compile multi-draw USL", 1);
     return 0;
   }
+
   if (GPUCreateShaderLayout(state->device,
                             state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 0u) {
+                            &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 0u) {
     set_status("GPU: unexpected multi-draw shader reflection", 1);
     return 0;
   }
@@ -83,37 +102,39 @@ create_resources(WebGPUMultiDraw *state) {
   color.format          = GPUGetSwapchainFormat(state->swapchain);
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
 
-  attributes[0].format          = GPU_VERTEX_FORMAT_FLOAT32X2;
-  attributes[0].offset          = offsetof(MultiDrawInstance, offset);
-  attributes[0].shaderLocation  = 0u;
-  attributes[1].format          = GPU_VERTEX_FORMAT_FLOAT32X4;
-  attributes[1].offset          = offsetof(MultiDrawInstance, color);
-  attributes[1].shaderLocation  = 1u;
-  vertexLayout.pAttributes      = attributes;
-  vertexLayout.strideBytes      = sizeof(MultiDrawInstance);
-  vertexLayout.stepMode         = GPU_VERTEX_STEP_MODE_INSTANCE;
-  vertexLayout.attributeCount   = 2u;
+  attributes[0].format         = GPU_VERTEX_FORMAT_FLOAT32X2;
+  attributes[0].offset         = offsetof(MultiDrawInstance, offset);
+  attributes[0].shaderLocation = 0u;
+  attributes[1].format         = GPU_VERTEX_FORMAT_FLOAT32X4;
+  attributes[1].offset         = offsetof(MultiDrawInstance, color);
+  attributes[1].shaderLocation = 1u;
 
-  pipelineInfo.chain.sType             =
-    GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  pipelineInfo.chain.structSize        = sizeof(pipelineInfo);
-  pipelineInfo.label                   = "multi-draw-webgpu-usl-pipeline";
-  pipelineInfo.layout                  = state->shaderLayout->pipelineLayout;
-  pipelineInfo.library                 = state->library;
-  pipelineInfo.vertexEntry             = "multi_vs";
-  pipelineInfo.fragmentEntry           = "multi_fs";
-  pipelineInfo.pColorTargets           = &color;
+  vertexLayout.pAttributes    = attributes;
+  vertexLayout.strideBytes    = sizeof(MultiDrawInstance);
+  vertexLayout.stepMode       = GPU_VERTEX_STEP_MODE_INSTANCE;
+  vertexLayout.attributeCount = 2u;
+
+  pipelineInfo.chain.sType              = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize         = sizeof(pipelineInfo);
+  pipelineInfo.label                    = "multi-draw-webgpu-usl-pipeline";
+  pipelineInfo.layout                   = state->shaderLayout->pipelineLayout;
+  pipelineInfo.library                  = state->library;
+  pipelineInfo.vertexEntry              = "multi_vs";
+  pipelineInfo.fragmentEntry            = "multi_fs";
+  pipelineInfo.pColorTargets            = &color;
   pipelineInfo.vertex.pBufferLayouts    = &vertexLayout;
   pipelineInfo.vertex.bufferLayoutCount = 1u;
-  pipelineInfo.colorTargetCount        = 1u;
-  pipelineInfo.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  pipelineInfo.cullMode                = GPU_CULL_MODE_NONE;
-  pipelineInfo.frontFace               = GPU_FRONT_FACE_CCW;
-  pipelineInfo.multisample.sampleCount = 1u;
-  pipelineInfo.multisample.sampleMask  = UINT32_MAX;
+  pipelineInfo.colorTargetCount         = 1u;
+  pipelineInfo.primitiveTopology        = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineInfo.cullMode                 = GPU_CULL_MODE_NONE;
+  pipelineInfo.frontFace                = GPU_FRONT_FACE_CCW;
+  pipelineInfo.multisample.sampleCount  = 1u;
+  pipelineInfo.multisample.sampleMask   = UINT32_MAX;
+
   result = GPUCreateRenderPipeline(state->device,
                                    &pipelineInfo,
                                    &state->pipeline);
+
   if (result != GPU_OK || !state->pipeline) {
     set_status("GPU: failed to create multi-draw pipeline", 1);
     return 0;
@@ -123,16 +144,16 @@ create_resources(WebGPUMultiDraw *state) {
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "multi-draw-webgpu-indirect";
   bufferInfo.sizeBytes        = sizeof(kDraws);
-  bufferInfo.usage             =
-    GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(state->device,
                       &bufferInfo,
-                      &state->indirectBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->indirectBuffer,
-                          0u,
-                          kDraws,
-                          sizeof(kDraws)) != GPU_OK) {
+                      &state->indirectBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->indirectBuffer,
+                             0u,
+                             kDraws,
+                             sizeof(kDraws)) != GPU_OK) {
     set_status("GPU: failed to upload multi-draw commands", 1);
     return 0;
   }
@@ -140,40 +161,44 @@ create_resources(WebGPUMultiDraw *state) {
   bufferInfo.label     = "multi-draw-webgpu-instances";
   bufferInfo.sizeBytes = sizeof(kInstances);
   bufferInfo.usage     = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(state->device,
                       &bufferInfo,
-                      &state->instanceBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->instanceBuffer,
-                          0u,
-                          kInstances,
-                          sizeof(kInstances)) != GPU_OK) {
+                      &state->instanceBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->instanceBuffer,
+                             0u,
+                             kInstances,
+                             sizeof(kInstances)) != GPU_OK) {
     set_status("GPU: failed to upload multi-draw instances", 1);
     return 0;
   }
+
   return 1;
 }
 
 static void
 render_frame(void *userData) {
-  WebGPUMultiDraw              *state;
-  GPUFrame                     *frame;
-  GPUCommandBuffer             *cmdb;
-  GPURenderPassEncoder         *pass;
-  GPUBufferBinding              vertexBuffer = {0};
-  GPURenderPassColorAttachment  color = {0};
-  GPURenderPassCreateInfo       passInfo = {0};
+  GPUCommandBuffer            *cmdb;
+  GPUBufferBinding             vertexBuffer = {0};
+  GPURenderPassColorAttachment color        = {0};
+  GPURenderPassCreateInfo      passInfo     = {0};
+  WebGPUMultiDraw             *state;
+  GPUFrame                    *frame;
+  GPURenderPassEncoder        *pass;
 
   state = userData;
+
   if (!resize_canvas(state)) {
     return;
   }
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) {
+  if (!(frame = GPUBeginFrame(state->swapchain))) {
     return;
   }
+
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(state->queue,
                               "multi-draw-webgpu-frame",
                               &cmdb) != GPU_OK || !cmdb) {
@@ -192,8 +217,8 @@ render_frame(void *userData) {
   passInfo.label                = "multi-draw-webgpu-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
@@ -204,19 +229,21 @@ render_frame(void *userData) {
   GPUBindVertexBuffers(pass, 0u, 1u, &vertexBuffer);
   GPUMultiDrawIndirect(pass, state->indirectBuffer, 0u, 2u, 16u);
   GPUEndRenderPass(pass);
+
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     fprintf(stderr, "GPU: failed to finish WebGPU multi-draw frame\n");
   }
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
   WebGPUMultiDraw *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status(!adapter ? "GPU: failed to request WebGPU adapter"
                         : "GPU: failed to request WebGPU device",
@@ -226,27 +253,31 @@ webgpu_ready(GPUResult  result,
 
   state->adapter = adapter;
   state->device  = device;
+
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW)) {
     set_status("GPU: WebGPU indirect draw unsupported by this adapter", 1);
     return;
   }
+
   state->nativeMultiDraw = GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW);
+
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               state->adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
+                                              state->adapter,
+                                              (void *)"#canvas",
+                                              GPU_SURFACE_WEB_CANVAS,
+                                              1.0f);
+
   if (!state->queue || !state->surface || !resize_canvas(state)) {
     set_status("GPU: failed to create WebGPU queue or canvas surface", 1);
     return;
   }
 
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain || !create_resources(state)) {
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))
+      || !create_resources(state)) {
     return;
   }
 
@@ -267,7 +298,9 @@ main(void) {
   info.label            = "multi-draw-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create WebGPU instance", 1);
     return 1;
@@ -278,5 +311,6 @@ main(void) {
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   return result == GPU_OK ? 0 : 1;
 }

@@ -30,14 +30,13 @@ mt_wrapBuffer(GPUDevice                 *device,
   }
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-  if (gpuDeviceDebugMarkersEnabled(device) &&
-      info->label && info->label[0] != '\0') {
+  if (gpuDeviceDebugMarkersEnabled(device)
+      && info->label && info->label[0] != '\0') {
     nativeBuffer.label = [NSString stringWithUTF8String:info->label];
   }
 #endif
 
-  buffer = calloc(1, sizeof(*buffer));
-  if (!buffer) {
+  if (!(buffer = calloc(1, sizeof(*buffer)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
@@ -45,48 +44,53 @@ mt_wrapBuffer(GPUDevice                 *device,
   buffer->device    = device;
   buffer->sizeBytes = info->sizeBytes;
   buffer->usage     = info->usage;
+
   if (@available(macOS 13.0, iOS 16.0, *)) {
     buffer->_gpuAddress = nativeBuffer.gpuAddress;
   }
+
   *outBuffer = buffer;
+
   return GPU_OK;
 }
 
 GPU_HIDE
 GPUResult
-mt_createBuffer(GPUDevice                 * __restrict device,
-                const GPUBufferCreateInfo * __restrict info,
-                GPUBuffer                ** __restrict outBuffer) {
-  GPUDeviceMT *deviceMT;
+mt_createBuffer(GPUDevice                 *__restrict device,
+                const GPUBufferCreateInfo *__restrict info,
+                GPUBuffer                **__restrict outBuffer) {
+  GPUDeviceMT  *deviceMT;
   id<MTLBuffer> buffer;
-  GPUResult result;
-  
+  GPUResult     result;
+
   if (!device || !info || !outBuffer || info->sizeBytes == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   deviceMT = device->_priv;
+
   if (info->sizeBytes > NSUIntegerMax) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  buffer = [deviceMT->device newBufferWithLength:(NSUInteger)info->sizeBytes
-                                         options:MTLResourceStorageModeShared];
-  if (!buffer) {
+  if (!(buffer = [deviceMT->device newBufferWithLength:(NSUInteger)info->sizeBytes
+                                               options:MTLResourceStorageModeShared])) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   result = mt_wrapBuffer(device, info, buffer, outBuffer);
+
   if (result != GPU_OK) {
     [buffer release];
     return result;
   }
+
   return GPU_OK;
 }
 
 GPU_HIDE
 void
-mt_destroyBuffer(GPUBuffer * __restrict buff) {
+mt_destroyBuffer(GPUBuffer *__restrict buff) {
   if (!buff) {
     return;
   }
@@ -94,55 +98,64 @@ mt_destroyBuffer(GPUBuffer * __restrict buff) {
   if (buff->_priv) {
     [(id<MTLBuffer>)buff->_priv release];
   }
+
   free(buff);
 }
 
 GPU_HIDE
 GPUResult
-mt_writeBuffer(GPUQueue * __restrict queue,
-               GPUBuffer       * __restrict buff,
-               uint64_t                     dstOffset,
-               const void      * __restrict data,
-               uint64_t                     sizeBytes) {
-  id<MTLBuffer> buffer;
-  id<MTLBuffer> staging;
+mt_writeBuffer(GPUQueue   *__restrict queue,
+               GPUBuffer  *__restrict buff,
+               uint64_t               dstOffset,
+               const void *__restrict data,
+               uint64_t               sizeBytes) {
+  id<MTLBuffer>             buffer;
+  id<MTLBuffer>             staging;
   id<MTLBlitCommandEncoder> blit;
-  uint8_t    *contents;
-  uint64_t    stagingOffset;
-  GPUResult   result;
+  uint8_t                  *contents;
+  uint64_t                  stagingOffset;
+  GPUResult                 result;
 
   if (!buff || !data || sizeBytes == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   buffer = (id<MTLBuffer>)buff->_priv;
+
   if (dstOffset > [buffer length] || sizeBytes > [buffer length] - dstOffset) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (sizeBytes > SIZE_MAX) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   contents = (uint8_t *)[buffer contents];
+
   if (!contents) {
     result = mt_beginTransfer(queue,
                               sizeBytes,
                               &blit,
                               &staging,
                               &stagingOffset);
+
     if (result != GPU_OK) {
       return result;
     }
+
     contents = (uint8_t *)[staging contents];
+
     if (!contents) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
+
     memcpy(contents + stagingOffset, data, (size_t)sizeBytes);
     [blit copyFromBuffer:staging
             sourceOffset:(NSUInteger)stagingOffset
                 toBuffer:buffer
        destinationOffset:(NSUInteger)dstOffset
                     size:(NSUInteger)sizeBytes];
+
     return GPU_OK;
   }
 
@@ -150,76 +163,90 @@ mt_writeBuffer(GPUQueue * __restrict queue,
 #if TARGET_OS_OSX
   if (buffer.storageMode == MTLStorageModeManaged) {
     [buffer didModifyRange:NSMakeRange((NSUInteger)dstOffset,
-                                      (NSUInteger)sizeBytes)];
+                                       (NSUInteger)sizeBytes)];
   }
 #endif
+
   return GPU_OK;
 }
 
 GPU_HIDE
 GPUResult
-mt_readBuffer(GPUQueue * __restrict queue,
-              GPUBuffer       * __restrict buff,
-              uint64_t                     srcOffset,
-              void           * __restrict outData,
-              uint64_t                     sizeBytes) {
-  id<MTLBuffer> buffer;
-  id<MTLBuffer> staging;
+mt_readBuffer(GPUQueue  *__restrict queue,
+              GPUBuffer *__restrict buff,
+              uint64_t              srcOffset,
+              void      *__restrict outData,
+              uint64_t              sizeBytes) {
+  id<MTLBuffer>             buffer;
+  id<MTLBuffer>             staging;
   id<MTLBlitCommandEncoder> blit;
-  const uint8_t *contents;
-  uint64_t       stagingOffset;
-  GPUResult      result;
+  const uint8_t            *contents;
+  uint64_t                  stagingOffset;
+  GPUResult                 result;
 
   if (!buff || !outData || sizeBytes == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   buffer = (id<MTLBuffer>)buff->_priv;
+
   if (srcOffset > [buffer length] || sizeBytes > [buffer length] - srcOffset) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (sizeBytes > SIZE_MAX) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   result = mt_waitCommandQueueIdle(queue);
+
   if (result != GPU_OK) {
     return result;
   }
 
   contents = (const uint8_t *)[buffer contents];
+
   if (!contents) {
     result = mt_beginTransfer(queue,
                               sizeBytes,
                               &blit,
                               &staging,
                               &stagingOffset);
+
     if (result != GPU_OK) {
       return result;
     }
+
     [blit copyFromBuffer:buffer
             sourceOffset:(NSUInteger)srcOffset
                 toBuffer:staging
        destinationOffset:(NSUInteger)stagingOffset
                     size:(NSUInteger)sizeBytes];
     result = mt_flushTransfers(queue, true);
+
     if (result != GPU_OK) {
       return result;
     }
+
     contents = (const uint8_t *)[staging contents];
+
     if (!contents) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
+
     memcpy(outData, contents + stagingOffset, (size_t)sizeBytes);
+
     return GPU_OK;
   }
 
   memcpy(outData, contents + srcOffset, (size_t)sizeBytes);
+
   return GPU_OK;
 }
 
 GPU_HIDE
 void*
-mt_bufferContents(GPUBuffer * __restrict buff) {
+mt_bufferContents(GPUBuffer *__restrict buff) {
   if (!buff) {
     return NULL;
   }
@@ -230,9 +257,9 @@ mt_bufferContents(GPUBuffer * __restrict buff) {
 GPU_HIDE
 void
 mt_initBuff(GPUApiBuffer *api) {
-  api->create  = mt_createBuffer;
-  api->destroy = mt_destroyBuffer;
-  api->write   = mt_writeBuffer;
-  api->read    = mt_readBuffer;
+  api->create   = mt_createBuffer;
+  api->destroy  = mt_destroyBuffer;
+  api->write    = mt_writeBuffer;
+  api->read     = mt_readBuffer;
   api->contents = mt_bufferContents;
 }

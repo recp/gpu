@@ -33,23 +33,44 @@ static const uint32_t mt_presentModes[] = {
 };
 #endif
 
+static GPUResult
+mt_getSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
+                          GPUSurface             *__restrict surface,
+                          GPUSurfaceCapabilities *__restrict outCaps) {
+  GPU__UNUSED(adapter);
+
+  if (!surface || !outCaps
+      || (surface->type != GPU_SURFACE_APPLE_NSVIEW
+          && surface->type != GPU_SURFACE_APPLE_UIVIEW)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  outCaps->pFormats         = mt_surfaceFormats;
+  outCaps->pPresentModes    = mt_presentModes;
+  outCaps->minImageCount    = 2u;
+  outCaps->maxImageCount    = 3u;
+  outCaps->formatCount      = (uint32_t)GPU_ARRAY_LEN(mt_surfaceFormats);
+  outCaps->presentModeCount = (uint32_t)GPU_ARRAY_LEN(mt_presentModes);
+
+  return GPU_OK;
+}
+
 GPUSurface*
-mt_createSurface(GPUApi                    * __restrict api,
-                 GPUInstance               * __restrict inst,
-                 const GPUSurfaceNativeInfo * __restrict info) {
+mt_createSurface(GPUApi                     *__restrict api,
+                 GPUInstance                *__restrict inst,
+                 const GPUSurfaceNativeInfo *__restrict info) {
   GPUSurface *surface;
 
   GPU__UNUSED(api);
   GPU__UNUSED(inst);
 
-  if (!info || !info->nativeHandle ||
-      (info->type != GPU_SURFACE_APPLE_NSVIEW &&
-       info->type != GPU_SURFACE_APPLE_UIVIEW)) {
+  if (!info || !info->nativeHandle
+      || (info->type != GPU_SURFACE_APPLE_NSVIEW
+          && info->type != GPU_SURFACE_APPLE_UIVIEW)) {
     return NULL;
   }
 
-  surface        = calloc(1, sizeof(*surface));
-  if (!surface) {
+  if (!(surface = calloc(1, sizeof(*surface)))) {
     return NULL;
   }
 
@@ -60,36 +81,15 @@ mt_createSurface(GPUApi                    * __restrict api,
   return surface;
 }
 
-static GPUResult
-mt_getSurfaceCapabilities(const GPUAdapter       * __restrict adapter,
-                          GPUSurface             * __restrict surface,
-                          GPUSurfaceCapabilities * __restrict outCaps) {
-  GPU__UNUSED(adapter);
-
-  if (!surface || !outCaps ||
-      (surface->type != GPU_SURFACE_APPLE_NSVIEW &&
-       surface->type != GPU_SURFACE_APPLE_UIVIEW)) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  outCaps->pFormats         = mt_surfaceFormats;
-  outCaps->pPresentModes    = mt_presentModes;
-  outCaps->minImageCount    = 2u;
-  outCaps->maxImageCount    = 3u;
-  outCaps->formatCount      = (uint32_t)GPU_ARRAY_LEN(mt_surfaceFormats);
-  outCaps->presentModeCount = (uint32_t)GPU_ARRAY_LEN(mt_presentModes);
-  return GPU_OK;
-}
-
 GPU_HIDE
 void
-mt_destroySurface(GPUSurface * __restrict surface) {
+mt_destroySurface(GPUSurface *__restrict surface) {
   free(surface);
 }
 
 GPU_HIDE
 void
-mt_initSurface(GPUApiSurface * apiDevice) {
+mt_initSurface(GPUApiSurface *apiDevice) {
   apiDevice->createSurface   = mt_createSurface;
   apiDevice->getCapabilities = mt_getSurfaceCapabilities;
   apiDevice->destroySurface  = mt_destroySurface;

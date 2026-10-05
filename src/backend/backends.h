@@ -19,26 +19,29 @@
 
 #include "common.h"
 
-#if defined(__APPLE__) && !GPU_BACKEND_VULKAN_ONLY && \
-    !GPU_BACKEND_WEBGPU_ONLY && !GPU_BACKEND_CUDA_ONLY
+#if defined(__APPLE__) \
+    && !GPU_BACKEND_VULKAN_ONLY \
+    && !GPU_BACKEND_WEBGPU_ONLY \
+    && !GPU_BACKEND_CUDA_ONLY
 GPU_HIDE
 GPUApi*
 backend_metal(void);
 #endif
 
-#if (defined(_WIN32) || defined(WIN32)) && \
-    !GPU_BACKEND_VULKAN_ONLY && !GPU_BACKEND_WEBGPU_ONLY && \
-    !GPU_BACKEND_CUDA_ONLY
+#if (defined(_WIN32) || defined(WIN32)) \
+    && !GPU_BACKEND_VULKAN_ONLY \
+    && !GPU_BACKEND_WEBGPU_ONLY \
+    && !GPU_BACKEND_CUDA_ONLY
 GPU_HIDE
 GPUApi*
 backend_dx12(void);
 #endif
 
-#if defined(GPU_ENABLE_VULKAN) && \
-    !GPU_BACKEND_METAL_ONLY && \
-    !GPU_BACKEND_DX12_ONLY && \
-    !GPU_BACKEND_WEBGPU_ONLY && \
-    !GPU_BACKEND_CUDA_ONLY
+#if defined(GPU_ENABLE_VULKAN) \
+    && !GPU_BACKEND_METAL_ONLY \
+    && !GPU_BACKEND_DX12_ONLY \
+    && !GPU_BACKEND_WEBGPU_ONLY \
+    && !GPU_BACKEND_CUDA_ONLY
 GPU_HIDE
 GPUApi*
 backend_vk(void);

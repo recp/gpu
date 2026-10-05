@@ -48,34 +48,34 @@ GPU_HIDE
 GPUApi*
 gpuApiForBackend(GPUBackend backend) {
 #if GPU_BACKEND_METAL_ONLY
-  if (backend == GPU_BACKEND_DEFAULT ||
-      backend == GPU_BACKEND_METAL) {
+  if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_METAL) {
     return gpu__selectDefaultBackend();
   }
+
   return NULL;
 #elif GPU_BACKEND_VULKAN_ONLY
-  if (backend == GPU_BACKEND_DEFAULT ||
-      backend == GPU_BACKEND_VULKAN) {
+  if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_VULKAN) {
     return gpu__selectDefaultBackend();
   }
+
   return NULL;
 #elif GPU_BACKEND_DX12_ONLY
-  if (backend == GPU_BACKEND_DEFAULT ||
-      backend == GPU_BACKEND_DX12) {
+  if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_DX12) {
     return gpu__selectDefaultBackend();
   }
+
   return NULL;
 #elif GPU_BACKEND_WEBGPU_ONLY
-  if (backend == GPU_BACKEND_DEFAULT ||
-      backend == GPU_BACKEND_WEBGPU) {
+  if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_WEBGPU) {
     return gpu__selectDefaultBackend();
   }
+
   return NULL;
 #elif GPU_BACKEND_CUDA_ONLY
-  if (backend == GPU_BACKEND_DEFAULT ||
-      backend == GPU_BACKEND_CUDA) {
+  if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_CUDA) {
     return gpu__selectDefaultBackend();
   }
+
   return NULL;
 #else
   GPUApi *api;
@@ -85,32 +85,38 @@ gpuApiForBackend(GPUBackend backend) {
   }
 
   api = NULL;
+
   switch (backend) {
 #ifdef __APPLE__
     case GPU_BACKEND_METAL:
       api = backend_metal();
       break;
 #endif
+
 #if defined(GPU_ENABLE_VULKAN)
     case GPU_BACKEND_VULKAN:
       api = backend_vk();
       break;
 #endif
+
 #if defined(_WIN32) || defined(WIN32)
     case GPU_BACKEND_DX12:
       api = backend_dx12();
       break;
 #endif
+
 #if defined(GPU_ENABLE_WEBGPU)
     case GPU_BACKEND_WEBGPU:
       api = backend_webgpu();
       break;
 #endif
+
 #if defined(GPU_ENABLE_CUDA)
     case GPU_BACKEND_CUDA:
       api = backend_cuda();
       break;
 #endif
+
     default:
       return NULL;
   }

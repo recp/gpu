@@ -23,8 +23,8 @@ extern "C" {
 #include "common.h"
 
 struct GPUDevice;
-typedef struct GPUFence        GPUFence;
-typedef struct GPUSemaphore    GPUSemaphore;
+typedef struct GPUFence         GPUFence;
+typedef struct GPUSemaphore     GPUSemaphore;
 typedef struct GPUQueue         GPUQueue;
 typedef struct GPUCommandBuffer GPUCommandBuffer;
 
@@ -38,14 +38,14 @@ typedef enum GPUQueueFlagBits {
 #define GPU_QUEUE_COMPUTE  GPU_QUEUE_COMPUTE_BIT
 #define GPU_QUEUE_TRANSFER GPU_QUEUE_TRANSFER_BIT
 
-typedef void (*GPUCommandBufferCompletionFn)(void            *__restrict sender,
-                                             GPUCommandBuffer*__restrict cmdb);
+typedef void (*GPUCommandBufferCompletionFn)(void             *__restrict sender,
+                                             GPUCommandBuffer *__restrict cmdb);
 
 typedef struct GPUQueueSubmitInfo {
-  GPUChainedStruct  chain;
+  GPUChainedStruct         chain;
   GPUCommandBuffer *const *ppCommandBuffers;
-  GPUFence         *fence; /* optional; signaled after submitted buffers complete */
-  uint32_t          commandBufferCount;
+  GPUFence                *fence; /* optional; signaled after submitted buffers complete */
+  uint32_t                 commandBufferCount;
 } GPUQueueSubmitInfo;
 
 typedef struct GPUQueueSemaphoreWait {
@@ -61,7 +61,7 @@ typedef struct GPUQueueSemaphoreSignal {
 
 typedef struct GPUQueueSubmitExInfo {
   GPUChainedStruct               chain;
-  GPUCommandBuffer              *const *ppCommandBuffers;
+  GPUCommandBuffer       *const *ppCommandBuffers;
   const GPUQueueSemaphoreWait   *pWaits;
   const GPUQueueSemaphoreSignal *pSignals;
   GPUFence                      *fence;
@@ -85,76 +85,76 @@ typedef struct GPUSemaphoreCreateInfo {
 /* convenience alias for GPUGetQueue(device, bits, 0). */
 GPU_EXPORT
 GPUQueue*
-GPUGetCommandQueue(struct GPUDevice * __restrict device, GPUQueueFlagBits bits);
+GPUGetCommandQueue(struct GPUDevice *__restrict device, GPUQueueFlagBits bits);
 
 GPU_EXPORT
 GPUQueue*
-GPUGetQueue(struct GPUDevice * __restrict device,
-            GPUQueueFlagBits              bits,
-            uint32_t                      index);
+GPUGetQueue(struct GPUDevice *__restrict device,
+            GPUQueueFlagBits             bits,
+            uint32_t                     index);
 
 GPU_EXPORT
 GPUResult
-GPUAcquireCommandBuffer(GPUQueue          * __restrict cmdq,
-                        const char        * __restrict label,
-                        GPUCommandBuffer ** __restrict outCmdb);
+GPUAcquireCommandBuffer(GPUQueue          *__restrict cmdq,
+                        const char        *__restrict label,
+                        GPUCommandBuffer **__restrict outCmdb);
 
-/* Discards recorded commands and consumes the command buffer. */
+/* discards recorded commands and consumes the command buffer. */
 GPU_EXPORT
 GPUResult
-GPUDiscardCommandBuffer(GPUCommandBuffer * __restrict cmdb);
+GPUDiscardCommandBuffer(GPUCommandBuffer *__restrict cmdb);
 
 GPU_EXPORT
 void
-GPUSetCommandBufferCompletionHandler(GPUCommandBuffer * __restrict cmdb,
-                                     void             * __restrict sender,
-                                     GPUCommandBufferCompletionFn  oncomplete);
+GPUSetCommandBufferCompletionHandler(GPUCommandBuffer *__restrict cmdb,
+                                     void             *__restrict sender,
+                                     GPUCommandBufferCompletionFn oncomplete);
 
 GPU_EXPORT
 void
-GPUCommit(GPUCommandBuffer * __restrict cmdb);
+GPUCommit(GPUCommandBuffer *__restrict cmdb);
 
 GPU_EXPORT
 GPUResult
-GPUQueueSubmit(GPUQueue                 * __restrict cmdq,
-               const GPUQueueSubmitInfo * __restrict info);
+GPUQueueSubmit(GPUQueue                 *__restrict cmdq,
+               const GPUQueueSubmitInfo *__restrict info);
 
 GPU_EXPORT
 GPUResult
-GPUQueueSubmitEx(GPUQueue                   * __restrict cmdq,
-                 const GPUQueueSubmitExInfo * __restrict info);
+GPUQueueSubmitEx(GPUQueue                   *__restrict cmdq,
+                 const GPUQueueSubmitExInfo *__restrict info);
 
 GPU_EXPORT
 GPUResult
-GPUCreateFence(struct GPUDevice          * __restrict device,
-               const GPUFenceCreateInfo  * __restrict info,
-               GPUFence                 ** __restrict outFence);
+GPUCreateFence(struct GPUDevice         *__restrict device,
+               const GPUFenceCreateInfo *__restrict info,
+               GPUFence                **__restrict outFence);
 
 GPU_EXPORT
 void
-GPUDestroyFence(GPUFence * __restrict fence);
+GPUDestroyFence(GPUFence *__restrict fence);
 
 GPU_EXPORT
 GPUResult
-GPUWaitFence(GPUFence * __restrict fence, uint64_t timeoutNs);
+GPUWaitFence(GPUFence *__restrict fence, uint64_t timeoutNs);
 
 GPU_EXPORT
 bool
-GPUIsFenceSignaled(GPUFence * __restrict fence);
+GPUIsFenceSignaled(GPUFence *__restrict fence);
 
 GPU_EXPORT
 void
-GPUResetFence(GPUFence * __restrict fence);
+GPUResetFence(GPUFence *__restrict fence);
 
 GPU_EXPORT
 GPUResult
-GPUCreateSemaphore(struct GPUDevice              * __restrict device,
-                   const GPUSemaphoreCreateInfo  * __restrict info,
-                   GPUSemaphore                 ** __restrict outSemaphore);
+GPUCreateSemaphore(struct GPUDevice             *__restrict device,
+                   const GPUSemaphoreCreateInfo *__restrict info,
+                   GPUSemaphore                **__restrict outSemaphore);
 
 GPU_EXPORT
 void
-GPUDestroySemaphore(GPUSemaphore * __restrict semaphore);
+GPUDestroySemaphore(GPUSemaphore *__restrict semaphore);
 
 #ifdef __cplusplus
 }

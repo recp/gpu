@@ -35,15 +35,17 @@ typedef struct GPUSurfaceNativeInfo {
 } GPUSurfaceNativeInfo;
 
 typedef struct GPUApiSurface {
-  GPUSurface *(*createSurface)(struct GPUApi                   * __restrict api,
-                               struct GPUInstance              * __restrict inst,
-                               const GPUSurfaceNativeInfo      * __restrict info);
+  GPUSurface *
+  (*createSurface)(struct GPUApi              *__restrict api,
+                   struct GPUInstance         *__restrict inst,
+                   const GPUSurfaceNativeInfo *__restrict info);
 
-  GPUResult (*getCapabilities)(const GPUAdapter      * __restrict adapter,
-                               GPUSurface            * __restrict surface,
-                               GPUSurfaceCapabilities * __restrict outCaps);
+  GPUResult
+  (*getCapabilities)(const GPUAdapter       *__restrict adapter,
+                     GPUSurface             *__restrict surface,
+                     GPUSurfaceCapabilities *__restrict outCaps);
 
-  void (*destroySurface)(GPUSurface * __restrict surface);
+  void (*destroySurface)(GPUSurface *__restrict surface);
 } GPUApiSurface;
 
 #ifdef __cplusplus

@@ -26,11 +26,12 @@ extern "C" {
 struct GPUApi;
 
 typedef struct GPUApiSampler {
-  GPUResult (*createSampler)(struct GPUApi *__restrict api,
-                             GPUDevice *__restrict device,
-                             const GPUSamplerCreateInfo *info,
-                             bool staticIfSupported,
-                             GPUSampler **outSampler);
+  GPUResult
+  (*createSampler)(struct GPUApi   *__restrict api,
+                   GPUDevice       *__restrict device,
+                   const GPUSamplerCreateInfo *info,
+                   bool                        staticIfSupported,
+                   GPUSampler                **outSampler);
 
   void (*destroySampler)(GPUSampler *__restrict sampler);
 } GPUApiSampler;

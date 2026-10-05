@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <AppKit/AppKit.h>
 #include <math.h>
 #include <stddef.h>
@@ -21,7 +37,45 @@ typedef struct ComputeParams {
   float tint[4];
 } ComputeParams;
 
-static const uint32_t kTextureSize = 256;
+@interface ComputeUSLApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
+@private
+  NSWindow           *_window;
+  NSView             *_view;
+
+  GPUInstance        *_instance;
+  GPUAdapter         *_adapter;
+  GPUDevice          *_device;
+  GPUQueue           *_queue;
+  GPUSurface         *_surface;
+  GPUSwapchain       *_swapchain;
+  GPUShaderLibrary   *_library;
+  GPUShaderLayout    *_shaderLayout;
+  GPUComputePipeline *_computePipeline;
+  GPURenderPipeline  *_renderPipeline;
+  GPUBuffer          *_vertexBuffer;
+  GPUBuffer          *_computeParamsBuffer;
+  GPUBuffer          *_readbackBuffer;
+  GPUTexture         *_texture;
+  GPUTextureView     *_textureView;
+  GPUSampler         *_sampler;
+  GPUBindGroup       *_bindGroup;
+  GPUBindGroup       *_samplerBindGroup;
+  uint32_t            _computeParamsOffset;
+  NSTimer            *_timer;
+  NSTimeInterval      _animationStart;
+  NSInteger           _exitAfterFrames;
+  NSInteger           _submittedFrames;
+  NSInteger           _completedFrames;
+  BOOL                _assertZeroAlloc;
+  BOOL                _validationFailed;
+  BOOL                _terminating;
+}
+
+- (void)frameCompleted;
+- (BOOL)validationFailed;
+@end
+
+static const uint32_t kTextureSize   = 256;
 static const uint32_t kWorkgroupSize = 8;
 
 static const QuadVertex kQuadVertices[] = {
@@ -33,49 +87,14 @@ static const QuadVertex kQuadVertices[] = {
   { {  0.8f,  0.8f, 0.0f, 1.0f }, { 1.0f, 0.0f } },
 };
 
-@interface ComputeUSLApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
-@private
-  NSWindow *_window;
-  NSView *_view;
-
-  GPUInstance *_instance;
-  GPUAdapter *_adapter;
-  GPUDevice *_device;
-  GPUQueue        *_queue;
-  GPUSurface *_surface;
-  GPUSwapchain *_swapchain;
-  GPUShaderLibrary *_library;
-  GPUShaderLayout *_shaderLayout;
-  GPUComputePipeline *_computePipeline;
-  GPURenderPipeline *_renderPipeline;
-  GPUBuffer *_vertexBuffer;
-  GPUBuffer *_computeParamsBuffer;
-  GPUBuffer *_readbackBuffer;
-  GPUTexture *_texture;
-  GPUTextureView *_textureView;
-  GPUSampler *_sampler;
-  GPUBindGroup *_bindGroup;
-  GPUBindGroup *_samplerBindGroup;
-  uint32_t _computeParamsOffset;
-  NSTimer *_timer;
-  NSTimeInterval _animationStart;
-  NSInteger _exitAfterFrames;
-  NSInteger _submittedFrames;
-  NSInteger _completedFrames;
-  BOOL _assertZeroAlloc;
-  BOOL _validationFailed;
-  BOOL _terminating;
-}
-- (void)frameCompleted;
-- (BOOL)validationFailed;
-@end
-
 static volatile int gComputeUSLValidationFailed = 0;
 
 static void
 ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
+  ComputeUSLApp *app;
+
   (void)cmdb;
-  ComputeUSLApp *app = (__bridge ComputeUSLApp *)sender;
+  app = (__bridge ComputeUSLApp *)sender;
   [app frameCompleted];
 }
 
@@ -89,7 +108,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (BOOL)setupTexture {
-  GPUTextureCreateInfo textureInfo = {
+  GPUTextureCreateInfo     textureInfo = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO,
                .structSize = sizeof(GPUTextureCreateInfo) },
     .label = "compute-output-texture",
@@ -102,7 +121,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .sampleCount = 1,
     .usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_STORAGE | GPU_TEXTURE_USAGE_COPY_SRC
   };
-  GPUTextureViewCreateInfo viewInfo = {
+  GPUTextureViewCreateInfo viewInfo    = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO,
                .structSize = sizeof(GPUTextureViewCreateInfo) },
     .label = "compute-output-view",
@@ -113,7 +132,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .baseArrayLayer = 0,
     .arrayLayerCount = 1
   };
-  GPUSamplerCreateInfo samplerInfo = {
+  GPUSamplerCreateInfo     samplerInfo = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
                .structSize = sizeof(GPUSamplerCreateInfo) },
     .label = "compute-output-sampler",
@@ -146,8 +165,13 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (BOOL)setupGPU {
-  GPUBindGroupEntry groupEntries[3] = {0};
-  GPUResult         bindGroupResult;
+  GPUBindGroupEntry              groupEntries[3] = {0};
+  const GPUBindGroupLayoutEntry *entries;
+  GPUResult                      bindGroupResult;
+  uint32_t                       entryCount;
+  uint32_t                       i;
+  BOOL                           sawDynamicUniform;
+  BOOL                           sawStorageTexture;
 
   if (!GPUSampleCreateDefaultSurfaceGPU(_window,
                                         _view,
@@ -167,43 +191,48 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                         &_shaderLayout)) {
     return NO;
   }
-  if (!_shaderLayout ||
-      _shaderLayout->bindGroupLayoutCount != 2u ||
-      !_shaderLayout->bindGroupLayouts ||
-      !_shaderLayout->bindGroupLayouts[0] ||
-      !_shaderLayout->bindGroupLayouts[1]) {
+
+  if (!_shaderLayout
+      || _shaderLayout->bindGroupLayoutCount != 2u
+      || !_shaderLayout->bindGroupLayouts
+      || !_shaderLayout->bindGroupLayouts[0]
+      || !_shaderLayout->bindGroupLayouts[1]) {
     NSLog(@"GPU: unexpected compute shader layout");
     return NO;
   }
+
   {
-    const GPUBindGroupLayoutEntry *entries;
-    uint32_t                       entryCount = 0u;
-    BOOL                           sawDynamicUniform = NO;
-    BOOL                           sawStorageTexture = NO;
+    entryCount        = 0u;
+    sawDynamicUniform = NO;
+    sawStorageTexture = NO;
 
     entries = GPUGetBindGroupLayoutEntries(_shaderLayout->bindGroupLayouts[0],
                                            &entryCount);
-    for (uint32_t i = 0; entries && i < entryCount; i++) {
-      if ((entries[i].visibility & GPU_SHADER_STAGE_COMPUTE_BIT) != 0u &&
-          entries[i].binding == 1u &&
-          entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
-          entries[i].hasDynamicOffset) {
+
+    for (i = 0; entries && i < entryCount; i++) {
+      if ((entries[i].visibility & GPU_SHADER_STAGE_COMPUTE_BIT) != 0u
+          && entries[i].binding == 1u
+          && entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER
+          && entries[i].hasDynamicOffset) {
         sawDynamicUniform = YES;
       }
-      if ((entries[i].visibility & GPU_SHADER_STAGE_COMPUTE_BIT) != 0u &&
-          entries[i].binding == 0u &&
-          entries[i].bindingType == GPU_BINDING_STORAGE_TEXTURE &&
-          entries[i].storageTexture.viewType == GPU_TEXTURE_VIEW_2D &&
-          entries[i].storageTexture.format == GPU_FORMAT_RGBA8_UNORM &&
-          entries[i].storageTexture.access ==
+
+      if ((entries[i].visibility & GPU_SHADER_STAGE_COMPUTE_BIT) != 0u
+          && entries[i].binding == 0u
+          && entries[i].bindingType == GPU_BINDING_STORAGE_TEXTURE
+          && entries[i].storageTexture.viewType == GPU_TEXTURE_VIEW_2D
+          && entries[i].storageTexture.format == GPU_FORMAT_RGBA8_UNORM
+          && entries[i].storageTexture.access ==
             GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY) {
         sawStorageTexture = YES;
       }
     }
+
     if (!sawDynamicUniform) {
       NSLog(@"GPU: compute uniform reflection is not dynamic-offset capable");
       return NO;
     }
+
     if (!sawStorageTexture) {
       NSLog(@"GPU: compute storage texture reflection is not rgba8unorm write-only");
       return NO;
@@ -218,6 +247,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .library = _library,
     .entryPoint = "fill_image"
   };
+
   if (GPUCreateComputePipeline(_device, &computeInfo, &_computePipeline) != GPU_OK) {
     NSLog(@"GPU: failed to create compute pipeline");
     return NO;
@@ -227,6 +257,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     { .shaderLocation = 0, .format = GPU_VERTEX_FORMAT_FLOAT32X4, .offset = offsetof(QuadVertex, position) },
     { .shaderLocation = 1, .format = GPU_VERTEX_FORMAT_FLOAT32X2, .offset = offsetof(QuadVertex, uv) }
   };
+
   GPUVertexBufferLayout vertexBuffers[] = {
     {
       .strideBytes = sizeof(QuadVertex),
@@ -271,6 +302,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .frontFace = GPU_FRONT_FACE_CCW,
     .multisample = multisample
   };
+
   if (GPUCreateRenderPipeline(_device, &renderInfo, &_renderPipeline) != GPU_OK) {
     NSLog(@"GPU: failed to create render pipeline");
     return NO;
@@ -283,6 +315,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .sizeBytes = sizeof(kQuadVertices),
     .usage = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST
   };
+
   if (GPUCreateBuffer(_device, &vertexBufferInfo, &_vertexBuffer) != GPU_OK) {
     NSLog(@"GPU: failed to create vertex buffer");
     return NO;
@@ -309,6 +342,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
       .sizeBytes = 4u,
       .usage = GPU_BUFFER_USAGE_COPY_DST | GPU_BUFFER_USAGE_COPY_SRC
     };
+
     if (GPUCreateBuffer(_device, &readbackInfo, &_readbackBuffer) != GPU_OK) {
       NSLog(@"GPU: failed to create compute readback buffer");
       return NO;
@@ -323,34 +357,37 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .chunkBytes = 256,
     .allowChunkFallback = true
   };
+
   if (GPUConfigureTransientAllocator(_device, &transientInfo) != GPU_OK) {
     NSLog(@"GPU: failed to configure compute transient uniforms");
     return NO;
   }
 
   GPUTransientBufferSlice initialParamsSlice = {0};
+
   if (GPUAllocateTransientBuffer(_device,
                                  GPU_BUFFER_USAGE_UNIFORM,
                                  sizeof(ComputeParams),
                                  256,
-                                 &initialParamsSlice) != GPU_OK ||
-      !initialParamsSlice.buffer) {
+                                 &initialParamsSlice) != GPU_OK
+      || !initialParamsSlice.buffer) {
     NSLog(@"GPU: failed to allocate compute transient uniform slice");
     return NO;
   }
+
   _computeParamsBuffer = initialParamsSlice.buffer;
 
-  groupEntries[0].binding = 0;
-  groupEntries[0].bindingType = GPU_BINDING_STORAGE_TEXTURE;
-  groupEntries[0].textureView = _textureView;
-  groupEntries[1].binding = 2;
-  groupEntries[1].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
-  groupEntries[1].textureView = _textureView;
-  groupEntries[2].binding = 1;
-  groupEntries[2].bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntries[0].binding       = 0;
+  groupEntries[0].bindingType   = GPU_BINDING_STORAGE_TEXTURE;
+  groupEntries[0].textureView   = _textureView;
+  groupEntries[1].binding       = 2;
+  groupEntries[1].bindingType   = GPU_BINDING_SAMPLED_TEXTURE;
+  groupEntries[1].textureView   = _textureView;
+  groupEntries[2].binding       = 1;
+  groupEntries[2].bindingType   = GPU_BINDING_UNIFORM_BUFFER;
   groupEntries[2].buffer.buffer = _computeParamsBuffer;
   groupEntries[2].buffer.offset = 0;
-  groupEntries[2].buffer.size = sizeof(ComputeParams);
+  groupEntries[2].buffer.size   = sizeof(ComputeParams);
 
   GPUBindGroupCreateInfo group0Info = {
     .chain = { .sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO,
@@ -361,6 +398,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .pEntries = groupEntries
   };
   bindGroupResult = GPUCreateBindGroup(_device, &group0Info, &_bindGroup);
+
   if (bindGroupResult != GPU_OK) {
     NSLog(@"GPU: failed to create bind group (%d)", bindGroupResult);
     return NO;
@@ -379,6 +417,7 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .entryCount = 1,
     .pEntries = &samplerEntry
   };
+
   if (GPUCreateBindGroup(_device, &group1Info, &_samplerBindGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create sampler bind group");
     return NO;
@@ -388,11 +427,12 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (BOOL)updateComputeParams {
-  ComputeParams params;
+  ComputeParams           params;
   GPUTransientBufferSlice slice = {0};
-  float time;
+  float                   time;
 
   time = (float)(CACurrentMediaTime() - _animationStart);
+
   if (_exitAfterFrames > 0) {
     params.tint[0] = 1.0f;
     params.tint[1] = 1.0f;
@@ -402,48 +442,49 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     params.tint[1] = 0.75f + 0.25f * sinf(time * 1.7f + 2.0f);
     params.tint[2] = 0.75f + 0.25f * sinf(time * 1.4f + 4.0f);
   }
+
   params.tint[3] = 1.0f;
 
   if (GPUAllocateTransientBuffer(_device,
                                  GPU_BUFFER_USAGE_UNIFORM,
                                  sizeof(params),
                                  256,
-                                 &slice) != GPU_OK ||
-      slice.buffer != _computeParamsBuffer ||
-      !slice.cpuPtr ||
-      slice.offset > UINT32_MAX) {
+                                 &slice) != GPU_OK
+      || slice.buffer != _computeParamsBuffer
+      || !slice.cpuPtr
+      || slice.offset > UINT32_MAX) {
     NSLog(@"GPU: failed to allocate compute frame uniform slice");
     return NO;
   }
 
-  _computeParamsOffset = (uint32_t)slice.offset;
+  _computeParamsOffset           = (uint32_t)slice.offset;
   *(ComputeParams *)slice.cpuPtr = params;
   return YES;
 }
 
 - (void)renderFrame {
-  GPUFrame *frame = NULL;
-  GPUCommandBuffer *cmdb = NULL;
-  GPUComputePassEncoder *compute = NULL;
-  GPUTransferPassEncoder *copy = NULL;
-  GPURenderPassEncoder *render = NULL;
-  GPUResult submitResult = GPU_OK;
-  GPUTextureBarrier textureBarrier = {0};
-  GPUBarrierBatch barriers = {0};
-  GPUBufferTextureCopyRegion readbackRegion = {0};
-  GPURenderPassColorAttachment color = {0};
-  GPURenderPassCreateInfo rp = {0};
-  GPUBufferBinding vertexBuffer = {0};
+  GPUTextureBarrier            textureBarrier = {0};
+  GPUBarrierBatch              barriers       = {0};
+  GPUBufferTextureCopyRegion   readbackRegion = {0};
+  GPURenderPassColorAttachment color          = {0};
+  GPURenderPassCreateInfo      rp             = {0};
+  GPUBufferBinding             vertexBuffer   = {0};
+  GPUFrame                    *frame          = NULL;
+  GPUCommandBuffer            *cmdb           = NULL;
+  GPUComputePassEncoder       *compute        = NULL;
+  GPUTransferPassEncoder      *copy           = NULL;
+  GPURenderPassEncoder        *render         = NULL;
+  GPUResult                    submitResult   = GPU_OK;
 
   if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
     return;
   }
+
   if (!GPUSampleRecoverSwapchain(_swapchain, _view)) {
     return;
   }
 
-  frame = GPUBeginFrame(_swapchain);
-  if (!frame) {
+  if (!(frame = GPUBeginFrame(_swapchain))) {
     (void)GPUSampleRecoverSwapchain(_swapchain, _view);
     return;
   }
@@ -451,19 +492,21 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (GPUAcquireCommandBuffer(_queue, "compute-frame", &cmdb) != GPU_OK || !cmdb) {
     goto cleanup;
   }
+
   if (_exitAfterFrames > 0) {
     GPUSetCommandBufferCompletionHandler(cmdb,
                                          (__bridge void *)self,
                                          ComputeUSLFrameComplete);
   }
 
-  compute = GPUBeginComputePass(cmdb, "compute-usl-fill");
-  if (!compute) {
+  if (!(compute = GPUBeginComputePass(cmdb, "compute-usl-fill"))) {
     goto cleanup;
   }
+
   if (![self updateComputeParams]) {
     goto cleanup;
   }
+
   GPUBindComputePipeline(compute, _computePipeline);
   GPUBindComputeGroup(compute, 0, _bindGroup, 1, &_computeParamsOffset);
   GPUDispatch(compute,
@@ -474,31 +517,30 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   compute = NULL;
 
   if (_readbackBuffer) {
-    textureBarrier.texture = _texture;
-    textureBarrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
-    textureBarrier.dstAccess = GPU_ACCESS_TRANSFER_READ;
-    textureBarrier.baseMip = 0;
-    textureBarrier.mipCount = 1;
-    textureBarrier.baseLayer = 0;
+    textureBarrier.texture    = _texture;
+    textureBarrier.srcAccess  = GPU_ACCESS_SHADER_WRITE;
+    textureBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
+    textureBarrier.baseMip    = 0;
+    textureBarrier.mipCount   = 1;
+    textureBarrier.baseLayer  = 0;
     textureBarrier.layerCount = 1;
 
-    barriers.srcStages = GPU_STAGE_COMPUTE;
-    barriers.dstStages = GPU_STAGE_TRANSFER;
+    barriers.srcStages           = GPU_STAGE_COMPUTE;
+    barriers.dstStages           = GPU_STAGE_TRANSFER;
     barriers.textureBarrierCount = 1;
-    barriers.pTextureBarriers = &textureBarrier;
+    barriers.pTextureBarriers    = &textureBarrier;
     GPUEncodeBarriers(cmdb, &barriers);
 
-    copy = GPUBeginTransferPass(cmdb, "compute-usl-readback");
-    if (!copy) {
+    if (!(copy = GPUBeginTransferPass(cmdb, "compute-usl-readback"))) {
       goto cleanup;
     }
 
-    readbackRegion.bufferOffset = 0u;
-    readbackRegion.bytesPerRow = 4u;
-    readbackRegion.rowsPerImage = 1u;
-    readbackRegion.texture.width = 1u;
-    readbackRegion.texture.height = 1u;
-    readbackRegion.texture.depth = 1u;
+    readbackRegion.bufferOffset       = 0u;
+    readbackRegion.bytesPerRow        = 4u;
+    readbackRegion.rowsPerImage       = 1u;
+    readbackRegion.texture.width      = 1u;
+    readbackRegion.texture.height     = 1u;
+    readbackRegion.texture.depth      = 1u;
     readbackRegion.texture.layerCount = 1u;
     GPUCopyTextureToBuffer(copy, _texture, _readbackBuffer, &readbackRegion);
     GPUEndTransferPass(copy);
@@ -506,45 +548,44 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
     memset(&textureBarrier, 0, sizeof(textureBarrier));
     memset(&barriers, 0, sizeof(barriers));
-    textureBarrier.texture = _texture;
-    textureBarrier.srcAccess = GPU_ACCESS_TRANSFER_READ;
-    textureBarrier.dstAccess = GPU_ACCESS_SHADER_READ;
-    textureBarrier.baseMip = 0;
-    textureBarrier.mipCount = 1;
-    textureBarrier.baseLayer = 0;
+    textureBarrier.texture    = _texture;
+    textureBarrier.srcAccess  = GPU_ACCESS_TRANSFER_READ;
+    textureBarrier.dstAccess  = GPU_ACCESS_SHADER_READ;
+    textureBarrier.baseMip    = 0;
+    textureBarrier.mipCount   = 1;
+    textureBarrier.baseLayer  = 0;
     textureBarrier.layerCount = 1;
-    barriers.srcStages = GPU_STAGE_TRANSFER;
+    barriers.srcStages        = GPU_STAGE_TRANSFER;
   } else {
     textureBarrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
     textureBarrier.dstAccess = GPU_ACCESS_SHADER_READ;
-    barriers.srcStages = GPU_STAGE_COMPUTE;
+    barriers.srcStages       = GPU_STAGE_COMPUTE;
   }
 
-  textureBarrier.texture = _texture;
-  textureBarrier.baseMip = 0;
-  textureBarrier.mipCount = 1;
-  textureBarrier.baseLayer = 0;
+  textureBarrier.texture    = _texture;
+  textureBarrier.baseMip    = 0;
+  textureBarrier.mipCount   = 1;
+  textureBarrier.baseLayer  = 0;
   textureBarrier.layerCount = 1;
 
-  barriers.dstStages = GPU_STAGE_FRAGMENT;
+  barriers.dstStages           = GPU_STAGE_FRAGMENT;
   barriers.textureBarrierCount = 1;
-  barriers.pTextureBarriers = &textureBarrier;
+  barriers.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barriers);
 
-  color.view = GPUFrameGetTargetView(frame);
-  color.loadOp = GPU_LOAD_OP_CLEAR;
-  color.storeOp = GPU_STORE_OP_STORE;
+  color.view                  = GPUFrameGetTargetView(frame);
+  color.loadOp                = GPU_LOAD_OP_CLEAR;
+  color.storeOp               = GPU_STORE_OP_STORE;
   color.clearColor.float32[0] = 0.0f;
   color.clearColor.float32[1] = 0.0f;
   color.clearColor.float32[2] = 0.0f;
   color.clearColor.float32[3] = 1.0f;
 
-  rp.label = "compute-usl-render-pass";
+  rp.label                = "compute-usl-render-pass";
   rp.colorAttachmentCount = 1;
-  rp.pColorAttachments = &color;
+  rp.pColorAttachments    = &color;
 
-  render = GPUBeginRenderPass(cmdb, &rp);
-  if (!render) {
+  if (!(render = GPUBeginRenderPass(cmdb, &rp))) {
     goto cleanup;
   }
 
@@ -560,18 +601,20 @@ ComputeUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   render = NULL;
 
   submitResult = GPUFinishFrame(_queue, cmdb, frame);
-  frame = NULL;
+  frame        = NULL;
+
   if (submitResult != GPU_OK) {
     NSLog(@"GPUFinishFrame failed: %d", submitResult);
   } else {
     _submittedFrames++;
+
     if (!GPUSampleCheckZeroAlloc(_device,
                                  (uint32_t)_submittedFrames,
                                  _assertZeroAlloc,
                                  "GPU Metal compute texture copy")) {
-      _validationFailed = YES;
+      _validationFailed           = YES;
       gComputeUSLValidationFailed = 1;
-      _terminating = YES;
+      _terminating                = YES;
       [_timer invalidate];
       _timer = nil;
       [NSApp terminate:nil];
@@ -583,17 +626,20 @@ cleanup:
   if (compute) {
     GPUEndComputePass(compute);
   }
+
   if (copy) {
     GPUEndTransferPass(copy);
   }
+
   if (render) {
     GPUEndRenderPass(render);
   }
+
   GPUEndFrame(frame);
 }
 
 - (BOOL)verifyReadback {
-  uint8_t pixel[4] = {0, 0, 0, 0};
+  uint8_t   pixel[4] = {0, 0, 0, 0};
   GPUResult result;
 
   result = GPUQueueReadBuffer(_queue,
@@ -601,16 +647,17 @@ cleanup:
                               0,
                               pixel,
                               sizeof(pixel));
+
   if (result != GPU_OK) {
     NSLog(@"GPUQueueReadBuffer failed: %d", result);
     return NO;
   }
 
-  if (pixel[0] > 2u ||
-      pixel[1] > 2u ||
-      pixel[2] < 180u ||
-      pixel[2] > 200u ||
-      pixel[3] < 250u) {
+  if (pixel[0] > 2u
+      || pixel[1] > 2u
+      || pixel[2] < 180u
+      || pixel[2] > 200u
+      || pixel[3] < 250u) {
     NSLog(@"GPU compute texture readback mismatch: %u %u %u %u",
           pixel[0],
           pixel[1],
@@ -624,12 +671,13 @@ cleanup:
 
 - (void)frameCompleted {
   _completedFrames++;
+
   if (_exitAfterFrames <= 0 || _terminating) {
     return;
   }
 
   if (![self verifyReadback]) {
-    _validationFailed = YES;
+    _validationFailed           = YES;
     gComputeUSLValidationFailed = 1;
     exit(1);
   }
@@ -656,92 +704,111 @@ cleanup:
     GPUDestroyBindGroup(_samplerBindGroup);
     _samplerBindGroup = NULL;
   }
+
   if (_bindGroup) {
     GPUDestroyBindGroup(_bindGroup);
     _bindGroup = NULL;
   }
+
   if (_renderPipeline) {
     GPUDestroyRenderPipeline(_renderPipeline);
     _renderPipeline = NULL;
   }
+
   if (_computePipeline) {
     GPUDestroyComputePipeline(_computePipeline);
     _computePipeline = NULL;
   }
+
   if (_sampler) {
     GPUDestroySampler(_sampler);
     _sampler = NULL;
   }
+
   if (_textureView) {
     GPUDestroyTextureView(_textureView);
     _textureView = NULL;
   }
+
   if (_texture) {
     GPUDestroyTexture(_texture);
     _texture = NULL;
   }
+
   _computeParamsBuffer = NULL;
+
   if (_readbackBuffer) {
     GPUDestroyBuffer(_readbackBuffer);
     _readbackBuffer = NULL;
   }
+
   if (_vertexBuffer) {
     GPUDestroyBuffer(_vertexBuffer);
     _vertexBuffer = NULL;
   }
+
   if (_shaderLayout) {
     GPUDestroyShaderLayout(_shaderLayout);
     _shaderLayout = NULL;
   }
+
   if (_library) {
     GPUDestroyShaderLibrary(_library);
     _library = NULL;
   }
+
   if (_swapchain) {
     GPUDestroySwapchain(_swapchain);
     _swapchain = NULL;
   }
+
   if (_surface) {
     GPUDestroySurface(_surface);
     _surface = NULL;
   }
+
   if (_device) {
     GPUDestroyDevice(_device);
     _device = NULL;
-    _queue = NULL;
+    _queue  = NULL;
   }
+
   if (_instance) {
     GPUDestroyInstance(_instance);
     _instance = NULL;
-    _adapter = NULL;
+    _adapter  = NULL;
   }
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
+  const char *exitAfterFrames;
+
   (void)notification;
 
-  const char *exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+  exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+
   if (exitAfterFrames && exitAfterFrames[0] != '\0') {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
   }
+
   _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
 
   if (![self setupWindow]) {
-    _validationFailed = YES;
+    _validationFailed           = YES;
     gComputeUSLValidationFailed = 1;
     [NSApp terminate:nil];
     return;
   }
 
   if (![self setupGPU]) {
-    _validationFailed = YES;
+    _validationFailed           = YES;
     gComputeUSLValidationFailed = 1;
     [NSApp terminate:nil];
     return;
   }
 
   _animationStart = CACurrentMediaTime();
-  _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
+  _timer          = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
                                    target:self
                                  selector:@selector(tick:)
                                  userInfo:nil
@@ -768,14 +835,16 @@ cleanup:
   uint32_t height;
 
   (void)notification;
+
   if (!_swapchain || _terminating) {
     return;
   }
 
   width  = (uint32_t)_view.bounds.size.width;
   height = (uint32_t)_view.bounds.size.height;
-  if (width > 0u && height > 0u &&
-      GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
+
+  if (width > 0u && height > 0u
+      && GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
     [self renderFrame];
   }
 }
@@ -789,7 +858,8 @@ cleanup:
 
 @end
 
-int main(int argc, const char * argv[]) {
+int
+main(int argc, const char *argv[]) {
   @autoreleasepool {
     ComputeUSLApp *delegate;
 
@@ -801,6 +871,7 @@ int main(int argc, const char * argv[]) {
     [NSApp setDelegate:delegate];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp run];
+
     return [delegate validationFailed] ? 1 : 0;
   }
 }

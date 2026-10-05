@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <gpu/gpu.h>
 
 #include <math.h>
@@ -13,27 +29,30 @@ enum {
   OutputCount      = 5u * ColorWidth
 };
 
-static void *
+static void*
 read_file(const char *path, uint64_t *outSize) {
   FILE *file;
   void *data;
   long  size;
 
   file = path ? fopen(path, "rb") : NULL;
-  if (!file || fseek(file, 0, SEEK_END) != 0 ||
-      (size = ftell(file)) <= 0 || fseek(file, 0, SEEK_SET) != 0) {
-    if (file) fclose(file);
+
+  if (!file || fseek(file, 0, SEEK_END) != 0
+      || (size = ftell(file)) <= 0 || fseek(file, 0, SEEK_SET) != 0) {
+    if (file)
+      fclose(file);
     return NULL;
   }
 
-  data = malloc((size_t)size);
-  if (!data || fread(data, 1u, (size_t)size, file) != (size_t)size) {
+  if (!(data = malloc((size_t)size)) || fread(data, 1u, (size_t)size, file) != (size_t)size) {
     free(data);
     fclose(file);
     return NULL;
   }
+
   fclose(file);
   *outSize = (uint64_t)size;
+
   return data;
 }
 
@@ -54,13 +73,16 @@ layout_has_entry(const GPUBindGroupLayoutEntry *entries,
                  uint32_t                       binding,
                  GPUBindingType                 bindingType,
                  uint32_t                       arrayCount) {
-  for (uint32_t i = 0u; i < entryCount; i++) {
-    if (entries[i].binding == binding &&
-        entries[i].bindingType == bindingType &&
-        entries[i].arrayCount == arrayCount) {
+  uint32_t i;
+
+  for (i = 0u; i < entryCount; i++) {
+    if (entries[i].binding == binding
+        && entries[i].bindingType == bindingType
+        && entries[i].arrayCount == arrayCount) {
       return 1;
     }
   }
+
   return 0;
 }
 
@@ -74,7 +96,7 @@ create_texture(GPUDevice           *device,
                GPUTexture         **outTexture,
                GPUTextureView     **outView) {
   GPUTextureCreateInfo     textureInfo = {0};
-  GPUTextureViewCreateInfo viewInfo = {0};
+  GPUTextureViewCreateInfo viewInfo    = {0};
   GPUTextureWriteRegion    writeRegion = {0};
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
@@ -88,8 +110,9 @@ create_texture(GPUDevice           *device,
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = usage | GPU_TEXTURE_USAGE_COPY_DST;
-  if (GPUCreateTexture(device, &textureInfo, outTexture) != GPU_OK ||
-      !*outTexture) {
+
+  if (GPUCreateTexture(device, &textureInfo, outTexture) != GPU_OK
+      || !*outTexture) {
     return 0;
   }
 
@@ -100,12 +123,12 @@ create_texture(GPUDevice           *device,
   writeRegion.layerCount   = 1u;
   writeRegion.bytesPerRow  = width * ColorWidth * sizeof(float);
   writeRegion.rowsPerImage = 1u;
+
   if (GPUQueueWriteTexture(queue,
                            *outTexture,
                            &writeRegion,
                            data,
-                           (uint64_t)width * ColorWidth * sizeof(float)) !=
-      GPU_OK) {
+                           (uint64_t)width * ColorWidth * sizeof(float)) != GPU_OK) {
     return 0;
   }
 
@@ -116,8 +139,9 @@ create_texture(GPUDevice           *device,
   viewInfo.format           = GPU_FORMAT_RGBA32_FLOAT;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
-  return GPUCreateTextureView(*outTexture, &viewInfo, outView) == GPU_OK &&
-         *outView;
+
+  return GPUCreateTextureView(*outTexture, &viewInfo, outView) == GPU_OK
+         && *outView;
 }
 
 static int
@@ -137,8 +161,9 @@ create_sampler(GPUDevice     *device,
   info.desc.addressV      = addressMode;
   info.desc.addressW      = addressMode;
   info.desc.maxAnisotropy = 1u;
-  return GPUCreateSampler(device, &info, false, outSampler) == GPU_OK &&
-         *outSampler;
+
+  return GPUCreateSampler(device, &info, false, outSampler) == GPU_OK
+         && *outSampler;
 }
 
 static int
@@ -156,39 +181,40 @@ colors_match(const float output[OutputCount]) {
       return 0;
     }
   }
+
   return 1;
 }
 
 int
 main(int argc, char **argv) {
-  GPUInstance           *instance;
-  GPUAdapter            *adapter;
-  GPUDevice             *device;
-  GPUQueue              *queue;
-  GPUShaderLibrary      *library;
-  GPUShaderLayout       *shaderLayout;
-  GPUComputePipeline    *writePipeline;
-  GPUComputePipeline    *readPipeline;
-  GPUTexture            *sampledTextures[TextureCount];
-  GPUTextureView        *sampledViews[TextureCount];
-  GPUTexture            *storageTextures[TextureCount];
-  GPUTextureView        *storageViews[TextureCount];
-  GPUSampler            *samplers[TextureCount];
-  GPUBuffer             *selectionBuffer;
-  GPUBuffer             *outputBuffer;
-  GPUBindGroup          *group;
-  GPUCommandBuffer      *cmdb;
-  GPUComputePassEncoder *pass;
-  void                  *artifact;
+  GPUInstance                   *instance;
+  GPUAdapter                    *adapter;
+  GPUDevice                     *device;
+  GPUQueue                      *queue;
+  GPUShaderLibrary              *library;
+  GPUShaderLayout               *shaderLayout;
+  GPUComputePipeline            *writePipeline;
+  GPUComputePipeline            *readPipeline;
+  GPUTexture                    *sampledTextures[TextureCount];
+  GPUTextureView                *sampledViews[TextureCount];
+  GPUTexture                    *storageTextures[TextureCount];
+  GPUTextureView                *storageViews[TextureCount];
+  GPUSampler                    *samplers[TextureCount];
+  GPUBuffer                     *selectionBuffer;
+  GPUBuffer                     *outputBuffer;
+  GPUBindGroup                  *group;
+  GPUCommandBuffer              *cmdb;
+  GPUComputePassEncoder         *pass;
+  void                          *artifact;
   const GPUBindGroupLayoutEntry *layoutEntries;
-  GPUInstanceCreateInfo         instanceInfo = {0};
-  GPUDeviceCreateInfo           deviceInfo = {0};
-  GPUComputePipelineCreateInfo  pipelineInfo = {0};
-  GPUBufferCreateInfo           bufferInfo = {0};
-  GPUBindGroupEntry             entries[8] = {0};
-  GPUBindGroupCreateInfo        groupInfo = {0};
-  GPUQueueSubmitInfo            submitInfo = {0};
-  const float sampledData[TextureCount][MaxSampledTexels * ColorWidth] = {
+  GPUInstanceCreateInfo          instanceInfo = {0};
+  GPUDeviceCreateInfo            deviceInfo   = {0};
+  GPUComputePipelineCreateInfo   pipelineInfo = {0};
+  GPUBufferCreateInfo            bufferInfo   = {0};
+  GPUBindGroupEntry              entries[8]   = {0};
+  GPUBindGroupCreateInfo         groupInfo    = {0};
+  GPUQueueSubmitInfo             submitInfo   = {0};
+  const float                    sampledData[TextureCount][MaxSampledTexels * ColorWidth] = {
     {
       1.0f, 0.0f, 0.0f, 1.0f,
       1.0f, 0.0f, 1.0f, 1.0f
@@ -200,7 +226,7 @@ main(int argc, char **argv) {
       1.0f, 1.0f, 0.0f, 1.0f
     }
   };
-  const float storageData[TextureCount][MaxStorageTexels * ColorWidth] = {
+  const float                    storageData[TextureCount][MaxStorageTexels * ColorWidth] = {
     {
       0.0f, 0.0f, 1.0f, 1.0f,
       0.0f, 0.0f, 1.0f, 1.0f
@@ -211,15 +237,20 @@ main(int argc, char **argv) {
       0.0f, 0.0f, 0.0f, 0.0f
     }
   };
-  const uint32_t sampledWidths[TextureCount] = {2u, 4u};
-  const uint32_t storageWidths[TextureCount] = {2u, 3u};
-  float       output[OutputCount] = {0};
-  GPUFeature  feature;
-  uint64_t    artifactSize;
-  uint32_t    adapterCount;
-  uint32_t    layoutEntryCount;
-  GPUResult   result;
-  int         status;
+  const uint32_t                 sampledWidths[TextureCount] = {2u, 4u};
+  const uint32_t                 storageWidths[TextureCount] = {2u, 3u};
+  float                          output[OutputCount]         = {0};
+  GPUFeature                     feature;
+  uint64_t                       artifactSize;
+  uint32_t                       adapterCount;
+  uint32_t                       layoutEntryCount;
+  GPUResult                      result;
+  int                            status;
+  uint32_t                       initIndex;
+  uint32_t                       textureIndex;
+  uint32_t                       bindingIndex;
+  uint32_t                       cleanupIndex;
+  uint32_t                       index;
 
   if (argc != 2) {
     fprintf(stderr,
@@ -243,16 +274,16 @@ main(int argc, char **argv) {
   artifactSize     = 0u;
   layoutEntryCount = 0u;
   status           = 1;
-  for (uint32_t i = 0u; i < TextureCount; i++) {
-    sampledTextures[i] = NULL;
-    sampledViews[i]    = NULL;
-    storageTextures[i] = NULL;
-    storageViews[i]    = NULL;
-    samplers[i]        = NULL;
+
+  for (initIndex = 0u; initIndex < TextureCount; initIndex++) {
+    sampledTextures[initIndex] = NULL;
+    sampledViews[initIndex]    = NULL;
+    storageTextures[initIndex] = NULL;
+    storageViews[initIndex]    = NULL;
+    samplers[initIndex]        = NULL;
   }
 
-  artifact = read_file(argv[1], &artifactSize);
-  if (!artifact) {
+  if (!(artifact = read_file(argv[1], &artifactSize))) {
     fprintf(stderr, "USL artifact read failed\n");
     goto cleanup;
   }
@@ -261,6 +292,7 @@ main(int argc, char **argv) {
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_CUDA;
   instanceInfo.enableValidation = true;
+
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
     puts("CUDA Driver backend unavailable");
     status = 77;
@@ -268,33 +300,39 @@ main(int argc, char **argv) {
   }
 
   adapterCount = 1u;
-  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
+  result       = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !adapter) {
     puts("CUDA adapter unavailable");
     status = 77;
     goto cleanup;
   }
+
   if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_DESCRIPTOR_INDEXING)) {
     puts("CUDA descriptor indexing unavailable");
     status = 77;
     goto cleanup;
   }
 
-  feature                          = GPU_FEATURE_DESCRIPTOR_INDEXING;
+  feature = GPU_FEATURE_DESCRIPTOR_INDEXING;
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
+
   if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "CUDA descriptor-array device creation failed\n");
     goto cleanup;
   }
+
   queue = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
+
   if (!queue) {
     fprintf(stderr, "CUDA compute queue unavailable\n");
     goto cleanup;
   }
+
   if (GPUSetDeviceErrorCallback(device, device_error, NULL) != GPU_OK) {
     fprintf(stderr, "CUDA device error callback setup failed\n");
     goto cleanup;
@@ -304,51 +342,55 @@ main(int argc, char **argv) {
                                          artifact,
                                          artifactSize,
                                          &library);
+
   if (result != GPU_OK || !library) {
     fprintf(stderr,
             "CUDA resource descriptor-array library creation failed (%d)\n",
             result);
     goto cleanup;
   }
+
   result = GPUCreateShaderLayout(device, library, &shaderLayout);
-  if (result != GPU_OK || !shaderLayout ||
-      shaderLayout->bindGroupLayoutCount != 1u ||
-      !shaderLayout->bindGroupLayouts ||
-      !shaderLayout->bindGroupLayouts[0] || !shaderLayout->pipelineLayout) {
+
+  if (result != GPU_OK || !shaderLayout
+      || shaderLayout->bindGroupLayoutCount != 1u
+      || !shaderLayout->bindGroupLayouts
+      || !shaderLayout->bindGroupLayouts[0] || !shaderLayout->pipelineLayout) {
     fprintf(stderr,
             "CUDA resource descriptor-array layout creation failed (%d)\n",
             result);
     goto cleanup;
   }
 
-  layoutEntries = GPUGetBindGroupLayoutEntries(
-    shaderLayout->bindGroupLayouts[0], &layoutEntryCount);
-  if (!layoutEntries || layoutEntryCount != 5u ||
-      !layout_has_entry(layoutEntries,
-                        layoutEntryCount,
-                        0u,
-                        GPU_BINDING_SAMPLED_TEXTURE,
-                        2u) ||
-      !layout_has_entry(layoutEntries,
-                        layoutEntryCount,
-                        2u,
-                        GPU_BINDING_SAMPLER,
-                        2u) ||
-      !layout_has_entry(layoutEntries,
-                        layoutEntryCount,
-                        4u,
-                        GPU_BINDING_UNIFORM_BUFFER,
-                        1u) ||
-      !layout_has_entry(layoutEntries,
-                        layoutEntryCount,
-                        5u,
-                        GPU_BINDING_STORAGE_BUFFER,
-                        1u) ||
-      !layout_has_entry(layoutEntries,
-                        layoutEntryCount,
-                        6u,
-                        GPU_BINDING_STORAGE_TEXTURE,
-                        2u)) {
+  layoutEntries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[0],
+                                               &layoutEntryCount);
+
+  if (!layoutEntries || layoutEntryCount != 5u
+      || !layout_has_entry(layoutEntries,
+                           layoutEntryCount,
+                           0u,
+                           GPU_BINDING_SAMPLED_TEXTURE,
+                           2u)
+      || !layout_has_entry(layoutEntries,
+                           layoutEntryCount,
+                           2u,
+                           GPU_BINDING_SAMPLER,
+                           2u)
+      || !layout_has_entry(layoutEntries,
+                           layoutEntryCount,
+                           4u,
+                           GPU_BINDING_UNIFORM_BUFFER,
+                           1u)
+      || !layout_has_entry(layoutEntries,
+                           layoutEntryCount,
+                           5u,
+                           GPU_BINDING_STORAGE_BUFFER,
+                           1u)
+      || !layout_has_entry(layoutEntries,
+                           layoutEntryCount,
+                           6u,
+                           GPU_BINDING_STORAGE_TEXTURE,
+                           2u)) {
     fprintf(stderr,
             "CUDA resource descriptor-array layout mismatch: %u entries\n",
             layoutEntryCount);
@@ -361,45 +403,47 @@ main(int argc, char **argv) {
   pipelineInfo.layout           = shaderLayout->pipelineLayout;
   pipelineInfo.library          = library;
   pipelineInfo.entryPoint       = "descriptor_array_write";
+
   if (GPUCreateComputePipeline(device,
                                &pipelineInfo,
-                               &writePipeline) != GPU_OK ||
-      !writePipeline) {
+                               &writePipeline) != GPU_OK
+      || !writePipeline) {
     fprintf(stderr, "CUDA resource descriptor-array write pipeline failed\n");
     goto cleanup;
   }
+
   pipelineInfo.label      = "cuda-resource-descriptor-array-read";
   pipelineInfo.entryPoint = "descriptor_array_read";
+
   if (GPUCreateComputePipeline(device,
                                &pipelineInfo,
-                               &readPipeline) != GPU_OK ||
-      !readPipeline) {
+                               &readPipeline) != GPU_OK
+      || !readPipeline) {
     fprintf(stderr, "CUDA resource descriptor-array read pipeline failed\n");
     goto cleanup;
   }
 
-  for (uint32_t i = 0u; i < TextureCount; i++) {
+  for (textureIndex = 0u; textureIndex < TextureCount; textureIndex++) {
     if (!create_texture(device,
                         queue,
                         "cuda-resource-array-sampled",
                         GPU_TEXTURE_USAGE_SAMPLED,
-                        sampledWidths[i],
-                        sampledData[i],
-                        &sampledTextures[i],
-                        &sampledViews[i]) ||
-        !create_texture(device,
-                        queue,
-                        "cuda-resource-array-storage",
-                        GPU_TEXTURE_USAGE_STORAGE,
-                        storageWidths[i],
-                        storageData[i],
-                        &storageTextures[i],
-                        &storageViews[i]) ||
-        !create_sampler(device,
-                        "cuda-resource-array-sampler",
-                        i == 0u ? GPU_ADDRESS_MODE_REPEAT
-                                : GPU_ADDRESS_MODE_CLAMP_TO_EDGE,
-                        &samplers[i])) {
+                        sampledWidths[textureIndex],
+                        sampledData[textureIndex],
+                        &sampledTextures[textureIndex],
+                        &sampledViews[textureIndex])
+        || !create_texture(device,
+                           queue,
+                           "cuda-resource-array-storage",
+                           GPU_TEXTURE_USAGE_STORAGE,
+                           storageWidths[textureIndex],
+                           storageData[textureIndex],
+                           &storageTextures[textureIndex],
+                           &storageViews[textureIndex])
+        || !create_sampler(device,
+                           "cuda-resource-array-sampler",
+                           textureIndex == 0u ? GPU_ADDRESS_MODE_REPEAT : GPU_ADDRESS_MODE_CLAMP_TO_EDGE,
+                           &samplers[textureIndex])) {
       fprintf(stderr, "CUDA resource descriptor-array resource setup failed\n");
       goto cleanup;
     }
@@ -414,13 +458,13 @@ main(int argc, char **argv) {
   {
     const uint32_t selection = 1u;
 
-    if (GPUCreateBuffer(device, &bufferInfo, &selectionBuffer) != GPU_OK ||
-        !selectionBuffer ||
-        GPUQueueWriteBuffer(queue,
-                            selectionBuffer,
-                            0u,
-                            &selection,
-                            sizeof(selection)) != GPU_OK) {
+    if (GPUCreateBuffer(device, &bufferInfo, &selectionBuffer) != GPU_OK
+        || !selectionBuffer
+        || GPUQueueWriteBuffer(queue,
+                               selectionBuffer,
+                               0u,
+                               &selection,
+                               sizeof(selection)) != GPU_OK) {
       fprintf(stderr, "CUDA resource descriptor-array selection failed\n");
       goto cleanup;
     }
@@ -431,33 +475,35 @@ main(int argc, char **argv) {
   bufferInfo.usage     = GPU_BUFFER_USAGE_STORAGE |
                          GPU_BUFFER_USAGE_COPY_SRC |
                          GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(device, &bufferInfo, &outputBuffer) != GPU_OK ||
-      !outputBuffer ||
-      GPUQueueWriteBuffer(queue,
-                          outputBuffer,
-                          0u,
-                          output,
-                          sizeof(output)) != GPU_OK) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &outputBuffer) != GPU_OK
+      || !outputBuffer
+      || GPUQueueWriteBuffer(queue,
+                             outputBuffer,
+                             0u,
+                             output,
+                             sizeof(output)) != GPU_OK) {
     fprintf(stderr, "CUDA resource descriptor-array output failed\n");
     goto cleanup;
   }
 
-  for (uint32_t i = 0u; i < TextureCount; i++) {
-    entries[i].binding     = 0u;
-    entries[i].arrayIndex  = i;
-    entries[i].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
-    entries[i].textureView = sampledViews[i];
+  for (bindingIndex = 0u; bindingIndex < TextureCount; bindingIndex++) {
+    entries[bindingIndex].binding     = 0u;
+    entries[bindingIndex].arrayIndex  = bindingIndex;
+    entries[bindingIndex].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+    entries[bindingIndex].textureView = sampledViews[bindingIndex];
 
-    entries[2u + i].binding     = 2u;
-    entries[2u + i].arrayIndex  = i;
-    entries[2u + i].bindingType = GPU_BINDING_SAMPLER;
-    entries[2u + i].sampler     = samplers[i];
+    entries[2u + bindingIndex].binding     = 2u;
+    entries[2u + bindingIndex].arrayIndex  = bindingIndex;
+    entries[2u + bindingIndex].bindingType = GPU_BINDING_SAMPLER;
+    entries[2u + bindingIndex].sampler     = samplers[bindingIndex];
 
-    entries[6u + i].binding     = 6u;
-    entries[6u + i].arrayIndex  = i;
-    entries[6u + i].bindingType = GPU_BINDING_STORAGE_TEXTURE;
-    entries[6u + i].textureView = storageViews[i];
+    entries[6u + bindingIndex].binding     = 6u;
+    entries[6u + bindingIndex].arrayIndex  = bindingIndex;
+    entries[6u + bindingIndex].bindingType = GPU_BINDING_STORAGE_TEXTURE;
+    entries[6u + bindingIndex].textureView = storageViews[bindingIndex];
   }
+
   entries[4].binding       = 4u;
   entries[4].bindingType   = GPU_BINDING_UNIFORM_BUFFER;
   entries[4].buffer.buffer = selectionBuffer;
@@ -473,6 +519,7 @@ main(int argc, char **argv) {
   groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
   groupInfo.pEntries         = entries;
   groupInfo.entryCount       = (uint32_t)(sizeof(entries) / sizeof(entries[0]));
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "CUDA resource descriptor-array bind group failed\n");
     goto cleanup;
@@ -480,13 +527,14 @@ main(int argc, char **argv) {
 
   if (GPUAcquireCommandBuffer(queue,
                               "cuda-resource-descriptor-array",
-                              &cmdb) != GPU_OK ||
-      !cmdb ||
-      !(pass = GPUBeginComputePass(cmdb,
-                                   "resource-descriptor-array-roundtrip"))) {
+                              &cmdb) != GPU_OK
+      || !cmdb
+      || !(pass = GPUBeginComputePass(cmdb,
+                                      "resource-descriptor-array-roundtrip"))) {
     fprintf(stderr, "CUDA resource descriptor-array encoding failed\n");
     goto cleanup;
   }
+
   GPUBindComputePipeline(pass, writePipeline);
   GPUBindComputeGroup(pass, 0u, group, 0u, NULL);
   GPUDispatch(pass, 1u, 1u, 1u);
@@ -500,18 +548,20 @@ main(int argc, char **argv) {
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
+
   if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
     fprintf(stderr, "CUDA resource descriptor-array submission failed\n");
     goto cleanup;
   }
+
   cmdb = NULL;
 
   if (GPUQueueReadBuffer(queue,
                          outputBuffer,
                          0u,
                          output,
-                         sizeof(output)) != GPU_OK ||
-      !colors_match(output)) {
+                         sizeof(output)) != GPU_OK
+      || !colors_match(output)) {
     fprintf(stderr,
             "CUDA resource descriptor-array mismatch: "
             "sample %.3f %.3f %.3f %.3f, "
@@ -526,24 +576,29 @@ main(int argc, char **argv) {
             output[16], output[17], output[18], output[19]);
     goto cleanup;
   }
+
   status = 0;
 
 cleanup:
-  if (pass) GPUEndComputePass(pass);
-  if (cmdb) (void)GPUDiscardCommandBuffer(cmdb);
+  if (pass)
+    GPUEndComputePass(pass);
+
+  if (cmdb)
+    (void)GPUDiscardCommandBuffer(cmdb);
   GPUDestroyBindGroup(group);
   GPUDestroyBuffer(outputBuffer);
   GPUDestroyBuffer(selectionBuffer);
-  for (uint32_t i = TextureCount; i > 0u; i--) {
-    uint32_t index;
 
-    index = i - 1u;
+  for (cleanupIndex = TextureCount; cleanupIndex > 0u; cleanupIndex--) {
+
+    index = cleanupIndex - 1u;
     GPUDestroySampler(samplers[index]);
     GPUDestroyTextureView(storageViews[index]);
     GPUDestroyTexture(storageTextures[index]);
     GPUDestroyTextureView(sampledViews[index]);
     GPUDestroyTexture(sampledTextures[index]);
   }
+
   GPUDestroyComputePipeline(readPipeline);
   GPUDestroyComputePipeline(writePipeline);
   GPUDestroyShaderLayout(shaderLayout);
@@ -555,5 +610,6 @@ cleanup:
   if (status == 0) {
     puts("CUDA USL resource descriptor-array validation passed");
   }
+
   return status;
 }

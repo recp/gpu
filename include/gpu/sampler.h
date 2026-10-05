@@ -24,7 +24,7 @@ extern "C" {
 #include "cmdqueue.h"
 #include "depthstencil.h"
 
-typedef struct GPUDevice GPUDevice;
+typedef struct GPUDevice  GPUDevice;
 typedef struct GPUSampler GPUSampler;
 
 typedef enum GPUFilter {
@@ -63,14 +63,14 @@ typedef struct GPUSamplerCreateInfo {
 
 GPU_EXPORT
 GPUResult
-GPUCreateSampler(GPUDevice                  * __restrict device,
-                 const GPUSamplerCreateInfo * __restrict info,
-                 bool                                    staticIfSupported,
-                 GPUSampler                ** __restrict outSampler);
+GPUCreateSampler(GPUDevice                  *__restrict device,
+                 const GPUSamplerCreateInfo *__restrict info,
+                 bool                                   staticIfSupported,
+                 GPUSampler                **__restrict outSampler);
 
 GPU_EXPORT
 void
-GPUDestroySampler(GPUSampler * __restrict sampler);
+GPUDestroySampler(GPUSampler *__restrict sampler);
 
 #ifdef __cplusplus
 }

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "VRSCompare.h"
 
 #include <stddef.h>
@@ -18,72 +34,32 @@ static const VRSCompareVertex vrs_compare_vertices[] = {
   { {  1.0f,  1.0f, 0.0f, 1.0f }, { 1.0f, 0.0f } }
 };
 
+static const GPUShadingRateEXT preferredRates[] = {
+  GPU_SHADING_RATE_2X2_EXT,
+  GPU_SHADING_RATE_1X2_EXT,
+  GPU_SHADING_RATE_2X1_EXT,
+  GPU_SHADING_RATE_2X4_EXT,
+  GPU_SHADING_RATE_4X2_EXT,
+  GPU_SHADING_RATE_4X4_EXT
+};
+
 static GPUResult
 choose_coarse_rate(const GPUVRSCapabilitiesEXT *caps,
                    GPUShadingRateEXT           *outRate) {
-  static const GPUShadingRateEXT preferredRates[] = {
-    GPU_SHADING_RATE_2X2_EXT,
-    GPU_SHADING_RATE_1X2_EXT,
-    GPU_SHADING_RATE_2X1_EXT,
-    GPU_SHADING_RATE_2X4_EXT,
-    GPU_SHADING_RATE_4X2_EXT,
-    GPU_SHADING_RATE_4X4_EXT
-  };
+  uint32_t i;
 
   if (!caps || !outRate) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(preferredRates); i++) {
+
+  for (i = 0u; i < GPU_ARRAY_LEN(preferredRates); i++) {
     if ((caps->rates & (1u << preferredRates[i])) != 0u) {
       *outRate = preferredRates[i];
       return GPU_OK;
     }
   }
+
   return GPU_ERROR_UNSUPPORTED;
-}
-
-GPUResult
-GPUSampleChooseVRSRate(const GPUAdapter *adapter,
-                       GPUShadingRateEXT *outRate) {
-  GPUVRSCapabilitiesEXT caps;
-  GPUResult             result;
-
-  if (!adapter || !outRate) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  memset(&caps, 0, sizeof(caps));
-  result = GPUGetVRSCapabilitiesEXT(adapter, &caps);
-  if (result != GPU_OK ||
-      (caps.modes & GPU_VRS_DRAW_RATE_BIT_EXT) == 0u) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
-  return choose_coarse_rate(&caps, outRate);
-}
-
-GPUResult
-GPUSampleChooseVRSAttachment(const GPUAdapter *adapter,
-                             GPUShadingRateEXT *outRate,
-                             GPUExtent2D       *outTexelSize) {
-  GPUVRSCapabilitiesEXT caps;
-  GPUResult             result;
-
-  if (!adapter || !outRate || !outTexelSize) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  memset(&caps, 0, sizeof(caps));
-  result = GPUGetVRSCapabilitiesEXT(adapter, &caps);
-  if (result != GPU_OK ||
-      (caps.modes & GPU_VRS_ATTACHMENT_BIT_EXT) == 0u ||
-      (caps.combiners & GPU_SHADING_RATE_COMBINER_REPLACE_BIT_EXT) == 0u ||
-      caps.minAttachmentTexelSize.width == 0u ||
-      caps.minAttachmentTexelSize.height == 0u) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
-  result = choose_coarse_rate(&caps, outRate);
-  if (result == GPU_OK) {
-    *outTexelSize = caps.minAttachmentTexelSize;
-  }
-  return result;
 }
 
 static GPUResult
@@ -111,22 +87,23 @@ create_pipeline(GPUSampleVRSCompare *state,
   color.blend.enabled   = false;
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
 
-  info.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  info.chain.structSize        = sizeof(info);
-  info.label                   = label;
-  info.layout                  = state->shaderLayout->pipelineLayout;
-  info.library                 = state->library;
-  info.vertexEntry             = "vrs_compare_vs";
-  info.fragmentEntry           = fragmentEntry;
+  info.chain.sType              = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  info.chain.structSize         = sizeof(info);
+  info.label                    = label;
+  info.layout                   = state->shaderLayout->pipelineLayout;
+  info.library                  = state->library;
+  info.vertexEntry              = "vrs_compare_vs";
+  info.fragmentEntry            = fragmentEntry;
   info.vertex.pBufferLayouts    = &vertexLayout;
   info.vertex.bufferLayoutCount = 1u;
-  info.pColorTargets           = &color;
-  info.colorTargetCount        = 1u;
-  info.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  info.cullMode                = GPU_CULL_MODE_NONE;
-  info.frontFace               = GPU_FRONT_FACE_CCW;
-  info.multisample.sampleCount = 1u;
-  info.multisample.sampleMask  = 0xffffffffu;
+  info.pColorTargets            = &color;
+  info.colorTargetCount         = 1u;
+  info.primitiveTopology        = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  info.cullMode                 = GPU_CULL_MODE_NONE;
+  info.frontFace                = GPU_FRONT_FACE_CCW;
+  info.multisample.sampleCount  = 1u;
+  info.multisample.sampleMask   = 0xffffffffu;
+
   return GPUCreateRenderPipeline(state->device, &info, outPipeline);
 }
 
@@ -140,10 +117,13 @@ create_vertex_buffer(GPUSampleVRSCompare *state) {
   info.label            = "vrs-compare-vertices";
   info.sizeBytes        = sizeof(vrs_compare_vertices);
   info.usage            = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
+
   result = GPUCreateBuffer(state->device, &info, &state->vertexBuffer);
+
   if (result != GPU_OK) {
     return result;
   }
+
   return GPUQueueWriteBuffer(state->queue,
                              state->vertexBuffer,
                              0u,
@@ -161,36 +141,36 @@ create_rate_attachment(GPUSampleVRSCompare *state,
   GPUTexture              *texture;
   GPUTextureView          *view;
   uint8_t                 *rates;
+  uint8_t                 *row;
   uint64_t                 texelCount;
   uint32_t                 fineWidth;
   uint32_t                 rateWidth;
   uint32_t                 rateHeight;
+  uint32_t                 y;
   GPUResult                result;
 
-  if (!state || width == 0u || height == 0u ||
-      state->attachmentTexelSize.width == 0u ||
-      state->attachmentTexelSize.height == 0u) {
+  if (!state || width == 0u || height == 0u
+      || state->attachmentTexelSize.width == 0u
+      || state->attachmentTexelSize.height == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   rateWidth  = (width - 1u) / state->attachmentTexelSize.width + 1u;
   rateHeight = (height - 1u) / state->attachmentTexelSize.height + 1u;
   texelCount = (uint64_t)rateWidth * rateHeight;
+
   if (texelCount == 0u || texelCount > SIZE_MAX) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  rates = malloc((size_t)texelCount);
-  if (!rates) {
+  if (!(rates = malloc((size_t)texelCount))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
-  fineWidth = width / 2u;
-  fineWidth = fineWidth > 0u
-                ? (fineWidth - 1u) / state->attachmentTexelSize.width + 1u
-                : 0u;
-  for (uint32_t y = 0u; y < rateHeight; y++) {
-    uint8_t *row;
 
+  fineWidth = width / 2u;
+  fineWidth = fineWidth > 0u ? (fineWidth - 1u) / state->attachmentTexelSize.width + 1u : 0u;
+
+  for (y = 0u; y < rateHeight; y++) {
     row = rates + (size_t)y * rateWidth;
     memset(row, GPU_SHADING_RATE_1X1_EXT, fineWidth);
     memset(row + fineWidth,
@@ -200,6 +180,7 @@ create_rate_attachment(GPUSampleVRSCompare *state,
 
   texture = NULL;
   view    = NULL;
+
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "vrs-compare-rate-image";
@@ -212,7 +193,9 @@ create_rate_attachment(GPUSampleVRSCompare *state,
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_COPY_DST |
                                  GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT;
+
   result = GPUCreateTexture(state->device, &textureInfo, &texture);
+
   if (result == GPU_OK) {
     viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
     viewInfo.chain.structSize = sizeof(viewInfo);
@@ -221,8 +204,10 @@ create_rate_attachment(GPUSampleVRSCompare *state,
     viewInfo.format           = GPU_FORMAT_R8_UINT;
     viewInfo.mipLevelCount    = 1u;
     viewInfo.arrayLayerCount  = 1u;
+
     result = GPUCreateTextureView(texture, &viewInfo, &view);
   }
+
   if (result == GPU_OK) {
     writeRegion.width        = rateWidth;
     writeRegion.height       = rateHeight;
@@ -230,13 +215,16 @@ create_rate_attachment(GPUSampleVRSCompare *state,
     writeRegion.layerCount   = 1u;
     writeRegion.bytesPerRow  = rateWidth;
     writeRegion.rowsPerImage = rateHeight;
+
     result = GPUQueueWriteTexture(state->queue,
                                   texture,
                                   &writeRegion,
                                   rates,
                                   texelCount);
   }
+
   free(rates);
+
   if (result != GPU_OK) {
     GPUDestroyTextureView(view);
     GPUDestroyTexture(texture);
@@ -249,7 +237,101 @@ create_rate_attachment(GPUSampleVRSCompare *state,
   state->rateView    = view;
   state->width       = width;
   state->height      = height;
+
   return GPU_OK;
+}
+
+static void
+draw_region(GPURenderPassEncoder *pass,
+            GPUSampleVRSCompare  *state,
+            GPURenderPipeline    *pipeline,
+            uint32_t              x,
+            uint32_t              width,
+            GPUShadingRateEXT     rate,
+            bool                  setRate) {
+  GPUViewport      viewport = {0};
+  GPUScissorRect   scissor  = {0};
+  GPUBufferBinding binding  = {0};
+
+  viewport.x        = (float)x;
+  viewport.width    = (float)width;
+  viewport.height   = (float)state->height;
+  viewport.minDepth = 0.0f;
+  viewport.maxDepth = 1.0f;
+  scissor.x         = (int32_t)x;
+  scissor.width     = width;
+  scissor.height    = state->height;
+
+  GPUSetViewport(pass, &viewport);
+  GPUSetScissor(pass, &scissor);
+
+  if (setRate) {
+    GPUSetFragmentShadingRateEXT(pass,
+                                 rate,
+                                 GPU_SHADING_RATE_COMBINER_KEEP_EXT,
+                                 GPU_SHADING_RATE_COMBINER_KEEP_EXT);
+  }
+
+  binding.buffer = state->vertexBuffer;
+
+  GPUBindRenderPipeline(pass, pipeline);
+  GPUBindVertexBuffers(pass, 0u, 1u, &binding);
+  GPUDraw(pass,
+          (uint32_t)GPU_ARRAY_LEN(vrs_compare_vertices),
+          1u,
+          0u,
+          0u);
+}
+
+GPUResult
+GPUSampleChooseVRSRate(const GPUAdapter  *adapter,
+                       GPUShadingRateEXT *outRate) {
+  GPUVRSCapabilitiesEXT caps;
+  GPUResult             result;
+
+  if (!adapter || !outRate) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(&caps, 0, sizeof(caps));
+  result = GPUGetVRSCapabilitiesEXT(adapter, &caps);
+
+  if (result != GPU_OK || (caps.modes & GPU_VRS_DRAW_RATE_BIT_EXT) == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  return choose_coarse_rate(&caps, outRate);
+}
+
+GPUResult
+GPUSampleChooseVRSAttachment(const GPUAdapter  *adapter,
+                             GPUShadingRateEXT *outRate,
+                             GPUExtent2D       *outTexelSize) {
+  GPUVRSCapabilitiesEXT caps;
+  GPUResult             result;
+
+  if (!adapter || !outRate || !outTexelSize) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(&caps, 0, sizeof(caps));
+  result = GPUGetVRSCapabilitiesEXT(adapter, &caps);
+
+  if (result != GPU_OK
+      || (caps.modes & GPU_VRS_ATTACHMENT_BIT_EXT) == 0u
+      || (caps.combiners & GPU_SHADING_RATE_COMBINER_REPLACE_BIT_EXT) == 0u
+      || caps.minAttachmentTexelSize.width == 0u
+      || caps.minAttachmentTexelSize.height == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  result = choose_coarse_rate(&caps, outRate);
+
+  if (result == GPU_OK) {
+    *outTexelSize = caps.minAttachmentTexelSize;
+  }
+
+  return result;
 }
 
 GPUResult
@@ -266,18 +348,17 @@ GPUSampleVRSCompareInit(GPUSampleVRSCompare *state,
                         uint32_t             height) {
   GPUResult result;
 
-  if (!state || !device || !queue || !swapchain || !library || !shaderLayout ||
-      !shaderLayout->pipelineLayout || width == 0u || height == 0u ||
-      coarseRate == GPU_SHADING_RATE_1X1_EXT ||
-      (mode != GPU_VRS_DRAW_RATE_BIT_EXT &&
-       mode != GPU_VRS_ATTACHMENT_BIT_EXT) ||
-      (mode == GPU_VRS_ATTACHMENT_BIT_EXT &&
-       (attachmentTexelSize.width == 0u ||
-        attachmentTexelSize.height == 0u))) {
+  if (!state || !device || !queue || !swapchain || !library || !shaderLayout
+      || !shaderLayout->pipelineLayout || width == 0u || height == 0u
+      || coarseRate == GPU_SHADING_RATE_1X1_EXT
+      || (mode != GPU_VRS_DRAW_RATE_BIT_EXT && mode != GPU_VRS_ATTACHMENT_BIT_EXT)
+      || (mode == GPU_VRS_ATTACHMENT_BIT_EXT
+          && (attachmentTexelSize.width == 0u || attachmentTexelSize.height == 0u))) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   memset(state, 0, sizeof(*state));
+
   state->device              = device;
   state->queue               = queue;
   state->swapchain           = swapchain;
@@ -297,21 +378,26 @@ GPUSampleVRSCompareInit(GPUSampleVRSCompare *state,
                              ? "vrs_attachment_fs"
                              : "vrs_fine_fs",
                            &state->finePipeline);
+
   if (result == GPU_OK && mode == GPU_VRS_DRAW_RATE_BIT_EXT) {
     result = create_pipeline(state,
                              "vrs-compare-coarse-pipeline",
                              "vrs_coarse_fs",
                              &state->coarsePipeline);
   }
+
   if (result == GPU_OK) {
     result = create_vertex_buffer(state);
   }
+
   if (result == GPU_OK && mode == GPU_VRS_ATTACHMENT_BIT_EXT) {
     result = create_rate_attachment(state, width, height);
   }
+
   if (result != GPU_OK) {
     GPUSampleVRSCompareDestroy(state);
   }
+
   return result;
 }
 
@@ -322,85 +408,53 @@ GPUSampleVRSCompareResize(GPUSampleVRSCompare *state,
   if (!state || width == 0u || height == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (state->width == width && state->height == height) {
     return GPU_OK;
   }
+
   if (state->mode == GPU_VRS_ATTACHMENT_BIT_EXT) {
     return create_rate_attachment(state, width, height);
   }
+
   state->width  = width;
   state->height = height;
+
   return GPU_OK;
 }
 
-static void
-draw_region(GPURenderPassEncoder *pass,
-            GPUSampleVRSCompare *state,
-            GPURenderPipeline   *pipeline,
-            uint32_t             x,
-            uint32_t             width,
-            GPUShadingRateEXT    rate,
-            bool                 setRate) {
-  GPUViewport      viewport = {0};
-  GPUScissorRect   scissor  = {0};
-  GPUBufferBinding binding = {0};
-
-  viewport.x        = (float)x;
-  viewport.width    = (float)width;
-  viewport.height   = (float)state->height;
-  viewport.minDepth = 0.0f;
-  viewport.maxDepth = 1.0f;
-  scissor.x         = (int32_t)x;
-  scissor.width     = width;
-  scissor.height    = state->height;
-  GPUSetViewport(pass, &viewport);
-  GPUSetScissor(pass, &scissor);
-  if (setRate) {
-    GPUSetFragmentShadingRateEXT(pass,
-                                 rate,
-                                 GPU_SHADING_RATE_COMBINER_KEEP_EXT,
-                                 GPU_SHADING_RATE_COMBINER_KEEP_EXT);
-  }
-  binding.buffer = state->vertexBuffer;
-  GPUBindRenderPipeline(pass, pipeline);
-  GPUBindVertexBuffers(pass, 0u, 1u, &binding);
-  GPUDraw(pass,
-          (uint32_t)GPU_ARRAY_LEN(vrs_compare_vertices),
-          1u,
-          0u,
-          0u);
-}
-
 GPUResult
-GPUSampleVRSCompareRender(GPUSampleVRSCompare          *state,
-                          void                         *completionSender,
-                          GPUCommandBufferCompletionFn  completion) {
-  GPUFrame                     *frame;
-  GPUCommandBuffer             *cmdb;
-  GPURenderPassEncoder         *pass;
-  GPURenderPassColorAttachment  color       = {0};
-  GPURenderPassCreateInfo       passInfo    = {0};
-  GPUShadingRateAttachmentEXT   shadingRate = {0};
-  GPUResult                     result;
-  uint32_t                      leftWidth;
+GPUSampleVRSCompareRender(GPUSampleVRSCompare         *state,
+                          void                        *completionSender,
+                          GPUCommandBufferCompletionFn completion) {
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassColorAttachment color       = {0};
+  GPURenderPassCreateInfo      passInfo    = {0};
+  GPUShadingRateAttachmentEXT  shadingRate = {0};
+  GPUFrame                    *frame;
+  GPURenderPassEncoder        *pass;
+  GPUResult                    result;
+  uint32_t                     leftWidth;
 
-  if (!state || !state->swapchain || !state->finePipeline ||
-      !state->vertexBuffer || state->width < 2u ||
-      (state->mode == GPU_VRS_DRAW_RATE_BIT_EXT && !state->coarsePipeline) ||
-      (state->mode == GPU_VRS_ATTACHMENT_BIT_EXT && !state->rateView)) {
+  if (!state || !state->swapchain || !state->finePipeline
+      || !state->vertexBuffer || state->width < 2u
+      || (state->mode == GPU_VRS_DRAW_RATE_BIT_EXT && !state->coarsePipeline)
+      || (state->mode == GPU_VRS_ATTACHMENT_BIT_EXT && !state->rateView)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) {
+  if (!(frame = GPUBeginFrame(state->swapchain))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   cmdb   = NULL;
   result = GPUAcquireCommandBuffer(state->queue, "vrs-compare-frame", &cmdb);
+
   if (result != GPU_OK || !cmdb) {
     GPUEndFrame(frame);
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
+
   if (completion) {
     GPUSetCommandBufferCompletionHandler(cmdb,
                                          completionSender,
@@ -414,21 +468,22 @@ GPUSampleVRSCompareRender(GPUSampleVRSCompare          *state,
   color.clearColor.float32[1] = 0.008f;
   color.clearColor.float32[2] = 0.020f;
   color.clearColor.float32[3] = 1.0f;
+
   passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize     = sizeof(passInfo);
   passInfo.label                = "vrs-compare-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
+
   if (state->mode == GPU_VRS_ATTACHMENT_BIT_EXT) {
-    shadingRate.chain.sType      =
-      GPU_STRUCTURE_TYPE_SHADING_RATE_ATTACHMENT_EXT;
+    shadingRate.chain.sType      = GPU_STRUCTURE_TYPE_SHADING_RATE_ATTACHMENT_EXT;
     shadingRate.chain.structSize = sizeof(shadingRate);
     shadingRate.view             = state->rateView;
     shadingRate.texelSize        = state->attachmentTexelSize;
     passInfo.chain.pNext         = &shadingRate.chain;
   }
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return GPU_ERROR_BACKEND_FAILURE;
@@ -444,6 +499,7 @@ GPUSampleVRSCompareRender(GPUSampleVRSCompare          *state,
                 false);
   } else {
     leftWidth = state->width / 2u;
+
     draw_region(pass,
                 state,
                 state->finePipeline,
@@ -451,6 +507,7 @@ GPUSampleVRSCompareRender(GPUSampleVRSCompare          *state,
                 leftWidth,
                 GPU_SHADING_RATE_1X1_EXT,
                 true);
+
     draw_region(pass,
                 state,
                 state->coarsePipeline,
@@ -459,12 +516,15 @@ GPUSampleVRSCompareRender(GPUSampleVRSCompare          *state,
                 state->coarseRate,
                 true);
   }
+
   GPUEndRenderPass(pass);
 
   result = GPUFinishFrame(state->queue, cmdb, frame);
+
   if (result == GPU_OK) {
     state->frameCount++;
   }
+
   return result;
 }
 

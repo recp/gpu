@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <gpu/gpu.h>
 
 #include "f16_builtins.h"
@@ -31,27 +47,53 @@ const float gpu_f16_builtin_inputs[F16_BUILTIN_INPUT_ROWS][4] = {
   {0.75f, -0.75f, 0.75f, -0.75f}
 };
 
+static const char *mathNames[F16_BUILTIN_MATH_ROWS] = {
+  "floor", "ceil", "round", "trunc", "fract", "sqrt", "rsqrt",
+  "inversesqrt", "rcp", "exp", "exp2", "log", "log2", "degrees",
+  "radians", "saturate", "abs", "sign", "pow", "mod", "fmod",
+  "min", "max", "clamp", "step", "copysign", "mix", "lerp",
+  "smoothstep", "fma", "inverselerp", "remap"
+};
+
+static const char *trigNames[F16_BUILTIN_TRIG_ROWS] = {
+  "sin", "cos", "tan", "asin", "acos", "atan", "acot", "asec",
+  "acsc", "atan2", "sinh", "cosh", "tanh", "asinh", "acosh",
+  "atanh"
+};
+
+static const char *geometricNames[F16_BUILTIN_GEOMETRIC_ROWS] = {
+  "dot-length-distance", "cross", "normalize", "reflect", "project",
+  "reject", "refract", "faceforward"
+};
+
+static int
+validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]);
+
 #if !defined(GPU_F16_BUILTINS_ORACLE_ONLY)
-static void *
+static void*
 read_file(const char *path, uint64_t *outSize) {
   FILE *file;
   void *data;
   long  size;
 
   file = path ? fopen(path, "rb") : NULL;
-  if (!file || fseek(file, 0, SEEK_END) != 0 ||
-      (size = ftell(file)) <= 0 || fseek(file, 0, SEEK_SET) != 0) {
-    if (file) fclose(file);
+
+  if (!file || fseek(file, 0, SEEK_END) != 0
+      || (size = ftell(file)) <= 0 || fseek(file, 0, SEEK_SET) != 0) {
+    if (file)
+      fclose(file);
     return NULL;
   }
-  data = malloc((size_t)size);
-  if (!data || fread(data, 1u, (size_t)size, file) != (size_t)size) {
+
+  if (!(data = malloc((size_t)size)) || fread(data, 1u, (size_t)size, file) != (size_t)size) {
     free(data);
     fclose(file);
     return NULL;
   }
+
   fclose(file);
   *outSize = (uint64_t)size;
+
   return data;
 }
 #endif
@@ -61,13 +103,14 @@ float_bits(float value) {
   uint32_t bits;
 
   memcpy(&bits, &value, sizeof(bits));
+
   return bits;
 }
 
 static uint16_t
 float_to_half_bits(float value) {
-  uint32_t bits = float_bits(value);
-  uint32_t sign = (bits >> 16u) & 0x8000u;
+  uint32_t bits     = float_bits(value);
+  uint32_t sign     = (bits >> 16u) & 0x8000u;
   uint32_t exponent = (bits >> 23u) & 0xffu;
   uint32_t mantissa = bits & 0x7fffffu;
   int32_t  halfExponent;
@@ -75,42 +118,61 @@ float_to_half_bits(float value) {
   if (exponent == 0xffu) {
     uint32_t payload;
 
-    if (mantissa == 0u) return (uint16_t)(sign | 0x7c00u);
+    if (mantissa == 0u)
+      return (uint16_t)(sign | 0x7c00u);
+
     payload = mantissa >> 13u;
-    if (payload == 0u) payload = 1u;
+
+    if (payload == 0u)
+      payload = 1u;
     return (uint16_t)(sign | 0x7c00u | payload);
   }
-  halfExponent = (int32_t)exponent - 127 + 15;
-  if (halfExponent <= 0) {
-    uint32_t halfway, remainder, rounded, shift;
 
-    if (halfExponent < -10) return (uint16_t)sign;
+  halfExponent = (int32_t)exponent - 127 + 15;
+
+  if (halfExponent <= 0) {
+    uint32_t halfway;
+    uint32_t remainder;
+    uint32_t rounded;
+    uint32_t shift;
+
+    if (halfExponent < -10)
+      return (uint16_t)sign;
+
     mantissa |= 0x800000u;
     shift     = (uint32_t)(14 - halfExponent);
     rounded   = mantissa >> shift;
     remainder = mantissa & ((1u << shift) - 1u);
     halfway   = 1u << (shift - 1u);
-    if (remainder > halfway ||
-        (remainder == halfway && (rounded & 1u) != 0u)) {
+
+    if (remainder > halfway
+        || (remainder == halfway && (rounded & 1u) != 0u)) {
       rounded++;
     }
+
     return (uint16_t)(sign | rounded);
   }
-  if (halfExponent >= 0x1f) return (uint16_t)(sign | 0x7c00u);
+
+  if (halfExponent >= 0x1f)
+    return (uint16_t)(sign | 0x7c00u);
+
   {
     uint32_t remainder = mantissa & 0x1fffu;
     uint32_t rounded   = mantissa >> 13u;
 
-    if (remainder > 0x1000u ||
-        (remainder == 0x1000u && (rounded & 1u) != 0u)) {
+    if (remainder > 0x1000u
+        || (remainder == 0x1000u && (rounded & 1u) != 0u)) {
       rounded++;
+
       if (rounded == 0x400u) {
         rounded = 0u;
         halfExponent++;
+
         if (halfExponent >= 0x1f)
           return (uint16_t)(sign | 0x7c00u);
       }
     }
+
     return (uint16_t)(sign | ((uint32_t)halfExponent << 10u) | rounded);
   }
 }
@@ -122,17 +184,19 @@ half_bits_to_float(uint16_t bits) {
   uint32_t mantissa = (uint32_t)bits & 0x03ffu;
   uint32_t resultBits;
   float    result;
+  int32_t  unbiased;
 
   if (exponent == 0u) {
     if (mantissa == 0u) {
       resultBits = sign;
     } else {
-      int32_t unbiased = -14;
+      unbiased = -14;
 
       while ((mantissa & 0x0400u) == 0u) {
         mantissa <<= 1u;
         unbiased--;
       }
+
       mantissa  &= 0x03ffu;
       resultBits = sign | ((uint32_t)(unbiased + 127) << 23u) |
                    (mantissa << 13u);
@@ -142,7 +206,9 @@ half_bits_to_float(uint16_t bits) {
   } else {
     resultBits = sign | ((exponent + 112u) << 23u) | (mantissa << 13u);
   }
+
   memcpy(&result, &resultBits, sizeof(result));
+
   return result;
 }
 
@@ -178,8 +244,7 @@ half_fma(float left, float right, float addend) {
 
 static uint16_t
 ordered_half_bits(uint16_t bits) {
-  return (bits & 0x8000u) != 0u ? (uint16_t)~bits
-                                : (uint16_t)(bits | 0x8000u);
+  return (bits & 0x8000u) != 0u ? (uint16_t)~bits : (uint16_t)(bits | 0x8000u);
 }
 
 static uint16_t
@@ -187,17 +252,19 @@ half_ulp_distance(float left, float right) {
   uint16_t leftBits  = ordered_half_bits(float_to_half_bits(left));
   uint16_t rightBits = ordered_half_bits(float_to_half_bits(right));
 
-  return leftBits > rightBits ? (uint16_t)(leftBits - rightBits)
-                              : (uint16_t)(rightBits - leftBits);
+  return leftBits > rightBits ? (uint16_t)(leftBits - rightBits) : (uint16_t)(rightBits - leftBits);
 }
 
 static int
 half_value_matches(float actual, float expected, uint16_t ulpLimit) {
-  if (isnan(expected)) return isnan(actual);
+  if (isnan(expected))
+    return isnan(actual);
+
   if (actual == expected)
     return expected != 0.0f || float_bits(actual) == float_bits(expected);
-  return !isnan(actual) && !isinf(actual) && !isinf(expected) &&
-         half_ulp_distance(actual, expected) <= ulpLimit;
+
+  return !isnan(actual) && !isinf(actual) && !isinf(expected)
+         && half_ulp_distance(actual, expected) <= ulpLimit;
 }
 
 static int
@@ -207,14 +274,17 @@ value_matches(const char *name,
               float       actual,
               float       expected,
               uint16_t    ulpLimit) {
-  uint16_t actualBits, expectedBits, ulp;
+  uint16_t actualBits;
+  uint16_t expectedBits;
+  uint16_t ulp;
 
-  if (half_value_matches(actual, expected, ulpLimit)) return 1;
+  if (half_value_matches(actual, expected, ulpLimit))
+    return 1;
+
   actualBits   = float_to_half_bits(actual);
   expectedBits = float_to_half_bits(expected);
   ulp          = isnan(actual) || isnan(expected)
-                   ? UINT16_MAX
-                   : half_ulp_distance(actual, expected);
+                   ? UINT16_MAX : half_ulp_distance(actual, expected);
   fprintf(stderr,
           "%s F16 %s mismatch at case %u lane %u: expected %.9g "
           "(0x%04x), got %.9g (0x%04x), %u ULP (limit %u)\n",
@@ -231,9 +301,6 @@ value_matches(const char *name,
   return 0;
 }
 
-static int
-validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]);
-
 static float
 half_abs(float value) {
   return half_round(fabsf(value));
@@ -241,21 +308,35 @@ half_abs(float value) {
 
 static float
 half_min(float left, float right) {
-  if (isnan(left)) return half_round(right);
-  if (isnan(right)) return half_round(left);
-  if (right < left) return half_round(right);
+  if (isnan(left))
+    return half_round(right);
+
+  if (isnan(right))
+    return half_round(left);
+
+  if (right < left)
+    return half_round(right);
+
   if (left == 0.0f && right == 0.0f)
     return signbit(left) || signbit(right) ? -0.0f : 0.0f;
+
   return half_round(left);
 }
 
 static float
 half_max(float left, float right) {
-  if (isnan(left)) return half_round(right);
-  if (isnan(right)) return half_round(left);
-  if (right > left) return half_round(right);
+  if (isnan(left))
+    return half_round(right);
+
+  if (isnan(right))
+    return half_round(left);
+
+  if (right > left)
+    return half_round(right);
+
   if (left == 0.0f && right == 0.0f)
     return !signbit(left) || !signbit(right) ? 0.0f : -0.0f;
+
   return half_round(left);
 }
 
@@ -292,7 +373,9 @@ half_smoothstep(float low, float high, float value) {
   float ratio = half_div(half_sub(value, low), half_sub(high, low));
   float t     = half_clamp(ratio, 0.0f, 1.0f);
 
-  if (isnan(ratio)) return NAN;
+  if (isnan(ratio))
+    return NAN;
+
   return half_mul(half_mul(t, t), half_fma(t, -2.0f, 3.0f));
 }
 
@@ -343,20 +426,19 @@ half_math_expected(uint32_t row, float a, float b) {
     case 30u:
       return half_div(half_sub(half_round(-a), a), half_sub(b, a));
     case 31u:
-      return half_mix(
-        half_round(-b),
-        b,
-        half_div(half_sub(half_round(-a), a), half_sub(b, a))
-      );
+      return half_mix(half_round(-b),
+                      b,
+                      half_div(half_sub(half_round(-a), a), half_sub(b, a)));
     default: return NAN;
   }
 }
 
 static float
 half_dot(const float left[4], const float right[4], uint32_t width) {
-  float sum = half_mul(left[0], right[0]);
+  float    sum = half_mul(left[0], right[0]);
+  uint32_t lane;
 
-  for (uint32_t lane = 1u; lane < width; lane++)
+  for (lane = 1u; lane < width; lane++)
     sum = half_fma(left[lane], right[lane], sum);
   return sum;
 }
@@ -367,26 +449,32 @@ half_geometric_expected(const float a[4],
                         uint32_t    width,
                         float       expected[F16_BUILTIN_GEOMETRIC_ROWS][4],
                         float       fusedReject[4]) {
-  float difference[4], incident[4], projected[4];
-  float dotAB = half_dot(a, b, width);
-  float dotAA = half_dot(a, a, width);
-  float dotBB = half_dot(b, b, width);
-  float inverseLength = half_round(1.0f / sqrtf(dotAA));
-  float projectScale  = half_div(dotAB, dotBB);
-  float reflectScale  = half_mul(-2.0f, dotAB);
-  float eta            = 0.75f;
-  float etaSquared     = half_mul(eta, eta);
-  float d2MinusOne     = half_fma(dotAB, dotAB, -1.0f);
-  float k              = half_fma(etaSquared, d2MinusOne, 1.0f);
-  float safeK          = k < 0.0f ? 0.0f : k;
-  float refractScale   = half_fma(eta, dotAB,
-                                  half_round(sqrtf(safeK)));
+  float    difference[4];
+  float    incident[4];
+  float    projected[4];
+  float    dotAB         = half_dot(a, b, width);
+  float    dotAA         = half_dot(a, a, width);
+  float    dotBB         = half_dot(b, b, width);
+  float    inverseLength = half_round(1.0f / sqrtf(dotAA));
+  float    projectScale  = half_div(dotAB, dotBB);
+  float    reflectScale  = half_mul(-2.0f, dotAB);
+  float    eta           = 0.75f;
+  float    etaSquared    = half_mul(eta, eta);
+  float    d2MinusOne    = half_fma(dotAB, dotAB, -1.0f);
+  float    k             = half_fma(etaSquared, d2MinusOne, 1.0f);
+  float    safeK         = k < 0.0f ? 0.0f : k;
+  float    refractScale = half_fma(eta,
+                                   dotAB,
+                                   half_round(sqrtf(safeK)));
+  uint32_t lane;
+  uint32_t resultLane;
 
-  for (uint32_t lane = 0u; lane < width; lane++) {
+  for (lane = 0u; lane < width; lane++) {
     difference[lane] = half_sub(a[lane], b[lane]);
     incident[lane]   = half_mul(eta, a[lane]);
     projected[lane]  = half_mul(projectScale, b[lane]);
   }
+
   expected[0][0] = dotAB;
   expected[0][1] = half_round(sqrtf(dotAA));
   expected[0][2] = half_round(sqrtf(half_dot(difference, difference, width)));
@@ -395,20 +483,23 @@ half_geometric_expected(const float a[4],
   expected[1][1] = half_sub(half_mul(a[2], b[0]), half_mul(a[0], b[2]));
   expected[1][2] = half_sub(half_mul(a[0], b[1]), half_mul(a[1], b[0]));
   expected[1][3] = 1.0f;
-  for (uint32_t lane = 0u; lane < width; lane++) {
-    expected[2][lane] = half_mul(a[lane], inverseLength);
-    expected[3][lane] = half_fma(reflectScale, b[lane], a[lane]);
-    expected[4][lane] = projected[lane];
-    expected[5][lane] = half_sub(a[lane], projected[lane]);
-    /* The builtin may contract its multiply/subtract. Validate that exact
+
+  for (resultLane = 0u; resultLane < width; resultLane++) {
+    expected[2][resultLane] = half_mul(a[resultLane], inverseLength);
+    expected[3][resultLane] = half_fma(reflectScale, b[resultLane], a[resultLane]);
+    expected[4][resultLane] = projected[resultLane];
+    expected[5][resultLane] = half_sub(a[resultLane], projected[resultLane]);
+
+    /* the builtin may contract its multiply/subtract. validate that exact
      * evaluation separately instead of relaxing the result's ULP limit. */
-    fusedReject[lane] = half_fma(half_round(-projectScale), b[lane], a[lane]);
-    expected[6][lane] = k < 0.0f
-                          ? 0.0f
-                          : half_fma(half_round(-refractScale),
-                                     b[lane],
-                                     incident[lane]);
-    expected[7][lane] = dotAB < 0.0f ? a[lane] : half_round(-a[lane]);
+
+    fusedReject[resultLane] = half_fma(half_round(-projectScale), b[resultLane], a[resultLane]);
+    expected[6][resultLane] = k < 0.0f
+                                ? 0.0f
+                                : half_fma(half_round(-refractScale),
+                                           b[resultLane],
+                                           incident[resultLane]);
+    expected[7][resultLane] = dotAB < 0.0f ? a[resultLane] : half_round(-a[resultLane]);
   }
 }
 
@@ -438,50 +529,36 @@ half_trig_expected(uint32_t row, float a, float b) {
 static float
 half_width_expected(uint32_t row, float a, float b) {
   return row < F16_BUILTIN_MATH_ROWS
-           ? half_math_expected(row, a, b)
-           : half_trig_expected(row - F16_BUILTIN_MATH_ROWS, a, b);
+           ? half_math_expected(row, a, b) : half_trig_expected(row - F16_BUILTIN_MATH_ROWS, a, b);
 }
 
 static int
 validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
-  static const char *mathNames[F16_BUILTIN_MATH_ROWS] = {
-    "floor", "ceil", "round", "trunc", "fract", "sqrt", "rsqrt",
-    "inversesqrt", "rcp", "exp", "exp2", "log", "log2", "degrees",
-    "radians", "saturate", "abs", "sign", "pow", "mod", "fmod",
-    "min", "max", "clamp", "step", "copysign", "mix", "lerp",
-    "smoothstep", "fma", "inverselerp", "remap"
-  };
-  static const char *trigNames[F16_BUILTIN_TRIG_ROWS] = {
-    "sin", "cos", "tan", "asin", "acos", "atan", "acot", "asec",
-    "acsc", "atan2", "sinh", "cosh", "tanh", "asinh", "acosh",
-    "atanh"
-  };
-  static const char *geometricNames[F16_BUILTIN_GEOMETRIC_ROWS] = {
-    "dot-length-distance", "cross", "normalize", "reflect", "project",
-    "reject", "refract", "faceforward"
-  };
   uint32_t checks = 0u;
-  int      ok = 1;
+  int      ok     = 1;
 
   for (uint32_t testCase = 0u; testCase < F16_BUILTIN_CASES; testCase++) {
-    float a[4], b[4], fusedReject[4];
-    float geometric[F16_BUILTIN_GEOMETRIC_ROWS][4];
+    float    a[4];
+    float    b[4];
+    float    fusedReject[4];
+    float    geometric[F16_BUILTIN_GEOMETRIC_ROWS][4];
     uint32_t base = testCase * F16_BUILTIN_OUTPUTS_PER_CASE;
 
     for (uint32_t lane = 0u; lane < 4u; lane++) {
       a[lane] = half_round(gpu_f16_builtin_inputs[testCase * 2u][lane]);
-      b[lane] = half_round(
-        gpu_f16_builtin_inputs[testCase * 2u + 1u][lane]
-      );
+      b[lane] = half_round(gpu_f16_builtin_inputs[testCase * 2u + 1u][lane]);
+
       for (uint32_t row = 0u; row < F16_BUILTIN_MATH_ROWS; row++) {
-        float expected = half_math_expected(row, a[lane], b[lane]);
-        float actual   = half_bits_to_float(output[base + row][lane]);
-        uint16_t limit = row >= 18u ? 16u : 8u;
+        float    expected = half_math_expected(row, a[lane], b[lane]);
+        float    actual   = half_bits_to_float(output[base + row][lane]);
+        uint16_t limit    = row >= 18u ? 16u : 8u;
 
         checks++;
+
         if (row == 17u && actual == 0.0f && expected == 0.0f) {
           continue;
         }
+
         if (!value_matches(mathNames[row],
                            testCase,
                            lane,
@@ -492,67 +569,71 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
         }
       }
     }
+
     half_geometric_expected(a, b, 4u, geometric, fusedReject);
+
     for (uint32_t row = 0u; row < F16_BUILTIN_GEOMETRIC_ROWS; row++) {
       for (uint32_t lane = 0u; lane < 4u; lane++) {
         checks++;
-        if (row == 5u &&
-            half_value_matches(half_bits_to_float(
-                                 output[base + F16_BUILTIN_MATH_ROWS + row][lane]),
-                               fusedReject[lane], 8u)) continue;
+
+        if (row == 5u
+            && half_value_matches(half_bits_to_float(output[base + F16_BUILTIN_MATH_ROWS + row][lane]),
+                                  fusedReject[lane],
+                                  8u))
+          continue;
+
         if (!value_matches(geometricNames[row],
                            testCase,
                            lane,
-                           half_bits_to_float(
-                             output[base + F16_BUILTIN_MATH_ROWS + row][lane]
-                           ),
+                           half_bits_to_float(output[base + F16_BUILTIN_MATH_ROWS + row][lane]),
                            geometric[row][lane],
                            8u)) {
           ok = 0;
         }
       }
     }
+
     for (uint32_t row = 0u; row < F16_BUILTIN_TRIG_ROWS; row++) {
       for (uint32_t lane = 0u; lane < 4u; lane++) {
-        uint16_t limit = testCase == 2u && lane == 3u &&
-                         (row == 1u || row == 2u)
-                           ? 64u
-                           : 8u;
+        uint16_t limit = testCase == 2u && lane == 3u
+                         && (row == 1u || row == 2u)
+                           ? 64u : 8u;
 
         checks++;
-        if (!value_matches(
-              trigNames[row],
-              testCase,
-              lane,
-              half_bits_to_float(
-                output[base + F16_BUILTIN_MATH_ROWS +
-                       F16_BUILTIN_GEOMETRIC_ROWS + row][lane]
-              ),
-              half_trig_expected(row, a[lane], b[lane]),
-              limit)) {
+
+        if (!value_matches(trigNames[row],
+                           testCase,
+                           lane,
+                           half_bits_to_float(output[base + F16_BUILTIN_MATH_ROWS + F16_BUILTIN_GEOMETRIC_ROWS + row][lane]),
+                           half_trig_expected(row, a[lane], b[lane]),
+                           limit)) {
           ok = 0;
         }
       }
     }
+
     for (uint32_t width = 1u; width <= F16_BUILTIN_WIDTHS; width++) {
       uint32_t widthBase = base + F16_BUILTIN_BASE_OUTPUTS_PER_CASE +
                            (width - 1u) * F16_BUILTIN_WIDTH_ROWS;
 
       for (uint32_t row = 0u; row < F16_BUILTIN_WIDTH_ROWS; row++) {
-        const char *name = row < F16_BUILTIN_MATH_ROWS
-                            ? mathNames[row]
-                            : trigNames[row - F16_BUILTIN_MATH_ROWS];
-        uint16_t    limit = row >= 18u && row < F16_BUILTIN_MATH_ROWS
-                             ? 16u : 8u;
         char        widthName[48];
+        const char *name = row < F16_BUILTIN_MATH_ROWS
+                             ? mathNames[row] : trigNames[row - F16_BUILTIN_MATH_ROWS];
+        uint16_t    limit = row >= 18u && row < F16_BUILTIN_MATH_ROWS
+                              ? 16u : 8u;
 
         (void)snprintf(widthName, sizeof(widthName), "%s half%u", name, width);
+
         for (uint32_t lane = 0u; lane < width; lane++) {
           float expected = half_width_expected(row, a[lane], b[lane]);
           float actual   = half_bits_to_float(output[widthBase + row][lane]);
 
           checks++;
-          if (row == 17u && actual == 0.0f && expected == 0.0f) continue;
+
+          if (row == 17u && actual == 0.0f && expected == 0.0f)
+            continue;
+
           if (!value_matches(widthName,
                              testCase,
                              lane,
@@ -564,44 +645,70 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
         }
       }
     }
+
     for (uint32_t width = 2u; width <= 3u; width++) {
       uint32_t geoBase = base + F16_BUILTIN_BASE_OUTPUTS_PER_CASE +
                          F16_BUILTIN_WIDTH_ROWS_PER_CASE +
                          (width - 2u) * F16_BUILTIN_GEOMETRIC_WIDTH_ROWS;
 
       half_geometric_expected(a, b, width, geometric, fusedReject);
+
       for (uint32_t row = 0u; row < F16_BUILTIN_GEOMETRIC_WIDTH_ROWS; row++) {
+        char     name[64];
         uint32_t sourceRow = row == 0u ? 0u : row + 1u;
         uint32_t lanes     = row == 0u ? 3u : width;
-        char     name[64];
 
-        (void)snprintf(name, sizeof(name), "%s half%u",
-                       geometricNames[sourceRow], width);
+        (void)snprintf(name,
+                       sizeof(name),
+                       "%s half%u",
+                       geometricNames[sourceRow],
+                       width);
+
         for (uint32_t lane = 0u; lane < lanes; lane++) {
           checks++;
-          if (sourceRow == 5u &&
-              half_value_matches(half_bits_to_float(output[geoBase + row][lane]),
-                                 fusedReject[lane], 8u)) continue;
-          if (!value_matches(name, testCase, lane,
+
+          if (sourceRow == 5u
+              && half_value_matches(half_bits_to_float(output[geoBase + row][lane]),
+                                    fusedReject[lane],
+                                    8u))
+            continue;
+
+          if (!value_matches(name,
+                             testCase,
+                             lane,
                              half_bits_to_float(output[geoBase + row][lane]),
-                             geometric[sourceRow][lane], 8u)) ok = 0;
+                             geometric[sourceRow][lane],
+                             8u))
+            ok = 0;
         }
       }
     }
+
     {
       uint32_t scalarBase = base + F16_BUILTIN_OUTPUTS_PER_CASE - 2u;
 
       for (uint32_t lane = 0u; lane < 4u; lane++) {
         checks += 2u;
-        if (!value_matches("length scalar", testCase, lane,
+
+        if (!value_matches("length scalar",
+                           testCase,
+                           lane,
                            half_bits_to_float(output[scalarBase][lane]),
-                           half_abs(a[lane]), 0u)) ok = 0;
-        if (!value_matches("distance scalar", testCase, lane,
+                           half_abs(a[lane]),
+                           0u))
+          ok = 0;
+
+        if (!value_matches("distance scalar",
+                           testCase,
+                           lane,
                            half_bits_to_float(output[scalarBase + 1u][lane]),
-                           half_abs(half_sub(a[lane], b[lane])), 0u)) ok = 0;
+                           half_abs(half_sub(a[lane], b[lane])),
+                           0u))
+          ok = 0;
       }
     }
   }
+
   if (checks != F16_BUILTIN_CHECKS) {
     fprintf(stderr,
             "%s F16 check-count mismatch: expected %u, got %u\n",
@@ -610,12 +717,12 @@ validate_results(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]) {
             (unsigned)checks);
     return 0;
   }
+
   return ok;
 }
 
 int
-gpu_f16_builtin_validate(
-  const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]
+gpu_f16_builtin_validate(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]
 ) {
   return validate_results(output);
 }
@@ -623,29 +730,29 @@ gpu_f16_builtin_validate(
 #if !defined(GPU_F16_BUILTINS_ORACLE_ONLY)
 int
 main(int argc, char **argv) {
-  GPUFeature                    feature = GPU_FEATURE_SHADER_F16;
-  GPUInstance                  *instance = NULL;
-  GPUAdapter                   *adapter = NULL;
-  GPUDevice                    *device = NULL;
-  GPUQueue                     *queue = NULL;
-  GPUShaderLibrary             *library = NULL;
-  GPUShaderLayout              *shaderLayout = NULL;
-  GPUComputePipeline           *pipeline = NULL;
-  GPUBuffer                    *buffers[2] = {0};
-  GPUBindGroup                 *bindGroup = NULL;
-  GPUCommandBuffer             *cmdb = NULL;
-  GPUComputePassEncoder        *pass = NULL;
-  GPUFence                     *fence = NULL;
-  void                         *artifact = NULL;
-  GPUInstanceCreateInfo         instanceInfo = {0};
-  GPUDeviceCreateInfo           deviceInfo = {0};
-  GPURuntimeConfig              runtimeConfig = {0};
-  GPUComputePipelineCreateInfo  pipelineInfo = {0};
-  GPUBufferCreateInfo           bufferInfo = {0};
-  GPUBindGroupEntry             groupEntries[2] = {0};
-  GPUBindGroupCreateInfo        groupInfo = {0};
-  GPUQueueSubmitInfo            submitInfo = {0};
-  uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4] = {0};
+  GPUFeature                     feature      = GPU_FEATURE_SHADER_F16;
+  GPUInstance                   *instance     = NULL;
+  GPUAdapter                    *adapter      = NULL;
+  GPUDevice                     *device       = NULL;
+  GPUQueue                      *queue        = NULL;
+  GPUShaderLibrary              *library      = NULL;
+  GPUShaderLayout               *shaderLayout = NULL;
+  GPUComputePipeline            *pipeline     = NULL;
+  GPUBuffer                     *buffers[2]   = {0};
+  GPUBindGroup                  *bindGroup    = NULL;
+  GPUCommandBuffer              *cmdb         = NULL;
+  GPUComputePassEncoder         *pass         = NULL;
+  GPUFence                      *fence        = NULL;
+  void                          *artifact     = NULL;
+  GPUInstanceCreateInfo          instanceInfo                       = {0};
+  GPUDeviceCreateInfo            deviceInfo                         = {0};
+  GPURuntimeConfig               runtimeConfig                      = {0};
+  GPUComputePipelineCreateInfo   pipelineInfo                       = {0};
+  GPUBufferCreateInfo            bufferInfo                         = {0};
+  GPUBindGroupEntry              groupEntries[2]                    = {0};
+  GPUBindGroupCreateInfo         groupInfo                          = {0};
+  GPUQueueSubmitInfo             submitInfo                         = {0};
+  uint16_t                       output[F16_BUILTIN_OUTPUT_ROWS][4] = {0};
   const GPUBindGroupLayoutEntry *layoutEntries;
   const char                    *artifactPath;
   GPUResult                      result;
@@ -654,14 +761,16 @@ main(int argc, char **argv) {
   uint32_t                       adapterCount;
   uint32_t                       layoutEntryCount;
   int                            ok = 0;
+  uint32_t                       binding;
 
   if (argc > 2) {
     fprintf(stderr, "usage: %s [f16_builtins.us]\n", argv[0]);
     return 1;
   }
+
   artifactPath = argc == 2 ? argv[1] : "f16_builtins.us";
-  artifact = read_file(artifactPath, &artifactSize);
-  if (!artifact) {
+
+  if (!(artifact = read_file(artifactPath, &artifactSize))) {
     fprintf(stderr, "%s F16 builtin artifact read failed\n",
             GPU_F16_BUILTINS_BACKEND_NAME);
     goto cleanup;
@@ -671,17 +780,20 @@ main(int argc, char **argv) {
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_F16_BUILTINS_BACKEND;
   instanceInfo.enableValidation = true;
-  result = GPUCreateInstance(&instanceInfo, &instance);
+  result                        = GPUCreateInstance(&instanceInfo, &instance);
+
   if (result != GPU_OK || !instance) {
     fprintf(stderr, "%s F16 instance creation failed (%d)\n",
             GPU_F16_BUILTINS_BACKEND_NAME,
             (int)result);
     goto cleanup;
   }
+
   adapterCount = 1u;
-  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter || !GPUIsFeatureSupported(adapter, feature)) {
+  result       = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !adapter || !GPUIsFeatureSupported(adapter, feature)) {
     fprintf(stderr, "%s F16 adapter is unavailable\n",
             GPU_F16_BUILTINS_BACKEND_NAME);
     goto cleanup;
@@ -693,8 +805,9 @@ main(int argc, char **argv) {
   deviceInfo.required.featureCount = 1u;
   result = GPUCreateDevice(adapter, &deviceInfo, &device);
   queue  = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
-  if (result != GPU_OK || !device || !queue ||
-      !GPUIsFeatureEnabled(device, feature)) {
+
+  if (result != GPU_OK || !device || !queue
+      || !GPUIsFeatureEnabled(device, feature)) {
     fprintf(stderr, "%s F16 device creation failed (%d)\n",
             GPU_F16_BUILTINS_BACKEND_NAME,
             (int)result);
@@ -705,34 +818,36 @@ main(int argc, char **argv) {
   runtimeConfig.chain.structSize  = sizeof(runtimeConfig);
   runtimeConfig.validationMode    = GPU_VALIDATION_FULL;
   runtimeConfig.enableVerboseLogs = true;
+
   if (GPUConfigureRuntime(device, &runtimeConfig) != GPU_OK) {
     fprintf(stderr, "%s F16 runtime configuration failed\n",
             GPU_F16_BUILTINS_BACKEND_NAME);
     goto cleanup;
   }
+
   result = gpu_test_create_shader_library_from_usl(device,
-                                                    artifact,
-                                                    artifactSize,
-                                                    &library);
-  if (result != GPU_OK || !library ||
-      GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !shaderLayout || shaderLayout->bindGroupLayoutCount != 1u ||
-      !shaderLayout->bindGroupLayouts[0] || !shaderLayout->pipelineLayout) {
+                                                   artifact,
+                                                   artifactSize,
+                                                   &library);
+
+  if (result != GPU_OK || !library
+      || GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK
+      || !shaderLayout || shaderLayout->bindGroupLayoutCount != 1u
+      || !shaderLayout->bindGroupLayouts[0] || !shaderLayout->pipelineLayout) {
     fprintf(stderr, "%s F16 shader setup failed (%d)\n",
             GPU_F16_BUILTINS_BACKEND_NAME,
             (int)result);
     goto cleanup;
   }
 
-  layoutEntries = GPUGetBindGroupLayoutEntries(
-    shaderLayout->bindGroupLayouts[0],
-    &layoutEntryCount
-  );
-  if (!layoutEntries || layoutEntryCount != 2u ||
-      layoutEntries[0].binding != 0u ||
-      layoutEntries[0].bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER ||
-      layoutEntries[1].binding != 1u ||
-      layoutEntries[1].bindingType != GPU_BINDING_STORAGE_BUFFER) {
+  layoutEntries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[0],
+                                               &layoutEntryCount);
+
+  if (!layoutEntries || layoutEntryCount != 2u
+      || layoutEntries[0].binding != 0u
+      || layoutEntries[0].bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER
+      || layoutEntries[1].binding != 1u
+      || layoutEntries[1].bindingType != GPU_BINDING_STORAGE_BUFFER) {
     fprintf(stderr, "Unexpected %s F16 reflection layout\n",
             GPU_F16_BUILTINS_BACKEND_NAME);
     goto cleanup;
@@ -744,7 +859,8 @@ main(int argc, char **argv) {
   pipelineInfo.layout           = shaderLayout->pipelineLayout;
   pipelineInfo.library          = library;
   pipelineInfo.entryPoint       = "f16_builtins";
-  result = GPUCreateComputePipeline(device, &pipelineInfo, &pipeline);
+  result                        = GPUCreateComputePipeline(device, &pipelineInfo, &pipeline);
+
   if (result != GPU_OK || !pipeline) {
     fprintf(stderr, "%s F16 pipeline creation failed (%d)\n",
             GPU_F16_BUILTINS_BACKEND_NAME,
@@ -752,34 +868,34 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
-  bufferSizes[0] = sizeof(gpu_f16_builtin_inputs);
-  bufferSizes[1] = sizeof(output);
+  bufferSizes[0]              = sizeof(gpu_f16_builtin_inputs);
+  bufferSizes[1]              = sizeof(output);
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
                                 GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  for (uint32_t binding = 0u; binding < 2u; binding++) {
+
+  for (binding = 0u; binding < 2u; binding++) {
     bufferInfo.sizeBytes = bufferSizes[binding];
-    result = GPUCreateBuffer(device, &bufferInfo, &buffers[binding]);
-    if (result != GPU_OK || !buffers[binding] ||
-        GPUQueueWriteBuffer(queue,
-                            buffers[binding],
-                            0u,
-                            binding == 0u
-                              ? (const void *)gpu_f16_builtin_inputs
-                              : (const void *)output,
-                            bufferSizes[binding]) != GPU_OK) {
+    result               = GPUCreateBuffer(device, &bufferInfo, &buffers[binding]);
+
+    if (result != GPU_OK || !buffers[binding]
+        || GPUQueueWriteBuffer(queue,
+                               buffers[binding],
+                               0u,
+                               binding == 0u ? (const void *)gpu_f16_builtin_inputs : (const void *)output,
+                               bufferSizes[binding]) != GPU_OK) {
       fprintf(stderr, "%s F16 buffer %u failed (%d)\n",
               GPU_F16_BUILTINS_BACKEND_NAME,
               binding,
               (int)result);
       goto cleanup;
     }
+
     groupEntries[binding].binding       = binding;
     groupEntries[binding].bindingType   = binding == 0u
-                                            ? GPU_BINDING_READ_ONLY_STORAGE_BUFFER
-                                            : GPU_BINDING_STORAGE_BUFFER;
+                                            ? GPU_BINDING_READ_ONLY_STORAGE_BUFFER : GPU_BINDING_STORAGE_BUFFER;
     groupEntries[binding].buffer.buffer = buffers[binding];
     groupEntries[binding].buffer.size   = bufferSizes[binding];
   }
@@ -790,12 +906,13 @@ main(int argc, char **argv) {
   groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
   groupInfo.entryCount       = 2u;
   groupInfo.pEntries         = groupEntries;
-  result = GPUCreateBindGroup(device, &groupInfo, &bindGroup);
-  if (result != GPU_OK || !bindGroup ||
-      GPUAcquireCommandBuffer(queue,
-                              "f16-builtins",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+  result                     = GPUCreateBindGroup(device, &groupInfo, &bindGroup);
+
+  if (result != GPU_OK || !bindGroup
+      || GPUAcquireCommandBuffer(queue,
+                                 "f16-builtins",
+                                 &cmdb) != GPU_OK
+      || !cmdb) {
     fprintf(stderr, "%s F16 bind/command failed (%d)\n",
             GPU_F16_BUILTINS_BACKEND_NAME,
             (int)result);
@@ -803,11 +920,13 @@ main(int argc, char **argv) {
   }
 
   pass = GPUBeginComputePass(cmdb, "f16-builtins");
+
   if (!pass) {
     fprintf(stderr, "%s F16 compute pass failed\n",
             GPU_F16_BUILTINS_BACKEND_NAME);
     goto cleanup;
   }
+
   GPUBindComputePipeline(pass, pipeline);
   GPUBindComputeGroup(pass, 0u, bindGroup, 0u, NULL);
   GPUDispatch(pass, F16_BUILTIN_CASES, 1u, 1u);
@@ -815,33 +934,39 @@ main(int argc, char **argv) {
   pass = NULL;
 
   result = GPUCreateFence(device, NULL, &fence);
+
   if (result != GPU_OK || !fence) {
     fprintf(stderr, "%s F16 fence creation failed (%d)\n",
             GPU_F16_BUILTINS_BACKEND_NAME,
             (int)result);
     goto cleanup;
   }
+
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
-      GPUQueueReadBuffer(queue,
-                         buffers[1],
-                         0u,
-                         output,
-                         sizeof(output)) != GPU_OK ||
-      !validate_results(output)) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK
+      || GPUQueueReadBuffer(queue,
+                            buffers[1],
+                            0u,
+                            output,
+                            sizeof(output)) != GPU_OK
+      || !validate_results(output)) {
     fprintf(stderr, "%s F16 readback validation failed\n",
             GPU_F16_BUILTINS_BACKEND_NAME);
     goto cleanup;
   }
+
   ok = 1;
 
 cleanup:
-  if (pass) GPUEndComputePass(pass);
+
+  if (pass)
+    GPUEndComputePass(pass);
   GPUDestroyFence(fence);
   GPUDestroyBindGroup(bindGroup);
   GPUDestroyBuffer(buffers[0]);
@@ -852,11 +977,15 @@ cleanup:
   GPUDestroyDevice(device);
   GPUDestroyInstance(instance);
   free(artifact);
-  if (!ok) return 1;
+
+  if (!ok)
+    return 1;
+
   printf("%s F16 builtin validation passed (%u/%u)\n",
          GPU_F16_BUILTINS_BACKEND_NAME,
          (unsigned)F16_BUILTIN_CHECKS,
          (unsigned)F16_BUILTIN_CHECKS);
+
   return 0;
 }
 #endif

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "asset.h"
 
 #include "../../common/asset_io.h"
@@ -23,10 +39,20 @@ typedef struct AssetLoadJob {
   bool          active;
 } AssetLoadJob;
 
+static const AkMaterialSemantic semantics[ASSET_TEXTURE_COUNT] = {
+  AK_MATERIAL_SEMANTIC_BASE_COLOR,
+  AK_MATERIAL_SEMANTIC_NORMAL,
+  AK_MATERIAL_SEMANTIC_METALLIC,
+  AK_MATERIAL_SEMANTIC_OCCLUSION,
+  AK_MATERIAL_SEMANTIC_EMISSIVE
+};
+
 static AssetLoadJob loadJob;
 
 static void
 asset_reset(Asset *asset) {
+  uint32_t i;
+
   memset(asset, 0, sizeof(*asset));
 
   asset->modelMatrix[0]  = 1.0f;
@@ -34,12 +60,12 @@ asset_reset(Asset *asset) {
   asset->modelMatrix[10] = 1.0f;
   asset->modelMatrix[15] = 1.0f;
 
-  for (uint32_t i = 0u; i < 3u; i++) {
+  for (i = 0u; i < 3u; i++) {
     asset->boundsMin[i] = FLT_MAX;
     asset->boundsMax[i] = -FLT_MAX;
   }
 
-  for (uint32_t i = 0u; i < 4u; i++) {
+  for (i = 0u; i < 4u; i++) {
     asset->material.baseColorFactor[i] = 1.0f;
   }
 
@@ -50,42 +76,18 @@ asset_reset(Asset *asset) {
   asset->material.emissiveStrength  = 1.0f;
 }
 
-void
-asset_release_uploads(Asset *asset) {
-  if (!asset)
-    return;
-
-  free(asset->vertices);
-  free(asset->indices);
-
-  asset->vertices = NULL;
-  asset->indices  = NULL;
-
-  for (uint32_t i = 0u; i < ASSET_TEXTURE_COUNT; i++) {
-    free(asset->material.images[i].pixels);
-    asset->material.images[i].pixels = NULL;
-  }
-}
-
-void
-asset_release(Asset *asset) {
-  if (!asset)
-    return;
-
-  asset_release_uploads(asset);
-  asset_reset(asset);
-}
-
 static void
 asset_job_cleanup(bool removeCachedFile) {
   if (loadJob.doc) {
     ak_free(loadJob.doc);
     loadJob.doc = NULL;
   }
+
   if (loadJob.path[0] != '\0') {
     if (removeCachedFile) {
       remove(loadJob.path);
     }
+
     loadJob.path[0] = '\0';
   }
 }
@@ -99,9 +101,9 @@ asset_fail(const char *message) {
     return;
   }
 
-  callback         = loadJob.callback;
-  userData         = loadJob.userData;
-  loadJob.active   = false;
+  callback       = loadJob.callback;
+  userData       = loadJob.userData;
+  loadJob.active = false;
 
   asset_job_cleanup(true);
   asset_release(&loadJob.asset);
@@ -109,10 +111,10 @@ asset_fail(const char *message) {
   callback(NULL, message, userData);
 }
 
-static AkInput *
+static AkInput*
 asset_input(AkMeshPrimitive *prim,
-             AkInputSemantic  semantic,
-             uint32_t         index) {
+            AkInputSemantic  semantic,
+            uint32_t         index) {
   AkInput *input;
 
   for (input = prim ? prim->input : NULL;
@@ -122,9 +124,9 @@ asset_input(AkMeshPrimitive *prim,
       return input;
   }
 
-  if (prim && prim->pos &&
-      prim->pos->semantic == semantic &&
-      prim->pos->index == index) {
+  if (prim && prim->pos
+      && prim->pos->semantic == semantic
+      && prim->pos->index == index) {
     return prim->pos;
   }
 
@@ -133,25 +135,27 @@ asset_input(AkMeshPrimitive *prim,
 
 static uint32_t
 asset_read_index(const AkAccessor *acc,
-                  uint32_t          index) {
+                 uint32_t          index) {
   const uint8_t *bytes;
   size_t         stride;
+  uint32_t       value32;
+  uint16_t       value16;
 
   stride = acc->byteStride ? acc->byteStride : acc->bytesPerComponent;
   bytes  = (const uint8_t *)acc->buffer->data + acc->byteOffset + (size_t)index * stride;
 
   switch (acc->componentType) {
-    case AKT_UBYTE:  return *bytes;
-    case AKT_USHORT: {
-      uint16_t value;
-      memcpy(&value, bytes, sizeof(value));
-      return value;
-    }
-    case AKT_UINT: {
-      uint32_t value;
-      memcpy(&value, bytes, sizeof(value));
-      return value;
-    }
+    case AKT_UBYTE:
+      return *bytes;
+
+    case AKT_USHORT:
+      memcpy(&value16, bytes, sizeof(value16));
+      return value16;
+
+    case AKT_UINT:
+      memcpy(&value32, bytes, sizeof(value32));
+      return value32;
+
     default:
       return UINT32_MAX;
   }
@@ -173,23 +177,24 @@ asset_index_accessor_valid(const AkAccessor *acc) {
   }
 
   stride = acc->byteStride ? acc->byteStride : acc->bytesPerComponent;
-  if (acc->bytesPerComponent != componentSize ||
-      stride < componentSize ||
-      acc->byteOffset > acc->buffer->length ||
-      acc->byteOffset > SIZE_MAX - componentSize) {
+
+  if (acc->bytesPerComponent != componentSize
+      || stride < componentSize
+      || acc->byteOffset > acc->buffer->length
+      || acc->byteOffset > SIZE_MAX - componentSize) {
     return 0;
   }
 
-  if ((size_t)(acc->count - 1u) >
-      (SIZE_MAX - acc->byteOffset - componentSize) / stride) {
+  if ((size_t)(acc->count - 1u) > (SIZE_MAX - acc->byteOffset - componentSize) / stride) {
     return 0;
   }
 
   last = acc->byteOffset + (size_t)(acc->count - 1u) * stride + componentSize;
+
   return last <= acc->buffer->length;
 }
 
-static AkNode *
+static AkNode*
 asset_geometry_node(AkNode *node) {
   AkNode *found;
 
@@ -200,13 +205,14 @@ asset_geometry_node(AkNode *node) {
     if ((found = asset_geometry_node(node->chld)))
       return found;
   }
+
   return NULL;
 }
 
 static int
 asset_extract_geometry(AkDoc            *doc,
-                        AkGeometry       *geometry,
-                        AkMeshPrimitive **outPrim) {
+                       AkGeometry       *geometry,
+                       AkMeshPrimitive **outPrim) {
   AkAccessor      *posAcc, *normAcc, *uvAcc;
   AkAccessor      *idxAcc;
   AkInput         *posInp, *normInp, *uvInput;
@@ -214,11 +220,15 @@ asset_extract_geometry(AkDoc            *doc,
   AkMeshPrimitive *prim;
   AssetVertex     *vertices;
   float           *attributes, *positions, *normals, *uvs;
-  uint32_t         maxIndex;
+  AkNode          *node;
+  uint32_t        *indices32;
+  uint16_t        *indices16;
   size_t           floatCount;
+  uint32_t         maxIndex, i, axis, indexValue;
+  float            value;
 
-  if (!geometry || !geometry->gdata ||
-      geometry->gdata->type != AK_GEOMETRY_MESH)
+  if (!geometry || !geometry->gdata
+      || geometry->gdata->type != AK_GEOMETRY_MESH)
     return 0;
 
   mesh = ak_objGet(geometry->gdata);
@@ -243,6 +253,7 @@ asset_extract_geometry(AkDoc            *doc,
   floatCount = (size_t)posAcc->count * 8u;
   attributes = malloc(floatCount * sizeof(float));
   vertices   = malloc((size_t)posAcc->count * sizeof(*vertices));
+
   if (!attributes || !vertices) {
     free(attributes);
     free(vertices);
@@ -261,15 +272,14 @@ asset_extract_geometry(AkDoc            *doc,
     return 0;
   }
 
-  for (uint32_t i = 0u; i < posAcc->count; i++) {
+  for (i = 0u; i < posAcc->count; i++) {
     memcpy(vertices[i].position, positions + (size_t)i * 3u, sizeof(vertices[i].position));
     memcpy(vertices[i].normal,   normals   + (size_t)i * 3u, sizeof(vertices[i].normal));
     memcpy(vertices[i].uv,       uvs       + (size_t)i * 2u, sizeof(vertices[i].uv));
 
-    for (uint32_t axis = 0u; axis < 3u; axis++) {
-      float value;
-
+    for (axis = 0u; axis < 3u; axis++) {
       value = vertices[i].position[axis];
+
       if (value < loadJob.asset.boundsMin[axis]) {
         loadJob.asset.boundsMin[axis] = value;
       }
@@ -283,69 +293,60 @@ asset_extract_geometry(AkDoc            *doc,
   free(attributes);
 
   idxAcc = ak_meshPrimitiveIndexAccessor(prim);
+
   if (!asset_index_accessor_valid(idxAcc)) {
     free(vertices);
     return 0;
   }
 
   maxIndex = 0u;
-  for (uint32_t i = 0u; i < idxAcc->count; i++) {
-    uint32_t value;
 
-    value = asset_read_index(idxAcc, i);
-    if (value == UINT32_MAX || value >= posAcc->count) {
+  for (i = 0u; i < idxAcc->count; i++) {
+    indexValue = asset_read_index(idxAcc, i);
+
+    if (indexValue == UINT32_MAX || indexValue >= posAcc->count) {
       free(vertices);
       return 0;
     }
 
-    if (value > maxIndex) {
-      maxIndex = value;
+    if (indexValue > maxIndex) {
+      maxIndex = indexValue;
     }
   }
 
   if (maxIndex <= UINT16_MAX) {
-    uint16_t *indices;
-
-    indices = malloc((size_t)idxAcc->count * sizeof(*indices));
-    if (!indices) {
+    if (!(indices16 = malloc((size_t)idxAcc->count * sizeof(*indices16)))) {
       free(vertices);
       return 0;
     }
 
-    for (uint32_t i = 0u; i < idxAcc->count; i++) {
-      indices[i] = (uint16_t)asset_read_index(idxAcc, i);
+    for (i = 0u; i < idxAcc->count; i++) {
+      indices16[i] = (uint16_t)asset_read_index(idxAcc, i);
     }
 
-    loadJob.asset.indices   = indices;
+    loadJob.asset.indices   = indices16;
     loadJob.asset.indexType = ASSET_INDEX_UINT16;
   } else {
-    uint32_t *indices;
-
-    indices = malloc((size_t)idxAcc->count * sizeof(*indices));
-    if (!indices) {
+    if (!(indices32 = malloc((size_t)idxAcc->count * sizeof(*indices32)))) {
       free(vertices);
       return 0;
     }
 
-    for (uint32_t i = 0u; i < idxAcc->count; i++) {
-      indices[i] = asset_read_index(idxAcc, i);
+    for (i = 0u; i < idxAcc->count; i++) {
+      indices32[i] = asset_read_index(idxAcc, i);
     }
 
-    loadJob.asset.indices   = indices;
+    loadJob.asset.indices   = indices32;
     loadJob.asset.indexType = ASSET_INDEX_UINT32;
   }
-
 
   loadJob.asset.vertices    = vertices;
   loadJob.asset.vertexCount = posAcc->count;
   loadJob.asset.indexCount  = idxAcc->count;
-  *outPrim = prim;
+  *outPrim                  = prim;
 
   if (doc->scene && doc->scene->node) {
-    AkNode *node;
-
-    node = asset_geometry_node(doc->scene->node->chld);
-    if (node) {
+    if ((node = asset_geometry_node(doc->scene->node->chld))) {
       ak_transformCombineWorld(node, loadJob.asset.modelMatrix);
     }
   }
@@ -355,10 +356,12 @@ asset_extract_geometry(AkDoc            *doc,
 
 static void
 asset_copy_factor(float                 *out,
-                   uint32_t               count,
-                   const AkMaterialInput *input,
-                   float                  fallback) {
-  for (uint32_t i = 0u; i < count; i++) {
+                  uint32_t               count,
+                  const AkMaterialInput *input,
+                  float                  fallback) {
+  uint32_t i;
+
+  for (i = 0u; i < count; i++) {
     out[i] = fallback;
   }
 
@@ -384,7 +387,7 @@ asset_copy_factor(float                 *out,
   }
 }
 
-static AkImageSource *
+static AkImageSource*
 asset_image_source(const AkMaterialInput *input) {
   AkTextureRef *reference;
   AkTexture    *texture;
@@ -393,6 +396,7 @@ asset_image_source(const AkMaterialInput *input) {
   reference = ak_materialInputTexture(input);
   texture   = reference ? reference->texture : NULL;
   image     = texture ? texture->image : NULL;
+
   return image ? image->source : NULL;
 }
 
@@ -404,9 +408,9 @@ asset_finish_if_ready(void) {
   if (!loadJob.active || loadJob.pendingImages != 0u)
     return;
 
-  callback         = loadJob.callback;
-  userData         = loadJob.userData;
-  loadJob.active   = false;
+  callback       = loadJob.callback;
+  userData       = loadJob.userData;
+  loadJob.active = false;
 
   asset_job_cleanup(false);
   callback(&loadJob.asset, NULL, userData);
@@ -422,6 +426,7 @@ asset_image_ready(uint8_t    *pixels,
   uint32_t    slot;
 
   slot = (uint32_t)(uintptr_t)userData;
+
   if (!loadJob.active || slot >= ASSET_TEXTURE_COUNT) {
     free(pixels);
     return;
@@ -444,21 +449,16 @@ asset_image_ready(uint8_t    *pixels,
 
 static int
 asset_extract_material(AkMeshPrimitive *prim) {
-  static const AkMaterialSemantic semantics[ASSET_TEXTURE_COUNT] = {
-    AK_MATERIAL_SEMANTIC_BASE_COLOR,
-    AK_MATERIAL_SEMANTIC_NORMAL,
-    AK_MATERIAL_SEMANTIC_METALLIC,
-    AK_MATERIAL_SEMANTIC_OCCLUSION,
-    AK_MATERIAL_SEMANTIC_EMISSIVE
-  };
+  AkImageSource         *sources[ASSET_TEXTURE_COUNT];
+  AkResolvedMaterial     resolved = {0};
+  AssetMaterial         *mat;
+  AkMaterialSurface     *surface;
+  const AkMaterialInput *input;
+  AkImageSource         *source;
+  uint32_t               i;
 
-  AkResolvedMaterial resolved = {0};
-  AkImageSource     *sources[ASSET_TEXTURE_COUNT];
-  AssetMaterial     *mat;
-  AkMaterialSurface *surface;
-
-  if (!ak_materialResolveForPrimitive(prim, UINT32_MAX, &resolved) ||
-      !resolved.surface) {
+  if (!ak_materialResolveForPrimitive(prim, UINT32_MAX, &resolved)
+      || !resolved.surface) {
     return 0;
   }
 
@@ -474,17 +474,14 @@ asset_extract_material(AkMeshPrimitive *prim) {
   mat->occlusionStrength = ak_materialOcclusionStrength(surface);
   mat->emissiveStrength  = ak_materialEmissiveStrength(surface);
 
-  for (uint32_t i = 0u; i < ASSET_TEXTURE_COUNT; i++) {
-    const AkMaterialInput *input;
-    AkImageSource         *source;
-
+  for (i = 0u; i < ASSET_TEXTURE_COUNT; i++) {
     input  = ak_materialInputBySemantic(surface, semantics[i]);
     source = asset_image_source(input);
 
-    if (!source || source->type != AK_IMAGE_SOURCE_BUFFER ||
-        !source->buffer || !source->buffer->data ||
-        source->buffer->length == 0u ||
-        source->buffer->length > UINT32_MAX) {
+    if (!source || source->type != AK_IMAGE_SOURCE_BUFFER
+        || !source->buffer || !source->buffer->data
+        || source->buffer->length == 0u
+        || source->buffer->length > UINT32_MAX) {
       return 0;
     }
 
@@ -492,10 +489,10 @@ asset_extract_material(AkMeshPrimitive *prim) {
   }
 
   loadJob.pendingImages = ASSET_TEXTURE_COUNT;
-  for (uint32_t i = 0u; i < ASSET_TEXTURE_COUNT; i++) {
-    AkImageSource *source;
 
+  for (i = 0u; i < ASSET_TEXTURE_COUNT; i++) {
     source = sources[i];
+
     if (!sample_decode_image(source->buffer->data,
                              source->buffer->length,
                              asset_image_ready,
@@ -503,10 +500,12 @@ asset_extract_material(AkMeshPrimitive *prim) {
       asset_fail("AssetKit: failed to start an embedded image decode");
       return 0;
     }
+
     if (!loadJob.active) {
       return 1;
     }
   }
+
   return 1;
 }
 
@@ -515,11 +514,11 @@ asset_write_file(const void *bytes, size_t byteCount) {
   FILE  *file;
   size_t written;
 
-  file = fopen(loadJob.path, "wb");
-  if (!file)
+  if (!(file = fopen(loadJob.path, "wb")))
     return 0;
 
   written = fwrite(bytes, 1u, byteCount, file);
+
   if (fclose(file) != 0)
     return 0;
 
@@ -531,8 +530,8 @@ asset_parse_file(void) {
   AkGeometry      *geom;
   AkMeshPrimitive *prim;
 
-  if (ak_load(&loadJob.doc, loadJob.path, AK_FILE_TYPE_GLB) != AK_OK ||
-      !loadJob.doc) {
+  if (ak_load(&loadJob.doc, loadJob.path, AK_FILE_TYPE_GLB) != AK_OK
+      || !loadJob.doc) {
     return 0;
   }
 
@@ -548,6 +547,7 @@ asset_parse_file(void) {
   }
 
   asset_finish_if_ready();
+
   return 1;
 }
 
@@ -557,6 +557,7 @@ asset_fetch_ready(void       *bytes,
                   const char *error,
                   void       *userData) {
   (void)userData;
+
   if (!loadJob.active) {
     free(bytes);
     return;
@@ -567,16 +568,46 @@ asset_fetch_ready(void       *bytes,
     asset_fail("AssetKit: failed to download DamagedHelmet from Khronos");
     return;
   }
+
   if (!asset_write_file(bytes, (size_t)byteCount)) {
     free(bytes);
     asset_fail("AssetKit: failed to cache the downloaded GLB");
     return;
   }
+
   free(bytes);
 
   if (!asset_parse_file() && loadJob.active) {
     asset_fail("AssetKit: failed to parse DamagedHelmet.glb");
   }
+}
+
+void
+asset_release_uploads(Asset *asset) {
+  uint32_t i;
+
+  if (!asset)
+    return;
+
+  free(asset->vertices);
+  free(asset->indices);
+
+  asset->vertices = NULL;
+  asset->indices  = NULL;
+
+  for (i = 0u; i < ASSET_TEXTURE_COUNT; i++) {
+    free(asset->material.images[i].pixels);
+    asset->material.images[i].pixels = NULL;
+  }
+}
+
+void
+asset_release(Asset *asset) {
+  if (!asset)
+    return;
+
+  asset_release_uploads(asset);
+  asset_reset(asset);
 }
 
 void
@@ -604,19 +635,22 @@ asset_load(AssetCallback callback,
     return;
   }
 
-  cachedFile = fopen(loadJob.path, "rb");
-  if (cachedFile) {
+  if ((cachedFile = fopen(loadJob.path, "rb"))) {
     fclose(cachedFile);
+
     if (asset_parse_file()) {
       return;
     }
+
     if (!loadJob.active) {
       return;
     }
+
     if (loadJob.doc) {
       ak_free(loadJob.doc);
       loadJob.doc = NULL;
     }
+
     remove(loadJob.path);
     asset_release(&loadJob.asset);
     asset_reset(&loadJob.asset);

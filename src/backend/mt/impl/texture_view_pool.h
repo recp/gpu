@@ -19,9 +19,9 @@
 
 GPU_HIDE
 GPUResult
-mt_acquireTextureView(GPUDeviceMT      *device,
-                      id<MTLTexture>    texture,
-                      id                descriptor,
+mt_acquireTextureView(GPUDeviceMT       *device,
+                      id<MTLTexture>     texture,
+                      id                 descriptor,
                       MTTextureViewSlot *slot,
                       uint64_t          *outResourceID);
 

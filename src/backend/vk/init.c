@@ -25,7 +25,8 @@ GPUApi vk = {
 GPU_HIDE
 GPUApi*
 backend_vk(void) {
-  // TODO: init
+  /* todo: init */
+
   if (!vk.initialized) {
     vk_initInstance(&vk.instance);
     vk_initDevice(&vk.device);
@@ -54,5 +55,6 @@ backend_vk(void) {
 
     vk.initialized = true;
   }
+
   return &vk;
 }

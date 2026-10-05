@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <AppKit/AppKit.h>
 #include <dispatch/dispatch.h>
 #import <QuartzCore/QuartzCore.h>
@@ -15,36 +31,6 @@ typedef struct QuadVertex {
 typedef struct FragmentUniforms {
   float tint[4];
 } FragmentUniforms;
-
-static const QuadVertex kQuadVertices[] = {
-  {{-0.8f, -0.8f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-  {{ 0.8f, -0.8f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-  {{-0.8f,  0.8f, 0.0f, 1.0f}, {0.0f, 0.0f}},
-  {{-0.8f,  0.8f, 0.0f, 1.0f}, {0.0f, 0.0f}},
-  {{ 0.8f, -0.8f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-  {{ 0.8f,  0.8f, 0.0f, 1.0f}, {1.0f, 0.0f}}
-};
-
-static const uint8_t kCheckerPixels[] = {
-  255,   0,   0, 255,    0, 255,   0, 255,
-    0,   0, 255, 255,  255, 255, 255, 255
-};
-
-static const GPUBindGroupLayoutEntry *
-FindLayoutEntry(GPUBindGroupLayout *layout,
-                uint32_t binding,
-                GPUBindingType type) {
-  const GPUBindGroupLayoutEntry *entries;
-  uint32_t count;
-
-  entries = GPUGetBindGroupLayoutEntries(layout, &count);
-  for (uint32_t i = 0u; entries && i < count; i++) {
-    if (entries[i].binding == binding && entries[i].bindingType == type) {
-      return &entries[i];
-    }
-  }
-  return NULL;
-}
 
 @interface TexturedQuadVulkanApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
 @private
@@ -72,9 +58,43 @@ FindLayoutEntry(GPUBindGroupLayout *layout,
   BOOL               _statsFailed;
   BOOL               _terminating;
 }
+
 - (void)frameCompleted;
 - (BOOL)statsFailed;
 @end
+
+static const QuadVertex kQuadVertices[] = {
+  {{-0.8f, -0.8f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+  {{ 0.8f, -0.8f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+  {{-0.8f,  0.8f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+  {{-0.8f,  0.8f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+  {{ 0.8f, -0.8f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+  {{ 0.8f,  0.8f, 0.0f, 1.0f}, {1.0f, 0.0f}}
+};
+
+static const uint8_t kCheckerPixels[] = {
+  255,   0,   0, 255,    0, 255,   0, 255,
+    0,   0, 255, 255,  255, 255, 255, 255
+};
+
+static const GPUBindGroupLayoutEntry*
+FindLayoutEntry(GPUBindGroupLayout *layout,
+                uint32_t            binding,
+                GPUBindingType      type) {
+  const GPUBindGroupLayoutEntry *entries;
+  uint32_t                       count;
+  uint32_t                       i;
+
+  entries = GPUGetBindGroupLayoutEntries(layout, &count);
+
+  for (i = 0u; entries && i < count; i++) {
+    if (entries[i].binding == binding && entries[i].bindingType == type) {
+      return &entries[i];
+    }
+  }
+
+  return NULL;
+}
 
 static void
 TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
@@ -95,14 +115,14 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (BOOL)setupResources {
-  GPUBufferCreateInfo      vertexInfo = {0};
-  GPUBufferCreateInfo      uniformInfo = {0};
-  GPUTextureCreateInfo     textureInfo = {0};
-  GPUTextureWriteRegion    writeRegion = {0};
-  GPUTextureViewCreateInfo viewInfo = {0};
+  GPUBufferCreateInfo      vertexInfo         = {0};
+  GPUBufferCreateInfo      uniformInfo        = {0};
+  GPUTextureCreateInfo     textureInfo        = {0};
+  GPUTextureWriteRegion    writeRegion        = {0};
+  GPUTextureViewCreateInfo viewInfo           = {0};
   GPUBindGroupEntry        fragmentEntries[2] = {{0}};
-  GPUBindGroupCreateInfo   groupInfo = {0};
-  FragmentUniforms         uniforms = {{0.9f, 0.95f, 1.0f, 1.0f}};
+  GPUBindGroupCreateInfo   groupInfo          = {0};
+  FragmentUniforms         uniforms           = {{0.9f, 0.95f, 1.0f, 1.0f}};
 
   vertexInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   vertexInfo.chain.structSize = sizeof(vertexInfo);
@@ -110,12 +130,13 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   vertexInfo.sizeBytes        = sizeof(kQuadVertices);
   vertexInfo.usage            = GPU_BUFFER_USAGE_VERTEX |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(_device, &vertexInfo, &_vertexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(_queue,
-                          _vertexBuffer,
-                          0u,
-                          kQuadVertices,
-                          sizeof(kQuadVertices)) != GPU_OK) {
+
+  if (GPUCreateBuffer(_device, &vertexInfo, &_vertexBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(_queue,
+                             _vertexBuffer,
+                             0u,
+                             kQuadVertices,
+                             sizeof(kQuadVertices)) != GPU_OK) {
     NSLog(@"GPU: failed to create Vulkan quad vertices");
     return NO;
   }
@@ -126,12 +147,13 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   uniformInfo.sizeBytes        = sizeof(uniforms);
   uniformInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
                                  GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(_device, &uniformInfo, &_uniformBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(_queue,
-                          _uniformBuffer,
-                          0u,
-                          &uniforms,
-                          sizeof(uniforms)) != GPU_OK) {
+
+  if (GPUCreateBuffer(_device, &uniformInfo, &_uniformBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(_queue,
+                             _uniformBuffer,
+                             0u,
+                             &uniforms,
+                             sizeof(uniforms)) != GPU_OK) {
     NSLog(@"GPU: failed to create Vulkan quad uniforms");
     return NO;
   }
@@ -148,17 +170,19 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_DST;
+
   if (GPUCreateTexture(_device, &textureInfo, &_texture) != GPU_OK) {
     NSLog(@"GPU: failed to create Vulkan checker texture");
     return NO;
   }
 
-  writeRegion.width          = 2u;
-  writeRegion.height         = 2u;
-  writeRegion.depth          = 1u;
-  writeRegion.layerCount     = 1u;
-  writeRegion.bytesPerRow    = 8u;
-  writeRegion.rowsPerImage   = 2u;
+  writeRegion.width        = 2u;
+  writeRegion.height       = 2u;
+  writeRegion.depth        = 1u;
+  writeRegion.layerCount   = 1u;
+  writeRegion.bytesPerRow  = 8u;
+  writeRegion.rowsPerImage = 2u;
+
   if (GPUQueueWriteTexture(_queue,
                            _texture,
                            &writeRegion,
@@ -175,6 +199,7 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(_texture, &viewInfo, &_textureView) != GPU_OK) {
     NSLog(@"GPU: failed to create Vulkan checker view");
     return NO;
@@ -194,6 +219,7 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   groupInfo.layout           = _shaderLayout->bindGroupLayouts[0];
   groupInfo.entryCount       = 2u;
   groupInfo.pEntries         = fragmentEntries;
+
   if (GPUCreateBindGroup(_device,
                          &groupInfo,
                          &_fragmentGroup) != GPU_OK) {
@@ -205,35 +231,38 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (BOOL)setupGPU {
-  GPUInstanceCreateInfo       instanceInfo = {0};
-  GPUVertexAttribute          vertexAttributes[2] = {{0}};
-  GPUVertexBufferLayout       vertexLayout = {0};
-  GPUColorTargetState         colorTarget = {0};
-  GPURenderPipelineCreateInfo pipelineInfo = {0};
+  GPUInstanceCreateInfo          instanceInfo        = {0};
+  GPUVertexAttribute             vertexAttributes[2] = {{0}};
+  GPUVertexBufferLayout          vertexLayout        = {0};
+  GPUColorTargetState            colorTarget         = {0};
+  GPURenderPipelineCreateInfo    pipelineInfo        = {0};
   const GPUBindGroupLayoutEntry *textureEntry;
   const GPUBindGroupLayoutEntry *uniformEntry;
   GPUResult                      result;
-  uint32_t adapterCount;
+  uint32_t                       adapterCount;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_VULKAN;
   instanceInfo.enableValidation = true;
+
   if (GPUCreateInstance(&instanceInfo, &_instance) != GPU_OK || !_instance) {
     NSLog(@"GPU: failed to create Vulkan instance");
     return NO;
   }
 
   adapterCount = 1u;
-  result = GPUEnumerateAdapters(_instance, &adapterCount, &_adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !_adapter) {
+  result       = GPUEnumerateAdapters(_instance, &adapterCount, &_adapter);
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !_adapter) {
     NSLog(@"GPU: failed to get Vulkan adapter");
     return NO;
   }
 
   _device = GPUCreateDeviceWithDefaultQueues(_adapter);
   _queue  = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0u);
+
   if (!_device || !_queue) {
     NSLog(@"GPU: failed to create Vulkan device or queue");
     return NO;
@@ -244,6 +273,7 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                                         (__bridge void *)_view,
                                         GPU_SURFACE_APPLE_NSVIEW,
                                         _window.backingScaleFactor ?: 1.0f);
+
   if (!_surface) {
     NSLog(@"GPU: failed to create Vulkan surface");
     return NO;
@@ -253,6 +283,7 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                                          _surface,
                                          (uint32_t)_view.bounds.size.width,
                                          (uint32_t)_view.bounds.size.height);
+
   if (!_swapchain) {
     NSLog(@"GPU: failed to create Vulkan swapchain");
     return NO;
@@ -272,10 +303,11 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   uniformEntry = FindLayoutEntry(_shaderLayout->bindGroupLayouts[0],
                                  1u,
                                  GPU_BINDING_UNIFORM_BUFFER);
-  if (_shaderLayout->bindGroupLayoutCount != 1u ||
-      !textureEntry || !uniformEntry ||
-      textureEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      uniformEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
+
+  if (_shaderLayout->bindGroupLayoutCount != 1u
+      || !textureEntry || !uniformEntry
+      || textureEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT
+      || uniformEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
     NSLog(@"GPU: unexpected Vulkan textured quad reflection layout");
     return NO;
   }
@@ -294,27 +326,28 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   vertexLayout.stepMode              = GPU_VERTEX_STEP_MODE_VERTEX;
   vertexLayout.attributeCount        = 2u;
   vertexLayout.pAttributes           = vertexAttributes;
-  colorTarget.format             = GPUGetSwapchainFormat(_swapchain);
-  colorTarget.blend.writeMask    = GPU_COLOR_WRITE_ALL;
+  colorTarget.format                 = GPUGetSwapchainFormat(_swapchain);
+  colorTarget.blend.writeMask        = GPU_COLOR_WRITE_ALL;
 
-  pipelineInfo.chain.sType        = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  pipelineInfo.chain.structSize   = sizeof(pipelineInfo);
-  pipelineInfo.label              = "textured-quad-vulkan-pipeline";
-  pipelineInfo.layout             = _shaderLayout->pipelineLayout;
-  pipelineInfo.library            = _library;
-  pipelineInfo.vertexEntry        = "quad_vs";
-  pipelineInfo.fragmentEntry      = "quad_fs";
+  pipelineInfo.chain.sType              = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize         = sizeof(pipelineInfo);
+  pipelineInfo.label                    = "textured-quad-vulkan-pipeline";
+  pipelineInfo.layout                   = _shaderLayout->pipelineLayout;
+  pipelineInfo.library                  = _library;
+  pipelineInfo.vertexEntry              = "quad_vs";
+  pipelineInfo.fragmentEntry            = "quad_fs";
   pipelineInfo.vertex.bufferLayoutCount = 1u;
   pipelineInfo.vertex.pBufferLayouts    = &vertexLayout;
-  pipelineInfo.colorTargetCount   = 1u;
-  pipelineInfo.pColorTargets      = &colorTarget;
-  pipelineInfo.primitiveTopology  = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  pipelineInfo.cullMode           = GPU_CULL_MODE_NONE;
-  pipelineInfo.frontFace          = GPU_FRONT_FACE_CCW;
-  pipelineInfo.multisample.sampleCount = 1u;
-  pipelineInfo.multisample.sampleMask  = 0xffffffffu;
-  if (GPUCreateRenderPipeline(_device, &pipelineInfo, &_pipeline) != GPU_OK ||
-      !_pipeline) {
+  pipelineInfo.colorTargetCount         = 1u;
+  pipelineInfo.pColorTargets            = &colorTarget;
+  pipelineInfo.primitiveTopology        = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineInfo.cullMode                 = GPU_CULL_MODE_NONE;
+  pipelineInfo.frontFace                = GPU_FRONT_FACE_CCW;
+  pipelineInfo.multisample.sampleCount  = 1u;
+  pipelineInfo.multisample.sampleMask   = 0xffffffffu;
+
+  if (GPUCreateRenderPipeline(_device, &pipelineInfo, &_pipeline) != GPU_OK
+      || !_pipeline) {
     NSLog(@"GPU: failed to create Vulkan textured quad pipeline");
     return NO;
   }
@@ -323,41 +356,43 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (void)renderFrame {
-  GPUFrame                     *frame;
-  GPUCommandBuffer             *cmdb;
-  GPURenderPassEncoder         *pass;
-  GPURenderPassColorAttachment  color = {0};
-  GPURenderPassCreateInfo       passInfo = {0};
-  GPUBufferBinding              vertexBinding = {0};
-  GPUResult                     result;
+  GPURenderPassColorAttachment color         = {0};
+  GPURenderPassCreateInfo      passInfo      = {0};
+  GPUBufferBinding             vertexBinding = {0};
+  GPUFrame                    *frame;
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassEncoder        *pass;
+  GPUResult                    result;
 
-  if (_terminating ||
-      (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames)) {
+  if (_terminating
+      || (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames)) {
     return;
   }
+
   if (!GPUSampleRecoverSwapchain(_swapchain, _view)) {
     return;
   }
 
   frame = GPUBeginFrame(_swapchain);
+
   if (!frame) {
     (void)GPUSampleRecoverSwapchain(_swapchain, _view);
     return;
   }
 
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(_queue,
                               "textured-quad-vulkan-frame",
                               &cmdb) != GPU_OK || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
+
   if (_exitAfterFrames > 0) {
-    GPUSetCommandBufferCompletionHandler(
-      cmdb,
-      (__bridge void *)self,
-      TexturedQuadVulkanFrameComplete
-    );
+    GPUSetCommandBufferCompletionHandler(cmdb,
+                                         (__bridge void *)self,
+                                         TexturedQuadVulkanFrameComplete);
   }
 
   color.view                  = GPUFrameGetTargetView(frame);
@@ -374,6 +409,7 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   passInfo.colorAttachmentCount = 1u;
   passInfo.pColorAttachments    = &color;
   pass = GPUBeginRenderPass(cmdb, &passInfo);
+
   if (!pass) {
     GPUEndFrame(frame);
     return;
@@ -387,11 +423,14 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUEndRenderPass(pass);
 
   result = GPUFinishFrame(_queue, cmdb, frame);
+
   if (result != GPU_OK) {
     NSLog(@"GPUFinishFrame failed: %d", result);
     return;
   }
+
   _submittedFrames++;
+
   if (!GPUSampleCheckZeroAlloc(_device,
                                (uint32_t)_submittedFrames,
                                _assertZeroAlloc,
@@ -407,9 +446,10 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 - (void)frameCompleted {
   dispatch_async(dispatch_get_main_queue(), ^{
     self->_completedFrames++;
-    if (self->_exitAfterFrames > 0 &&
-        self->_completedFrames >= self->_exitAfterFrames &&
-        !self->_terminating) {
+
+    if (self->_exitAfterFrames > 0
+        && self->_completedFrames >= self->_exitAfterFrames
+        && !self->_terminating) {
       self->_terminating = YES;
       [self->_timer invalidate];
       self->_timer = nil;
@@ -428,47 +468,58 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     GPUDestroyRenderPipeline(_pipeline);
     _pipeline = NULL;
   }
+
   if (_fragmentGroup) {
     GPUDestroyBindGroup(_fragmentGroup);
     _fragmentGroup = NULL;
   }
+
   if (_textureView) {
     GPUDestroyTextureView(_textureView);
     _textureView = NULL;
   }
+
   if (_texture) {
     GPUDestroyTexture(_texture);
     _texture = NULL;
   }
+
   if (_uniformBuffer) {
     GPUDestroyBuffer(_uniformBuffer);
     _uniformBuffer = NULL;
   }
+
   if (_vertexBuffer) {
     GPUDestroyBuffer(_vertexBuffer);
     _vertexBuffer = NULL;
   }
+
   if (_shaderLayout) {
     GPUDestroyShaderLayout(_shaderLayout);
     _shaderLayout = NULL;
   }
+
   if (_library) {
     GPUDestroyShaderLibrary(_library);
     _library = NULL;
   }
+
   if (_swapchain) {
     GPUDestroySwapchain(_swapchain);
     _swapchain = NULL;
   }
+
   if (_surface) {
     GPUDestroySurface(_surface);
     _surface = NULL;
   }
+
   if (_device) {
     GPUDestroyDevice(_device);
     _device = NULL;
     _queue  = NULL;
   }
+
   if (_instance) {
     GPUDestroyInstance(_instance);
     _instance = NULL;
@@ -479,6 +530,7 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   const char *exitAfterFrames;
 
   (void)notification;
+
   if (![self setupWindow] || ![self setupGPU]) {
     _statsFailed = YES;
     [NSApp terminate:nil];
@@ -486,12 +538,15 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   }
 
   exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+
   if (exitAfterFrames && exitAfterFrames[0] != '\0') {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
+
     if (_exitAfterFrames < 1) {
       _exitAfterFrames = 1;
     }
   }
+
   _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
 
   _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
@@ -524,14 +579,16 @@ TexturedQuadVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   uint32_t height;
 
   (void)notification;
+
   if (!_swapchain || _terminating) {
     return;
   }
 
   width  = (uint32_t)_view.bounds.size.width;
   height = (uint32_t)_view.bounds.size.height;
-  if (width > 0u && height > 0u &&
-      GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
+
+  if (width > 0u && height > 0u
+      && GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
     [self renderFrame];
   }
 }
@@ -543,6 +600,7 @@ main(int argc, const char *argv[]) {
   int result;
 
   result = 0;
+
   @autoreleasepool {
     TexturedQuadVulkanApp *delegate;
 
@@ -555,5 +613,6 @@ main(int argc, const char *argv[]) {
     [NSApp run];
     result = [delegate statsFailed] ? 1 : 0;
   }
+
   return result;
 }

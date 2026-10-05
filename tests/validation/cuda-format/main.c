@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "backend/cuda/format.h"
 
 #include <stdio.h>
@@ -116,20 +132,36 @@ static const ExpectedFormat expected[] = {
          SAMPLED_FLAGS, 4u, 1u)
 };
 
+static const struct {
+  GPUFormat            format;
+  CUresourceViewFormat viewFormat;
+} viewFormats[] = {
+  {GPU_FORMAT_R8_UNORM,     CU_RES_VIEW_FORMAT_UINT_1X8},
+  {GPU_FORMAT_RG8_SINT,     CU_RES_VIEW_FORMAT_SINT_2X8},
+  {GPU_FORMAT_RGBA8_UINT,   CU_RES_VIEW_FORMAT_UINT_4X8},
+  {GPU_FORMAT_R16_FLOAT,    CU_RES_VIEW_FORMAT_FLOAT_1X16},
+  {GPU_FORMAT_RG16_SINT,    CU_RES_VIEW_FORMAT_SINT_2X16},
+  {GPU_FORMAT_RGBA16_FLOAT, CU_RES_VIEW_FORMAT_FLOAT_4X16},
+  {GPU_FORMAT_RG32_UINT,    CU_RES_VIEW_FORMAT_UINT_2X32},
+  {GPU_FORMAT_RGBA32_FLOAT, CU_RES_VIEW_FORMAT_FLOAT_4X32}
+};
+
 static int
 matches(const GPUCudaFormatInfo *actual, const ExpectedFormat *item) {
-  return actual->arrayFormat == item->arrayFormat &&
-         actual->flags == item->flags &&
-         actual->bytesPerTexel == item->bytesPerTexel &&
-         actual->channelCount == item->channelCount;
+  return actual->arrayFormat == item->arrayFormat
+         && actual->flags == item->flags
+         && actual->bytesPerTexel == item->bytesPerTexel
+         && actual->channelCount == item->channelCount;
 }
 
 static int
 validate_texture_desc(void) {
   GPUCudaFormatInfo info;
   GPUCudaFormatInfo unsupported = {0};
-  CUDA_TEXTURE_DESC source = {0};
+  CUDA_TEXTURE_DESC source      = {0};
   CUDA_TEXTURE_DESC actual;
+  uint32_t          i;
+  bool              shouldFilter;
 
   source.addressMode[0]   = CU_TR_ADDRESS_MODE_WRAP;
   source.filterMode       = CU_TR_FILTER_MODE_POINT;
@@ -138,132 +170,140 @@ validate_texture_desc(void) {
                             CU_TRSF_SRGB;
   source.maxAnisotropy    = 1u;
 
-  if (!cuda_formatInfo(GPU_FORMAT_RGBA8_UINT, &info) ||
-      !cuda_formatTextureDesc(&info, &source, &actual) ||
-      actual.flags != (CU_TRSF_NORMALIZED_COORDINATES |
-                       CU_TRSF_READ_AS_INTEGER)) {
+  if (!cuda_formatInfo(GPU_FORMAT_RGBA8_UINT, &info)
+      || !cuda_formatTextureDesc(&info, &source, &actual)
+      || actual.flags != (CU_TRSF_NORMALIZED_COORDINATES |
+                          CU_TRSF_READ_AS_INTEGER)) {
     return 0;
   }
 
   source.filterMode = CU_TR_FILTER_MODE_LINEAR;
   memset(&actual, 0xa5, sizeof(actual));
-  if (cuda_formatTextureDesc(&info, &source, &actual) ||
-      memcmp(&actual, &(CUDA_TEXTURE_DESC){0}, sizeof(actual)) != 0) {
+
+  if (cuda_formatTextureDesc(&info, &source, &actual)
+      || memcmp(&actual, &(CUDA_TEXTURE_DESC){0}, sizeof(actual)) != 0) {
     return 0;
   }
 
   source.filterMode = CU_TR_FILTER_MODE_LINEAR;
   source.flags      = CU_TRSF_NORMALIZED_COORDINATES |
                       CU_TRSF_READ_AS_INTEGER;
-  if (!cuda_formatInfo(GPU_FORMAT_RGBA8_UNORM_SRGB, &info) ||
-      !cuda_formatTextureDesc(&info, &source, &actual) ||
-      actual.flags != (CU_TRSF_NORMALIZED_COORDINATES | CU_TRSF_SRGB)) {
+
+  if (!cuda_formatInfo(GPU_FORMAT_RGBA8_UNORM_SRGB, &info)
+      || !cuda_formatTextureDesc(&info, &source, &actual)
+      || actual.flags != (CU_TRSF_NORMALIZED_COORDINATES | CU_TRSF_SRGB)) {
     return 0;
   }
 
   source.flags = CU_TRSF_NORMALIZED_COORDINATES |
                  CU_TRSF_READ_AS_INTEGER |
                  CU_TRSF_SRGB;
-  if (!cuda_formatInfo(GPU_FORMAT_RGBA32_FLOAT, &info) ||
-      !cuda_formatTextureDesc(&info, &source, &actual) ||
-      actual.flags != CU_TRSF_NORMALIZED_COORDINATES) {
+
+  if (!cuda_formatInfo(GPU_FORMAT_RGBA32_FLOAT, &info)
+      || !cuda_formatTextureDesc(&info, &source, &actual)
+      || actual.flags != CU_TRSF_NORMALIZED_COORDINATES) {
     return 0;
   }
+
   memset(&actual, 0xa5, sizeof(actual));
-  if (cuda_formatTextureDesc(NULL, &source, &actual) ||
-      memcmp(&actual, &(CUDA_TEXTURE_DESC){0}, sizeof(actual)) != 0) {
+
+  if (cuda_formatTextureDesc(NULL, &source, &actual)
+      || memcmp(&actual, &(CUDA_TEXTURE_DESC){0}, sizeof(actual)) != 0) {
     return 0;
   }
+
   memset(&actual, 0xa5, sizeof(actual));
-  if (cuda_formatTextureDesc(&info, NULL, &actual) ||
-      memcmp(&actual, &(CUDA_TEXTURE_DESC){0}, sizeof(actual)) != 0) {
+
+  if (cuda_formatTextureDesc(&info, NULL, &actual)
+      || memcmp(&actual, &(CUDA_TEXTURE_DESC){0}, sizeof(actual)) != 0) {
     return 0;
   }
+
   memset(&actual, 0xa5, sizeof(actual));
-  if (cuda_formatTextureDesc(&unsupported, &source, &actual) ||
-      memcmp(&actual, &(CUDA_TEXTURE_DESC){0}, sizeof(actual)) != 0 ||
-      cuda_formatTextureDesc(&info, &source, NULL)) {
+
+  if (cuda_formatTextureDesc(&unsupported, &source, &actual)
+      || memcmp(&actual, &(CUDA_TEXTURE_DESC){0}, sizeof(actual)) != 0
+      || cuda_formatTextureDesc(&info, &source, NULL)) {
     return 0;
   }
+
   if (!cuda_formatInfo(GPU_FORMAT_BGRA8_UNORM, &info)) {
     return 0;
   }
+
   memset(&actual, 0xa5, sizeof(actual));
-  if (cuda_formatTextureDesc(&info, &source, &actual) ||
-      memcmp(&actual, &(CUDA_TEXTURE_DESC){0}, sizeof(actual)) != 0) {
+
+  if (cuda_formatTextureDesc(&info, &source, &actual)
+      || memcmp(&actual, &(CUDA_TEXTURE_DESC){0}, sizeof(actual)) != 0) {
     return 0;
   }
+
   source.filterMode       = CU_TR_FILTER_MODE_LINEAR;
   source.mipmapFilterMode = CU_TR_FILTER_MODE_LINEAR;
   source.maxAnisotropy    = 16u;
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(expected); i++) {
-    bool shouldFilter;
 
+  for (i = 0u; i < GPU_ARRAY_LEN(expected); i++) {
     shouldFilter = (expected[i].flags &
                     (GPU_CUDA_FORMAT_SAMPLED_BIT |
                      GPU_CUDA_FORMAT_FILTERABLE_BIT)) ==
                    (GPU_CUDA_FORMAT_SAMPLED_BIT |
                     GPU_CUDA_FORMAT_FILTERABLE_BIT);
-    if (!cuda_formatInfo(expected[i].format, &info) ||
-        cuda_formatTextureDesc(&info, &source, &actual) != shouldFilter) {
+
+    if (!cuda_formatInfo(expected[i].format, &info)
+        || cuda_formatTextureDesc(&info, &source, &actual) != shouldFilter) {
       return 0;
     }
   }
+
   return 1;
 }
 
 static int
 validate_resource_view_formats(void) {
-  static const struct {
-    GPUFormat            format;
-    CUresourceViewFormat viewFormat;
-  } viewFormats[] = {
-    {GPU_FORMAT_R8_UNORM,     CU_RES_VIEW_FORMAT_UINT_1X8},
-    {GPU_FORMAT_RG8_SINT,     CU_RES_VIEW_FORMAT_SINT_2X8},
-    {GPU_FORMAT_RGBA8_UINT,   CU_RES_VIEW_FORMAT_UINT_4X8},
-    {GPU_FORMAT_R16_FLOAT,    CU_RES_VIEW_FORMAT_FLOAT_1X16},
-    {GPU_FORMAT_RG16_SINT,    CU_RES_VIEW_FORMAT_SINT_2X16},
-    {GPU_FORMAT_RGBA16_FLOAT, CU_RES_VIEW_FORMAT_FLOAT_4X16},
-    {GPU_FORMAT_RG32_UINT,    CU_RES_VIEW_FORMAT_UINT_2X32},
-    {GPU_FORMAT_RGBA32_FLOAT, CU_RES_VIEW_FORMAT_FLOAT_4X32}
-  };
   GPUCudaFormatInfo    info;
   CUresourceViewFormat viewFormat;
+  uint32_t             i;
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(viewFormats); i++) {
-    if (!cuda_formatInfo(viewFormats[i].format, &info) ||
-        !cuda_formatResourceView(&info, &viewFormat) ||
-        viewFormat != viewFormats[i].viewFormat) {
+  for (i = 0u; i < GPU_ARRAY_LEN(viewFormats); i++) {
+    if (!cuda_formatInfo(viewFormats[i].format, &info)
+        || !cuda_formatResourceView(&info, &viewFormat)
+        || viewFormat != viewFormats[i].viewFormat) {
       return 0;
     }
   }
+
   memset(&info, 0, sizeof(info));
   viewFormat = CU_RES_VIEW_FORMAT_FLOAT_4X32;
-  if (cuda_formatResourceView(&info, &viewFormat) ||
-      viewFormat != CU_RES_VIEW_FORMAT_NONE ||
-      cuda_formatResourceView(NULL, &viewFormat) ||
-      cuda_formatResourceView(&info, NULL)) {
+
+  if (cuda_formatResourceView(&info, &viewFormat)
+      || viewFormat != CU_RES_VIEW_FORMAT_NONE
+      || cuda_formatResourceView(NULL, &viewFormat)
+      || cuda_formatResourceView(&info, NULL)) {
     return 0;
   }
+
   return 1;
 }
 
 int
 main(void) {
-  GPUCudaFormatInfo info;
-  uint32_t          supported;
+  GPUCudaFormatInfo     info;
+  const ExpectedFormat *item;
+  uint32_t              supported;
+  GPUFormat             format;
+  uint32_t              i;
+  bool                  found;
+  bool                  mapped;
 
   supported = 0u;
-  for (GPUFormat format = GPU_FORMAT_UNDEFINED;
+
+  for (format = GPU_FORMAT_UNDEFINED;
        format < GPU_FORMAT_COUNT;
        format++) {
-    const ExpectedFormat *item;
-    bool                  found;
-    bool                  mapped;
-
     item  = NULL;
     found = false;
-    for (uint32_t i = 0u; i < GPU_ARRAY_LEN(expected); i++) {
+
+    for (i = 0u; i < GPU_ARRAY_LEN(expected); i++) {
       if (expected[i].format == format) {
         item  = &expected[i];
         found = true;
@@ -273,8 +313,9 @@ main(void) {
 
     memset(&info, 0xa5, sizeof(info));
     mapped = cuda_formatInfo(format, &info);
-    if (mapped != found || (mapped && !matches(&info, item)) ||
-        (!mapped && memcmp(&info,
+
+    if (mapped != found || (mapped && !matches(&info, item))
+        || (!mapped && memcmp(&info,
                            &(GPUCudaFormatInfo){0},
                            sizeof(info)) != 0)) {
       fprintf(stderr,
@@ -282,14 +323,15 @@ main(void) {
               (uint32_t)format);
       return 1;
     }
+
     supported += mapped ? 1u : 0u;
   }
 
-  if (supported != GPU_ARRAY_LEN(expected) ||
-      cuda_formatInfo(GPU_FORMAT_COUNT, &info) ||
-      cuda_formatInfo(GPU_FORMAT_RGBA32_FLOAT, NULL) ||
-      !validate_resource_view_formats() ||
-      !validate_texture_desc()) {
+  if (supported != GPU_ARRAY_LEN(expected)
+      || cuda_formatInfo(GPU_FORMAT_COUNT, &info)
+      || cuda_formatInfo(GPU_FORMAT_RGBA32_FLOAT, NULL)
+      || !validate_resource_view_formats()
+      || !validate_texture_desc()) {
     fprintf(stderr, "CUDA format contract boundary mismatch\n");
     return 1;
   }

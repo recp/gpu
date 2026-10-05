@@ -18,7 +18,7 @@
 #include "../../../api/compute_internal.h"
 #include "pipeline_cache.h"
 
-static MTComputeEncoder *
+static MTComputeEncoder*
 mt_computeEncoder(GPUComputePassEncoder *enc) {
   return enc ? enc->_priv : NULL;
 }
@@ -28,87 +28,44 @@ mt_nativeBuffer(GPUBuffer *buffer) {
   return buffer ? (id<MTLBuffer>)buffer->_priv : nil;
 }
 
-GPU_HIDE
-GPUComputePipeline*
-mt_newComputePipeline(void) {
-  GPUComputePipeline *pipeline;
-  MTComputePipelineDesc *desc;
-
-  pipeline = calloc(1, sizeof(*pipeline));
-  desc = calloc(1, sizeof(*desc));
-  if (!pipeline || !desc) {
-    free(desc);
-    free(pipeline);
-    return NULL;
-  }
-
-  pipeline->_priv = desc;
-  return pipeline;
-}
-
-GPU_HIDE
-void
-mt_setComputeFunction(GPUComputePipeline *pipeline, GPUShaderFunction *func) {
-  MTComputePipelineDesc *desc;
-  MTShaderFunction      *function;
-
-  if (!pipeline || !pipeline->_priv || !func) {
-    return;
-  }
-
-  desc     = pipeline->_priv;
-  function = func->_priv;
-  [desc->function release];
-  desc->function = [function->function retain];
-#if MT_HAS_METAL4
-  if (@available(macOS 26.0, iOS 26.0, *)) {
-    MTL4LibraryFunctionDescriptor *function4;
-
-    function4         = [MTL4LibraryFunctionDescriptor new];
-    function4.library = function->library;
-    function4.name    = function->name;
-    [desc->function4 release];
-    desc->function4 = function4;
-  }
-#endif
-}
-
 static GPUResult
-mt_setComputeIntersectionFunctions(
-  GPUComputePipeline       *pipeline,
-  GPUShaderFunction *const *functions,
-  uint32_t                  functionCount) {
-  MTComputePipelineDesc *desc;
-  NSMutableArray        *nativeFunctions;
-  NSMutableArray        *nativeFunctions4;
+mt_setComputeIntersectionFunctions(GPUComputePipeline       *pipeline,
+                                   GPUShaderFunction *const *functions,
+                                   uint32_t                  functionCount) {
+  MTComputePipelineDesc         *desc;
+  NSMutableArray                *nativeFunctions;
+  NSMutableArray                *nativeFunctions4;
+  MTShaderFunction              *function;
+#if MT_HAS_METAL4
+  MTL4LibraryFunctionDescriptor *function4;
+#endif
+  uint32_t                       i;
 
-  if (!pipeline || !(desc = pipeline->_priv) || !functions ||
-      functionCount == 0u) {
+  if (!pipeline || !(desc = pipeline->_priv) || !functions
+      || functionCount == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  nativeFunctions = [[NSMutableArray alloc] initWithCapacity:functionCount];
+  nativeFunctions  = [[NSMutableArray alloc] initWithCapacity:functionCount];
   nativeFunctions4 = nil;
 #if MT_HAS_METAL4
   if (@available(macOS 26.0, iOS 26.0, *)) {
     nativeFunctions4 = [[NSMutableArray alloc] initWithCapacity:functionCount];
   }
 #endif
-  for (uint32_t i = 0u; i < functionCount; i++) {
-    MTShaderFunction *function;
-
+  for (i = 0u; i < functionCount; i++) {
     function = functions[i] ? functions[i]->_priv : NULL;
+
     if (!function || !function->function) {
       [nativeFunctions4 release];
       [nativeFunctions release];
       return GPU_ERROR_INVALID_ARGUMENT;
     }
+
     [nativeFunctions addObject:function->function];
 #if MT_HAS_METAL4
     if (nativeFunctions4) {
       if (@available(macOS 26.0, iOS 26.0, *)) {
-        MTL4LibraryFunctionDescriptor *function4;
-
         function4         = [MTL4LibraryFunctionDescriptor new];
         function4.library = function->library;
         function4.name    = function->name;
@@ -125,29 +82,81 @@ mt_setComputeIntersectionFunctions(
   desc->intersectionFunctions4 = [nativeFunctions4 copy];
   [nativeFunctions4 release];
   [nativeFunctions release];
+
   return GPU_OK;
+}
+
+GPU_HIDE
+GPUComputePipeline*
+mt_newComputePipeline(void) {
+  GPUComputePipeline    *pipeline;
+  MTComputePipelineDesc *desc;
+
+  pipeline = calloc(1, sizeof(*pipeline));
+  desc     = calloc(1, sizeof(*desc));
+
+  if (!pipeline || !desc) {
+    free(desc);
+    free(pipeline);
+    return NULL;
+  }
+
+  pipeline->_priv = desc;
+
+  return pipeline;
+}
+
+GPU_HIDE
+void
+mt_setComputeFunction(GPUComputePipeline *pipeline, GPUShaderFunction *func) {
+  MTComputePipelineDesc         *desc;
+  MTShaderFunction              *function;
+#if MT_HAS_METAL4
+  MTL4LibraryFunctionDescriptor *function4;
+#endif
+
+  if (!pipeline || !pipeline->_priv || !func) {
+    return;
+  }
+
+  desc     = pipeline->_priv;
+  function = func->_priv;
+  [desc->function release];
+  desc->function = [function->function retain];
+#if MT_HAS_METAL4
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    function4         = [MTL4LibraryFunctionDescriptor new];
+    function4.library = function->library;
+    function4.name    = function->name;
+    [desc->function4 release];
+    desc->function4 = function4;
+  }
+#endif
 }
 
 GPU_HIDE
 GPUComputePipelineState*
 mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
-  MTLComputePipelineDescriptor *pipelineDesc;
-  id<MTLComputePipelineState>   mtState;
-  GPUComputePipelineState      *state;
-  MTComputePipelineDesc        *desc;
-  GPUDeviceMT                  *deviceMT;
-  NSError                      *error;
-  bool                          usesArchive;
+  MTLComputePipelineDescriptor  *pipelineDesc;
+  id<MTLComputePipelineState>    mtState;
+  GPUComputePipelineState       *state;
+  MTComputePipelineDesc         *desc;
+  GPUDeviceMT                   *deviceMT;
+  NSError                       *error;
 #if MT_HAS_METAL4
   MTL4ComputePipelineDescriptor *pipelineDesc4;
+  MTL4StaticLinkingDescriptor   *linking;
 #endif
+  MTLLinkedFunctions            *linkedFunctions;
+  bool                           usesArchive;
 
   if (!device || !pipeline || !pipeline->_priv) {
     return NULL;
   }
 
   deviceMT = device->_priv;
-  desc = pipeline->_priv;
+  desc     = pipeline->_priv;
+
   if (!deviceMT || !desc->function) {
     return NULL;
   }
@@ -156,95 +165,101 @@ mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
   usesArchive  = false;
   error        = nil;
   mtState      = nil;
+
   if (deviceMT->commandMode == MTCommandMode4) {
 #if MT_HAS_METAL4
     if (@available(macOS 26.0, iOS 26.0, *)) {
       pipelineDesc4                           = [MTL4ComputePipelineDescriptor new];
       pipelineDesc4.computeFunctionDescriptor = desc->function4;
-      if (desc->intersectionFunctions4.count > 0u) {
-        MTL4StaticLinkingDescriptor *linking;
 
-        linking = [MTL4StaticLinkingDescriptor new];
-        linking.functionDescriptors = desc->intersectionFunctions4;
+      if (desc->intersectionFunctions4.count > 0u) {
+        linking                               = [MTL4StaticLinkingDescriptor new];
+        linking.functionDescriptors           = desc->intersectionFunctions4;
         pipelineDesc4.staticLinkingDescriptor = linking;
         [linking release];
       }
+
       mtState = mt_compileComputePipeline4(pipeline->_cache,
-                                            deviceMT,
-                                            pipelineDesc4,
-                                            &error);
+                                           deviceMT,
+                                           pipelineDesc4,
+                                           &error);
       [pipelineDesc4 release];
     }
 #endif
   } else {
     pipelineDesc                 = [MTLComputePipelineDescriptor new];
     pipelineDesc.computeFunction = desc->function;
-    if (desc->intersectionFunctions.count > 0u) {
-      MTLLinkedFunctions *linkedFunctions;
 
-      linkedFunctions           = [MTLLinkedFunctions new];
-      linkedFunctions.functions = desc->intersectionFunctions;
+    if (desc->intersectionFunctions.count > 0u) {
+      linkedFunctions              = [MTLLinkedFunctions new];
+      linkedFunctions.functions    = desc->intersectionFunctions;
       pipelineDesc.linkedFunctions = linkedFunctions;
       [linkedFunctions release];
     }
+
     usesArchive = mt_useComputeCache(pipeline->_cache, pipelineDesc);
+
     if (usesArchive) {
-      mtState = [deviceMT->device
-        newComputePipelineStateWithDescriptor:pipelineDesc
-                                      options:
-                                        MTLPipelineOptionFailOnBinaryArchiveMiss
-                                   reflection:nil
-                                        error:&error];
-      if (!mtState) {
+      if (!(mtState = [deviceMT->device newComputePipelineStateWithDescriptor:pipelineDesc
+                                                                      options:MTLPipelineOptionFailOnBinaryArchiveMiss
+                                                                   reflection:nil
+                                                                        error:&error])) {
         mt_addComputeCache(pipeline->_cache, pipelineDesc);
         error = nil;
       }
     }
+
     if (!mtState) {
-      mtState = [deviceMT->device
-        newComputePipelineStateWithDescriptor:pipelineDesc
-                                      options:MTLPipelineOptionNone
-                                   reflection:nil
-                                        error:&error];
+      mtState = [deviceMT->device newComputePipelineStateWithDescriptor:pipelineDesc
+                                                                options:MTLPipelineOptionNone
+                                                             reflection:nil
+                                                                  error:&error];
     }
   }
+
   [pipelineDesc release];
+
   if (!mtState) {
     NSLog(@"Failed to create compute pipeline state: %@", error);
     return NULL;
   }
 
-  state = calloc(1, sizeof(*state));
-  if (!state) {
+  if (!(state = calloc(1, sizeof(*state)))) {
     [mtState release];
     return NULL;
   }
 
-  state->_priv = mtState;
+  state->_priv            = mtState;
   state->workgroupSize[0] = 1u;
   state->workgroupSize[1] = 1u;
   state->workgroupSize[2] = 1u;
-  pipeline->_state = state;
+  pipeline->_state        = state;
+
   return state;
 }
 
 GPU_HIDE
 void
 mt_destroyComputePipeline(GPUComputePipeline *pipeline) {
-  MTComputePipelineDesc *desc;
+  MTComputePipelineDesc   *desc;
+  GPUComputePipelineState *state;
 
   if (!pipeline) {
     return;
   }
 
   desc = pipeline->_priv;
+
   if (pipeline->_state) {
-    GPUComputePipelineState *state = pipeline->_state;
+    state = pipeline->_state;
+
     if (state->_priv) {
       [(id<MTLComputePipelineState>)state->_priv release];
     }
+
     free(state);
   }
+
   [desc->intersectionFunctions4 release];
   [desc->intersectionFunctions release];
   [desc->function4 release];
@@ -260,16 +275,21 @@ mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
   MTCommandBuffer       *commandState;
   MTComputeEncoder      *nativeState;
   GPUComputePassEncoder *enc;
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  NSString              *nativeLabel;
+#endif
 
   if (!cmdb) {
     return NULL;
   }
 
   commandState = mt_commandBuffer(cmdb);
+
   if (!commandState) {
     return NULL;
   }
-  enc = &commandState->computeEncoder;
+
+  enc         = &commandState->computeEncoder;
   nativeState = &commandState->computeState;
   memset(enc, 0, sizeof(*enc));
   memset(nativeState, 0, sizeof(*nativeState));
@@ -278,11 +298,11 @@ mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
   if (commandState->mode == MTCommandMode4) {
     if (!mt_prepareArgumentState(cmdb,
                                  &commandState->computeArguments,
-                                 gpuDeviceDebugLabel(
-                                   gpuCommandBufferDevice(cmdb),
-                                   "gpu-metal4-compute-arguments"))) {
+                                 gpuDeviceDebugLabel(gpuCommandBufferDevice(cmdb),
+                                                     "gpu-metal4-compute-arguments"))) {
       return NULL;
     }
+
     if (@available(macOS 26.0, iOS 26.0, *)) {
       nativeState->modern = [commandState->modern computeCommandEncoder];
       mt_applyPendingBarrier(cmdb, nativeState->modern);
@@ -293,9 +313,9 @@ mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
 #endif
   {
     @autoreleasepool {
-      nativeState->classic = [[mt_classicCommandBuffer(cmdb)
-        computeCommandEncoder] retain];
+      nativeState->classic = [[mt_classicCommandBuffer(cmdb) computeCommandEncoder] retain];
     }
+
     mt_applyPendingBarrier(cmdb, nativeState->classic);
   }
 
@@ -304,7 +324,7 @@ mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
   }
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   if (info->label && info->label[0] != '\0') {
-    NSString *nativeLabel = [NSString stringWithUTF8String:info->label];
+    nativeLabel = [NSString stringWithUTF8String:info->label];
 
     nativeState->classic.label = nativeLabel;
 #if MT_HAS_METAL4
@@ -317,16 +337,17 @@ mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
   GPU__UNUSED(info);
 #endif
 
-  enc->_priv = nativeState;
+  enc->_priv             = nativeState;
   enc->_workgroupSize[0] = 1u;
   enc->_workgroupSize[1] = 1u;
   enc->_workgroupSize[2] = 1u;
+
   return enc;
 }
 
 GPU_HIDE
 void
-mt_setComputePipelineState(GPUComputePassEncoder *enc,
+mt_setComputePipelineState(GPUComputePassEncoder   *enc,
                            GPUComputePipelineState *state) {
   MTComputeEncoder *native;
 
@@ -335,6 +356,7 @@ mt_setComputePipelineState(GPUComputePassEncoder *enc,
   }
 
   native = mt_computeEncoder(enc);
+
   if (!native) {
     return;
   }
@@ -348,6 +370,7 @@ mt_setComputePipelineState(GPUComputePassEncoder *enc,
   {
     [native->classic setComputePipelineState:(id<MTLComputePipelineState>)state->_priv];
   }
+
   enc->_workgroupSize[0] = state->workgroupSize[0] ? state->workgroupSize[0] : 1u;
   enc->_workgroupSize[1] = state->workgroupSize[1] ? state->workgroupSize[1] : 1u;
   enc->_workgroupSize[2] = state->workgroupSize[2] ? state->workgroupSize[2] : 1u;
@@ -363,9 +386,11 @@ mt_computeBuffer(GPUComputePassEncoder *enc,
   id<MTLBuffer>     buffer;
 
   native = mt_computeEncoder(enc);
+
   if (!native) {
     return;
   }
+
   buffer = mt_nativeBuffer(buf);
 #if MT_HAS_METAL4
   if (native->modern) {
@@ -385,6 +410,7 @@ mt_computeTexture(GPUComputePassEncoder *enc,
   id<MTLTexture>    texture;
 
   native = mt_computeEncoder(enc);
+
   if (!native) {
     return;
   }
@@ -403,10 +429,11 @@ void
 mt_computeSampler(GPUComputePassEncoder *enc,
                   GPUSampler            *sampler,
                   uint32_t               index) {
-  MTComputeEncoder    *native;
-  id<MTLSamplerState>  samplerState;
+  MTComputeEncoder   *native;
+  id<MTLSamplerState> samplerState;
 
   native = mt_computeEncoder(enc);
+
   if (!native) {
     return;
   }
@@ -430,6 +457,7 @@ mt_computeAccelerationStructure(GPUComputePassEncoder       *enc,
 
   native = mt_computeEncoder(enc);
   ray    = structure ? structure->_priv : NULL;
+
   if (!native || !ray || !ray->structure) {
     return;
   }
@@ -453,27 +481,30 @@ mt_computePushConstants(GPUComputePassEncoder *enc,
                         const void            *data,
                         uint32_t               sizeBytes) {
   MTComputeEncoder *native;
+#if MT_HAS_METAL4
+  uint64_t          address;
+#endif
 
   if (!data || sizeBytes == 0u) {
     return;
   }
 
   native = mt_computeEncoder(enc);
+
   if (!native) {
     return;
   }
 #if MT_HAS_METAL4
   if (native->modern) {
-    uint64_t address;
-
     if (mt_uploadConstants(enc->_cmdb, data, sizeBytes, &address)) {
       if (@available(macOS 26.0, iOS 26.0, *)) {
-        [(id<MTL4ArgumentTable>)native->arguments->table
-          setAddress:address
-             atIndex:MT_PUSH_CONSTANT_INDEX];
+        [(id<MTL4ArgumentTable>)native->arguments->table setAddress:address
+                                                            atIndex:MT_PUSH_CONSTANT_INDEX];
       }
+
       native->arguments->bufferMask |= 1u << MT_PUSH_CONSTANT_INDEX;
     }
+
     return;
   }
 #endif
@@ -488,15 +519,16 @@ mt_dispatch(GPUComputePassEncoder *enc,
             uint32_t               x,
             uint32_t               y,
             uint32_t               z) {
+  MTLSize           groups;
+  MTLSize           threads;
   MTComputeEncoder *native;
-  MTLSize groups;
-  MTLSize threads;
 
-  groups = MTLSizeMake(x, y, z);
+  groups  = MTLSizeMake(x, y, z);
   threads = MTLSizeMake(enc->_workgroupSize[0] ? enc->_workgroupSize[0] : 1u,
                         enc->_workgroupSize[1] ? enc->_workgroupSize[1] : 1u,
                         enc->_workgroupSize[2] ? enc->_workgroupSize[2] : 1u);
-  native = mt_computeEncoder(enc);
+  native  = mt_computeEncoder(enc);
+
   if (!native) {
     return;
   }
@@ -504,8 +536,9 @@ mt_dispatch(GPUComputePassEncoder *enc,
   if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern dispatchThreadgroups:groups
-                       threadsPerThreadgroup:threads];
+                     threadsPerThreadgroup:threads];
     }
+
     return;
   }
 #endif
@@ -517,15 +550,17 @@ void
 mt_dispatchIndirect(GPUComputePassEncoder *enc,
                     GPUBuffer             *argsBuffer,
                     uint64_t               argsOffset) {
+  MTLSize           threads;
   MTComputeEncoder *native;
   id<MTLBuffer>     args;
-  MTLSize           threads;
 
   native = mt_computeEncoder(enc);
+
   if (!native) {
     return;
   }
-  args = mt_nativeBuffer(argsBuffer);
+
+  args    = mt_nativeBuffer(argsBuffer);
   threads = MTLSizeMake(enc->_workgroupSize[0] ? enc->_workgroupSize[0] : 1u,
                         enc->_workgroupSize[1] ? enc->_workgroupSize[1] : 1u,
                         enc->_workgroupSize[2] ? enc->_workgroupSize[2] : 1u);
@@ -536,11 +571,12 @@ mt_dispatchIndirect(GPUComputePassEncoder *enc,
       [native->modern dispatchThreadgroupsWithIndirectBuffer:args.gpuAddress + argsOffset
                                        threadsPerThreadgroup:threads];
     }
+
     return;
   }
 #endif
   [native->classic dispatchThreadgroupsWithIndirectBuffer:args
-                                      indirectBufferOffset:(NSUInteger)argsOffset
+                                     indirectBufferOffset:(NSUInteger)argsOffset
                                     threadsPerThreadgroup:threads];
 }
 
@@ -552,7 +588,9 @@ mt_endComputeEncoding(GPUComputePassEncoder *enc) {
   if (!enc) {
     return;
   }
+
   native = mt_computeEncoder(enc);
+
   if (!native) {
     return;
   }
@@ -567,26 +605,27 @@ mt_endComputeEncoding(GPUComputePassEncoder *enc) {
     [native->classic endEncoding];
     [native->classic release];
   }
+
   native->classic = nil;
-  native->modern = nil;
+  native->modern  = nil;
 }
 
 GPU_HIDE
 void
 mt_initCompute(GPUApiCompute *api) {
-  api->newComputePipeline = mt_newComputePipeline;
-  api->setFunction = mt_setComputeFunction;
+  api->newComputePipeline       = mt_newComputePipeline;
+  api->setFunction              = mt_setComputeFunction;
   api->setIntersectionFunctions = mt_setComputeIntersectionFunctions;
-  api->newComputeState = mt_newComputeState;
-  api->destroyComputePipeline = mt_destroyComputePipeline;
-  api->computeCommandEncoder = mt_computeCommandEncoder;
-  api->setComputePipelineState = mt_setComputePipelineState;
-  api->buffer = mt_computeBuffer;
-  api->texture = mt_computeTexture;
-  api->sampler = mt_computeSampler;
-  api->accelerationStructure = mt_computeAccelerationStructure;
-  api->pushConstants = mt_computePushConstants;
-  api->dispatch = mt_dispatch;
-  api->dispatchIndirect = mt_dispatchIndirect;
-  api->endEncoding = mt_endComputeEncoding;
+  api->newComputeState          = mt_newComputeState;
+  api->destroyComputePipeline   = mt_destroyComputePipeline;
+  api->computeCommandEncoder    = mt_computeCommandEncoder;
+  api->setComputePipelineState  = mt_setComputePipelineState;
+  api->buffer                   = mt_computeBuffer;
+  api->texture                  = mt_computeTexture;
+  api->sampler                  = mt_computeSampler;
+  api->accelerationStructure    = mt_computeAccelerationStructure;
+  api->pushConstants            = mt_computePushConstants;
+  api->dispatch                 = mt_dispatch;
+  api->dispatchIndirect         = mt_dispatchIndirect;
+  api->endEncoding              = mt_endComputeEncoding;
 }

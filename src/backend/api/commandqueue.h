@@ -24,52 +24,35 @@ extern "C" {
 #include <gpu/gpu.h>
 
 typedef struct GPUApiCommandQueue {
-  GPUQueue*
-  (*newCommandQueue)(GPUDevice * __restrict device);
+  GPUQueue * (*newCommandQueue)(GPUDevice *__restrict device);
 
-  GPUQueue*
-  (*getCommandQueue)(struct GPUDevice * __restrict device,
-                     GPUQueueFlagBits              bits,
-                     uint32_t                      index);
+  GPUQueue * (*getCommandQueue)(struct GPUDevice *__restrict device, GPUQueueFlagBits bits, uint32_t index);
 
-  GPUResult
-  (*getTimestampPeriod)(GPUQueue *queue,
-                        double   *outNanosecondsPerTick);
+  GPUResult (*getTimestampPeriod)(GPUQueue *queue, double *outNanosecondsPerTick);
 
-  GPUCommandBuffer*
-  (*newCommandBuffer)(GPUQueue                  * __restrict cmdb,
-                      const char                * __restrict label,
-                      void                      * __restrict sender,
-                      GPUCommandBufferCompletionFn  oncomplete);
-  
-  void
-  (*commandBufferOnComplete)(GPUCommandBuffer * __restrict cmdb,
-                             void             * __restrict sender,
-                             GPUCommandBufferCompletionFn  oncomplete);
-
-  GPUResult
-  (*discard)(GPUCommandBuffer * __restrict cmdb);
-  
-  /* Every prepared buffer must reach gpuFinishCommandBuffer exactly once. */
-  GPUResult
-  (*commit)(GPUCommandBuffer * __restrict cmdb);
-
-  GPUResult
-  (*submit)(GPUQueue                  * __restrict queue,
-            uint32_t                               count,
-            GPUCommandBuffer * const * __restrict buffers);
-
-  GPUResult
-  (*createSemaphore)(GPUDevice                       *device,
-                     const GPUSemaphoreCreateInfo    *info,
-                     GPUSemaphore                    *semaphore);
+  GPUCommandBuffer *
+  (*newCommandBuffer)(GPUQueue         *__restrict cmdb,
+                      const char       *__restrict label,
+                      void             *__restrict sender,
+                      GPUCommandBufferCompletionFn oncomplete);
 
   void
-  (*destroySemaphore)(GPUSemaphore *semaphore);
+  (*commandBufferOnComplete)(GPUCommandBuffer *__restrict cmdb,
+                             void             *__restrict sender,
+                             GPUCommandBufferCompletionFn oncomplete);
 
-  GPUResult
-  (*submitEx)(GPUQueue                   *queue,
-              const GPUQueueSubmitExInfo *info);
+  GPUResult (*discard)(GPUCommandBuffer *__restrict cmdb);
+
+  /* every prepared buffer must reach gpuFinishCommandBuffer exactly once. */
+  GPUResult (*commit)(GPUCommandBuffer *__restrict cmdb);
+
+  GPUResult (*submit)(GPUQueue *__restrict queue, uint32_t count, GPUCommandBuffer *const *__restrict buffers);
+
+  GPUResult (*createSemaphore)(GPUDevice *device, const GPUSemaphoreCreateInfo *info, GPUSemaphore *semaphore);
+
+  void (*destroySemaphore)(GPUSemaphore *semaphore);
+
+  GPUResult (*submitEx)(GPUQueue *queue, const GPUQueueSubmitExInfo *info);
 } GPUApiCommandQueue;
 
 #ifdef __cplusplus

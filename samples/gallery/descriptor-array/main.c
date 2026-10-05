@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 #include <stdio.h>
@@ -33,6 +49,39 @@ typedef struct DescriptorArray {
 
 static DescriptorArray app;
 
+static const uint8_t colors[DESCRIPTOR_COUNT][2][4] = {
+  {
+    { 255u,  86u,  18u, 255u },
+    { 255u, 196u,  42u, 255u }
+  },
+  {
+    {   0u, 195u, 255u, 255u },
+    {   9u,  54u, 168u, 255u }
+  },
+  {
+    { 255u,  48u, 142u, 255u },
+    { 116u,  18u,  86u, 255u }
+  },
+  {
+    {  33u, 220u, 105u, 255u },
+    { 184u, 255u,  68u, 255u }
+  }
+};
+
+static const char *const textureLabels[DESCRIPTOR_COUNT] = {
+  "descriptor-array-orange",
+  "descriptor-array-blue",
+  "descriptor-array-pink",
+  "descriptor-array-green"
+};
+
+static const float tints[DESCRIPTOR_COUNT][4] = {
+  {1.00f, 0.72f, 0.55f, 1.0f},
+  {0.55f, 0.82f, 1.00f, 1.0f},
+  {1.00f, 0.58f, 0.86f, 1.0f},
+  {0.68f, 1.00f, 0.62f, 1.0f}
+};
+
 static int
 resize_canvas(DescriptorArray *state) {
   return resize_webgpu_canvas(state->swapchain,
@@ -42,32 +91,14 @@ resize_canvas(DescriptorArray *state) {
 
 static void
 fill_texture(uint8_t *pixels, uint32_t textureIndex) {
-  static const uint8_t colors[DESCRIPTOR_COUNT][2][4] = {
-    {
-      { 255u,  86u,  18u, 255u },
-      { 255u, 196u,  42u, 255u }
-    },
-    {
-      {   0u, 195u, 255u, 255u },
-      {   9u,  54u, 168u, 255u }
-    },
-    {
-      { 255u,  48u, 142u, 255u },
-      { 116u,  18u,  86u, 255u }
-    },
-    {
-      {  33u, 220u, 105u, 255u },
-      { 184u, 255u,  68u, 255u }
-    }
-  };
+  const uint8_t *color;
+  uint32_t       offset, x, y;
 
-  for (uint32_t y = 0u; y < TEXTURE_SIZE; y++) {
-    for (uint32_t x = 0u; x < TEXTURE_SIZE; x++) {
-      const uint8_t *color;
-      uint32_t       offset;
-
+  for (y = 0u; y < TEXTURE_SIZE; y++) {
+    for (x = 0u; x < TEXTURE_SIZE; x++) {
       color  = colors[textureIndex][((x >> 1u) + (y >> 1u)) & 1u];
       offset = (y * TEXTURE_SIZE + x) * 4u;
+
       pixels[offset + 0u] = color[0];
       pixels[offset + 1u] = color[1];
       pixels[offset + 2u] = color[2];
@@ -78,9 +109,9 @@ fill_texture(uint8_t *pixels, uint32_t textureIndex) {
 
 static int
 create_shader(DescriptorArray *state) {
-  const GPUBindGroupLayoutEntry *entries;
   GPUColorTargetState            color = {0};
   GPURenderPipelineCreateInfo    info  = {0};
+  const GPUBindGroupLayoutEntry *entries;
   void                          *artifact;
   uint64_t                       artifactSize;
   uint32_t                       entryCount;
@@ -88,6 +119,7 @@ create_shader(DescriptorArray *state) {
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/descriptor_array.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /descriptor_array.us", 1);
     return 0;
@@ -98,35 +130,36 @@ create_shader(DescriptorArray *state) {
                                          artifactSize,
                                          &state->library);
   free(artifact);
+
   if (result != GPU_OK || !state->library) {
     set_status("GPU: failed to compile the descriptor-array artifact", 1);
     return 0;
   }
+
   if (GPUCreateShaderLayout(state->device,
                             state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 1u ||
-      !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0]) {
+                            &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 1u
+      || !state->shaderLayout->bindGroupLayouts
+      || !state->shaderLayout->bindGroupLayouts[0]) {
     set_status("GPU: unexpected descriptor-array reflection", 1);
     return 0;
   }
 
-  entries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[0],
-    &entryCount
-  );
-  if (!entries || entryCount != 3u ||
-      entries[0].binding != 0u ||
-      entries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      entries[0].arrayCount != DESCRIPTOR_COUNT ||
-      entries[1].binding != 1u ||
-      entries[1].bindingType != GPU_BINDING_SAMPLER ||
-      entries[1].arrayCount != DESCRIPTOR_COUNT ||
-      entries[2].binding != 2u ||
-      entries[2].bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER ||
-      entries[2].arrayCount != DESCRIPTOR_COUNT) {
+  entries = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[0],
+                                         &entryCount);
+
+  if (!entries || entryCount != 3u
+      || entries[0].binding != 0u
+      || entries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || entries[0].arrayCount != DESCRIPTOR_COUNT
+      || entries[1].binding != 1u
+      || entries[1].bindingType != GPU_BINDING_SAMPLER
+      || entries[1].arrayCount != DESCRIPTOR_COUNT
+      || entries[2].binding != 2u
+      || entries[2].bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER
+      || entries[2].arrayCount != DESCRIPTOR_COUNT) {
     set_status("GPU: descriptor-array reflection lost its array shape", 1);
     return 0;
   }
@@ -148,36 +181,31 @@ create_shader(DescriptorArray *state) {
   info.frontFace               = GPU_FRONT_FACE_CCW;
   info.multisample.sampleCount = 1u;
   info.multisample.sampleMask  = UINT32_MAX;
+
   result = GPUCreateRenderPipeline(state->device, &info, &state->pipeline);
+
   if (result != GPU_OK || !state->pipeline) {
     set_status("GPU: failed to create the descriptor-array pipeline", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_resources(DescriptorArray *state) {
-  static const char * const textureLabels[DESCRIPTOR_COUNT] = {
-    "descriptor-array-orange",
-    "descriptor-array-blue",
-    "descriptor-array-pink",
-    "descriptor-array-green"
-  };
-  static const float tints[DESCRIPTOR_COUNT][4] = {
-    {1.00f, 0.72f, 0.55f, 1.0f},
-    {0.55f, 0.82f, 1.00f, 1.0f},
-    {1.00f, 0.58f, 0.86f, 1.0f},
-    {0.68f, 1.00f, 0.62f, 1.0f}
-  };
   uint8_t                  pixels[TEXTURE_DATA_SIZE];
+
   GPUBufferCreateInfo      bufferInfo  = {0};
   GPUTextureCreateInfo     textureInfo = {0};
   GPUTextureWriteRegion    writeRegion = {0};
   GPUTextureViewCreateInfo viewInfo    = {0};
   GPUSamplerCreateInfo     samplerInfo = {0};
+
   GPUBindGroupEntry        entries[DESCRIPTOR_COUNT * 3u] = {0};
-  GPUBindGroupCreateInfo   groupInfo = {0};
+
+  GPUBindGroupCreateInfo   groupInfo   = {0};
+  uint32_t                 i;
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
@@ -188,8 +216,7 @@ create_resources(DescriptorArray *state) {
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
-  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
-                                 GPU_TEXTURE_USAGE_COPY_DST;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
 
   writeRegion.aspect       = GPU_TEXTURE_ASPECT_ALL;
   writeRegion.width        = TEXTURE_SIZE;
@@ -218,28 +245,29 @@ create_resources(DescriptorArray *state) {
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.sizeBytes        = sizeof(tints[0]);
-  bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
-                                GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_DST;
 
-  for (uint32_t i = 0u; i < DESCRIPTOR_COUNT; i++) {
+  for (i = 0u; i < DESCRIPTOR_COUNT; i++) {
     fill_texture(pixels, i);
     textureInfo.label = textureLabels[i];
+
     if (GPUCreateTexture(state->device,
                          &textureInfo,
-                         &state->textures[i]) != GPU_OK ||
-        GPUQueueWriteTexture(state->queue,
-                             state->textures[i],
-                             &writeRegion,
-                             pixels,
-                             sizeof(pixels)) != GPU_OK ||
-        GPUCreateTextureView(state->textures[i],
-                             &viewInfo,
-                             &state->textureViews[i]) != GPU_OK) {
+                         &state->textures[i]) != GPU_OK
+        || GPUQueueWriteTexture(state->queue,
+                                state->textures[i],
+                                &writeRegion,
+                                pixels,
+                                sizeof(pixels)) != GPU_OK
+        || GPUCreateTextureView(state->textures[i],
+                                &viewInfo,
+                                &state->textureViews[i]) != GPU_OK) {
       set_status("GPU: failed to create a descriptor-array texture", 1);
       return 0;
     }
 
     samplerInfo.label = textureLabels[i];
+
     if (GPUCreateSampler(state->device,
                          &samplerInfo,
                          false,
@@ -247,15 +275,17 @@ create_resources(DescriptorArray *state) {
       set_status("GPU: failed to create a descriptor-array sampler", 1);
       return 0;
     }
+
     bufferInfo.label = textureLabels[i];
+
     if (GPUCreateBuffer(state->device,
                         &bufferInfo,
-                        &state->tintBuffers[i]) != GPU_OK ||
-        GPUQueueWriteBuffer(state->queue,
-                            state->tintBuffers[i],
-                            0u,
-                            tints[i],
-                            sizeof(tints[i])) != GPU_OK) {
+                        &state->tintBuffers[i]) != GPU_OK
+        || GPUQueueWriteBuffer(state->queue,
+                               state->tintBuffers[i],
+                               0u,
+                               tints[i],
+                               sizeof(tints[i])) != GPU_OK) {
       set_status("GPU: failed to create a descriptor-array buffer", 1);
       return 0;
     }
@@ -264,17 +294,17 @@ create_resources(DescriptorArray *state) {
     entries[i].binding     = 0u;
     entries[i].arrayIndex  = i;
     entries[i].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+
     entries[DESCRIPTOR_COUNT + i].sampler     = state->samplers[i];
     entries[DESCRIPTOR_COUNT + i].binding     = 1u;
     entries[DESCRIPTOR_COUNT + i].arrayIndex  = i;
     entries[DESCRIPTOR_COUNT + i].bindingType = GPU_BINDING_SAMPLER;
-    entries[DESCRIPTOR_COUNT * 2u + i].buffer.buffer =
-      state->tintBuffers[i];
-    entries[DESCRIPTOR_COUNT * 2u + i].buffer.size = sizeof(tints[i]);
-    entries[DESCRIPTOR_COUNT * 2u + i].binding     = 2u;
-    entries[DESCRIPTOR_COUNT * 2u + i].arrayIndex  = i;
-    entries[DESCRIPTOR_COUNT * 2u + i].bindingType =
-      GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
+
+    entries[DESCRIPTOR_COUNT * 2u + i].buffer.buffer = state->tintBuffers[i];
+    entries[DESCRIPTOR_COUNT * 2u + i].buffer.size   = sizeof(tints[i]);
+    entries[DESCRIPTOR_COUNT * 2u + i].binding       = 2u;
+    entries[DESCRIPTOR_COUNT * 2u + i].arrayIndex    = i;
+    entries[DESCRIPTOR_COUNT * 2u + i].bindingType   = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
   }
 
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
@@ -283,31 +313,38 @@ create_resources(DescriptorArray *state) {
   groupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
   groupInfo.pEntries         = entries;
   groupInfo.entryCount       = GPU_ARRAY_LEN(entries);
+
   if (GPUCreateBindGroup(state->device,
                          &groupInfo,
                          &state->bindGroup) != GPU_OK) {
     set_status("GPU: failed to create the descriptor-array bind group", 1);
     return 0;
   }
+
   return 1;
 }
 
 static void
 render_frame(void *userData) {
-  DescriptorArray                *state;
-  GPUFrame                      *frame;
-  GPUCommandBuffer              *cmdb;
-  GPURenderPassEncoder          *pass;
-  GPURenderPassColorAttachment  color    = {0};
-  GPURenderPassCreateInfo       passInfo = {0};
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassColorAttachment color    = {0};
+  GPURenderPassCreateInfo      passInfo = {0};
+  DescriptorArray             *state;
+  GPUFrame                    *frame;
+  GPURenderPassEncoder        *pass;
 
   state = userData;
-  if (!resize_canvas(state)) return;
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) return;
+  if (!resize_canvas(state)) {
+    return;
+  }
+
+  if (!(frame = GPUBeginFrame(state->swapchain))) {
+    return;
+  }
 
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(state->queue,
                               "descriptor-array-frame",
                               &cmdb) != GPU_OK || !cmdb) {
@@ -322,11 +359,12 @@ render_frame(void *userData) {
   color.clearColor.float32[1] = 0.025f;
   color.clearColor.float32[2] = 0.065f;
   color.clearColor.float32[3] = 1.0f;
+
   passInfo.label                = "descriptor-array-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
@@ -336,15 +374,17 @@ render_frame(void *userData) {
   GPUBindRenderGroup(pass, 0u, state->bindGroup, 0u, NULL);
   GPUDraw(pass, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
+
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     fprintf(stderr, "GPU: failed to finish descriptor-array frame\n");
   } else {
     GPUFrameStats stats;
 
     state->frameCount++;
-    if (state->frameCount > WARM_FRAME_COUNT &&
-        GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.hotPathAllocCount != 0u || stats.hotPathFreeCount != 0u)) {
+
+    if (state->frameCount > WARM_FRAME_COUNT
+        && GPUGetLastFrameStats(state->device, &stats) == GPU_OK
+        && (stats.hotPathAllocCount != 0u || stats.hotPathFreeCount != 0u)) {
       set_status("GPU: warm descriptor-array frame allocated wrapper memory",
                  1);
       emscripten_cancel_main_loop();
@@ -353,14 +393,15 @@ render_frame(void *userData) {
 }
 
 static void
-gpu_ready(GPUResult  result,
+gpu_ready(GPUResult   result,
           GPUAdapter *adapter,
           GPUDevice  *device,
           void       *userData) {
-  DescriptorArray   *state;
-  GPURuntimeConfig   runtime = {0};
+  GPURuntimeConfig runtime = {0};
+  DescriptorArray *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status(!adapter ? "GPU: failed to request adapter"
                         : "GPU: failed to request device",
@@ -370,35 +411,40 @@ gpu_ready(GPUResult  result,
 
   state->adapter = adapter;
   state->device  = device;
+
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING)) {
     set_status_notice("GPU: descriptor indexing unavailable");
     return;
   }
+
   state->queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (GPUConfigureRuntime(device, &runtime) != GPU_OK) {
     set_status("GPU: failed to configure runtime stats", 1);
     return;
   }
 
   state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               state->adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
+                                              state->adapter,
+                                              (void *)"#canvas",
+                                              GPU_SURFACE_WEB_CANVAS,
+                                              1.0f);
+
   if (!state->queue || !state->surface || !resize_canvas(state)) {
     set_status("GPU: failed to create queue or surface", 1);
     return;
   }
 
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain || !create_shader(state) || !create_resources(state)) {
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))
+      || !create_shader(state) || !create_resources(state)) {
     set_status("GPU: failed to initialize descriptor-array resources", 1);
     return;
   }
@@ -409,16 +455,18 @@ gpu_ready(GPUResult  result,
 
 int
 main(void) {
-  const GPUFeature       feature = GPU_FEATURE_DESCRIPTOR_INDEXING;
-  GPUInstanceCreateInfo  info    = {0};
-  GPUResult              result;
+  const GPUFeature      feature = GPU_FEATURE_DESCRIPTOR_INDEXING;
+  GPUInstanceCreateInfo info    = {0};
+  GPUResult             result;
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   info.chain.structSize = sizeof(info);
   info.label            = "descriptor-array-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create instance", 1);
     return 1;
@@ -431,5 +479,6 @@ main(void) {
                                           &app,
                                           &feature,
                                           1u);
+
   return result == GPU_OK ? 0 : 1;
 }

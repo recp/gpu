@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 typedef struct TriangleVertex {
@@ -36,10 +52,10 @@ typedef struct WebGPUInstancing {
 } WebGPUInstancing;
 
 enum {
-  INSTANCE_COUNT       = 4u,
-  UNIFORM_DATA_SIZE    = 32u,
-  UNIFORM_STRIDE       = 256u,
-  WARM_FRAME_COUNT     = 8u
+  INSTANCE_COUNT    = 4u,
+  UNIFORM_DATA_SIZE = 32u,
+  UNIFORM_STRIDE    = 256u,
+  WARM_FRAME_COUNT  = 8u
 };
 
 _Static_assert(sizeof(DrawUniformBlock) == UNIFORM_STRIDE,
@@ -78,19 +94,20 @@ resize_canvas(WebGPUInstancing *state) {
 
 static int
 create_pipeline(WebGPUInstancing *state) {
-  GPUVertexAttribute          vertexAttribute = {0};
-  GPUVertexAttribute          instanceAttributes[2] = {0};
-  GPUVertexBufferLayout       vertexLayouts[2] = {0};
-  GPUColorTargetState         color = {0};
-  GPURenderPipelineCreateInfo info = {0};
+  GPUVertexAttribute             instanceAttributes[2] = {0};
+  GPUVertexBufferLayout          vertexLayouts[2]      = {0};
+  GPURenderPipelineCreateInfo    info                  = {0};
+  GPUColorTargetState            color                 = {0};
+  GPUVertexAttribute             vertexAttribute       = {0};
   const GPUBindGroupLayoutEntry *layoutEntries;
-  void                       *artifact;
-  uint64_t                    artifactSize;
-  uint32_t                    layoutEntryCount;
-  GPUResult                   result;
+  void                          *artifact;
+  uint64_t                       artifactSize;
+  uint32_t                       layoutEntryCount;
+  GPUResult                      result;
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/instancing.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /instancing.us", 1);
     return 0;
@@ -101,36 +118,37 @@ create_pipeline(WebGPUInstancing *state) {
                                          artifactSize,
                                          &state->library);
   free(artifact);
+
   if (result != GPU_OK || !state->library) {
     set_status("GPU: failed to compile the instancing artifact", 1);
     return 0;
   }
+
   if (GPUCreateShaderLayout(state->device,
                             state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 1u ||
-      !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0]) {
+                            &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 1u
+      || !state->shaderLayout->bindGroupLayouts
+      || !state->shaderLayout->bindGroupLayouts[0]) {
     set_status("GPU: unexpected instancing shader reflection", 1);
     return 0;
   }
 
-  layoutEntries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[0],
-    &layoutEntryCount
-  );
-  if (!layoutEntries || layoutEntryCount != 1u ||
-      layoutEntries[0].binding != 0u ||
-      layoutEntries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER ||
-      !layoutEntries[0].hasDynamicOffset) {
+  if (!(layoutEntries = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[0],
+                                                     &layoutEntryCount))
+      || layoutEntryCount != 1u
+      || layoutEntries[0].binding != 0u
+      || layoutEntries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER
+      || !layoutEntries[0].hasDynamicOffset) {
     set_status("GPU: USL dynamic-offset reflection mismatch", 1);
     return 0;
   }
 
-  vertexAttribute.format          = GPU_VERTEX_FORMAT_FLOAT32X2;
-  vertexAttribute.offset          = offsetof(TriangleVertex, position);
-  vertexAttribute.shaderLocation  = 0u;
+  vertexAttribute.format         = GPU_VERTEX_FORMAT_FLOAT32X2;
+  vertexAttribute.offset         = offsetof(TriangleVertex, position);
+  vertexAttribute.shaderLocation = 0u;
+
   vertexLayouts[0].pAttributes    = &vertexAttribute;
   vertexLayouts[0].strideBytes    = sizeof(TriangleVertex);
   vertexLayouts[0].stepMode       = GPU_VERTEX_STEP_MODE_VERTEX;
@@ -142,10 +160,11 @@ create_pipeline(WebGPUInstancing *state) {
   instanceAttributes[1].format         = GPU_VERTEX_FORMAT_FLOAT32X4;
   instanceAttributes[1].offset         = offsetof(InstanceData, color);
   instanceAttributes[1].shaderLocation = 2u;
-  vertexLayouts[1].pAttributes         = instanceAttributes;
-  vertexLayouts[1].strideBytes         = sizeof(InstanceData);
-  vertexLayouts[1].stepMode            = GPU_VERTEX_STEP_MODE_INSTANCE;
-  vertexLayouts[1].attributeCount      = 2u;
+
+  vertexLayouts[1].pAttributes    = instanceAttributes;
+  vertexLayouts[1].strideBytes    = sizeof(InstanceData);
+  vertexLayouts[1].stepMode       = GPU_VERTEX_STEP_MODE_INSTANCE;
+  vertexLayouts[1].attributeCount = 2u;
 
   color.format          = GPUGetSwapchainFormat(state->swapchain);
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
@@ -166,48 +185,52 @@ create_pipeline(WebGPUInstancing *state) {
   info.frontFace                = GPU_FRONT_FACE_CCW;
   info.multisample.sampleCount  = 1u;
   info.multisample.sampleMask   = UINT32_MAX;
+
   result = GPUCreateRenderPipeline(state->device, &info, &state->pipeline);
+
   if (result != GPU_OK || !state->pipeline) {
     set_status("GPU: failed to create the instancing pipeline", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_resources(WebGPUInstancing *state) {
   GPUBufferCreateInfo    bufferInfo = {0};
-  GPUBindGroupEntry      groupEntry = {0};
   GPUBindGroupCreateInfo groupInfo  = {0};
+  GPUBindGroupEntry      groupEntry = {0};
 
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "instancing-webgpu-vertices";
   bufferInfo.sizeBytes        = sizeof(kTriangleVertices);
-  bufferInfo.usage            = GPU_BUFFER_USAGE_VERTEX |
-                                GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(state->device,
                       &bufferInfo,
-                      &state->vertexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->vertexBuffer,
-                          0u,
-                          kTriangleVertices,
-                          sizeof(kTriangleVertices)) != GPU_OK) {
+                      &state->vertexBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->vertexBuffer,
+                             0u,
+                             kTriangleVertices,
+                             sizeof(kTriangleVertices)) != GPU_OK) {
     set_status("GPU: failed to upload instancing vertices", 1);
     return 0;
   }
 
   bufferInfo.label     = "instancing-webgpu-instances";
   bufferInfo.sizeBytes = sizeof(kInstances);
+
   if (GPUCreateBuffer(state->device,
                       &bufferInfo,
-                      &state->instanceBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->instanceBuffer,
-                          0u,
-                          kInstances,
-                          sizeof(kInstances)) != GPU_OK) {
+                      &state->instanceBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->instanceBuffer,
+                             0u,
+                             kInstances,
+                             sizeof(kInstances)) != GPU_OK) {
     set_status("GPU: failed to upload instance data", 1);
     return 0;
   }
@@ -215,14 +238,15 @@ create_resources(WebGPUInstancing *state) {
   bufferInfo.label     = "instancing-webgpu-dynamic-uniforms";
   bufferInfo.sizeBytes = sizeof(kDrawUniforms);
   bufferInfo.usage     = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(state->device,
                       &bufferInfo,
-                      &state->uniformBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->uniformBuffer,
-                          0u,
-                          kDrawUniforms,
-                          sizeof(kDrawUniforms)) != GPU_OK) {
+                      &state->uniformBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->uniformBuffer,
+                             0u,
+                             kDrawUniforms,
+                             sizeof(kDrawUniforms)) != GPU_OK) {
     set_status("GPU: failed to upload dynamic uniforms", 1);
     return 0;
   }
@@ -231,43 +255,48 @@ create_resources(WebGPUInstancing *state) {
   groupEntry.buffer.size   = UNIFORM_DATA_SIZE;
   groupEntry.binding       = 0u;
   groupEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
+
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label             = "instancing-webgpu-group0";
-  groupInfo.layout            = state->shaderLayout->bindGroupLayouts[0];
-  groupInfo.pEntries          = &groupEntry;
-  groupInfo.entryCount        = 1u;
+  groupInfo.label            = "instancing-webgpu-group0";
+  groupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
+  groupInfo.pEntries         = &groupEntry;
+  groupInfo.entryCount       = 1u;
+
   if (GPUCreateBindGroup(state->device,
                          &groupInfo,
-                         &state->drawGroup) != GPU_OK ||
-      !state->drawGroup) {
+                         &state->drawGroup) != GPU_OK
+      || !state->drawGroup) {
     set_status("GPU: failed to create the dynamic bind group", 1);
     return 0;
   }
+
   return 1;
 }
 
 static void
 render_frame(void *userData) {
-  WebGPUInstancing              *state;
-  GPUFrame                      *frame;
-  GPUCommandBuffer              *cmdb;
-  GPURenderPassEncoder          *pass;
-  GPUBufferBinding               vertexBuffers[2] = {0};
-  GPURenderPassColorAttachment   color = {0};
-  GPURenderPassCreateInfo        passInfo = {0};
-  uint32_t                       dynamicOffset;
+  GPUBufferBinding             vertexBuffers[2] = {0};
+  GPURenderPassCreateInfo      passInfo         = {0};
+  GPURenderPassColorAttachment color            = {0};
+  WebGPUInstancing            *state;
+  GPUFrame                    *frame;
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassEncoder        *pass;
+  uint32_t                     dynamicOffset;
 
   state = userData;
+
   if (!resize_canvas(state)) {
     return;
   }
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) {
+  if (!(frame = GPUBeginFrame(state->swapchain))) {
     return;
   }
+
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(state->queue,
                               "instancing-webgpu-frame",
                               &cmdb) != GPU_OK || !cmdb) {
@@ -282,11 +311,12 @@ render_frame(void *userData) {
   color.clearColor.float32[1] = 0.035f;
   color.clearColor.float32[2] = 0.085f;
   color.clearColor.float32[3] = 1.0f;
+
   passInfo.label                = "instancing-webgpu-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
@@ -294,27 +324,32 @@ render_frame(void *userData) {
 
   vertexBuffers[0].buffer = state->vertexBuffer;
   vertexBuffers[1].buffer = state->instanceBuffer;
+
   GPUBindRenderPipeline(pass, state->pipeline);
   GPUBindVertexBuffers(pass, 0u, 2u, vertexBuffers);
 
   dynamicOffset = 0u;
+
   GPUBindRenderGroup(pass, 0u, state->drawGroup, 1u, &dynamicOffset);
   GPUDraw(pass, 3u, INSTANCE_COUNT, 0u, 0u);
 
   dynamicOffset = UNIFORM_STRIDE;
+
   GPUBindRenderGroup(pass, 0u, state->drawGroup, 1u, &dynamicOffset);
   GPUDraw(pass, 3u, INSTANCE_COUNT, 0u, INSTANCE_COUNT);
 
   GPUEndRenderPass(pass);
+
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     set_status("GPU: failed to finish the instancing frame", 1);
   } else {
     GPUFrameStats stats;
 
     state->frameCount++;
-    if (state->frameCount > WARM_FRAME_COUNT &&
-        GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.hotPathAllocCount != 0u || stats.hotPathFreeCount != 0u)) {
+
+    if (state->frameCount > WARM_FRAME_COUNT
+        && GPUGetLastFrameStats(state->device, &stats) == GPU_OK
+        && (stats.hotPathAllocCount != 0u || stats.hotPathFreeCount != 0u)) {
       set_status("GPU: warm instancing frame allocated wrapper memory", 1);
       emscripten_cancel_main_loop();
     }
@@ -322,14 +357,15 @@ render_frame(void *userData) {
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
-  WebGPUInstancing *state;
   GPURuntimeConfig  runtime = {0};
+  WebGPUInstancing *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status(!adapter ? "GPU: failed to request WebGPU adapter"
                         : "GPU: failed to request WebGPU device",
@@ -340,31 +376,34 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (GPUConfigureRuntime(device, &runtime) != GPU_OK) {
     set_status("GPU: failed to configure WebGPU runtime stats", 1);
     return;
   }
 
   state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               state->adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
+                                              state->adapter,
+                                              (void *)"#canvas",
+                                              GPU_SURFACE_WEB_CANVAS,
+                                              1.0f);
+
   if (!state->queue || !state->surface || !resize_canvas(state)) {
     set_status("GPU: failed to create WebGPU queue or canvas surface", 1);
     return;
   }
 
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain || !create_pipeline(state) ||
-      !create_resources(state)) {
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))
+      || !create_pipeline(state)
+      || !create_resources(state)) {
     set_status("GPU: failed to initialize instancing resources", 1);
     return;
   }
@@ -383,7 +422,9 @@ main(void) {
   info.label            = "instancing-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create WebGPU instance", 1);
     return 1;
@@ -394,8 +435,10 @@ main(void) {
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   if (result != GPU_OK) {
     return 1;
   }
+
   return 0;
 }

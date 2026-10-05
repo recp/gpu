@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <AppKit/AppKit.h>
 #import <dispatch/dispatch.h>
 
@@ -16,20 +32,6 @@
 enum {
   kSkipReturnCode = 77
 };
-
-static NSString *
-BindlessTextureWindowTitle(void) {
-  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN
-           ? @"GPU Vulkan USL Bindless Texture"
-           : @"GPU Metal USL Bindless Texture";
-}
-
-static const char *
-BindlessTextureStatsLabel(void) {
-  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN
-           ? "GPU Vulkan bindless texture"
-           : "GPU Metal bindless texture";
-}
 
 @interface BindlessTextureApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
 @private
@@ -51,10 +53,25 @@ BindlessTextureStatsLabel(void) {
   BOOL                      _skipped;
   BOOL                      _terminating;
 }
+
 - (void)frameCompleted;
 - (void)failAndTerminate;
 - (int)exitCode;
 @end
+
+static NSString*
+BindlessTextureWindowTitle(void) {
+  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN
+           ? @"GPU Vulkan USL Bindless Texture"
+           : @"GPU Metal USL Bindless Texture";
+}
+
+static const char*
+BindlessTextureStatsLabel(void) {
+  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN
+           ? "GPU Vulkan bindless texture"
+           : "GPU Metal bindless texture";
+}
 
 static void
 BindlessTextureFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
@@ -73,8 +90,10 @@ BindlessTextureDeviceError(GPUDevice                *device,
 
   (void)device;
   app = (__bridge BindlessTextureApp *)userData;
-  NSLog(@"GPU bindless error: %s", error && error->message ? error->message
-                                                           : "unknown error");
+  NSLog(@"GPU bindless error: %s",
+        error && error->message ? error->message
+          : "unknown error");
+
   if (app) {
     dispatch_async(dispatch_get_main_queue(), ^{
       [app failAndTerminate];
@@ -90,9 +109,11 @@ BindlessTextureDeviceError(GPUDevice                *device,
   if (!outWidth || !outHeight) {
     return NO;
   }
+
   scale      = _window.backingScaleFactor ?: 1.0f;
   *outWidth  = (uint32_t)(_view.bounds.size.width * scale);
   *outHeight = (uint32_t)(_view.bounds.size.height * scale);
+
   return *outWidth > 0u && *outHeight > 0u;
 }
 
@@ -111,41 +132,52 @@ BindlessTextureDeviceError(GPUDevice                *device,
   instanceInfo.label            = "bindless-native-usl";
   instanceInfo.preferredBackend = GPU_SAMPLE_BACKEND;
   instanceInfo.enableValidation = true;
+
   if (GPUCreateInstance(&instanceInfo, &_instance) != GPU_OK || !_instance) {
     return NO;
   }
 
   _adapter = GPUSampleSelectAdapter(_instance);
+
   if (!_adapter) {
     return NO;
   }
+
   if (!GPUIsFeatureSupported(_adapter, GPU_FEATURE_BINDLESS)) {
     _skipped = YES;
     return NO;
   }
-  feature                           = GPU_FEATURE_BINDLESS;
+
+  feature = GPU_FEATURE_BINDLESS;
+
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.label                 = "bindless-native-device";
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
-  if (GPUCreateDevice(_adapter, &deviceInfo, &_device) != GPU_OK ||
-      !_device || !GPUIsFeatureEnabled(_device, GPU_FEATURE_BINDLESS)) {
+
+  if (GPUCreateDevice(_adapter, &deviceInfo, &_device) != GPU_OK
+      || !_device || !GPUIsFeatureEnabled(_device, GPU_FEATURE_BINDLESS)) {
     return NO;
   }
+
   _queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0u);
+
   if (!_queue) {
     return NO;
   }
+
   if (GPUSetDeviceErrorCallback(_device,
                                 BindlessTextureDeviceError,
                                 (__bridge void *)self) != GPU_OK) {
     return NO;
   }
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (GPUConfigureRuntime(_device, &runtime) != GPU_OK) {
     return NO;
   }
@@ -155,19 +187,23 @@ BindlessTextureDeviceError(GPUDevice                *device,
                                         (__bridge void *)_view,
                                         GPU_SURFACE_APPLE_NSVIEW,
                                         _window.backingScaleFactor ?: 1.0f);
+
   if (!_surface) {
     return NO;
   }
+
   _swapchain = GPUCreateSwapchainDefault(_device,
                                          _surface,
                                          (uint32_t)_view.bounds.size.width,
                                          (uint32_t)_view.bounds.size.height);
+
   if (!_swapchain || ![self drawableSizeWidth:&width height:&height]) {
     return NO;
   }
 
   library      = NULL;
   shaderLayout = NULL;
+
   if (!GPUSampleLoadUSL(_device,
                         @"bindless.us",
                         1u,
@@ -175,6 +211,7 @@ BindlessTextureDeviceError(GPUDevice                *device,
                         &shaderLayout)) {
     return NO;
   }
+
   return GPUSampleBindlessTextureInit(&_renderer,
                                       _device,
                                       _queue,
@@ -191,21 +228,23 @@ BindlessTextureDeviceError(GPUDevice                *device,
   uint32_t                     width;
   uint32_t                     height;
 
-  if (_terminating ||
-      (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) ||
-      !GPUSampleRecoverSwapchain(_swapchain, _view) ||
-      ![self drawableSizeWidth:&width height:&height]) {
+  if (_terminating
+      || (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames)
+      || !GPUSampleRecoverSwapchain(_swapchain, _view)
+      || ![self drawableSizeWidth:&width height:&height]) {
     return;
   }
+
   if (GPUSampleBindlessTextureResize(&_renderer, width, height) != GPU_OK) {
     [self failAndTerminate];
     return;
   }
 
   completion = _exitAfterFrames > 0 ? BindlessTextureFrameComplete : NULL;
-  result = GPUSampleBindlessTextureRender(&_renderer,
-                                          (__bridge void *)self,
-                                          completion);
+  result     = GPUSampleBindlessTextureRender(&_renderer,
+                                              (__bridge void *)self,
+                                              completion);
+
   if (result != GPU_OK) {
     NSLog(@"GPU bindless frame failed: %d", result);
     [self failAndTerminate];
@@ -213,13 +252,14 @@ BindlessTextureDeviceError(GPUDevice                *device,
   }
 
   _submittedFrames++;
+
   if (!GPUSampleCheckZeroAlloc(_device,
                                (uint32_t)_submittedFrames,
                                _assertZeroAlloc,
                                BindlessTextureStatsLabel())) {
     [self failAndTerminate];
-  } else if (_exitAfterFrames > 0 &&
-             _submittedFrames >= _exitAfterFrames) {
+  } else if (_exitAfterFrames > 0
+             && _submittedFrames >= _exitAfterFrames) {
     [_timer invalidate];
     _timer = nil;
   }
@@ -234,9 +274,10 @@ BindlessTextureDeviceError(GPUDevice                *device,
 - (void)frameCompleted {
   dispatch_async(dispatch_get_main_queue(), ^{
     self->_completedFrames++;
-    if (self->_exitAfterFrames > 0 &&
-        self->_completedFrames >= self->_exitAfterFrames &&
-        !self->_terminating) {
+
+    if (self->_exitAfterFrames > 0
+        && self->_completedFrames >= self->_exitAfterFrames
+        && !self->_terminating) {
       self->_terminating = YES;
       [NSApp terminate:nil];
     }
@@ -266,8 +307,9 @@ BindlessTextureDeviceError(GPUDevice                *device,
   const char *exitAfterFrames;
 
   (void)notification;
-  if (!GPUSampleCreateWindow(BindlessTextureWindowTitle(), self, &_window, &_view) ||
-      ![self setupGPU]) {
+
+  if (!GPUSampleCreateWindow(BindlessTextureWindowTitle(), self, &_window, &_view)
+      || ![self setupGPU]) {
     if (!_skipped) {
       _failed = YES;
     }
@@ -276,15 +318,18 @@ BindlessTextureDeviceError(GPUDevice                *device,
   }
 
   exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+
   if (exitAfterFrames) {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
   }
+
   _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
+
   _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
-                                   target:self
-                                 selector:@selector(tick:)
-                                 userInfo:nil
-                                  repeats:YES];
+                                 target:self
+                               selector:@selector(tick:)
+                               userInfo:nil
+                                repeats:YES];
   [[NSRunLoop mainRunLoop] addTimer:_timer forMode:NSRunLoopCommonModes];
   [self renderFrame];
 }
@@ -312,6 +357,7 @@ main(int argc, const char *argv[]) {
   int result;
 
   result = 0;
+
   @autoreleasepool {
     BindlessTextureApp *delegate;
 
@@ -324,5 +370,6 @@ main(int argc, const char *argv[]) {
     [NSApp run];
     result = [delegate exitCode];
   }
+
   return result;
 }

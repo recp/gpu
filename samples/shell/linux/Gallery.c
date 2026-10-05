@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "NativeSamples.h"
 
 #include <gtk/gtk.h>
@@ -28,20 +44,64 @@ typedef struct GPUGallery {
   GPid       child;
 } GPUGallery;
 
+static const char css[] =
+  "window { background: #07090d; color: #f3f1eb; }"
+  "headerbar.gallery-header,"
+  "headerbar.gallery-header:backdrop {"
+  "  background: #0b0d12;"
+  "  background-image: none;"
+  "  border: 0;"
+  "  border-bottom: 1px solid #20242c;"
+  "  box-shadow: none;"
+  "  color: #f3f1eb;"
+  "}"
+  "headerbar.gallery-header label,"
+  "headerbar.gallery-header:backdrop label {"
+  "  color: #f3f1eb;"
+  "  text-shadow: none;"
+  "}"
+  ".gallery-title { font-size: 26px; font-weight: 800; }"
+  ".gallery-status { color: #918f8a; }"
+  "button.sample-card,"
+  "button.sample-card:focus,"
+  "button.sample-card:active,"
+  "button.sample-card:backdrop,"
+  "button.sample-card:disabled {"
+  "  background: #0e121a;"
+  "  background-image: none;"
+  "  border: 1px solid #2f343d;"
+  "  border-radius: 18px;"
+  "  box-shadow: none;"
+  "  padding: 12px;"
+  "}"
+  "button.sample-card:hover,"
+  "button.sample-card:focus { border-color: #ff7014; }"
+  "button.sample-card label.sample-title,"
+  "button.sample-card:focus label.sample-title,"
+  "button.sample-card:backdrop label.sample-title,"
+  "button.sample-card:disabled label.sample-title {"
+  "  color: #f3f1eb;"
+  "  font-size: 18px;"
+  "  font-weight: 700;"
+  "  text-shadow: none;"
+  "}";
+
 static char*
 sample_title(const char *id) {
   char   *title;
-  size_t  length;
+  size_t  length, i;
 
   length = strlen(id);
   title  = g_malloc(length + 1u);
   memcpy(title, id, length + 1u);
   title[0] = g_ascii_toupper(title[0]);
-  for (size_t i = 1u; i < length; i++) {
+
+  for (i = 1u; i < length; i++) {
     if (title[i] == '-') {
       title[i] = ' ';
     }
   }
+
   return title;
 }
 
@@ -51,9 +111,9 @@ sample_preview(const char *path) {
   GError    *error;
   int        width, height;
 
-  error  = NULL;
-  source = gdk_pixbuf_new_from_file(path, &error);
-  if (!source) {
+  error = NULL;
+
+  if (!(source = gdk_pixbuf_new_from_file(path, &error))) {
     g_clear_error(&error);
     return NULL;
   }
@@ -61,6 +121,7 @@ sample_preview(const char *path) {
   width   = gdk_pixbuf_get_width(source);
   height  = gdk_pixbuf_get_height(source);
   cropped = source;
+
   if (width > 4 && height > 4) {
     cropped = gdk_pixbuf_new_subpixbuf(source,
                                        2,
@@ -68,21 +129,25 @@ sample_preview(const char *path) {
                                        width - 4,
                                        height - 4);
   }
+
   pixels = gdk_pixbuf_scale_simple(cropped,
                                    340,
                                    212,
                                    GDK_INTERP_BILINEAR);
+
   if (cropped != source) {
     g_object_unref(cropped);
   }
+
   g_object_unref(source);
+
   return pixels;
 }
 
 static gboolean
 draw_preview(GtkWidget *widget, cairo_t *context, gpointer userData) {
-  GdkPixbuf     *pixels;
   GtkAllocation allocation;
+  GdkPixbuf    *pixels;
 
   pixels = userData;
   gtk_widget_get_allocation(widget, &allocation);
@@ -90,11 +155,10 @@ draw_preview(GtkWidget *widget, cairo_t *context, gpointer userData) {
   cairo_paint(context);
   gdk_cairo_set_source_pixbuf(context,
                               pixels,
-                              (allocation.width -
-                               gdk_pixbuf_get_width(pixels)) * 0.5,
-                              (allocation.height -
-                               gdk_pixbuf_get_height(pixels)) * 0.5);
+                              (allocation.width - gdk_pixbuf_get_width(pixels)) * 0.5,
+                              (allocation.height - gdk_pixbuf_get_height(pixels)) * 0.5);
   cairo_paint(context);
+
   return TRUE;
 }
 
@@ -112,14 +176,22 @@ sample_closed(GPid pid, gint status, gpointer userData) {
 
 static void
 sample_clicked(GtkButton *button, gpointer userData) {
+#ifdef GPU_LINUX_GALLERY_XLIB
+  char                   parentId[32];
+#endif
+  gchar                 *arguments[2];
   const GPUNativeSample *sample;
   GPUGallery            *gallery;
   GError                *error;
   gchar                **environment;
-  gchar                 *arguments[2];
+#ifdef GPU_LINUX_GALLERY_XLIB
+  GdkWindow             *nativeWindow;
+  unsigned long          xid;
+#endif
 
   gallery = userData;
   sample  = g_object_get_data(G_OBJECT(button), "gpu-sample");
+
   if (!sample || gallery->child) {
     return;
   }
@@ -128,23 +200,20 @@ sample_clicked(GtkButton *button, gpointer userData) {
   arguments[1] = NULL;
   error        = NULL;
   environment  = g_get_environ();
-#ifdef GPU_LINUX_GALLERY_XLIB
-  {
-    GdkWindow     *nativeWindow;
-    char           parentId[32];
-    unsigned long  xid;
 
-    nativeWindow = gtk_widget_get_window(gallery->window);
-    xid          = nativeWindow ? GDK_WINDOW_XID(nativeWindow) : 0ul;
-    if (xid != 0ul) {
-      snprintf(parentId, sizeof(parentId), "%lu", xid);
-      environment = g_environ_setenv(environment,
-                                     "GPU_SAMPLE_PARENT_XID",
-                                     parentId,
-                                     TRUE);
-    }
+#ifdef GPU_LINUX_GALLERY_XLIB
+  nativeWindow = gtk_widget_get_window(gallery->window);
+  xid          = nativeWindow ? GDK_WINDOW_XID(nativeWindow) : 0ul;
+
+  if (xid != 0ul) {
+    snprintf(parentId, sizeof(parentId), "%lu", xid);
+    environment = g_environ_setenv(environment,
+                                   "GPU_SAMPLE_PARENT_XID",
+                                   parentId,
+                                   TRUE);
   }
 #endif
+
   if (!g_spawn_async(NULL,
                      arguments,
                      environment,
@@ -160,6 +229,7 @@ sample_clicked(GtkButton *button, gpointer userData) {
     g_strfreev(environment);
     return;
   }
+
   g_strfreev(environment);
 
   gtk_label_set_text(GTK_LABEL(gallery->status), sample->id);
@@ -175,8 +245,8 @@ sample_card(const GPUNativeSample *sample, GPUGallery *gallery) {
 
   button = gtk_button_new();
   box    = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-  pixels = sample_preview(sample->preview);
-  if (pixels) {
+
+  if ((pixels = sample_preview(sample->preview))) {
     image = gtk_drawing_area_new();
     gtk_widget_set_size_request(image, 340, 212);
     g_signal_connect(image,
@@ -209,55 +279,16 @@ sample_card(const GPUNativeSample *sample, GPUGallery *gallery) {
                    "clicked",
                    G_CALLBACK(sample_clicked),
                    gallery);
+
   return button;
 }
 
 static void
 activate(GtkApplication *application, gpointer userData) {
-  static const char css[] =
-    "window { background: #07090d; color: #f3f1eb; }"
-    "headerbar.gallery-header,"
-    "headerbar.gallery-header:backdrop {"
-    "  background: #0b0d12;"
-    "  background-image: none;"
-    "  border: 0;"
-    "  border-bottom: 1px solid #20242c;"
-    "  box-shadow: none;"
-    "  color: #f3f1eb;"
-    "}"
-    "headerbar.gallery-header label,"
-    "headerbar.gallery-header:backdrop label {"
-    "  color: #f3f1eb;"
-    "  text-shadow: none;"
-    "}"
-    ".gallery-title { font-size: 26px; font-weight: 800; }"
-    ".gallery-status { color: #918f8a; }"
-    "button.sample-card,"
-    "button.sample-card:focus,"
-    "button.sample-card:active,"
-    "button.sample-card:backdrop,"
-    "button.sample-card:disabled {"
-    "  background: #0e121a;"
-    "  background-image: none;"
-    "  border: 1px solid #2f343d;"
-    "  border-radius: 18px;"
-    "  box-shadow: none;"
-    "  padding: 12px;"
-    "}"
-    "button.sample-card:hover,"
-    "button.sample-card:focus { border-color: #ff7014; }"
-    "button.sample-card label.sample-title,"
-    "button.sample-card:focus label.sample-title,"
-    "button.sample-card:backdrop label.sample-title,"
-    "button.sample-card:disabled label.sample-title {"
-    "  color: #f3f1eb;"
-    "  font-size: 18px;"
-    "  font-weight: 700;"
-    "  text-shadow: none;"
-    "}";
-  GPUGallery    *gallery;
+  GPUGallery     *gallery;
   GtkCssProvider *provider;
   GtkWidget      *titlebar, *page, *header, *title, *scroll, *flow;
+  size_t          i;
 
   gallery         = userData;
   gallery->window = gtk_application_window_new(application);
@@ -272,9 +303,9 @@ activate(GtkApplication *application, gpointer userData) {
                        GPU_LINUX_GALLERY_TITLE);
   gtk_window_set_default_size(GTK_WINDOW(gallery->window), 1240, 840);
 
-  page   = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
-  header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-  title  = gtk_label_new("GPU | Universal Shading (USL)");
+  page            = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
+  header          = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+  title           = gtk_label_new("GPU | Universal Shading (USL)");
   gallery->status = gtk_label_new(GPU_LINUX_GDK_BACKEND " / Vulkan");
   gtk_style_context_add_class(gtk_widget_get_style_context(title),
                               "gallery-title");
@@ -294,10 +325,12 @@ activate(GtkApplication *application, gpointer userData) {
   gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(flow), 18);
   gtk_flow_box_set_min_children_per_line(GTK_FLOW_BOX(flow), 1);
   gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(flow), 3);
-  for (size_t i = 0u; i < gpuNativeSampleCount; i++) {
+
+  for (i = 0u; i < gpuNativeSampleCount; i++) {
     gtk_container_add(GTK_CONTAINER(flow),
                       sample_card(&gpuNativeSamples[i], gallery));
   }
+
   gtk_container_add(GTK_CONTAINER(scroll), flow);
   gtk_box_pack_start(GTK_BOX(page), scroll, TRUE, TRUE, 0);
   gtk_container_set_border_width(GTK_CONTAINER(page), 28);
@@ -305,18 +338,17 @@ activate(GtkApplication *application, gpointer userData) {
 
   provider = gtk_css_provider_new();
   gtk_css_provider_load_from_data(provider, css, -1, NULL);
-  gtk_style_context_add_provider_for_screen(
-    gtk_widget_get_screen(gallery->window),
-    GTK_STYLE_PROVIDER(provider),
-    GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  gtk_style_context_add_provider_for_screen(gtk_widget_get_screen(gallery->window),
+                                            GTK_STYLE_PROVIDER(provider),
+                                            GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   g_object_unref(provider);
   gtk_widget_show_all(gallery->window);
 }
 
 int
 main(int argc, char **argv) {
-  GtkApplication *application;
   GPUGallery      gallery = {0};
+  GtkApplication *application;
   int             result;
 
   g_setenv("GDK_BACKEND", GPU_LINUX_GDK_BACKEND, TRUE);

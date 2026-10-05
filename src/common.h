@@ -17,6 +17,21 @@
 #ifndef src_common_h
 #define src_common_h
 
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+#if defined(_WIN32) || defined(WIN32)
+#  define WIN32_LEAN_AND_MEAN
+#  include <SDKDDKVer.h>
+#  include <windows.h>
+#endif
+
+#include "../include/gpu/common.h"
+#include "../include/gpu/gpu.h"
+#include "api/format_internal.h"
+#include "backend/api/gpudef.h"
+
 #ifdef __GNUC__
 #  define GPU_DESTRUCTOR  __attribute__((destructor))
 #  define GPU_CONSTRUCTOR __attribute__((constructor))
@@ -60,21 +75,6 @@
 #ifndef GPU_BACKEND_CUDA_ONLY
 #  define GPU_BACKEND_CUDA_ONLY 0
 #endif
-
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-
-#if defined(_WIN32) || defined(WIN32)
-#  define WIN32_LEAN_AND_MEAN 
-#  include <SDKDDKVer.h>
-#  include <windows.h>
-#endif
-
-#include "../include/gpu/common.h"
-#include "../include/gpu/gpu.h"
-#include "api/format_internal.h"
-#include "backend/api/gpudef.h"
 
 GPU_HIDE
 GPUApi*

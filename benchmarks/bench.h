@@ -28,7 +28,7 @@ typedef struct BenchProcessMemory {
   uint64_t peakResidentBytes;
 } BenchProcessMemory;
 
-const char *
+const char*
 bench_backendName(GPUBackend backend);
 
 bool
@@ -46,13 +46,13 @@ bench_percentile(double *values, size_t count, double percentile);
 bool
 bench_processMemory(BenchProcessMemory *outMemory);
 
-void *
+void*
 bench_read(const char *path, uint64_t *outSize);
 
-GPUAdapter *
+GPUAdapter*
 bench_createAdapter(GPUInstance *instance);
 
-GPUDevice *
+GPUDevice*
 bench_createDevice(GPUAdapter                *adapter,
                    const GPUDeviceCreateInfo *info);
 

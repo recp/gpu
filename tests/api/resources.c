@@ -1,7 +1,91 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 #include "../../src/api/buffer_internal.h"
 #include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/texture_internal.h"
+
+typedef struct TextureViewFormatCase {
+  GPUFormat textureFormat;
+  GPUFormat viewFormat;
+  bool      valid;
+} TextureViewFormatCase;
+
+typedef struct CubeViewCase {
+  GPUTextureViewType viewType;
+  uint32_t           baseLayer;
+  uint32_t           layerCount;
+  bool               valid;
+} CubeViewCase;
+
+typedef struct Texture3DViewCase {
+  GPUTextureViewType viewType;
+  uint32_t           baseLayer;
+  uint32_t           layerCount;
+  bool               valid;
+} Texture3DViewCase;
+
+typedef struct Texture1DViewCase {
+  GPUTextureViewType viewType;
+  uint32_t           baseLayer;
+  uint32_t           layerCount;
+  bool               arrayTexture;
+  bool               valid;
+} Texture1DViewCase;
+
+static const TextureViewFormatCase textureViewFormatCases[] = {
+  {GPU_FORMAT_RGBA8_UNORM           , GPU_FORMAT_RGBA8_UNORM           , true},
+  {GPU_FORMAT_RGBA8_UNORM           , GPU_FORMAT_RGBA8_UNORM_SRGB      , false},
+  {GPU_FORMAT_DEPTH32_FLOAT         , GPU_FORMAT_DEPTH32_FLOAT         , true},
+  {GPU_FORMAT_DEPTH32_FLOAT         , GPU_FORMAT_R32_FLOAT             , false},
+  {GPU_FORMAT_STENCIL8              , GPU_FORMAT_STENCIL8              , true},
+  {GPU_FORMAT_STENCIL8              , GPU_FORMAT_R8_UINT               , false},
+  {GPU_FORMAT_DEPTH24_UNORM_STENCIL8, GPU_FORMAT_DEPTH24_UNORM_STENCIL8, true},
+  {GPU_FORMAT_DEPTH24_UNORM_STENCIL8, GPU_FORMAT_DEPTH32_FLOAT_STENCIL8, false}
+};
+
+static const CubeViewCase cubeViewCases[] = {
+  {GPU_TEXTURE_VIEW_2D,         0u,  1u, false},
+  {GPU_TEXTURE_VIEW_2D_ARRAY,   1u,  2u, true},
+  {GPU_TEXTURE_VIEW_CUBE,       0u,  6u, true},
+  {GPU_TEXTURE_VIEW_CUBE,       6u,  6u, false},
+  {GPU_TEXTURE_VIEW_CUBE,       0u, 12u, false},
+  {GPU_TEXTURE_VIEW_CUBE_ARRAY, 0u,  6u, true},
+  {GPU_TEXTURE_VIEW_CUBE_ARRAY, 6u,  6u, true},
+  {GPU_TEXTURE_VIEW_CUBE_ARRAY, 1u,  6u, false},
+  {GPU_TEXTURE_VIEW_CUBE_ARRAY, 6u,  5u, false}
+};
+
+static const Texture3DViewCase texture3DViewCases[] = {
+  {GPU_TEXTURE_VIEW_3D, 0u, 1u, true},
+  {GPU_TEXTURE_VIEW_2D, 0u, 1u, false},
+  {GPU_TEXTURE_VIEW_3D, 1u, 1u, false},
+  {GPU_TEXTURE_VIEW_3D, 0u, 2u, false}
+};
+
+static const Texture1DViewCase texture1DViewCases[] = {
+  {GPU_TEXTURE_VIEW_1D,       0u, 1u, false, true},
+  {GPU_TEXTURE_VIEW_1D_ARRAY, 0u, 1u, false, false},
+  {GPU_TEXTURE_VIEW_2D,       0u, 1u, false, false},
+  {GPU_TEXTURE_VIEW_1D,       0u, 1u, true,  false},
+  {GPU_TEXTURE_VIEW_1D_ARRAY, 0u, 3u, true,  true},
+  {GPU_TEXTURE_VIEW_1D_ARRAY, 1u, 2u, true,  true},
+  {GPU_TEXTURE_VIEW_1D_ARRAY, 2u, 2u, true,  false}
+};
 
 static GPUBuffer      gScopedBuffer;
 static GPUTextureView gScopedTextureView;
@@ -15,74 +99,79 @@ static uint32_t       gScopedTextureViewDestroyCalls;
 static uint32_t       gScopedTextureWriteCalls;
 
 static GPUResult
-create_scoped_buffer(GPUDevice                 * __restrict device,
-                     const GPUBufferCreateInfo * __restrict info,
-                     GPUBuffer                ** __restrict outBuffer) {
+create_scoped_buffer(GPUDevice                 *__restrict device,
+                     const GPUBufferCreateInfo *__restrict info,
+                     GPUBuffer                **__restrict outBuffer) {
   (void)device;
   (void)info;
   memset(&gScopedBuffer, 0, sizeof(gScopedBuffer));
   memset(gScopedBufferStorage, 0, sizeof(gScopedBufferStorage));
   *outBuffer = &gScopedBuffer;
   gScopedBufferCreateCalls++;
+
   return GPU_OK;
 }
 
 static void
-destroy_scoped_buffer(GPUBuffer * __restrict buffer) {
+destroy_scoped_buffer(GPUBuffer *__restrict buffer) {
   (void)buffer;
   gScopedBufferDestroyCalls++;
 }
 
 static GPUResult
-write_scoped_buffer(GPUQueue * __restrict queue,
-                    GPUBuffer       * __restrict buffer,
-                    uint64_t                     offset,
-                    const void      * __restrict data,
-                    uint64_t                     sizeBytes) {
+write_scoped_buffer(GPUQueue   *__restrict queue,
+                    GPUBuffer  *__restrict buffer,
+                    uint64_t               offset,
+                    const void *__restrict data,
+                    uint64_t               sizeBytes) {
   (void)queue;
   (void)buffer;
   memcpy(gScopedBufferStorage + offset, data, (size_t)sizeBytes);
   gScopedBufferWriteCalls++;
+
   return GPU_OK;
 }
 
 static GPUResult
-read_scoped_buffer(GPUQueue * __restrict queue,
-                   GPUBuffer       * __restrict buffer,
-                   uint64_t                     offset,
-                   void           * __restrict outData,
-                   uint64_t                     sizeBytes) {
+read_scoped_buffer(GPUQueue  *__restrict queue,
+                   GPUBuffer *__restrict buffer,
+                   uint64_t              offset,
+                   void      *__restrict outData,
+                   uint64_t              sizeBytes) {
   (void)queue;
   (void)buffer;
   memcpy(outData, gScopedBufferStorage + offset, (size_t)sizeBytes);
   gScopedBufferReadCalls++;
+
   return GPU_OK;
 }
 
 static GPUResult
-write_scoped_texture(GPUQueue             * __restrict queue,
-                     GPUTexture                  * __restrict texture,
-                     const GPUTextureWriteRegion * __restrict region,
-                     const void                  * __restrict data,
-                     uint64_t                                 sizeBytes) {
+write_scoped_texture(GPUQueue                    *__restrict queue,
+                     GPUTexture                  *__restrict texture,
+                     const GPUTextureWriteRegion *__restrict region,
+                     const void                  *__restrict data,
+                     uint64_t                                sizeBytes) {
   (void)queue;
   (void)texture;
   (void)region;
   (void)data;
   (void)sizeBytes;
   gScopedTextureWriteCalls++;
+
   return GPU_OK;
 }
 
 static GPUResult
-create_scoped_texture_view(GPUTexture                     * __restrict texture,
-                           const GPUTextureViewCreateInfo * __restrict info,
-                           GPUTextureView                ** __restrict outView) {
+create_scoped_texture_view(GPUTexture                     *__restrict texture,
+                           const GPUTextureViewCreateInfo *__restrict info,
+                           GPUTextureView                **__restrict outView) {
   (void)texture;
   (void)info;
   memset(&gScopedTextureView, 0, sizeof(gScopedTextureView));
   *outView = &gScopedTextureView;
   gScopedTextureViewCreateCalls++;
+
   return GPU_OK;
 }
 
@@ -95,10 +184,11 @@ wait_queue_writes(GPUDevice *device, GPUQueue *queue) {
 
   cmdb  = NULL;
   fence = NULL;
-  if (!device || !queue ||
-      GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence ||
-      GPUAcquireCommandBuffer(queue, "resource-write-wait", &cmdb) != GPU_OK ||
-      !cmdb) {
+
+  if (!device || !queue
+      || GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence
+      || GPUAcquireCommandBuffer(queue, "resource-write-wait", &cmdb) != GPU_OK
+      || !cmdb) {
     GPUDestroyFence(fence);
     return 0;
   }
@@ -108,17 +198,17 @@ wait_queue_writes(GPUDevice *device, GPUQueue *queue) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
-  ok = GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
-       GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+  ok = GPUQueueSubmit(queue, &submitInfo) == GPU_OK
+       && GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
   GPUDestroyFence(fence);
   return ok;
 }
 
 static int
-check_format_texture_create(GPUDevice            *device,
-                            GPUFormat             format,
-                            GPUTextureUsageFlags  usage,
-                            const char           *capability) {
+check_format_texture_create(GPUDevice           *device,
+                            GPUFormat            format,
+                            GPUTextureUsageFlags usage,
+                            const char          *capability) {
   GPUTextureCreateInfo info = {0};
   GPUTexture          *texture;
   GPUResult            result;
@@ -135,6 +225,7 @@ check_format_texture_create(GPUDevice            *device,
   info.usage            = usage;
   texture               = NULL;
   result                = GPUCreateTexture(device, &info, &texture);
+
   if (result != GPU_OK || !texture) {
     fprintf(stderr,
             "format %u reports %s but texture creation returned %d\n",
@@ -152,37 +243,39 @@ check_format_texture_create(GPUDevice            *device,
 static int
 check_format_capability_textures(GPUDevice *device) {
   GPUFormatCapabilities caps;
+  GPUFormat             format;
 
-  for (GPUFormat format = GPU_FORMAT_R8_UNORM;
+  for (format = GPU_FORMAT_R8_UNORM;
        format < GPU_FORMAT_COUNT;
        format = (GPUFormat)(format + 1)) {
-    if (GPUGetFormatCapabilities(device->adapter, format, &caps) != GPU_OK ||
-        (caps.filterable && !caps.sampled) ||
-        (caps.blendable && !caps.colorAttachment)) {
+    if (GPUGetFormatCapabilities(device->adapter, format, &caps) != GPU_OK
+        || (caps.filterable && !caps.sampled)
+        || (caps.blendable && !caps.colorAttachment)) {
       fprintf(stderr, "format %u reports inconsistent capabilities\n",
               (uint32_t)format);
       return 0;
     }
-    if ((caps.sampled &&
-         !check_format_texture_create(device,
-                                      format,
-                                      GPU_TEXTURE_USAGE_SAMPLED,
-                                      "sampled")) ||
-        (caps.storage &&
-         !check_format_texture_create(device,
-                                      format,
-                                      GPU_TEXTURE_USAGE_STORAGE,
-                                      "storage")) ||
-        (caps.colorAttachment &&
-         !check_format_texture_create(device,
-                                      format,
-                                      GPU_TEXTURE_USAGE_COLOR_TARGET,
-                                      "color attachment")) ||
-        (caps.depthStencil &&
-         !check_format_texture_create(device,
-                                      format,
-                                      GPU_TEXTURE_USAGE_DEPTH_STENCIL,
-                                      "depth-stencil"))) {
+
+    if ((caps.sampled
+         && !check_format_texture_create(device,
+                                         format,
+                                         GPU_TEXTURE_USAGE_SAMPLED,
+                                         "sampled"))
+        || (caps.storage
+            && !check_format_texture_create(device,
+                                            format,
+                                            GPU_TEXTURE_USAGE_STORAGE,
+                                            "storage"))
+        || (caps.colorAttachment
+            && !check_format_texture_create(device,
+                                            format,
+                                            GPU_TEXTURE_USAGE_COLOR_TARGET,
+                                            "color attachment"))
+        || (caps.depthStencil
+            && !check_format_texture_create(device,
+                                            format,
+                                            GPU_TEXTURE_USAGE_DEPTH_STENCIL,
+                                            "depth-stencil"))) {
       return 0;
     }
   }
@@ -191,35 +284,35 @@ check_format_capability_textures(GPUDevice *device) {
 }
 
 static void
-destroy_scoped_texture_view(GPUTextureView * __restrict view) {
+destroy_scoped_texture_view(GPUTextureView *__restrict view) {
   (void)view;
   gScopedTextureViewDestroyCalls++;
 }
 
 static int
 check_buffer_device_dispatch(GPUDevice *activeDevice) {
-  GPUBuffer           *buffer;
-  GPUBufferCreateInfo info = {0};
-  GPUQueue            queue = {0};
+  GPUBufferCreateInfo info         = {0};
+  GPUQueue            queue        = {0};
   GPUQueue            foreignQueue = {0};
-  GPUDevice           device = {0};
+  GPUDevice           device       = {0};
   GPUApi              scopedApi;
-  uint32_t             source[4] = { 2u, 4u, 6u, 8u };
-  uint32_t             result[4] = {0};
+  uint32_t            source[4] = { 2u, 4u, 6u, 8u };
+  uint32_t            result[4] = {0};
+  GPUBuffer          *buffer;
 
   if (!activeDevice || !gpuDeviceApi(activeDevice)) {
     fprintf(stderr, "buffer dispatch has no device api\n");
     return 0;
   }
 
-  scopedApi                          = *gpuDeviceApi(activeDevice);
-  scopedApi.buf.create               = create_scoped_buffer;
-  scopedApi.buf.destroy              = destroy_scoped_buffer;
-  scopedApi.buf.write                = write_scoped_buffer;
-  scopedApi.buf.read                 = read_scoped_buffer;
-  device._api                        = &scopedApi;
-  queue._device                      = &device;
-  foreignQueue._device               = activeDevice;
+  scopedApi                 = *gpuDeviceApi(activeDevice);
+  scopedApi.buf.create      = create_scoped_buffer;
+  scopedApi.buf.destroy     = destroy_scoped_buffer;
+  scopedApi.buf.write       = write_scoped_buffer;
+  scopedApi.buf.read        = read_scoped_buffer;
+  device._api               = &scopedApi;
+  queue._device             = &device;
+  foreignQueue._device      = activeDevice;
   gScopedBufferCreateCalls  = 0u;
   gScopedBufferWriteCalls   = 0u;
   gScopedBufferReadCalls    = 0u;
@@ -230,21 +323,22 @@ check_buffer_device_dispatch(GPUDevice *activeDevice) {
   info.sizeBytes        = sizeof(source);
   info.usage            = GPU_BUFFER_USAGE_COPY_SRC |
                           GPU_BUFFER_USAGE_COPY_DST;
-  buffer = NULL;
-  if (GPUCreateBuffer(&device, &info, &buffer) != GPU_OK ||
-      buffer != &gScopedBuffer || buffer->device != &device ||
-      buffer->sizeBytes != sizeof(source) || buffer->usage != info.usage ||
-      GPUQueueWriteBuffer(&queue,
-                          buffer,
-                          0u,
-                          source,
-                          sizeof(source)) != GPU_OK ||
-      GPUQueueReadBuffer(&queue,
-                         buffer,
-                         0u,
-                         result,
-                         sizeof(result)) != GPU_OK ||
-      memcmp(source, result, sizeof(source)) != 0) {
+  buffer                = NULL;
+
+  if (GPUCreateBuffer(&device, &info, &buffer) != GPU_OK
+      || buffer != &gScopedBuffer || buffer->device != &device
+      || buffer->sizeBytes != sizeof(source) || buffer->usage != info.usage
+      || GPUQueueWriteBuffer(&queue,
+                             buffer,
+                             0u,
+                             source,
+                             sizeof(source)) != GPU_OK
+      || GPUQueueReadBuffer(&queue,
+                            buffer,
+                            0u,
+                            result,
+                            sizeof(result)) != GPU_OK
+      || memcmp(source, result, sizeof(source)) != 0) {
     fprintf(stderr, "buffer device dispatch failed\n");
     return 0;
   }
@@ -253,21 +347,22 @@ check_buffer_device_dispatch(GPUDevice *activeDevice) {
                           buffer,
                           0u,
                           source,
-                          sizeof(source)) != GPU_ERROR_INVALID_ARGUMENT ||
-      GPUQueueReadBuffer(&foreignQueue,
-                         buffer,
-                         0u,
-                         result,
-                         sizeof(result)) != GPU_ERROR_INVALID_ARGUMENT) {
+                          sizeof(source)) != GPU_ERROR_INVALID_ARGUMENT
+      || GPUQueueReadBuffer(&foreignQueue,
+                            buffer,
+                            0u,
+                            result,
+                            sizeof(result)) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "buffer accepted a foreign queue\n");
     return 0;
   }
 
   GPUDestroyBuffer(buffer);
-  if (gScopedBufferCreateCalls != 1u ||
-      gScopedBufferWriteCalls != 1u ||
-      gScopedBufferReadCalls != 1u ||
-      gScopedBufferDestroyCalls != 1u) {
+
+  if (gScopedBufferCreateCalls != 1u
+      || gScopedBufferWriteCalls != 1u
+      || gScopedBufferReadCalls != 1u
+      || gScopedBufferDestroyCalls != 1u) {
     fprintf(stderr, "buffer dispatch called wrong backend\n");
     return 0;
   }
@@ -277,10 +372,10 @@ check_buffer_device_dispatch(GPUDevice *activeDevice) {
 
 static int
 check_texture_transfer_layout(GPUDevice *activeDevice) {
-  GPUTextureWriteRegion region = {0};
-  GPUQueue              queue = {0};
+  GPUTextureWriteRegion region  = {0};
+  GPUQueue              queue   = {0};
   GPUTexture            texture = {0};
-  GPUDevice             device = {0};
+  GPUDevice             device  = {0};
   GPUApi                scopedApi;
   uint8_t               blocks[64] = {0};
 
@@ -316,50 +411,56 @@ check_texture_transfer_layout(GPUDevice *activeDevice) {
                            &texture,
                            &region,
                            blocks,
-                           sizeof(blocks)) != GPU_OK ||
-      gScopedTextureWriteCalls != 1u) {
+                           sizeof(blocks)) != GPU_OK
+      || gScopedTextureWriteCalls != 1u) {
     fprintf(stderr, "texture layout rejected a valid mip edge\n");
     return 0;
   }
+
   if (GPUQueueWriteTexture(&queue,
                            &texture,
                            &region,
                            blocks,
-                           sizeof(blocks) - 1u) != GPU_ERROR_INVALID_ARGUMENT ||
-      gScopedTextureWriteCalls != 1u) {
+                           sizeof(blocks) - 1u) != GPU_ERROR_INVALID_ARGUMENT
+      || gScopedTextureWriteCalls != 1u) {
     fprintf(stderr, "texture layout accepted undersized block data\n");
     return 0;
   }
 
   region.bytesPerRow = 16u;
+
   if (GPUQueueWriteTexture(&queue,
                            &texture,
                            &region,
                            blocks,
-                           sizeof(blocks)) != GPU_ERROR_INVALID_ARGUMENT ||
-      gScopedTextureWriteCalls != 1u) {
+                           sizeof(blocks)) != GPU_ERROR_INVALID_ARGUMENT
+      || gScopedTextureWriteCalls != 1u) {
     fprintf(stderr, "texture layout accepted a short block row\n");
     return 0;
   }
+
   region.bytesPerRow  = 32u;
   region.rowsPerImage = 5u;
+
   if (GPUQueueWriteTexture(&queue,
                            &texture,
                            &region,
                            blocks,
-                           sizeof(blocks)) != GPU_ERROR_INVALID_ARGUMENT ||
-      gScopedTextureWriteCalls != 1u) {
+                           sizeof(blocks)) != GPU_ERROR_INVALID_ARGUMENT
+      || gScopedTextureWriteCalls != 1u) {
     fprintf(stderr, "texture layout accepted unaligned rowsPerImage\n");
     return 0;
   }
+
   region.rowsPerImage = 8u;
   region.width        = 6u;
+
   if (GPUQueueWriteTexture(&queue,
                            &texture,
                            &region,
                            blocks,
-                           sizeof(blocks)) != GPU_ERROR_INVALID_ARGUMENT ||
-      gScopedTextureWriteCalls != 1u) {
+                           sizeof(blocks)) != GPU_ERROR_INVALID_ARGUMENT
+      || gScopedTextureWriteCalls != 1u) {
     fprintf(stderr, "texture layout accepted a partial compressed block\n");
     return 0;
   }
@@ -395,80 +496,85 @@ check_texture_write_aspects(GPUDevice *activeDevice) {
   texture.sampleCount     = 1u;
   texture.usage           = GPU_TEXTURE_USAGE_COPY_DST;
 
-  region.width          = 4u;
-  region.height         = 4u;
-  region.depth          = 1u;
-  region.layerCount     = 1u;
-  region.bytesPerRow    = 16u;
-  region.rowsPerImage   = 4u;
+  region.width             = 4u;
+  region.height            = 4u;
+  region.depth             = 1u;
+  region.layerCount        = 1u;
+  region.bytesPerRow       = 16u;
+  region.rowsPerImage      = 4u;
   gScopedTextureWriteCalls = 0u;
 
   if (GPUQueueWriteTexture(&queue,
                            &texture,
                            &region,
                            pixels,
-                           sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT ||
-      gScopedTextureWriteCalls != 0u) {
+                           sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT
+      || gScopedTextureWriteCalls != 0u) {
     fprintf(stderr, "combined texture write accepted all aspects\n");
     return 0;
   }
 
   region.aspect = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+
   if (GPUQueueWriteTexture(&queue,
                            &texture,
                            &region,
                            pixels,
-                           sizeof(pixels)) != GPU_OK ||
-      gScopedTextureWriteCalls != 1u) {
+                           sizeof(pixels)) != GPU_OK
+      || gScopedTextureWriteCalls != 1u) {
     fprintf(stderr, "combined texture rejected depth write\n");
     return 0;
   }
 
   region.aspect      = GPU_TEXTURE_ASPECT_STENCIL_ONLY;
   region.bytesPerRow = 4u;
+
   if (GPUQueueWriteTexture(&queue,
                            &texture,
                            &region,
                            pixels,
-                           16u) != GPU_OK ||
-      gScopedTextureWriteCalls != 2u) {
+                           16u) != GPU_OK
+      || gScopedTextureWriteCalls != 2u) {
     fprintf(stderr, "combined texture rejected stencil write\n");
     return 0;
   }
 
   region.width = 3u;
+
   if (GPUQueueWriteTexture(&queue,
                            &texture,
                            &region,
                            pixels,
-                           16u) != GPU_ERROR_INVALID_ARGUMENT ||
-      gScopedTextureWriteCalls != 2u) {
+                           16u) != GPU_ERROR_INVALID_ARGUMENT
+      || gScopedTextureWriteCalls != 2u) {
     fprintf(stderr, "combined texture write accepted partial plane\n");
     return 0;
   }
 
-  texture.format      = GPU_FORMAT_DEPTH32_FLOAT;
-  region.width        = 4u;
-  region.aspect       = GPU_TEXTURE_ASPECT_ALL;
-  region.bytesPerRow  = 16u;
+  texture.format     = GPU_FORMAT_DEPTH32_FLOAT;
+  region.width       = 4u;
+  region.aspect      = GPU_TEXTURE_ASPECT_ALL;
+  region.bytesPerRow = 16u;
+
   if (GPUQueueWriteTexture(&queue,
                            &texture,
                            &region,
                            pixels,
-                           sizeof(pixels)) != GPU_OK ||
-      gScopedTextureWriteCalls != 3u) {
+                           sizeof(pixels)) != GPU_OK
+      || gScopedTextureWriteCalls != 3u) {
     fprintf(stderr, "depth texture rejected default aspect\n");
     return 0;
   }
 
   texture.format = GPU_FORMAT_RGBA8_UNORM;
   region.aspect  = GPU_TEXTURE_ASPECT_DEPTH_ONLY;
+
   if (GPUQueueWriteTexture(&queue,
                            &texture,
                            &region,
                            pixels,
-                           sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT ||
-      gScopedTextureWriteCalls != 3u) {
+                           sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT
+      || gScopedTextureWriteCalls != 3u) {
     fprintf(stderr, "color texture write accepted depth aspect\n");
     return 0;
   }
@@ -478,23 +584,6 @@ check_texture_write_aspects(GPUDevice *activeDevice) {
 
 static int
 check_texture_view_format_validation(GPUDevice *activeDevice) {
-  typedef struct TextureViewFormatCase {
-    GPUFormat textureFormat;
-    GPUFormat viewFormat;
-    bool      valid;
-  } TextureViewFormatCase;
-
-  static const TextureViewFormatCase cases[] = {
-    {GPU_FORMAT_RGBA8_UNORM,            GPU_FORMAT_RGBA8_UNORM,            true},
-    {GPU_FORMAT_RGBA8_UNORM,            GPU_FORMAT_RGBA8_UNORM_SRGB,       false},
-    {GPU_FORMAT_DEPTH32_FLOAT,           GPU_FORMAT_DEPTH32_FLOAT,           true},
-    {GPU_FORMAT_DEPTH32_FLOAT,           GPU_FORMAT_R32_FLOAT,               false},
-    {GPU_FORMAT_STENCIL8,                GPU_FORMAT_STENCIL8,                true},
-    {GPU_FORMAT_STENCIL8,                GPU_FORMAT_R8_UINT,                 false},
-    {GPU_FORMAT_DEPTH24_UNORM_STENCIL8,  GPU_FORMAT_DEPTH24_UNORM_STENCIL8,  true},
-    {GPU_FORMAT_DEPTH24_UNORM_STENCIL8,  GPU_FORMAT_DEPTH32_FLOAT_STENCIL8,  false}
-  };
-
   GPUTextureViewCreateInfo viewInfo = {0};
   GPUTexture               texture  = {0};
   GPUDevice                device   = {0};
@@ -528,17 +617,19 @@ check_texture_view_format_validation(GPUDevice *activeDevice) {
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
 
-  validCount                         = 0u;
-  gScopedTextureViewCreateCalls      = 0u;
-  gScopedTextureViewDestroyCalls     = 0u;
-  for (i = 0u; i < GPU_ARRAY_LEN(cases); i++) {
-    texture.format  = cases[i].textureFormat;
-    viewInfo.format = cases[i].viewFormat;
-    view             = (GPUTextureView *)(uintptr_t)1u;
-    result           = GPUCreateTextureView(&texture, &viewInfo, &view);
-    if ((cases[i].valid && (result != GPU_OK || !view)) ||
-        (!cases[i].valid &&
-         (result != GPU_ERROR_INVALID_ARGUMENT || view != NULL))) {
+  validCount                     = 0u;
+  gScopedTextureViewCreateCalls  = 0u;
+  gScopedTextureViewDestroyCalls = 0u;
+
+  for (i = 0u; i < GPU_ARRAY_LEN(textureViewFormatCases); i++) {
+    texture.format  = textureViewFormatCases[i].textureFormat;
+    viewInfo.format = textureViewFormatCases[i].viewFormat;
+    view            = (GPUTextureView *)(uintptr_t)1u;
+    result          = GPUCreateTextureView(&texture, &viewInfo, &view);
+
+    if ((textureViewFormatCases[i].valid && (result != GPU_OK || !view))
+        || (!textureViewFormatCases[i].valid
+            && (result != GPU_ERROR_INVALID_ARGUMENT || view != NULL))) {
       fprintf(stderr,
               "texture view format case %u returned %d\n",
               i,
@@ -546,14 +637,14 @@ check_texture_view_format_validation(GPUDevice *activeDevice) {
       return 0;
     }
 
-    if (cases[i].valid) {
+    if (textureViewFormatCases[i].valid) {
       validCount++;
       GPUDestroyTextureView(view);
     }
   }
 
-  if (gScopedTextureViewCreateCalls != validCount ||
-      gScopedTextureViewDestroyCalls != validCount) {
+  if (gScopedTextureViewCreateCalls != validCount
+      || gScopedTextureViewDestroyCalls != validCount) {
     fprintf(stderr, "texture view format validation reached backend incorrectly\n");
     return 0;
   }
@@ -587,402 +678,442 @@ check_destroy_null_handles(void) {
 
 static int
 check_resource_validation(GPUDevice *device) {
-  GPUQueue        *queue;
-  GPUBufferCreateInfo bufferInfo = {0};
-  GPUTextureCreateInfo textureInfo = {0};
-  GPUTextureInfo queriedTextureInfo = {0};
-  GPUTextureViewCreateInfo viewInfo = {0};
-  GPUTextureWriteRegion region = {0};
-  GPUBuffer *buffer;
-  GPUTexture *texture;
-  GPUTexture *textureNoCopyDst;
-  GPUTextureView *view;
-  uint32_t writeWords[4] = { 1u, 2u, 3u, 4u };
-  uint32_t readWords[4] = { 0u, 0u, 0u, 0u };
-  uint8_t pixels[4u * 4u * 4u] = {0};
+  GPUBufferCreateInfo      bufferInfo           = {0};
+  GPUTextureCreateInfo     textureInfo          = {0};
+  GPUTextureInfo           queriedTextureInfo   = {0};
+  GPUTextureViewCreateInfo viewInfo             = {0};
+  GPUTextureWriteRegion    region               = {0};
+  uint32_t                 writeWords[4]        = { 1u, 2u, 3u, 4u };
+  uint32_t                 readWords[4]         = { 0u, 0u, 0u, 0u };
+  uint8_t                  pixels[4u * 4u * 4u] = {0};
+  GPUQueue                *queue;
+  GPUBuffer               *buffer;
+  GPUTexture              *texture;
+  GPUTexture              *textureNoCopyDst;
+  GPUTextureView          *view;
 
-  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
-  if (!queue) {
+  if (!(queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u))) {
     fprintf(stderr, "failed to get graphics queue for resource test\n");
     return 0;
   }
 
-  bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.sizeBytes = sizeof(writeWords);
-  bufferInfo.usage = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.sizeBytes        = sizeof(writeWords);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
 
   buffer = (GPUBuffer *)(uintptr_t)1u;
-  if (GPUCreateBuffer(NULL, &bufferInfo, &buffer) != GPU_ERROR_INVALID_ARGUMENT ||
-      buffer != NULL) {
+
+  if (GPUCreateBuffer(NULL, &bufferInfo, &buffer) != GPU_ERROR_INVALID_ARGUMENT
+      || buffer != NULL) {
     fprintf(stderr, "buffer create accepted null device\n");
     return 0;
   }
+
   if (GPUCreateBuffer(device, &bufferInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "buffer create accepted null output\n");
     return 0;
   }
 
   bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
-  buffer = (GPUBuffer *)(uintptr_t)1u;
-  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_ERROR_INVALID_ARGUMENT ||
-      buffer != NULL) {
+  buffer                 = (GPUBuffer *)(uintptr_t)1u;
+
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_ERROR_INVALID_ARGUMENT
+      || buffer != NULL) {
     fprintf(stderr, "buffer create accepted wrong sType\n");
     return 0;
   }
 
-  bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = (uint32_t)(sizeof(bufferInfo) - 1u);
-  buffer = (GPUBuffer *)(uintptr_t)1u;
-  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_ERROR_INVALID_ARGUMENT ||
-      buffer != NULL) {
+  buffer                      = (GPUBuffer *)(uintptr_t)1u;
+
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_ERROR_INVALID_ARGUMENT
+      || buffer != NULL) {
     fprintf(stderr, "buffer create accepted short structSize\n");
     return 0;
   }
 
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.usage = 0u;
-  buffer = (GPUBuffer *)(uintptr_t)1u;
-  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_ERROR_INVALID_ARGUMENT ||
-      buffer != NULL) {
+  bufferInfo.usage            = 0u;
+  buffer                      = (GPUBuffer *)(uintptr_t)1u;
+
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_ERROR_INVALID_ARGUMENT
+      || buffer != NULL) {
     fprintf(stderr, "buffer create accepted zero usage\n");
     return 0;
   }
 
   bufferInfo.usage = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
-  buffer = NULL;
+  buffer           = NULL;
+
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     fprintf(stderr, "buffer create failed\n");
     return 0;
   }
-  if (GPUQueueWriteBuffer(queue, buffer, 0u, writeWords, sizeof(writeWords)) != GPU_OK ||
-      GPUQueueReadBuffer(queue, buffer, 0u, readWords, sizeof(readWords)) != GPU_OK ||
-      memcmp(writeWords, readWords, sizeof(writeWords)) != 0) {
+
+  if (GPUQueueWriteBuffer(queue, buffer, 0u, writeWords, sizeof(writeWords)) != GPU_OK
+      || GPUQueueReadBuffer(queue, buffer, 0u, readWords, sizeof(readWords)) != GPU_OK
+      || memcmp(writeWords, readWords, sizeof(writeWords)) != 0) {
     fprintf(stderr, "buffer write/read failed\n");
     GPUDestroyBuffer(buffer);
     return 0;
   }
-  if (GPUQueueWriteBuffer(queue, buffer, 12u, writeWords, 8u) != GPU_ERROR_INVALID_ARGUMENT ||
-      GPUQueueReadBuffer(queue, buffer, 12u, readWords, 8u) != GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUQueueWriteBuffer(queue, buffer, 12u, writeWords, 8u) != GPU_ERROR_INVALID_ARGUMENT
+      || GPUQueueReadBuffer(queue, buffer, 12u, readWords, 8u) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "buffer write/read accepted out-of-bounds range\n");
     GPUDestroyBuffer(buffer);
     return 0;
   }
+
   GPUDestroyBuffer(buffer);
 
-  textureInfo.chain.sType = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
-  textureInfo.dimension = GPU_TEXTURE_DIMENSION_2D;
-  textureInfo.format = GPU_FORMAT_RGBA8_UNORM;
-  textureInfo.width = 4u;
-  textureInfo.height = 4u;
-  textureInfo.depthOrLayers = 1u;
-  textureInfo.mipLevelCount = 1u;
-  textureInfo.sampleCount = 1u;
-  textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 4u;
+  textureInfo.height           = 4u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
 
   texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(NULL, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
-      texture != NULL) {
+
+  if (GPUCreateTexture(NULL, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT
+      || texture != NULL) {
     fprintf(stderr, "texture create accepted null device\n");
     return 0;
   }
+
   texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, NULL, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
-      texture != NULL) {
+
+  if (GPUCreateTexture(device, NULL, &texture) != GPU_ERROR_INVALID_ARGUMENT
+      || texture != NULL) {
     fprintf(stderr, "texture create accepted null info\n");
     return 0;
   }
+
   if (GPUCreateTexture(device, &textureInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "texture create accepted null output\n");
     return 0;
   }
 
   textureInfo.sampleCount = 3u;
-  texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) !=
-        GPU_ERROR_INVALID_ARGUMENT || texture != NULL) {
+  texture                 = (GPUTexture *)(uintptr_t)1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT || texture != NULL) {
     fprintf(stderr, "texture create accepted invalid sample count\n");
     return 0;
   }
+
   textureInfo.sampleCount = 4u;
-  texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) !=
-        GPU_ERROR_INVALID_ARGUMENT || texture != NULL) {
+  texture                 = (GPUTexture *)(uintptr_t)1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT || texture != NULL) {
     fprintf(stderr, "texture create accepted multisampled copy texture\n");
     return 0;
   }
+
   textureInfo.usage = GPU_TEXTURE_USAGE_COLOR_TARGET |
                       GPU_TEXTURE_USAGE_SAMPLED;
-  texture = NULL;
+  texture           = NULL;
+
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
     fprintf(stderr, "texture create rejected multisampled sampled texture\n");
     return 0;
   }
+
   GPUDestroyTexture(texture);
   textureInfo.sampleCount = 1u;
-  textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
+  textureInfo.usage       = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
 
   textureInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
-  texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
-      texture != NULL) {
+  texture                 = (GPUTexture *)(uintptr_t)1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT
+      || texture != NULL) {
     fprintf(stderr, "texture create accepted wrong sType\n");
     return 0;
   }
 
-  textureInfo.chain.sType = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = (uint32_t)(sizeof(textureInfo) - 1u);
-  texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
-      texture != NULL) {
+  texture                      = (GPUTexture *)(uintptr_t)1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT
+      || texture != NULL) {
     fprintf(stderr, "texture create accepted short structSize\n");
     return 0;
   }
 
   textureInfo.chain.structSize = sizeof(textureInfo);
-  textureInfo.dimension = (GPUTextureDimension)99;
-  texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
-      texture != NULL) {
+  textureInfo.dimension        = (GPUTextureDimension)99;
+  texture                      = (GPUTexture *)(uintptr_t)1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT
+      || texture != NULL) {
     fprintf(stderr, "texture create accepted invalid dimension\n");
     return 0;
   }
 
   textureInfo.dimension = GPU_TEXTURE_DIMENSION_2D;
-  textureInfo.format = GPU_FORMAT_UNDEFINED;
-  texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
-      texture != NULL) {
+  textureInfo.format    = GPU_FORMAT_UNDEFINED;
+  texture               = (GPUTexture *)(uintptr_t)1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT
+      || texture != NULL) {
     fprintf(stderr, "texture create accepted undefined format\n");
     return 0;
   }
 
   textureInfo.format = GPU_FORMAT_COUNT;
-  texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) !=
-        GPU_ERROR_INVALID_ARGUMENT || texture != NULL) {
+  texture            = (GPUTexture *)(uintptr_t)1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT || texture != NULL) {
     fprintf(stderr, "texture create accepted out-of-range format\n");
     return 0;
   }
 
   textureInfo.format = GPU_FORMAT_RGBA8_UNORM;
-  textureInfo.width = 0u;
-  texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
-      texture != NULL) {
+  textureInfo.width  = 0u;
+  texture            = (GPUTexture *)(uintptr_t)1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT
+      || texture != NULL) {
     fprintf(stderr, "texture create accepted zero width\n");
     return 0;
   }
 
-  textureInfo.width = 4u;
+  textureInfo.width  = 4u;
   textureInfo.height = 0u;
-  texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
-      texture != NULL) {
+  texture            = (GPUTexture *)(uintptr_t)1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT
+      || texture != NULL) {
     fprintf(stderr, "texture create accepted zero height\n");
     return 0;
   }
 
-  textureInfo.height = 4u;
+  textureInfo.height        = 4u;
   textureInfo.depthOrLayers = 0u;
-  texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
-      texture != NULL) {
+  texture                   = (GPUTexture *)(uintptr_t)1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT
+      || texture != NULL) {
     fprintf(stderr, "texture create accepted zero depth/layers\n");
     return 0;
   }
 
   textureInfo.depthOrLayers = 1u;
-  textureInfo.usage = 0u;
-  texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT ||
-      texture != NULL) {
+  textureInfo.usage         = 0u;
+  texture                   = (GPUTexture *)(uintptr_t)1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT
+      || texture != NULL) {
     fprintf(stderr, "texture create accepted zero usage\n");
     return 0;
   }
 
   textureInfo.usage = 1u << 31;
-  texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) !=
-        GPU_ERROR_INVALID_ARGUMENT ||
-      texture != NULL) {
+  texture           = (GPUTexture *)(uintptr_t)1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT
+      || texture != NULL) {
     fprintf(stderr, "texture create accepted unknown usage\n");
     return 0;
   }
 
-  textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
+  textureInfo.usage         = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
   textureInfo.mipLevelCount = 4u;
-  texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) !=
-        GPU_ERROR_INVALID_ARGUMENT ||
-      texture != NULL) {
+  texture                   = (GPUTexture *)(uintptr_t)1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT
+      || texture != NULL) {
     fprintf(stderr, "texture create accepted excessive mip levels\n");
     return 0;
   }
 
   textureInfo.mipLevelCount = 1u;
-  texture = NULL;
-  textureNoCopyDst = NULL;
+  texture                   = NULL;
+  textureNoCopyDst          = NULL;
+
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
     fprintf(stderr, "texture create failed\n");
     return 0;
   }
-  if (GPUGetTextureInfo(NULL, &queriedTextureInfo) != GPU_ERROR_INVALID_ARGUMENT ||
-      GPUGetTextureInfo(texture, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUGetTextureInfo(NULL, &queriedTextureInfo) != GPU_ERROR_INVALID_ARGUMENT
+      || GPUGetTextureInfo(texture, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "texture info accepted invalid arguments\n");
     GPUDestroyTexture(texture);
     return 0;
   }
-  if (GPUGetTextureInfo(texture, &queriedTextureInfo) != GPU_OK ||
-      queriedTextureInfo.dimension != textureInfo.dimension ||
-      queriedTextureInfo.format != textureInfo.format ||
-      queriedTextureInfo.width != textureInfo.width ||
-      queriedTextureInfo.height != textureInfo.height ||
-      queriedTextureInfo.depthOrLayers != textureInfo.depthOrLayers ||
-      queriedTextureInfo.mipLevelCount != textureInfo.mipLevelCount ||
-      queriedTextureInfo.sampleCount != textureInfo.sampleCount ||
-      queriedTextureInfo.usage != textureInfo.usage) {
+
+  if (GPUGetTextureInfo(texture, &queriedTextureInfo) != GPU_OK
+      || queriedTextureInfo.dimension != textureInfo.dimension
+      || queriedTextureInfo.format != textureInfo.format
+      || queriedTextureInfo.width != textureInfo.width
+      || queriedTextureInfo.height != textureInfo.height
+      || queriedTextureInfo.depthOrLayers != textureInfo.depthOrLayers
+      || queriedTextureInfo.mipLevelCount != textureInfo.mipLevelCount
+      || queriedTextureInfo.sampleCount != textureInfo.sampleCount
+      || queriedTextureInfo.usage != textureInfo.usage) {
     fprintf(stderr, "texture info query returned wrong metadata\n");
     GPUDestroyTexture(texture);
     return 0;
   }
 
-  region.width = 4u;
-  region.height = 4u;
-  region.depth = 1u;
-  region.layerCount = 1u;
-  region.bytesPerRow = 4u * 4u;
+  region.width        = 4u;
+  region.height       = 4u;
+  region.depth        = 1u;
+  region.layerCount   = 1u;
+  region.bytesPerRow  = 4u * 4u;
   region.rowsPerImage = 4u;
-  if (GPUQueueWriteTexture(NULL, texture, &region, pixels, sizeof(pixels)) !=
-      GPU_ERROR_INVALID_ARGUMENT ||
-      GPUQueueWriteTexture(queue, NULL, &region, pixels, sizeof(pixels)) !=
-      GPU_ERROR_INVALID_ARGUMENT ||
-      GPUQueueWriteTexture(queue, texture, NULL, pixels, sizeof(pixels)) !=
-      GPU_ERROR_INVALID_ARGUMENT ||
-      GPUQueueWriteTexture(queue, texture, &region, NULL, sizeof(pixels)) !=
-      GPU_ERROR_INVALID_ARGUMENT ||
-      GPUQueueWriteTexture(queue, texture, &region, pixels, 0u) !=
-      GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUQueueWriteTexture(NULL, texture, &region, pixels, sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT
+      || GPUQueueWriteTexture(queue, NULL, &region, pixels, sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT
+      || GPUQueueWriteTexture(queue, texture, NULL, pixels, sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT
+      || GPUQueueWriteTexture(queue, texture, &region, NULL, sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT
+      || GPUQueueWriteTexture(queue, texture, &region, pixels, 0u) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "texture write accepted null or empty arguments\n");
     GPUDestroyTexture(texture);
     return 0;
   }
+
   if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) != GPU_OK) {
     fprintf(stderr, "texture write failed\n");
     GPUDestroyTexture(texture);
     return 0;
   }
+
   if (!wait_queue_writes(device, queue)) {
     fprintf(stderr, "texture write wait failed\n");
     GPUDestroyTexture(texture);
     return 0;
   }
-  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels) - 1u) !=
-      GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels) - 1u) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "texture write accepted undersized data\n");
     GPUDestroyTexture(texture);
     return 0;
   }
 
   region.bytesPerRow = 0u;
-  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) !=
-      GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "texture write accepted zero bytesPerRow\n");
     GPUDestroyTexture(texture);
     return 0;
   }
+
   region.bytesPerRow = 4u * 4u;
 
   region.rowsPerImage = 3u;
-  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) !=
-      GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "texture write accepted short rowsPerImage\n");
     GPUDestroyTexture(texture);
     return 0;
   }
+
   region.rowsPerImage = 4u;
 
   region.width = 5u;
-  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) !=
-      GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "texture write accepted out-of-range width\n");
     GPUDestroyTexture(texture);
     return 0;
   }
+
   region.width = 4u;
 
   region.height = 5u;
-  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) !=
-      GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "texture write accepted out-of-range height\n");
     GPUDestroyTexture(texture);
     return 0;
   }
+
   region.height = 4u;
 
   region.depth = 0u;
-  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) !=
-      GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "texture write accepted zero depth\n");
     GPUDestroyTexture(texture);
     return 0;
   }
+
   region.depth = 1u;
 
   textureInfo.usage = GPU_TEXTURE_USAGE_SAMPLED;
-  if (GPUCreateTexture(device, &textureInfo, &textureNoCopyDst) != GPU_OK ||
-      !textureNoCopyDst) {
+
+  if (GPUCreateTexture(device, &textureInfo, &textureNoCopyDst) != GPU_OK
+      || !textureNoCopyDst) {
     fprintf(stderr, "texture without copy dst setup failed\n");
     GPUDestroyTexture(texture);
     return 0;
   }
-  if (GPUQueueWriteTexture(queue, textureNoCopyDst, &region, pixels, sizeof(pixels)) !=
-      GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUQueueWriteTexture(queue, textureNoCopyDst, &region, pixels, sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "texture write accepted texture without copy dst usage\n");
     GPUDestroyTexture(textureNoCopyDst);
     GPUDestroyTexture(texture);
     return 0;
   }
+
   GPUDestroyTexture(textureNoCopyDst);
   textureNoCopyDst = NULL;
 
   region.mipLevel = 1u;
+
   if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "texture write accepted invalid mip level\n");
     GPUDestroyTexture(texture);
     return 0;
   }
-  region.mipLevel = 0u;
+
+  region.mipLevel   = 0u;
   region.layerCount = 2u;
+
   if (GPUQueueWriteTexture(queue, texture, &region, pixels, sizeof(pixels)) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "texture write accepted invalid layer range\n");
     GPUDestroyTexture(texture);
     return 0;
   }
+
   region.layerCount = 1u;
 
-  viewInfo.chain.sType = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   viewInfo.chain.structSize = sizeof(viewInfo);
-  viewInfo.viewType = GPU_TEXTURE_VIEW_2D;
-  viewInfo.format = GPU_FORMAT_RGBA8_UNORM;
-  viewInfo.mipLevelCount = 1u;
-  viewInfo.arrayLayerCount = 1u;
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.arrayLayerCount  = 1u;
 
   view = (GPUTextureView *)(uintptr_t)1u;
-  if (GPUCreateTextureView(NULL, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
-      view != NULL) {
+
+  if (GPUCreateTextureView(NULL, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT
+      || view != NULL) {
     fprintf(stderr, "texture view create accepted null texture\n");
     GPUDestroyTexture(texture);
     return 0;
   }
+
   view = (GPUTextureView *)(uintptr_t)1u;
-  if (GPUCreateTextureView(texture, NULL, &view) != GPU_ERROR_INVALID_ARGUMENT ||
-      view != NULL) {
+
+  if (GPUCreateTextureView(texture, NULL, &view) != GPU_ERROR_INVALID_ARGUMENT
+      || view != NULL) {
     fprintf(stderr, "texture view create accepted null info\n");
     GPUDestroyTexture(texture);
     return 0;
   }
+
   if (GPUCreateTextureView(texture, &viewInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "texture view create accepted null output\n");
     GPUDestroyTexture(texture);
@@ -990,105 +1121,116 @@ check_resource_validation(GPUDevice *device) {
   }
 
   viewInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
-  view = (GPUTextureView *)(uintptr_t)1u;
-  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
-      view != NULL) {
+  view                 = (GPUTextureView *)(uintptr_t)1u;
+
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT
+      || view != NULL) {
     fprintf(stderr, "texture view create accepted wrong sType\n");
     GPUDestroyTexture(texture);
     return 0;
   }
 
-  viewInfo.chain.sType = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   viewInfo.chain.structSize = (uint32_t)(sizeof(viewInfo) - 1u);
-  view = (GPUTextureView *)(uintptr_t)1u;
-  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
-      view != NULL) {
+  view                      = (GPUTextureView *)(uintptr_t)1u;
+
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT
+      || view != NULL) {
     fprintf(stderr, "texture view create accepted short structSize\n");
     GPUDestroyTexture(texture);
     return 0;
   }
 
   viewInfo.chain.structSize = sizeof(viewInfo);
-  viewInfo.viewType = (GPUTextureViewType)99;
-  view = (GPUTextureView *)(uintptr_t)1u;
-  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
-      view != NULL) {
+  viewInfo.viewType         = (GPUTextureViewType)99;
+  view                      = (GPUTextureView *)(uintptr_t)1u;
+
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT
+      || view != NULL) {
     fprintf(stderr, "texture view create accepted invalid view type\n");
     GPUDestroyTexture(texture);
     return 0;
   }
 
   viewInfo.viewType = GPU_TEXTURE_VIEW_2D;
-  viewInfo.format = GPU_FORMAT_UNDEFINED;
-  view = (GPUTextureView *)(uintptr_t)1u;
-  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
-      view != NULL) {
+  viewInfo.format   = GPU_FORMAT_UNDEFINED;
+  view              = (GPUTextureView *)(uintptr_t)1u;
+
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT
+      || view != NULL) {
     fprintf(stderr, "texture view create accepted undefined format\n");
     GPUDestroyTexture(texture);
     return 0;
   }
 
-  viewInfo.format = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.format       = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.baseMipLevel = 1u;
-  view = (GPUTextureView *)(uintptr_t)1u;
-  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
-      view != NULL) {
+  view                  = (GPUTextureView *)(uintptr_t)1u;
+
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT
+      || view != NULL) {
     fprintf(stderr, "texture view create accepted invalid mip range\n");
     GPUDestroyTexture(texture);
     return 0;
   }
 
-  viewInfo.baseMipLevel = 0u;
+  viewInfo.baseMipLevel   = 0u;
   viewInfo.baseArrayLayer = 1u;
-  view = (GPUTextureView *)(uintptr_t)1u;
-  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
-      view != NULL) {
+  view                    = (GPUTextureView *)(uintptr_t)1u;
+
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT
+      || view != NULL) {
     fprintf(stderr, "texture view create accepted invalid array range\n");
     GPUDestroyTexture(texture);
     return 0;
   }
 
-  viewInfo.baseArrayLayer = 0u;
+  viewInfo.baseArrayLayer  = 0u;
   viewInfo.arrayLayerCount = 0u;
-  view = (GPUTextureView *)(uintptr_t)1u;
-  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT ||
-      view != NULL) {
+  view                     = (GPUTextureView *)(uintptr_t)1u;
+
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT
+      || view != NULL) {
     fprintf(stderr, "texture view create accepted zero array layer count\n");
     GPUDestroyTexture(texture);
     return 0;
   }
 
   viewInfo.arrayLayerCount = 1u;
-  view = NULL;
+  view                     = NULL;
+
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK || !view) {
     fprintf(stderr, "texture view create failed\n");
     GPUDestroyTexture(texture);
     return 0;
   }
-  if (view->_texture != texture ||
-      view->format != viewInfo.format ||
-      view->viewType != viewInfo.viewType ||
-      view->baseMipLevel != viewInfo.baseMipLevel ||
-      view->mipLevelCount != viewInfo.mipLevelCount ||
-      view->baseArrayLayer != viewInfo.baseArrayLayer ||
-      view->arrayLayerCount != viewInfo.arrayLayerCount) {
+
+  if (view->_texture != texture
+      || view->format != viewInfo.format
+      || view->viewType != viewInfo.viewType
+      || view->baseMipLevel != viewInfo.baseMipLevel
+      || view->mipLevelCount != viewInfo.mipLevelCount
+      || view->baseArrayLayer != viewInfo.baseArrayLayer
+      || view->arrayLayerCount != viewInfo.arrayLayerCount) {
     fprintf(stderr, "texture view metadata mismatch\n");
     GPUDestroyTextureView(view);
     GPUDestroyTexture(texture);
     return 0;
   }
+
   GPUDestroyTextureView(view);
 
   viewInfo.viewType = GPU_TEXTURE_VIEW_2D_ARRAY;
-  view = (GPUTextureView *)(uintptr_t)1u;
-  if (GPUCreateTextureView(texture, &viewInfo, &view) !=
-        GPU_ERROR_INVALID_ARGUMENT ||
-      view != NULL) {
+  view              = (GPUTextureView *)(uintptr_t)1u;
+
+  if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_ERROR_INVALID_ARGUMENT
+      || view != NULL) {
     fprintf(stderr, "single-layer texture accepted a 2D array view\n");
     GPUDestroyTextureView(view);
     GPUDestroyTexture(texture);
     return 0;
   }
+
   GPUDestroyTexture(texture);
 
   return 1;
@@ -1096,29 +1238,12 @@ check_resource_validation(GPUDevice *device) {
 
 static int
 check_cube_view_validation(GPUDevice *device) {
-  typedef struct CubeViewCase {
-    GPUTextureViewType viewType;
-    uint32_t           baseLayer;
-    uint32_t           layerCount;
-    bool               valid;
-  } CubeViewCase;
-
-  static const CubeViewCase cases[] = {
-    {GPU_TEXTURE_VIEW_2D,         0u,  1u, false},
-    {GPU_TEXTURE_VIEW_2D_ARRAY,   1u,  2u, true},
-    {GPU_TEXTURE_VIEW_CUBE,       0u,  6u, true},
-    {GPU_TEXTURE_VIEW_CUBE,       6u,  6u, false},
-    {GPU_TEXTURE_VIEW_CUBE,       0u, 12u, false},
-    {GPU_TEXTURE_VIEW_CUBE_ARRAY, 0u,  6u, true},
-    {GPU_TEXTURE_VIEW_CUBE_ARRAY, 6u,  6u, true},
-    {GPU_TEXTURE_VIEW_CUBE_ARRAY, 1u,  6u, false},
-    {GPU_TEXTURE_VIEW_CUBE_ARRAY, 6u,  5u, false}
-  };
-  GPUTexture               *texture;
-  GPUTextureView           *view;
-  GPUTextureCreateInfo      textureInfo = {0};
-  GPUTextureViewCreateInfo  viewInfo    = {0};
-  GPUResult                 result;
+  GPUTextureCreateInfo     textureInfo = {0};
+  GPUTextureViewCreateInfo viewInfo    = {0};
+  GPUTexture              *texture;
+  GPUTextureView          *view;
+  GPUResult                result;
+  uint32_t                 i;
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
@@ -1132,6 +1257,7 @@ check_cube_view_validation(GPUDevice *device) {
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED;
   texture                      = NULL;
+
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
     fprintf(stderr, "cube view validation texture creation failed\n");
     return 0;
@@ -1142,16 +1268,18 @@ check_cube_view_validation(GPUDevice *device) {
   viewInfo.label            = "api-cube-view-validation";
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(cases); i++) {
-    viewInfo.viewType        = cases[i].viewType;
-    viewInfo.baseArrayLayer  = cases[i].baseLayer;
-    viewInfo.arrayLayerCount = cases[i].layerCount;
+
+  for (i = 0u; i < GPU_ARRAY_LEN(cubeViewCases); i++) {
+    viewInfo.viewType        = cubeViewCases[i].viewType;
+    viewInfo.baseArrayLayer  = cubeViewCases[i].baseLayer;
+    viewInfo.arrayLayerCount = cubeViewCases[i].layerCount;
 
     view   = (GPUTextureView *)(uintptr_t)1u;
     result = GPUCreateTextureView(texture, &viewInfo, &view);
-    if ((cases[i].valid && (result != GPU_OK || !view)) ||
-        (!cases[i].valid &&
-         (result != GPU_ERROR_INVALID_ARGUMENT || view != NULL))) {
+
+    if ((cubeViewCases[i].valid && (result != GPU_OK || !view))
+        || (!cubeViewCases[i].valid
+            && (result != GPU_ERROR_INVALID_ARGUMENT || view != NULL))) {
       fprintf(stderr,
               "cube view validation case %u returned %d\n",
               i,
@@ -1160,6 +1288,7 @@ check_cube_view_validation(GPUDevice *device) {
       GPUDestroyTexture(texture);
       return 0;
     }
+
     GPUDestroyTextureView(view);
   }
 
@@ -1169,24 +1298,12 @@ check_cube_view_validation(GPUDevice *device) {
 
 static int
 check_3d_view_validation(GPUDevice *device) {
-  typedef struct Texture3DViewCase {
-    GPUTextureViewType viewType;
-    uint32_t baseLayer;
-    uint32_t layerCount;
-    bool     valid;
-  } Texture3DViewCase;
-
-  static const Texture3DViewCase cases[] = {
-    {GPU_TEXTURE_VIEW_3D, 0u, 1u, true},
-    {GPU_TEXTURE_VIEW_2D, 0u, 1u, false},
-    {GPU_TEXTURE_VIEW_3D, 1u, 1u, false},
-    {GPU_TEXTURE_VIEW_3D, 0u, 2u, false}
-  };
-  GPUTexture               *texture;
-  GPUTextureView           *view;
-  GPUTextureCreateInfo      textureInfo = {0};
-  GPUTextureViewCreateInfo  viewInfo    = {0};
-  GPUResult                 result;
+  GPUTextureCreateInfo     textureInfo = {0};
+  GPUTextureViewCreateInfo viewInfo    = {0};
+  GPUTexture              *texture;
+  GPUTextureView          *view;
+  GPUResult                result;
+  uint32_t                 i;
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
@@ -1200,6 +1317,7 @@ check_3d_view_validation(GPUDevice *device) {
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED;
   texture                      = NULL;
+
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
     fprintf(stderr, "3D view validation texture creation failed\n");
     return 0;
@@ -1210,16 +1328,18 @@ check_3d_view_validation(GPUDevice *device) {
   viewInfo.label            = "api-3d-view-validation";
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(cases); i++) {
-    viewInfo.viewType        = cases[i].viewType;
-    viewInfo.baseArrayLayer  = cases[i].baseLayer;
-    viewInfo.arrayLayerCount = cases[i].layerCount;
+
+  for (i = 0u; i < GPU_ARRAY_LEN(texture3DViewCases); i++) {
+    viewInfo.viewType        = texture3DViewCases[i].viewType;
+    viewInfo.baseArrayLayer  = texture3DViewCases[i].baseLayer;
+    viewInfo.arrayLayerCount = texture3DViewCases[i].layerCount;
 
     view   = (GPUTextureView *)(uintptr_t)1u;
     result = GPUCreateTextureView(texture, &viewInfo, &view);
-    if ((cases[i].valid && (result != GPU_OK || !view)) ||
-        (!cases[i].valid &&
-         (result != GPU_ERROR_INVALID_ARGUMENT || view != NULL))) {
+
+    if ((texture3DViewCases[i].valid && (result != GPU_OK || !view))
+        || (!texture3DViewCases[i].valid
+            && (result != GPU_ERROR_INVALID_ARGUMENT || view != NULL))) {
       fprintf(stderr,
               "3D view validation case %u returned %d\n",
               i,
@@ -1228,6 +1348,7 @@ check_3d_view_validation(GPUDevice *device) {
       GPUDestroyTexture(texture);
       return 0;
     }
+
     GPUDestroyTextureView(view);
   }
 
@@ -1237,30 +1358,14 @@ check_3d_view_validation(GPUDevice *device) {
 
 static int
 check_1d_view_validation(GPUDevice *device) {
-  typedef struct Texture1DViewCase {
-    GPUTextureViewType viewType;
-    uint32_t           baseLayer;
-    uint32_t           layerCount;
-    bool               arrayTexture;
-    bool               valid;
-  } Texture1DViewCase;
-
-  static const Texture1DViewCase cases[] = {
-    {GPU_TEXTURE_VIEW_1D,       0u, 1u, false, true},
-    {GPU_TEXTURE_VIEW_1D_ARRAY, 0u, 1u, false, false},
-    {GPU_TEXTURE_VIEW_2D,       0u, 1u, false, false},
-    {GPU_TEXTURE_VIEW_1D,       0u, 1u, true,  false},
-    {GPU_TEXTURE_VIEW_1D_ARRAY, 0u, 3u, true,  true},
-    {GPU_TEXTURE_VIEW_1D_ARRAY, 1u, 2u, true,  true},
-    {GPU_TEXTURE_VIEW_1D_ARRAY, 2u, 2u, true,  false}
-  };
-  GPUTexture               *singleTexture;
-  GPUTexture               *arrayTexture;
-  GPUTexture               *texture;
-  GPUTextureView           *view;
-  GPUTextureCreateInfo      textureInfo = {0};
-  GPUTextureViewCreateInfo  viewInfo    = {0};
-  GPUResult                 result;
+  GPUTextureCreateInfo     textureInfo = {0};
+  GPUTextureViewCreateInfo viewInfo    = {0};
+  GPUTexture              *singleTexture;
+  GPUTexture              *arrayTexture;
+  GPUTexture              *texture;
+  GPUTextureView          *view;
+  GPUResult                result;
+  uint32_t                 i;
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
@@ -1275,9 +1380,9 @@ check_1d_view_validation(GPUDevice *device) {
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED;
 
   texture = (GPUTexture *)(uintptr_t)1u;
-  if (GPUCreateTexture(device, &textureInfo, &texture) !=
-        GPU_ERROR_INVALID_ARGUMENT ||
-      texture != NULL) {
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_ERROR_INVALID_ARGUMENT
+      || texture != NULL) {
     fprintf(stderr, "1D texture accepted height greater than one\n");
     GPUDestroyTexture(texture);
     return 0;
@@ -1285,16 +1390,18 @@ check_1d_view_validation(GPUDevice *device) {
 
   textureInfo.height = 1u;
   singleTexture      = NULL;
-  if (GPUCreateTexture(device, &textureInfo, &singleTexture) != GPU_OK ||
-      !singleTexture) {
+
+  if (GPUCreateTexture(device, &textureInfo, &singleTexture) != GPU_OK
+      || !singleTexture) {
     fprintf(stderr, "single 1D validation texture creation failed\n");
     return 0;
   }
 
   textureInfo.depthOrLayers = 3u;
   arrayTexture              = NULL;
-  if (GPUCreateTexture(device, &textureInfo, &arrayTexture) != GPU_OK ||
-      !arrayTexture) {
+
+  if (GPUCreateTexture(device, &textureInfo, &arrayTexture) != GPU_OK
+      || !arrayTexture) {
     fprintf(stderr, "array 1D validation texture creation failed\n");
     GPUDestroyTexture(singleTexture);
     return 0;
@@ -1305,19 +1412,21 @@ check_1d_view_validation(GPUDevice *device) {
   viewInfo.label            = "api-1d-view-validation";
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(cases); i++) {
-    texture                  = cases[i].arrayTexture
+
+  for (i = 0u; i < GPU_ARRAY_LEN(texture1DViewCases); i++) {
+    texture                  = texture1DViewCases[i].arrayTexture
                                  ? arrayTexture
                                  : singleTexture;
-    viewInfo.viewType        = cases[i].viewType;
-    viewInfo.baseArrayLayer  = cases[i].baseLayer;
-    viewInfo.arrayLayerCount = cases[i].layerCount;
+    viewInfo.viewType        = texture1DViewCases[i].viewType;
+    viewInfo.baseArrayLayer  = texture1DViewCases[i].baseLayer;
+    viewInfo.arrayLayerCount = texture1DViewCases[i].layerCount;
 
     view   = (GPUTextureView *)(uintptr_t)1u;
     result = GPUCreateTextureView(texture, &viewInfo, &view);
-    if ((cases[i].valid && (result != GPU_OK || !view)) ||
-        (!cases[i].valid &&
-         (result != GPU_ERROR_INVALID_ARGUMENT || view != NULL))) {
+
+    if ((texture1DViewCases[i].valid && (result != GPU_OK || !view))
+        || (!texture1DViewCases[i].valid
+            && (result != GPU_ERROR_INVALID_ARGUMENT || view != NULL))) {
       fprintf(stderr,
               "1D view validation case %u returned %d\n",
               i,
@@ -1327,6 +1436,7 @@ check_1d_view_validation(GPUDevice *device) {
       GPUDestroyTexture(singleTexture);
       return 0;
     }
+
     GPUDestroyTextureView(view);
   }
 
@@ -1337,14 +1447,14 @@ check_1d_view_validation(GPUDevice *device) {
 
 int
 gpu_test_resources(GPUDevice *device) {
-  return check_destroy_null_handles() &&
-         check_buffer_device_dispatch(device) &&
-         check_format_capability_textures(device) &&
-         check_texture_transfer_layout(device) &&
-         check_texture_write_aspects(device) &&
-         check_texture_view_format_validation(device) &&
-         check_resource_validation(device) &&
-         check_cube_view_validation(device) &&
-         check_3d_view_validation(device) &&
-         check_1d_view_validation(device);
+  return check_destroy_null_handles()
+         && check_buffer_device_dispatch(device)
+         && check_format_capability_textures(device)
+         && check_texture_transfer_layout(device)
+         && check_texture_write_aspects(device)
+         && check_texture_view_format_validation(device)
+         && check_resource_validation(device)
+         && check_cube_view_validation(device)
+         && check_3d_view_validation(device)
+         && check_1d_view_validation(device);
 }

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <gpu/gpu.h>
 
 #include "backend/vk/common.h"
@@ -40,25 +56,31 @@ typedef struct DescriptorBufferProbe {
 _Static_assert(sizeof(GPUPipelineStatisticsResult) == 11u * sizeof(uint64_t),
                "pipeline statistics result layout changed");
 
-#define VULKAN_CHECK(label, expression)                                      \
-  do {                                                                       \
-    if (ok && !(expression)) {                                               \
+#define VULKAN_CHECK(label, expression)                                     \
+  do {                                                                      \
+    if (ok && !(expression)) {                                              \
       fprintf(stderr, "vulkan queue check failed: %s\n", label);            \
-      ok = 0;                                                                \
-    }                                                                        \
+      ok = 0;                                                               \
+    }                                                                       \
   } while (0)
+
+static uint8_t kBufferUpload[VULKAN_TRANSFER_TEST_BYTES];
+static uint8_t kTextureUpload[VULKAN_TRANSFER_TEST_BYTES];
 
 static int
 feature_set_contains(const GPUFeatureSet *set, GPUFeature feature) {
+  uint32_t i;
+
   if (!set || !set->pFeatures) {
     return 0;
   }
 
-  for (uint32_t i = 0; i < set->featureCount; i++) {
+  for (i = 0; i < set->featureCount; i++) {
     if (set->pFeatures[i] == feature) {
       return 1;
     }
   }
+
   return 0;
 }
 
@@ -77,18 +99,22 @@ descriptor_probe_bind(VkCommandBuffer                         command,
                       uint32_t                                bufferCount,
                       const VkDescriptorBufferBindingInfoEXT *bufferInfos) {
   DescriptorBufferProbe *probe;
+  uint32_t               i;
 
   probe = (DescriptorBufferProbe *)(uintptr_t)command;
+
   if (!probe) {
     return;
   }
+
   probe->bindCallCount++;
   probe->boundBufferCount = bufferCount;
-  probe->valid = probe->valid && bufferCount > 0u && bufferInfos;
-  for (uint32_t i = 0u; probe->valid && i < bufferCount; i++) {
+  probe->valid            = probe->valid && bufferCount > 0u && bufferInfos;
+
+  for (i = 0u; probe->valid && i < bufferCount; i++) {
     probe->valid = bufferInfos[i].sType ==
-                     VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT &&
-                   bufferInfos[i].address != 0u;
+                     VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT
+                   && bufferInfos[i].address != 0u;
   }
 }
 
@@ -101,19 +127,23 @@ descriptor_probe_offsets(VkCommandBuffer     command,
                          const uint32_t     *bufferIndices,
                          const VkDeviceSize *offsets) {
   DescriptorBufferProbe *probe;
+  uint32_t               i;
 
   probe = (DescriptorBufferProbe *)(uintptr_t)command;
+
   if (!probe) {
     return;
   }
+
   probe->offsetCallCount++;
   probe->offsetSetCount += setCount;
-  probe->lastFirstSet    = firstSet;
-  probe->lastSetCount    = setCount;
-  probe->valid = probe->valid &&
-                 bindPoint == VK_PIPELINE_BIND_POINT_COMPUTE && layout &&
-                 setCount > 0u && bufferIndices && offsets;
-  for (uint32_t i = 0u; probe->valid && i < setCount; i++) {
+  probe->lastFirstSet = firstSet;
+  probe->lastSetCount = setCount;
+  probe->valid        = probe->valid
+                        && bindPoint == VK_PIPELINE_BIND_POINT_COMPUTE && layout
+                        && setCount > 0u && bufferIndices && offsets;
+
+  for (i = 0u; probe->valid && i < setCount; i++) {
     probe->valid = bufferIndices[i] < probe->boundBufferCount;
   }
 }
@@ -134,27 +164,30 @@ descriptor_probe_group(GPUApi                *api,
 
 static int
 descriptor_buffer_state_shadow(GPUDevice *gpuDevice) {
-  GPUApi                     *api;
-  GPUDeviceVk                 device      = {0};
-  GPUBindGroupLayoutVk        layout      = {0};
-  GPUPipelineLayoutVk         pipelineVk  = {0};
-  GPUPipelineLayout           pipeline    = {0};
-  GPUDescriptorBufferChunkVk  chunks[3]   = {0};
-  GPUBindGroupVk              groupsVk[3] = {0};
-  GPUBindGroup                groups[3]   = {0};
-  GPUComputeEncoderVk         encoder     = {0};
-  GPUComputePassEncoder       pass        = {0};
-  DescriptorBufferProbe       probe       = {0};
-  VkDevice                    deviceHandle;
-  VkPipelineLayout            layoutHandle;
+  GPUDeviceVk                device      = {0};
+  GPUBindGroupLayoutVk       layout      = {0};
+  GPUPipelineLayoutVk        pipelineVk  = {0};
+  GPUPipelineLayout          pipeline    = {0};
+  GPUDescriptorBufferChunkVk chunks[3]   = {0};
+  GPUBindGroupVk             groupsVk[3] = {0};
+  GPUBindGroup               groups[3]   = {0};
+  GPUComputeEncoderVk        encoder     = {0};
+  GPUComputePassEncoder      pass        = {0};
+  DescriptorBufferProbe      probe       = {0};
+  GPUApi                    *api;
+  VkDevice                   deviceHandle;
+  VkPipelineLayout           layoutHandle;
+  uint32_t                   i;
 
   api = gpuDeviceApi(gpuDevice);
+
   if (!api || !api->descriptor.bindComputeGroup) {
     return 0;
   }
-  probe.valid  = true;
-  deviceHandle = (VkDevice)(uintptr_t)1u;
-  layoutHandle = (VkPipelineLayout)(uintptr_t)2u;
+
+  probe.valid                       = true;
+  deviceHandle                      = (VkDevice)(uintptr_t)1u;
+  layoutHandle                      = (VkPipelineLayout)(uintptr_t)2u;
   device.bindDescriptorBuffers      = descriptor_probe_bind;
   device.setDescriptorBufferOffsets = descriptor_probe_offsets;
   device.descriptorBuffer           = true;
@@ -168,43 +201,46 @@ descriptor_buffer_state_shadow(GPUDevice *gpuDevice) {
   chunks[0].address                 = 0x1000u;
   chunks[1].address                 = 0x2000u;
   chunks[2].address                 = 0x3000u;
-  for (uint32_t i = 0u; i < 3u; i++) {
-    groupsVk[i].layout            = &layout;
-    groupsVk[i].descriptorChunk   = &chunks[i];
-    groupsVk[i].device            = deviceHandle;
-    groupsVk[i].descriptorOffset  = (VkDeviceSize)i * 64u;
-    groups[i]._native             = &groupsVk[i];
+
+  for (i = 0u; i < 3u; i++) {
+    groupsVk[i].layout           = &layout;
+    groupsVk[i].descriptorChunk  = &chunks[i];
+    groupsVk[i].device           = deviceHandle;
+    groupsVk[i].descriptorOffset = (VkDeviceSize)i * 64u;
+    groups[i]._native            = &groupsVk[i];
   }
+
   encoder.command        = (VkCommandBuffer)(uintptr_t)&probe;
   encoder.bindPoint      = VK_PIPELINE_BIND_POINT_COMPUTE;
   encoder.pipelineLayout = layoutHandle;
   pass._priv             = &encoder;
 
-  if (!descriptor_probe_group(api, &pass, &pipeline, 0u, &groups[0]) ||
-      probe.bindCallCount != 1u || probe.offsetCallCount != 1u ||
-      probe.offsetSetCount != 1u || encoder.descriptors.chunkCount != 1u ||
-      !descriptor_probe_group(api, &pass, &pipeline, 0u, &groups[0]) ||
-      probe.bindCallCount != 1u || probe.offsetCallCount != 1u ||
-      !descriptor_probe_group(api, &pass, &pipeline, 1u, &groups[0]) ||
-      probe.bindCallCount != 1u || probe.offsetCallCount != 2u ||
-      probe.offsetSetCount != 2u || probe.lastFirstSet != 1u ||
-      probe.lastSetCount != 1u ||
-      !descriptor_probe_group(api, &pass, &pipeline, 0u, &groups[1]) ||
-      probe.bindCallCount != 2u || probe.offsetCallCount != 3u ||
-      probe.offsetSetCount != 4u || probe.lastFirstSet != 0u ||
-      probe.lastSetCount != 2u || encoder.descriptors.chunkCount != 2u ||
-      !descriptor_probe_group(api, &pass, &pipeline, 1u, &groups[2]) ||
-      probe.bindCallCount != 3u || probe.offsetCallCount != 4u ||
-      probe.offsetSetCount != 6u || probe.lastSetCount != 2u ||
-      encoder.descriptors.chunkCount != 2u || !probe.valid) {
+  if (!descriptor_probe_group(api, &pass, &pipeline, 0u, &groups[0])
+      || probe.bindCallCount != 1u || probe.offsetCallCount != 1u
+      || probe.offsetSetCount != 1u || encoder.descriptors.chunkCount != 1u
+      || !descriptor_probe_group(api, &pass, &pipeline, 0u, &groups[0])
+      || probe.bindCallCount != 1u || probe.offsetCallCount != 1u
+      || !descriptor_probe_group(api, &pass, &pipeline, 1u, &groups[0])
+      || probe.bindCallCount != 1u || probe.offsetCallCount != 2u
+      || probe.offsetSetCount != 2u || probe.lastFirstSet != 1u
+      || probe.lastSetCount != 1u
+      || !descriptor_probe_group(api, &pass, &pipeline, 0u, &groups[1])
+      || probe.bindCallCount != 2u || probe.offsetCallCount != 3u
+      || probe.offsetSetCount != 4u || probe.lastFirstSet != 0u
+      || probe.lastSetCount != 2u || encoder.descriptors.chunkCount != 2u
+      || !descriptor_probe_group(api, &pass, &pipeline, 1u, &groups[2])
+      || probe.bindCallCount != 3u || probe.offsetCallCount != 4u
+      || probe.offsetSetCount != 6u || probe.lastSetCount != 2u
+      || encoder.descriptors.chunkCount != 2u || !probe.valid) {
     return 0;
   }
 
   memset(encoder.descriptors.groups, 0, sizeof(encoder.descriptors.groups));
-  if (!descriptor_probe_group(api, &pass, &pipeline, 0u, &groups[1]) ||
-      probe.bindCallCount != 3u || probe.offsetCallCount != 5u ||
-      probe.offsetSetCount != 7u || probe.lastFirstSet != 0u ||
-      probe.lastSetCount != 1u || !probe.valid) {
+
+  if (!descriptor_probe_group(api, &pass, &pipeline, 0u, &groups[1])
+      || probe.bindCallCount != 3u || probe.offsetCallCount != 5u
+      || probe.offsetSetCount != 7u || probe.lastFirstSet != 0u
+      || probe.lastSetCount != 1u || !probe.valid) {
     return 0;
   }
 
@@ -223,42 +259,51 @@ descriptor_binding_path(GPUDevice *device,
                         GPUQueue  *queue,
                         GPUFence  *fence,
                         bool       bindless) {
-  GPUDeviceVk                   *deviceVk;
-  GPUBindlessLayoutEXT           bindlessInfo = {0};
-  GPUBindGroupLayoutEntry        layoutEntries[2] = {0};
-  GPUBindGroupLayoutEntry        dynamicEntry = {0};
-  GPUBindGroupLayoutCreateInfo   layoutInfo = {0};
-  GPUBindGroupLayoutCreateInfo   dynamicInfo = {0};
-  GPUBindGroupEntry              groupEntry = {0};
-  GPUBindGroupCreateInfo         groupInfo = {0};
-  GPUPipelineLayoutCreateInfo    pipelineInfo = {0};
-  GPUQueueSubmitInfo             submitInfo = {0};
-  GPUBufferCreateInfo            bufferInfo = {0};
-  GPUBindGroupLayout            *layouts[2];
-  GPUBindGroupLayout            *layout;
-  GPUBindGroupLayout            *dynamicLayout;
-  GPUBindGroupLayoutVk          *layoutVk;
-  GPUBindGroupLayoutVk          *dynamicLayoutVk;
-  GPUPipelineLayout             *pipelineLayout;
-  GPUPipelineLayout             *mixedPipelineLayout;
-  GPUPipelineLayoutVk           *pipelineLayoutVk;
-  GPUPipelineLayoutVk           *mixedPipelineLayoutVk;
-  GPUBindGroup                  *group;
-  GPUBindGroupVk                *groupVk;
-  GPUBuffer                     *buffer;
-  GPUCommandBuffer              *cmdb;
-  GPUComputePassEncoder         *pass;
-  GPUComputeEncoderVk           *passVk;
+  GPUBindlessLayoutEXT          bindlessInfo     = {0};
+  GPUBindGroupLayoutEntry       layoutEntries[2] = {0};
+  GPUBindGroupLayoutEntry       dynamicEntry     = {0};
+  GPUBindGroupLayoutCreateInfo  layoutInfo       = {0};
+  GPUBindGroupLayoutCreateInfo  dynamicInfo      = {0};
+  GPUBindGroupEntry             groupEntry       = {0};
+  GPUBindGroupCreateInfo        groupInfo        = {0};
+  GPUPipelineLayoutCreateInfo   pipelineInfo     = {0};
+  GPUQueueSubmitInfo            submitInfo       = {0};
+  GPUBufferCreateInfo           bufferInfo       = {0};
+  GPUBindGroupLayout           *layouts[2];
 #ifdef VK_EXT_descriptor_buffer
-  const GPUDescriptorBindingVk  *samplerBinding;
-  VkDescriptorGetInfoEXT         samplerGetInfo = {0};
-  VkSampler                      sampler;
-  uint8_t                       *expectedSampler;
-  const uint8_t                 *actualSampler;
+  VkDescriptorGetInfoEXT        samplerGetInfo = {0};
 #endif
-  int                            ok;
+  GPUDeviceVk                  *deviceVk;
+  GPUBindGroupLayout           *layout;
+  GPUBindGroupLayout           *dynamicLayout;
+  GPUBindGroupLayoutVk         *layoutVk;
+  GPUBindGroupLayoutVk         *dynamicLayoutVk;
+  GPUPipelineLayout            *pipelineLayout;
+  GPUPipelineLayout            *mixedPipelineLayout;
+  GPUPipelineLayoutVk          *pipelineLayoutVk;
+  GPUPipelineLayoutVk          *mixedPipelineLayoutVk;
+  GPUBindGroup                 *group;
+  GPUBindGroupVk               *groupVk;
+  GPUBuffer                    *buffer;
+  GPUCommandBuffer             *cmdb;
+  GPUComputePassEncoder        *pass;
+  GPUComputeEncoderVk          *passVk;
+#ifdef VK_EXT_descriptor_buffer
+  const GPUDescriptorBindingVk *samplerBinding;
+  VkSampler                     sampler;
+  uint8_t                      *expectedSampler;
+  const uint8_t                *actualSampler;
+#endif
+  int                           ok;
+#ifdef VK_EXT_descriptor_buffer
+  uint32_t                      bindingIndex;
+  uint32_t                      samplerIndex;
+#endif
 
-  deviceVk = device ? device->_priv : NULL;
+#ifdef VK_EXT_descriptor_buffer
+#endif
+
+  deviceVk            = device ? device->_priv : NULL;
   layout              = NULL;
   dynamicLayout       = NULL;
   pipelineLayout      = NULL;
@@ -270,6 +315,7 @@ descriptor_binding_path(GPUDevice *device,
   expectedSampler     = NULL;
 #endif
   ok                  = 0;
+
   if (!deviceVk) {
     return 0;
   }
@@ -280,38 +326,39 @@ descriptor_binding_path(GPUDevice *device,
   bufferInfo.sizeBytes        = 256u;
   bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
                                 GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     goto cleanup;
   }
 
-  layoutEntries[0].binding      = 0u;
-  layoutEntries[0].bindingType  = GPU_BINDING_UNIFORM_BUFFER;
-  layoutEntries[0].visibility   = GPU_SHADER_STAGE_COMPUTE_BIT;
-  layoutEntries[0].arrayCount   = bindless ? 2u : 1u;
-  layoutEntries[1].binding      = 1u;
-  layoutEntries[1].bindingType  = GPU_BINDING_SAMPLER;
-  layoutEntries[1].visibility   = GPU_SHADER_STAGE_COMPUTE_BIT;
-  layoutEntries[1].arrayCount   = 2u;
-  layoutEntries[1].immutableSampler = true;
+  layoutEntries[0].binding                        = 0u;
+  layoutEntries[0].bindingType                    = GPU_BINDING_UNIFORM_BUFFER;
+  layoutEntries[0].visibility                     = GPU_SHADER_STAGE_COMPUTE_BIT;
+  layoutEntries[0].arrayCount                     = bindless ? 2u : 1u;
+  layoutEntries[1].binding                        = 1u;
+  layoutEntries[1].bindingType                    = GPU_BINDING_SAMPLER;
+  layoutEntries[1].visibility                     = GPU_SHADER_STAGE_COMPUTE_BIT;
+  layoutEntries[1].arrayCount                     = 2u;
+  layoutEntries[1].immutableSampler               = true;
   layoutEntries[1].immutableSamplerDesc.minFilter = GPU_FILTER_LINEAR;
   layoutEntries[1].immutableSamplerDesc.magFilter = GPU_FILTER_LINEAR;
   layoutEntries[1].immutableSamplerDesc.mipFilter = GPU_MIP_FILTER_LINEAR;
-  layoutEntries[1].immutableSamplerDesc.addressU = GPU_ADDRESS_MODE_REPEAT;
-  layoutEntries[1].immutableSamplerDesc.addressV = GPU_ADDRESS_MODE_REPEAT;
-  layoutEntries[1].immutableSamplerDesc.addressW = GPU_ADDRESS_MODE_REPEAT;
+  layoutEntries[1].immutableSamplerDesc.addressU  = GPU_ADDRESS_MODE_REPEAT;
+  layoutEntries[1].immutableSamplerDesc.addressV  = GPU_ADDRESS_MODE_REPEAT;
+  layoutEntries[1].immutableSamplerDesc.addressW  = GPU_ADDRESS_MODE_REPEAT;
 
   bindlessInfo.chain.sType      = GPU_STRUCTURE_TYPE_BINDLESS_LAYOUT_EXT;
   bindlessInfo.chain.structSize = sizeof(bindlessInfo);
 
-  layoutInfo.chain.sType      =
-    GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layoutInfo.chain.structSize = sizeof(layoutInfo);
   layoutInfo.chain.pNext      = bindless ? &bindlessInfo.chain : NULL;
   layoutInfo.label            = "vulkan-descriptor-layout";
   layoutInfo.entryCount       = 2u;
   layoutInfo.pEntries         = layoutEntries;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK ||
-      !layout) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK
+      || !layout) {
     goto cleanup;
   }
 
@@ -320,99 +367,111 @@ descriptor_binding_path(GPUDevice *device,
   dynamicEntry.visibility       = GPU_SHADER_STAGE_COMPUTE_BIT;
   dynamicEntry.arrayCount       = 1u;
   dynamicEntry.hasDynamicOffset = true;
-  dynamicInfo.chain.sType      =
-    GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
-  dynamicInfo.chain.structSize = sizeof(dynamicInfo);
-  dynamicInfo.label            = "vulkan-dynamic-descriptor-layout";
-  dynamicInfo.entryCount       = 1u;
-  dynamicInfo.pEntries         = &dynamicEntry;
+  dynamicInfo.chain.sType       = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  dynamicInfo.chain.structSize  = sizeof(dynamicInfo);
+  dynamicInfo.label             = "vulkan-dynamic-descriptor-layout";
+  dynamicInfo.entryCount        = 1u;
+  dynamicInfo.pEntries          = &dynamicEntry;
+
   if (GPUCreateBindGroupLayout(device,
                                &dynamicInfo,
-                               &dynamicLayout) != GPU_OK ||
-      !dynamicLayout) {
+                               &dynamicLayout) != GPU_OK
+      || !dynamicLayout) {
     goto cleanup;
   }
 
-  groupEntry.binding       = 0u;
-  groupEntry.arrayIndex    = bindless ? 1u : 0u;
-  groupEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
-  groupEntry.buffer.buffer = buffer;
-  groupEntry.buffer.size   = bufferInfo.sizeBytes;
+  groupEntry.binding         = 0u;
+  groupEntry.arrayIndex      = bindless ? 1u : 0u;
+  groupEntry.bindingType     = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntry.buffer.buffer   = buffer;
+  groupEntry.buffer.size     = bufferInfo.sizeBytes;
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "vulkan-descriptor-group";
   groupInfo.layout           = layout;
   groupInfo.entryCount       = bindless ? 0u : 1u;
   groupInfo.pEntries         = bindless ? NULL : &groupEntry;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     goto cleanup;
   }
-  if (bindless &&
-      GPUUpdateBindGroupEXT(group, 1u, &groupEntry) != GPU_OK) {
+
+  if (bindless
+      && GPUUpdateBindGroupEXT(group, 1u, &groupEntry) != GPU_OK) {
     goto cleanup;
   }
 
-  layouts[0] = layout;
-  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  layouts[0]                        = layout;
+  pipelineInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize     = sizeof(pipelineInfo);
   pipelineInfo.bindGroupLayoutCount = 1u;
   pipelineInfo.ppBindGroupLayouts   = layouts;
+
   if (GPUCreatePipelineLayout(device,
                               &pipelineInfo,
-                              &pipelineLayout) != GPU_OK ||
-      !pipelineLayout) {
+                              &pipelineLayout) != GPU_OK
+      || !pipelineLayout) {
     goto cleanup;
   }
 
-  layouts[1]                         = dynamicLayout;
-  pipelineInfo.label                 = "vulkan-mixed-descriptor-pipeline";
-  pipelineInfo.bindGroupLayoutCount  = 2u;
+  layouts[1]                        = dynamicLayout;
+  pipelineInfo.label                = "vulkan-mixed-descriptor-pipeline";
+  pipelineInfo.bindGroupLayoutCount = 2u;
+
   if (GPUCreatePipelineLayout(device,
                               &pipelineInfo,
-                              &mixedPipelineLayout) != GPU_OK ||
-      !mixedPipelineLayout ||
-      GPUAcquireCommandBuffer(queue,
-                              "vulkan-descriptor-bind",
-                              &cmdb) != GPU_OK ||
-      !cmdb || !(pass = GPUBeginComputePass(cmdb,
-                                            "vulkan-descriptor-bind"))) {
+                              &mixedPipelineLayout) != GPU_OK
+      || !mixedPipelineLayout
+      || GPUAcquireCommandBuffer(queue,
+                                 "vulkan-descriptor-bind",
+                                 &cmdb) != GPU_OK
+      || !cmdb || !(pass = GPUBeginComputePass(cmdb,
+                                               "vulkan-descriptor-bind"))) {
     goto cleanup;
   }
 
   pipelineLayoutVk = pipelineLayout->_native;
   passVk           = pass->_priv;
+
   if (!pipelineLayoutVk || !passVk) {
     GPUEndComputePass(pass);
     goto cleanup;
   }
+
   pass->_pipelineLayout              = pipelineLayout;
   passVk->pipelineLayout             = pipelineLayoutVk->layout;
   passVk->descriptors.pipelineLayout = pipelineLayoutVk;
   GPUBindComputeGroup(pass, 0u, group, 0u, NULL);
   ok = pass->_boundGroups[0] == group;
   GPUEndComputePass(pass);
+
   if (!ok) {
     goto cleanup;
   }
 
   pass = GPUBeginComputePass(cmdb, "vulkan-descriptor-set-fallback");
+
   if (!pass) {
     ok = 0;
     goto cleanup;
   }
+
   mixedPipelineLayoutVk = mixedPipelineLayout->_native;
   passVk                = pass->_priv;
+
   if (!mixedPipelineLayoutVk || !passVk) {
     GPUEndComputePass(pass);
     ok = 0;
     goto cleanup;
   }
+
   pass->_pipelineLayout              = mixedPipelineLayout;
   passVk->pipelineLayout             = mixedPipelineLayoutVk->layout;
   passVk->descriptors.pipelineLayout = mixedPipelineLayoutVk;
   GPUBindComputeGroup(pass, 0u, group, 0u, NULL);
   ok = pass->_boundGroups[0] == group;
   GPUEndComputePass(pass);
+
   if (!ok) {
     goto cleanup;
   }
@@ -422,40 +481,44 @@ descriptor_binding_path(GPUDevice *device,
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, 5000000000ull) != GPU_OK) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, 5000000000ull) != GPU_OK) {
     ok = 0;
     goto cleanup;
   }
 
-  layoutVk = layout->_native;
+  layoutVk        = layout->_native;
   dynamicLayoutVk = dynamicLayout->_native;
-  groupVk  = group->_native;
-  ok = layoutVk && dynamicLayoutVk && groupVk && mixedPipelineLayoutVk &&
-       layoutVk->descriptorBuffer == deviceVk->descriptorBuffer &&
-       !dynamicLayoutVk->descriptorBuffer &&
-       !mixedPipelineLayoutVk->descriptorBuffer;
+  groupVk         = group->_native;
+  ok              = layoutVk && dynamicLayoutVk && groupVk && mixedPipelineLayoutVk
+                    && layoutVk->descriptorBuffer == deviceVk->descriptorBuffer
+                    && !dynamicLayoutVk->descriptorBuffer
+                    && !mixedPipelineLayoutVk->descriptorBuffer;
 #ifdef VK_EXT_descriptor_buffer
   if (ok && deviceVk->descriptorBuffer) {
     samplerBinding = NULL;
-    for (uint32_t i = 0u; i < layoutVk->descriptorBindingCount; i++) {
-      if (layoutVk->descriptorBindings[i].binding == 1u) {
-        samplerBinding = &layoutVk->descriptorBindings[i];
+
+    for (bindingIndex = 0u; bindingIndex < layoutVk->descriptorBindingCount; bindingIndex++) {
+      if (layoutVk->descriptorBindings[bindingIndex].binding == 1u) {
+        samplerBinding = &layoutVk->descriptorBindings[bindingIndex];
         break;
       }
     }
-    ok = pipelineLayoutVk->descriptorBuffer && groupVk->descriptorChunk &&
-         groupVk->set && buffer->_gpuAddress != 0u && samplerBinding &&
-         samplerBinding->immutableSamplers && samplerBinding->count == 2u &&
-         samplerBinding->size > 0u;
+
+    ok = pipelineLayoutVk->descriptorBuffer && groupVk->descriptorChunk
+         && groupVk->set && buffer->_gpuAddress != 0u && samplerBinding
+         && samplerBinding->immutableSamplers && samplerBinding->count == 2u
+         && samplerBinding->size > 0u;
+
     if (ok) {
       expectedSampler = malloc((size_t)samplerBinding->size);
-      ok = expectedSampler != NULL;
+      ok              = expectedSampler != NULL;
     }
-    for (uint32_t i = 0u; ok && i < samplerBinding->count; i++) {
-      sampler                      = samplerBinding->immutableSamplers[i];
-      samplerGetInfo.sType         =
-        VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+
+    for (samplerIndex = 0u; ok && samplerIndex < samplerBinding->count; samplerIndex++) {
+      sampler                      = samplerBinding->immutableSamplers[samplerIndex];
+      samplerGetInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
       samplerGetInfo.type          = VK_DESCRIPTOR_TYPE_SAMPLER;
       samplerGetInfo.data.pSampler = &sampler;
       deviceVk->getDescriptor(deviceVk->device,
@@ -464,10 +527,10 @@ descriptor_binding_path(GPUDevice *device,
                               expectedSampler);
       actualSampler = (const uint8_t *)groupVk->descriptorChunk->mapped +
                       groupVk->descriptorOffset + samplerBinding->offset +
-                      samplerBinding->size * i;
-      ok = memcmp(actualSampler,
-                  expectedSampler,
-                  samplerBinding->size) == 0;
+                      samplerBinding->size * samplerIndex;
+      ok            = memcmp(actualSampler,
+                             expectedSampler,
+                             samplerBinding->size) == 0;
     }
   } else
 #endif
@@ -494,9 +557,10 @@ wait_queue(GPUQueue *queue, GPUFence *fence) {
   GPUCommandBuffer  *cmdb;
 
   cmdb = NULL;
-  if (!queue || !fence ||
-      GPUAcquireCommandBuffer(queue, "vulkan-transfer-wait", &cmdb) != GPU_OK ||
-      !cmdb) {
+
+  if (!queue || !fence
+      || GPUAcquireCommandBuffer(queue, "vulkan-transfer-wait", &cmdb) != GPU_OK
+      || !cmdb) {
     return 0;
   }
 
@@ -505,22 +569,23 @@ wait_queue(GPUQueue *queue, GPUFence *fence) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
-  return GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
-         GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+  return GPUQueueSubmit(queue, &submitInfo) == GPU_OK
+         && GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
 }
 
 static int
 frame_time_roundtrip(GPUDevice *device,
                      GPUQueue  *queue,
                      GPUFence  *fence) {
-  GPUFrameStats       stats;
-  GPUQueueSubmitInfo  submitInfo = {0};
-  GPUCommandBuffer   *cmdb;
+  GPUFrameStats      stats;
+  GPUQueueSubmitInfo submitInfo = {0};
+  GPUCommandBuffer  *cmdb;
 
   GPUResetStats(device);
   cmdb = NULL;
-  if (GPUAcquireCommandBuffer(queue, "vulkan-frame-time", &cmdb) != GPU_OK ||
-      !cmdb) {
+
+  if (GPUAcquireCommandBuffer(queue, "vulkan-frame-time", &cmdb) != GPU_OK
+      || !cmdb) {
     return 0;
   }
 
@@ -530,9 +595,10 @@ frame_time_roundtrip(GPUDevice *device,
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, 5000000000ull) != GPU_OK ||
-      GPUGetLastFrameStats(device, &stats) != GPU_OK) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, 5000000000ull) != GPU_OK
+      || GPUGetLastFrameStats(device, &stats) != GPU_OK) {
     return 0;
   }
 
@@ -540,9 +606,9 @@ frame_time_roundtrip(GPUDevice *device,
 }
 
 static int
-buffer_transfers_reuse(GPUDevice       *device,
-                       GPUQueue        *queue,
-                       GPUFence        *fence) {
+buffer_transfers_reuse(GPUDevice *device,
+                       GPUQueue  *queue,
+                       GPUFence  *fence) {
   GPUQueueVk         *native;
   GPUBufferCreateInfo bufferInfo = {0};
   GPUTransferSlotVk   slots[GPU_VK_TRANSFER_SLOT_COUNT];
@@ -554,13 +620,13 @@ buffer_transfers_reuse(GPUDevice       *device,
   VkDeviceMemory      readbackMemory;
   void               *readbackMapped;
   uint64_t            readbackCapacity;
-  static uint8_t      upload[VULKAN_TRANSFER_TEST_BYTES];
   uint32_t            value;
   uint32_t            copied;
   int                 ok;
 
   native = queue ? queue->_priv : NULL;
   buffer = NULL;
+
   if (!native || !device) {
     return 0;
   }
@@ -568,34 +634,38 @@ buffer_transfers_reuse(GPUDevice       *device,
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "vulkan-sync-buffer-transfer";
-  bufferInfo.sizeBytes        = sizeof(upload);
+  bufferInfo.sizeBytes        = sizeof(kBufferUpload);
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     return 0;
   }
 
   bufferNative = buffer->_priv;
-  ok = bufferNative && !bufferNative->mapped;
+  ok           = bufferNative && !bufferNative->mapped;
+
   for (uint32_t i = 0u;
        ok && i < GPU_VK_TRANSFER_SLOT_COUNT *
-                  VULKAN_BUFFER_UPLOADS_PER_SLOT;
+                 VULKAN_BUFFER_UPLOADS_PER_SLOT;
        i++) {
     value = UINT32_C(0x12340000) + i;
-    memcpy(upload, &value, sizeof(value));
+    memcpy(kBufferUpload, &value, sizeof(value));
     ok = GPUQueueWriteBuffer(queue,
                              buffer,
                              0u,
-                             upload,
-                             sizeof(upload)) == GPU_OK;
+                             kBufferUpload,
+                             sizeof(kBufferUpload)) == GPU_OK;
   }
+
   copied = 0u;
-  ok = ok && GPUQueueReadBuffer(queue,
-                                buffer,
-                                0u,
-                                &copied,
-                                sizeof(copied)) == GPU_OK &&
-       copied == value && !native->transferOpen;
+  ok     = ok && GPUQueueReadBuffer(queue,
+                                    buffer,
+                                    0u,
+                                    &copied,
+                                    sizeof(copied)) == GPU_OK
+           && copied == value && !native->transferOpen;
+
   if (!ok) {
     (void)wait_queue(queue, fence);
     GPUDestroyBuffer(buffer);
@@ -607,9 +677,10 @@ buffer_transfers_reuse(GPUDevice       *device,
 
     slots[i] = native->transferSlots[i];
     upload   = slots[i].uploadStaging ? slots[i].uploadStaging->_priv : NULL;
-    if (!slots[i].command || !slots[i].fence || !upload ||
-        !upload->buffer || !upload->memory || !upload->mapped ||
-        slots[i].uploadCapacity < VULKAN_TRANSFER_TEST_BYTES) {
+
+    if (!slots[i].command || !slots[i].fence || !upload
+        || !upload->buffer || !upload->memory || !upload->mapped
+        || slots[i].uploadCapacity < VULKAN_TRANSFER_TEST_BYTES) {
       (void)wait_queue(queue, fence);
       GPUDestroyBuffer(buffer);
       return 0;
@@ -622,8 +693,9 @@ buffer_transfers_reuse(GPUDevice       *device,
   readbackMemory   = readbackNative ? readbackNative->memory : VK_NULL_HANDLE;
   readbackMapped   = readbackNative ? readbackNative->mapped : NULL;
   readbackCapacity = native->readbackCapacity;
-  if (!readbackNative || !readbackBuffer || !readbackMemory ||
-      !readbackMapped || readbackCapacity < sizeof(value)) {
+
+  if (!readbackNative || !readbackBuffer || !readbackMemory
+      || !readbackMapped || readbackCapacity < sizeof(value)) {
     (void)wait_queue(queue, fence);
     GPUDestroyBuffer(buffer);
     return 0;
@@ -632,24 +704,25 @@ buffer_transfers_reuse(GPUDevice       *device,
   for (uint32_t i = 0u; i < 16u; i++) {
     value  = UINT32_C(0xabc00000) + i;
     copied = 0u;
+
     if (GPUQueueWriteBuffer(queue,
                             buffer,
                             0u,
                             &value,
-                            sizeof(value)) != GPU_OK ||
-        GPUQueueReadBuffer(queue,
-                           buffer,
-                           0u,
-                           &copied,
-                           sizeof(copied)) != GPU_OK ||
-        copied != value ||
-        native->readbackStaging != readback ||
-        native->readbackStaging->_priv != readbackNative ||
-        readbackNative->buffer != readbackBuffer ||
-        readbackNative->memory != readbackMemory ||
-        readbackNative->mapped != readbackMapped ||
-        native->readbackCapacity != readbackCapacity ||
-        native->transferOpen) {
+                            sizeof(value)) != GPU_OK
+        || GPUQueueReadBuffer(queue,
+                              buffer,
+                              0u,
+                              &copied,
+                              sizeof(copied)) != GPU_OK
+        || copied != value
+        || native->readbackStaging != readback
+        || native->readbackStaging->_priv != readbackNative
+        || readbackNative->buffer != readbackBuffer
+        || readbackNative->memory != readbackMemory
+        || readbackNative->mapped != readbackMapped
+        || native->readbackCapacity != readbackCapacity
+        || native->transferOpen) {
       ok = 0;
       break;
     }
@@ -659,30 +732,31 @@ buffer_transfers_reuse(GPUDevice       *device,
     GPUTransferSlotVk *slot;
 
     slot = &native->transferSlots[i];
-    ok = slot->command == slots[i].command &&
-         slot->fence == slots[i].fence &&
-         slot->uploadStaging == slots[i].uploadStaging &&
-         slot->uploadCapacity == slots[i].uploadCapacity;
+    ok   = slot->command == slots[i].command
+           && slot->fence == slots[i].fence
+           && slot->uploadStaging == slots[i].uploadStaging
+           && slot->uploadCapacity == slots[i].uploadCapacity;
   }
+
   ok = wait_queue(queue, fence) && ok;
   GPUDestroyBuffer(buffer);
   return ok;
 }
 
 static int
-texture_uploads_reuse(GPUDevice       *device,
-                      GPUQueue        *queue,
-                      GPUFence        *fence) {
-  GPUQueueVk            *native;
-  GPUTextureCreateInfo   textureInfo = {0};
+texture_uploads_reuse(GPUDevice *device,
+                      GPUQueue  *queue,
+                      GPUFence  *fence) {
+  GPUTextureCreateInfo  textureInfo = {0};
   GPUTextureWriteRegion writeRegion = {0};
-  GPUTransferSlotVk      slots[GPU_VK_TRANSFER_SLOT_COUNT];
-  GPUTexture            *texture;
-  static uint8_t         pixels[VULKAN_TRANSFER_TEST_BYTES];
-  int                    ok;
+  GPUTransferSlotVk     slots[GPU_VK_TRANSFER_SLOT_COUNT];
+  GPUQueueVk           *native;
+  GPUTexture           *texture;
+  int                   ok;
 
   native  = queue ? queue->_priv : NULL;
   texture = NULL;
+
   if (!native || !device) {
     return 0;
   }
@@ -698,8 +772,9 @@ texture_uploads_reuse(GPUDevice       *device,
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_COPY_DST;
-  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK ||
-      !texture) {
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK
+      || !texture) {
     return 0;
   }
 
@@ -709,40 +784,45 @@ texture_uploads_reuse(GPUDevice       *device,
   writeRegion.layerCount   = 1u;
   writeRegion.bytesPerRow  = 128u * 4u;
   writeRegion.rowsPerImage = 128u;
-  memset(pixels, 0, sizeof(pixels));
-  pixels[3] = 255u;
-  ok = 1;
+  memset(kTextureUpload, 0, sizeof(kTextureUpload));
+  kTextureUpload[3] = 255u;
+  ok                = 1;
+
   for (uint32_t i = 0u;
        ok && i < GPU_VK_TRANSFER_SLOT_COUNT *
-                   VULKAN_TEXTURE_UPLOADS_PER_SLOT;
+                 VULKAN_TEXTURE_UPLOADS_PER_SLOT;
        i++) {
-    pixels[0] = (uint8_t)i;
-    ok = GPUQueueWriteTexture(queue,
-                              texture,
-                              &writeRegion,
-                              pixels,
-                              sizeof(pixels)) == GPU_OK;
+    kTextureUpload[0] = (uint8_t)i;
+    ok                = GPUQueueWriteTexture(queue,
+                                             texture,
+                                             &writeRegion,
+                                             kTextureUpload,
+                                             sizeof(kTextureUpload)) == GPU_OK;
   }
+
   ok = ok && wait_queue(queue, fence);
+
   for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
     GPUBufferVk *upload;
 
     slots[i] = native->transferSlots[i];
     upload   = slots[i].uploadStaging ? slots[i].uploadStaging->_priv : NULL;
-    ok = slots[i].command && slots[i].fence && upload && upload->buffer &&
-         upload->memory && upload->mapped &&
-         slots[i].uploadCapacity >= sizeof(pixels);
+    ok       = slots[i].command && slots[i].fence && upload && upload->buffer
+               && upload->memory && upload->mapped
+               && slots[i].uploadCapacity >= sizeof(kTextureUpload);
   }
+
   for (uint32_t i = 0u; ok && i < 16u; i++) {
-    pixels[0] = (uint8_t)i;
-    pixels[1] = (uint8_t)(i + 1u);
-    pixels[2] = (uint8_t)(i + 2u);
+    kTextureUpload[0] = (uint8_t)i;
+    kTextureUpload[1] = (uint8_t)(i + 1u);
+    kTextureUpload[2] = (uint8_t)(i + 2u);
+
     if (GPUQueueWriteTexture(queue,
                              texture,
                              &writeRegion,
-                             pixels,
-                             sizeof(pixels)) != GPU_OK ||
-        !native->transferOpen) {
+                             kTextureUpload,
+                             sizeof(kTextureUpload)) != GPU_OK
+        || !native->transferOpen) {
       ok = 0;
       break;
     }
@@ -752,38 +832,40 @@ texture_uploads_reuse(GPUDevice       *device,
     GPUTransferSlotVk *slot;
 
     slot = &native->transferSlots[i];
-    ok = slot->command == slots[i].command &&
-         slot->fence == slots[i].fence &&
-         slot->uploadStaging == slots[i].uploadStaging &&
-         slot->uploadCapacity == slots[i].uploadCapacity;
+    ok   = slot->command == slots[i].command
+           && slot->fence == slots[i].fence
+           && slot->uploadStaging == slots[i].uploadStaging
+           && slot->uploadCapacity == slots[i].uploadCapacity;
   }
+
   ok = wait_queue(queue, fence) && ok;
   GPUDestroyTexture(texture);
   return ok;
 }
 
 static int
-submit_empty_batch(GPUQueue *queue,
+submit_empty_batch(GPUQueue        *queue,
                    GPUFence        *fence,
                    CompletionProbe *probe) {
-  GPUCommandBuffer *buffers[VULKAN_COMMAND_BATCH_SIZE];
+  GPUCommandBuffer  *buffers[VULKAN_COMMAND_BATCH_SIZE];
   GPUQueueSubmitInfo submitInfo = {0};
+  uint32_t           i;
 
   memset(buffers, 0, sizeof(buffers));
-  for (uint32_t i = 0; i < VULKAN_COMMAND_BATCH_SIZE; i++) {
+
+  for (i = 0; i < VULKAN_COMMAND_BATCH_SIZE; i++) {
     if (GPUAcquireCommandBuffer(queue,
                                 "vulkan-empty",
-                                &buffers[i]) != GPU_OK ||
-        !buffers[i]) {
+                                &buffers[i]) != GPU_OK
+        || !buffers[i]) {
       return 0;
     }
   }
+
   if (probe) {
-    GPUSetCommandBufferCompletionHandler(
-      buffers[VULKAN_COMMAND_BATCH_SIZE - 1u],
-      probe,
-      on_complete
-    );
+    GPUSetCommandBufferCompletionHandler(buffers[VULKAN_COMMAND_BATCH_SIZE - 1u],
+                                         probe,
+                                         on_complete);
   }
 
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
@@ -791,21 +873,23 @@ submit_empty_batch(GPUQueue *queue,
   submitInfo.commandBufferCount = VULKAN_COMMAND_BATCH_SIZE;
   submitInfo.ppCommandBuffers   = buffers;
   submitInfo.fence              = fence;
-  return GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
-         GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+  return GPUQueueSubmit(queue, &submitInfo) == GPU_OK
+         && GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
 }
 
 static int
 submit_empty_compute(GPUQueue *queue, GPUFence *fence) {
+  GPUQueueSubmitInfo     submitInfo = {0};
   GPUCommandBuffer      *cmdb;
   GPUComputePassEncoder *pass;
-  GPUQueueSubmitInfo     submitInfo = {0};
 
   cmdb = NULL;
-  if (GPUAcquireCommandBuffer(queue, "vulkan-empty-compute", &cmdb) != GPU_OK ||
-      !cmdb || !(pass = GPUBeginComputePass(cmdb, "vulkan-empty-compute"))) {
+
+  if (GPUAcquireCommandBuffer(queue, "vulkan-empty-compute", &cmdb) != GPU_OK
+      || !cmdb || !(pass = GPUBeginComputePass(cmdb, "vulkan-empty-compute"))) {
     return 0;
   }
+
   GPUEndComputePass(pass);
 
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
@@ -813,26 +897,26 @@ submit_empty_compute(GPUQueue *queue, GPUFence *fence) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
-  return GPUQueueSubmit(queue, &submitInfo) == GPU_OK &&
-         GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
+  return GPUQueueSubmit(queue, &submitInfo) == GPU_OK
+         && GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
 }
 
 static int
-timestamp_roundtrip(GPUDevice       *device,
-                    GPUQueue        *queue,
-                    GPUFence        *fence) {
-  GPUCommandBuffer         *cmdb;
-  GPUComputePassEncoder    *pass;
-  GPUQuerySet              *set;
-  GPUBuffer                *buffer;
-  GPUQuerySetCreateInfo     queryInfo = {0};
-  GPUBufferCreateInfo       bufferInfo = {0};
-  GPUQueueSubmitInfo        submitInfo = {0};
-  GPUComputePassCreateInfo  passInfo = {0};
-  GPUPassTimestampWrites    timestampWrites = {0};
-  uint64_t                  timestamps[2] = {UINT64_MAX, UINT64_MAX};
-  double                    timestampPeriod;
-  int                       ok;
+timestamp_roundtrip(GPUDevice *device,
+                    GPUQueue  *queue,
+                    GPUFence  *fence) {
+  GPUQuerySetCreateInfo    queryInfo       = {0};
+  GPUBufferCreateInfo      bufferInfo      = {0};
+  GPUQueueSubmitInfo       submitInfo      = {0};
+  GPUComputePassCreateInfo passInfo        = {0};
+  GPUPassTimestampWrites   timestampWrites = {0};
+  uint64_t                 timestamps[2]   = {UINT64_MAX, UINT64_MAX};
+  GPUCommandBuffer        *cmdb;
+  GPUComputePassEncoder   *pass;
+  GPUQuerySet             *set;
+  GPUBuffer               *buffer;
+  double                   timestampPeriod;
+  int                      ok;
 
   set    = NULL;
   buffer = NULL;
@@ -841,8 +925,9 @@ timestamp_roundtrip(GPUDevice       *device,
   ok     = 0;
 
   timestampPeriod = 0.0;
-  if (GPUGetTimestampPeriod(queue, &timestampPeriod) != GPU_OK ||
-      !(timestampPeriod > 0.0)) {
+
+  if (GPUGetTimestampPeriod(queue, &timestampPeriod) != GPU_OK
+      || !(timestampPeriod > 0.0)) {
     goto cleanup;
   }
 
@@ -851,6 +936,7 @@ timestamp_roundtrip(GPUDevice       *device,
   queryInfo.label            = "vulkan-timestamps";
   queryInfo.type             = GPU_QUERY_TIMESTAMP;
   queryInfo.count            = 2u;
+
   if (GPUCreateQuerySet(device, &queryInfo, &set) != GPU_OK || !set) {
     goto cleanup;
   }
@@ -861,9 +947,11 @@ timestamp_roundtrip(GPUDevice       *device,
   bufferInfo.sizeBytes        = sizeof(timestamps);
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
                                 GPU_BUFFER_USAGE_COPY_SRC;
+
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     goto cleanup;
   }
+
   if (GPUQueueWriteBuffer(queue,
                           buffer,
                           0u,
@@ -871,6 +959,7 @@ timestamp_roundtrip(GPUDevice       *device,
                           sizeof(timestamps)) != GPU_OK) {
     goto cleanup;
   }
+
   if (GPUAcquireCommandBuffer(queue,
                               "vulkan-timestamp",
                               &cmdb) != GPU_OK || !cmdb) {
@@ -884,7 +973,8 @@ timestamp_roundtrip(GPUDevice       *device,
   passInfo.chain.structSize  = sizeof(passInfo);
   passInfo.label             = "vulkan-timestamp-pass";
   passInfo.timestampWrites   = &timestampWrites;
-  pass = GPUBeginComputePassWithInfo(cmdb, &passInfo);
+  pass                       = GPUBeginComputePassWithInfo(cmdb, &passInfo);
+
   if (pass) {
     GPUEndComputePass(pass);
     pass = NULL;
@@ -892,10 +982,12 @@ timestamp_roundtrip(GPUDevice       *device,
   }
 
   timestampWrites.endIndex = 1u;
-  pass = GPUBeginComputePassWithInfo(cmdb, &passInfo);
+  pass                     = GPUBeginComputePassWithInfo(cmdb, &passInfo);
+
   if (!pass) {
     goto cleanup;
   }
+
   GPUEndComputePass(pass);
   pass = NULL;
   GPUResolveQuerySet(cmdb, set, 0u, 2u, buffer, 0u);
@@ -905,19 +997,22 @@ timestamp_roundtrip(GPUDevice       *device,
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
+
   if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
     cmdb = NULL;
     goto cleanup;
   }
+
   cmdb = NULL;
-  if (GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
-      GPUQueueReadBuffer(queue,
-                         buffer,
-                         0u,
-                         timestamps,
-                         sizeof(timestamps)) != GPU_OK ||
-      timestamps[0] == UINT64_MAX || timestamps[1] == UINT64_MAX ||
-      timestamps[1] < timestamps[0]) {
+
+  if (GPUWaitFence(fence, UINT64_MAX) != GPU_OK
+      || GPUQueueReadBuffer(queue,
+                            buffer,
+                            0u,
+                            timestamps,
+                            sizeof(timestamps)) != GPU_OK
+      || timestamps[0] == UINT64_MAX || timestamps[1] == UINT64_MAX
+      || timestamps[1] < timestamps[0]) {
     goto cleanup;
   }
 
@@ -927,28 +1022,30 @@ cleanup:
   if (pass) {
     GPUEndComputePass(pass);
   }
+
   if (cmdb) {
     (void)GPUDiscardCommandBuffer(cmdb);
   }
+
   GPUDestroyBuffer(buffer);
   GPUDestroyQuerySet(set);
   return ok;
 }
 
 static int
-pipeline_statistics_roundtrip(GPUDevice       *device,
-                              GPUQueue        *queue,
-                              GPUFence        *fence) {
-  GPUQuerySetCreateInfo  queryInfo  = {0};
-  GPUBufferCreateInfo    bufferInfo = {0};
-  GPUQueueSubmitInfo     submitInfo = {0};
-  GPUCommandBuffer      *cmdb;
-  GPUComputePassEncoder *pass;
-  GPUQuerySet           *set;
-  GPUBuffer             *buffer;
-  GPUCommandBuffer      *buffers[1];
+pipeline_statistics_roundtrip(GPUDevice *device,
+                              GPUQueue  *queue,
+                              GPUFence  *fence) {
+  GPUQuerySetCreateInfo       queryInfo  = {0};
+  GPUBufferCreateInfo         bufferInfo = {0};
+  GPUQueueSubmitInfo          submitInfo = {0};
+  GPUCommandBuffer           *cmdb;
+  GPUComputePassEncoder      *pass;
+  GPUQuerySet                *set;
+  GPUBuffer                  *buffer;
+  GPUCommandBuffer           *buffers[1];
   GPUPipelineStatisticsResult result;
-  int ok;
+  int                         ok;
 
   set    = NULL;
   buffer = NULL;
@@ -962,6 +1059,7 @@ pipeline_statistics_roundtrip(GPUDevice       *device,
   queryInfo.type              = GPU_QUERY_PIPELINE_STATISTICS;
   queryInfo.count             = 1u;
   queryInfo.pipelineStatsMask = GPU_PIPESTAT_ALL;
+
   if (GPUCreateQuerySet(device, &queryInfo, &set) != GPU_OK || !set) {
     goto cleanup;
   }
@@ -972,10 +1070,11 @@ pipeline_statistics_roundtrip(GPUDevice       *device,
   bufferInfo.sizeBytes        = sizeof(result);
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
                                 GPU_BUFFER_USAGE_COPY_SRC;
-  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer ||
-      GPUAcquireCommandBuffer(queue,
-                              "vulkan-pipeline-statistics",
-                              &cmdb) != GPU_OK || !cmdb) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer
+      || GPUAcquireCommandBuffer(queue,
+                                 "vulkan-pipeline-statistics",
+                                 &cmdb) != GPU_OK || !cmdb) {
     goto cleanup;
   }
 
@@ -987,10 +1086,12 @@ pipeline_statistics_roundtrip(GPUDevice       *device,
   submitInfo.fence              = fence;
 
   GPUBeginPipelineStatisticsQuery(cmdb, set, 0u);
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_ERROR_INVALID_ARGUMENT ||
-      !(pass = GPUBeginComputePass(cmdb, "vulkan-pipeline-statistics"))) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_ERROR_INVALID_ARGUMENT
+      || !(pass = GPUBeginComputePass(cmdb, "vulkan-pipeline-statistics"))) {
     goto cleanup;
   }
+
   GPUEndComputePass(pass);
   GPUEndPipelineStatisticsQuery(cmdb, set);
   GPUResolveQuerySet(cmdb, set, 0u, 1u, buffer, 0u);
@@ -999,13 +1100,15 @@ pipeline_statistics_roundtrip(GPUDevice       *device,
     cmdb = NULL;
     goto cleanup;
   }
+
   cmdb = NULL;
-  if (GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
-      GPUQueueReadBuffer(queue,
-                         buffer,
-                         0u,
-                         &result,
-                         sizeof(result)) != GPU_OK) {
+
+  if (GPUWaitFence(fence, UINT64_MAX) != GPU_OK
+      || GPUQueueReadBuffer(queue,
+                            buffer,
+                            0u,
+                            &result,
+                            sizeof(result)) != GPU_OK) {
     goto cleanup;
   }
 
@@ -1018,36 +1121,37 @@ cleanup:
 }
 
 static int
-occlusion_roundtrip(GPUDevice       *device,
-                    GPUQueue        *queue,
-                    GPUFence        *fence) {
-  GPUTextureCreateInfo           textureInfo = {0};
-  GPUTextureCreateInfo           resolveTextureInfo = {0};
-  GPUTextureCreateInfo           depthTextureInfo = {0};
-  GPUTextureViewCreateInfo       viewInfo = {0};
-  GPUTextureViewCreateInfo       depthViewInfo = {0};
-  GPUQuerySetCreateInfo          queryInfo = {0};
-  GPUBufferCreateInfo            bufferInfo = {0};
-  GPURenderPassColorAttachment   colors[2] = {{0}};
-  GPURenderPassDepthStencilAttachment depthStencil = {0};
-  GPURenderPassCreateInfo        passInfo = {0};
-  GPUQueueSubmitInfo             submitInfo = {0};
-  GPUTexture                    *texture;
-  GPUTexture                    *texture2;
-  GPUTexture                    *resolveTexture;
-  GPUTexture                    *resolveTexture2;
-  GPUTexture                    *depthTexture;
-  GPUTextureView                *view;
-  GPUTextureView                *view2;
-  GPUTextureView                *resolveView;
-  GPUTextureView                *resolveView2;
-  GPUTextureView                *depthView;
-  GPUQuerySet                   *querySet;
-  GPUBuffer                     *resultBuffer;
-  GPUCommandBuffer              *cmdb;
-  GPURenderPassEncoder          *pass;
-  uint64_t                       resultValue;
-  int                            ok;
+occlusion_roundtrip(GPUDevice *device,
+                    GPUQueue  *queue,
+                    GPUFence  *fence) {
+  GPUTextureCreateInfo                textureInfo        = {0};
+  GPUTextureCreateInfo                resolveTextureInfo = {0};
+  GPUTextureCreateInfo                depthTextureInfo   = {0};
+  GPUTextureViewCreateInfo            viewInfo           = {0};
+  GPUTextureViewCreateInfo            depthViewInfo      = {0};
+  GPUQuerySetCreateInfo               queryInfo          = {0};
+  GPUBufferCreateInfo                 bufferInfo         = {0};
+  GPURenderPassColorAttachment        colors[2]          = {{0}};
+  GPURenderPassDepthStencilAttachment depthStencil       = {0};
+  GPURenderPassCreateInfo             passInfo           = {0};
+  GPUQueueSubmitInfo                  submitInfo         = {0};
+  GPUTexture                         *texture;
+  GPUTexture                         *texture2;
+  GPUTexture                         *resolveTexture;
+  GPUTexture                         *resolveTexture2;
+  GPUTexture                         *depthTexture;
+  GPUTextureView                     *view;
+  GPUTextureView                     *view2;
+  GPUTextureView                     *resolveView;
+  GPUTextureView                     *resolveView2;
+  GPUTextureView                     *depthView;
+  GPUQuerySet                        *querySet;
+  GPUBuffer                          *resultBuffer;
+  GPUCommandBuffer                   *cmdb;
+  GPURenderPassEncoder               *pass;
+  uint64_t                            resultValue;
+  int                                 ok;
+  uint32_t                            i;
 
   texture         = NULL;
   texture2        = NULL;
@@ -1066,27 +1170,27 @@ occlusion_roundtrip(GPUDevice       *device,
   resultValue     = UINT64_MAX;
   ok              = 0;
 
-  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
-  textureInfo.chain.structSize = sizeof(textureInfo);
-  textureInfo.label            = "vulkan-occlusion-target";
-  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
-  textureInfo.format           = GPU_FORMAT_BGRA8_UNORM;
-  textureInfo.width            = 4u;
-  textureInfo.height           = 4u;
-  textureInfo.depthOrLayers    = 1u;
-  textureInfo.mipLevelCount    = 1u;
-  textureInfo.sampleCount      = 4u;
-  textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET;
-  viewInfo.chain.sType         = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
-  viewInfo.chain.structSize    = sizeof(viewInfo);
-  viewInfo.label               = "vulkan-occlusion-target-view";
-  viewInfo.viewType            = GPU_TEXTURE_VIEW_2D;
-  viewInfo.format              = GPU_FORMAT_BGRA8_UNORM;
-  viewInfo.mipLevelCount       = 1u;
-  viewInfo.arrayLayerCount     = 1u;
-  resolveTextureInfo             = textureInfo;
-  resolveTextureInfo.label       = "vulkan-resolve-target";
-  resolveTextureInfo.sampleCount = 1u;
+  textureInfo.chain.sType           = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize      = sizeof(textureInfo);
+  textureInfo.label                 = "vulkan-occlusion-target";
+  textureInfo.dimension             = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format                = GPU_FORMAT_BGRA8_UNORM;
+  textureInfo.width                 = 4u;
+  textureInfo.height                = 4u;
+  textureInfo.depthOrLayers         = 1u;
+  textureInfo.mipLevelCount         = 1u;
+  textureInfo.sampleCount           = 4u;
+  textureInfo.usage                 = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  viewInfo.chain.sType              = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize         = sizeof(viewInfo);
+  viewInfo.label                    = "vulkan-occlusion-target-view";
+  viewInfo.viewType                 = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format                   = GPU_FORMAT_BGRA8_UNORM;
+  viewInfo.mipLevelCount            = 1u;
+  viewInfo.arrayLayerCount          = 1u;
+  resolveTextureInfo                = textureInfo;
+  resolveTextureInfo.label          = "vulkan-resolve-target";
+  resolveTextureInfo.sampleCount    = 1u;
   depthTextureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   depthTextureInfo.chain.structSize = sizeof(depthTextureInfo);
   depthTextureInfo.label            = "vulkan-depth-stencil-target";
@@ -1098,82 +1202,86 @@ occlusion_roundtrip(GPUDevice       *device,
   depthTextureInfo.mipLevelCount    = 1u;
   depthTextureInfo.sampleCount      = 4u;
   depthTextureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
-  depthViewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
-  depthViewInfo.chain.structSize = sizeof(depthViewInfo);
-  depthViewInfo.label            = "vulkan-depth-stencil-view";
-  depthViewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
-  depthViewInfo.format           = GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
-  depthViewInfo.mipLevelCount    = 1u;
-  depthViewInfo.arrayLayerCount  = 1u;
-  queryInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
-  queryInfo.chain.structSize   = sizeof(queryInfo);
-  queryInfo.label              = "vulkan-occlusion";
-  queryInfo.type               = GPU_QUERY_OCCLUSION;
-  queryInfo.count              = 1u;
-  bufferInfo.chain.sType       = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  bufferInfo.chain.structSize  = sizeof(bufferInfo);
-  bufferInfo.label             = "vulkan-occlusion-result";
-  bufferInfo.sizeBytes         = sizeof(resultValue);
-  bufferInfo.usage             = GPU_BUFFER_USAGE_COPY_DST |
-                                 GPU_BUFFER_USAGE_COPY_SRC;
-  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture ||
-      GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK || !view ||
-      GPUCreateTexture(device, &textureInfo, &texture2) != GPU_OK || !texture2 ||
-      GPUCreateTextureView(texture2, &viewInfo, &view2) != GPU_OK || !view2 ||
-      GPUCreateTexture(device, &resolveTextureInfo, &resolveTexture) != GPU_OK ||
-      !resolveTexture ||
-      GPUCreateTextureView(resolveTexture, &viewInfo, &resolveView) != GPU_OK ||
-      !resolveView ||
-      GPUCreateTexture(device,
-                       &resolveTextureInfo,
-                       &resolveTexture2) != GPU_OK ||
-      !resolveTexture2 ||
-      GPUCreateTextureView(resolveTexture2,
-                           &viewInfo,
-                           &resolveView2) != GPU_OK ||
-      !resolveView2 ||
-      GPUCreateTexture(device, &depthTextureInfo, &depthTexture) != GPU_OK ||
-      !depthTexture ||
-      GPUCreateTextureView(depthTexture, &depthViewInfo, &depthView) != GPU_OK ||
-      !depthView ||
-      GPUCreateQuerySet(device, &queryInfo, &querySet) != GPU_OK || !querySet ||
-      GPUCreateBuffer(device, &bufferInfo, &resultBuffer) != GPU_OK ||
-      !resultBuffer ||
-      GPUAcquireCommandBuffer(queue, "vulkan-occlusion", &cmdb) != GPU_OK ||
-      !cmdb) {
+  depthViewInfo.chain.sType         = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  depthViewInfo.chain.structSize    = sizeof(depthViewInfo);
+  depthViewInfo.label               = "vulkan-depth-stencil-view";
+  depthViewInfo.viewType            = GPU_TEXTURE_VIEW_2D;
+  depthViewInfo.format              = GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  depthViewInfo.mipLevelCount       = 1u;
+  depthViewInfo.arrayLayerCount     = 1u;
+  queryInfo.chain.sType             = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+  queryInfo.chain.structSize        = sizeof(queryInfo);
+  queryInfo.label                   = "vulkan-occlusion";
+  queryInfo.type                    = GPU_QUERY_OCCLUSION;
+  queryInfo.count                   = 1u;
+  bufferInfo.chain.sType            = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize       = sizeof(bufferInfo);
+  bufferInfo.label                  = "vulkan-occlusion-result";
+  bufferInfo.sizeBytes              = sizeof(resultValue);
+  bufferInfo.usage                  = GPU_BUFFER_USAGE_COPY_DST |
+                                      GPU_BUFFER_USAGE_COPY_SRC;
+
+  if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture
+      || GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK || !view
+      || GPUCreateTexture(device, &textureInfo, &texture2) != GPU_OK || !texture2
+      || GPUCreateTextureView(texture2, &viewInfo, &view2) != GPU_OK || !view2
+      || GPUCreateTexture(device, &resolveTextureInfo, &resolveTexture) != GPU_OK
+      || !resolveTexture
+      || GPUCreateTextureView(resolveTexture, &viewInfo, &resolveView) != GPU_OK
+      || !resolveView
+      || GPUCreateTexture(device,
+                          &resolveTextureInfo,
+                          &resolveTexture2) != GPU_OK
+      || !resolveTexture2
+      || GPUCreateTextureView(resolveTexture2,
+                              &viewInfo,
+                              &resolveView2) != GPU_OK
+      || !resolveView2
+      || GPUCreateTexture(device, &depthTextureInfo, &depthTexture) != GPU_OK
+      || !depthTexture
+      || GPUCreateTextureView(depthTexture, &depthViewInfo, &depthView) != GPU_OK
+      || !depthView
+      || GPUCreateQuerySet(device, &queryInfo, &querySet) != GPU_OK || !querySet
+      || GPUCreateBuffer(device, &bufferInfo, &resultBuffer) != GPU_OK
+      || !resultBuffer
+      || GPUAcquireCommandBuffer(queue, "vulkan-occlusion", &cmdb) != GPU_OK
+      || !cmdb) {
     goto cleanup;
   }
 
-  colors[0].view                = view;
-  colors[0].resolveView         = resolveView;
-  colors[0].loadOp              = GPU_LOAD_OP_CLEAR;
-  colors[0].storeOp             = GPU_STORE_OP_STORE;
-  colors[1]                     = colors[0];
-  colors[1].view                = view2;
-  colors[1].resolveView         = resolveView2;
-  depthStencil.view             = depthView;
-  depthStencil.depthLoadOp      = GPU_LOAD_OP_CLEAR;
-  depthStencil.depthStoreOp     = GPU_STORE_OP_STORE;
-  depthStencil.stencilLoadOp    = GPU_LOAD_OP_CLEAR;
-  depthStencil.stencilStoreOp   = GPU_STORE_OP_STORE;
-  depthStencil.clearDepth       = 1.0f;
-  depthStencil.clearStencil     = 7u;
-  passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  passInfo.chain.structSize     = sizeof(passInfo);
-  passInfo.label                = "vulkan-occlusion";
-  passInfo.occlusionQuerySet    = querySet;
-  passInfo.colorAttachmentCount = 2u;
-  passInfo.pColorAttachments    = colors;
+  colors[0].view        = view;
+  colors[0].resolveView = resolveView;
+  colors[0].loadOp      = GPU_LOAD_OP_CLEAR;
+  colors[0].storeOp     = GPU_STORE_OP_STORE;
+  colors[1] = colors[0];
+  colors[1].view        = view2;
+  colors[1].resolveView = resolveView2;
+  depthStencil.view           = depthView;
+  depthStencil.depthLoadOp    = GPU_LOAD_OP_CLEAR;
+  depthStencil.depthStoreOp   = GPU_STORE_OP_STORE;
+  depthStencil.stencilLoadOp  = GPU_LOAD_OP_CLEAR;
+  depthStencil.stencilStoreOp = GPU_STORE_OP_STORE;
+  depthStencil.clearDepth     = 1.0f;
+  depthStencil.clearStencil   = 7u;
+  passInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.structSize        = sizeof(passInfo);
+  passInfo.label                   = "vulkan-occlusion";
+  passInfo.occlusionQuerySet       = querySet;
+  passInfo.colorAttachmentCount    = 2u;
+  passInfo.pColorAttachments       = colors;
   passInfo.pDepthStencilAttachment = &depthStencil;
   pass = GPUBeginRenderPass(cmdb, &passInfo);
+
   if (!pass) {
     goto cleanup;
   }
 
   GPUBeginOcclusionQuery(pass, querySet, 0u);
+
   if (!pass->_occlusionQueryActive) {
     goto cleanup;
   }
+
   GPUEndOcclusionQuery(pass);
   GPUEndRenderPass(pass);
   pass = NULL;
@@ -1184,53 +1292,63 @@ occlusion_roundtrip(GPUDevice       *device,
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK ||
-      GPUQueueReadBuffer(queue,
-                         resultBuffer,
-                         0u,
-                         &resultValue,
-                         sizeof(resultValue)) != GPU_OK ||
-      resultValue != 0u) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK
+      || GPUQueueReadBuffer(queue,
+                            resultBuffer,
+                            0u,
+                            &resultValue,
+                            sizeof(resultValue)) != GPU_OK
+      || resultValue != 0u) {
     cmdb = NULL;
     goto cleanup;
   }
+
   cmdb = NULL;
 
   passInfo.occlusionQuerySet = NULL;
   GPUResetStats(device);
-  for (uint32_t i = 0u; i < VULKAN_WARM_ITERATIONS; i++) {
-    colors[0].loadOp  = (GPULoadOp)(i % 3u);
-    colors[0].storeOp = (GPUStoreOp)((i / 3u) % 2u);
-    colors[1].loadOp  = (GPULoadOp)((i / 2u) % 3u);
-    colors[1].storeOp = (GPUStoreOp)((i / 5u) % 2u);
-    depthStencil.depthLoadOp    = (GPULoadOp)((i / 2u) % 3u);
-    depthStencil.depthStoreOp   = (GPUStoreOp)((i / 5u) % 2u);
-    depthStencil.stencilLoadOp  = (GPULoadOp)((i / 3u) % 3u);
-    depthStencil.stencilStoreOp = (GPUStoreOp)((i / 7u) % 2u);
+
+  for (i = 0u; i < VULKAN_WARM_ITERATIONS; i++) {
+    colors[0].loadOp              = (GPULoadOp)(i % 3u);
+    colors[0].storeOp             = (GPUStoreOp)((i / 3u) % 2u);
+    colors[1].loadOp              = (GPULoadOp)((i / 2u) % 3u);
+    colors[1].storeOp             = (GPUStoreOp)((i / 5u) % 2u);
+    depthStencil.depthLoadOp      = (GPULoadOp)((i / 2u) % 3u);
+    depthStencil.depthStoreOp     = (GPUStoreOp)((i / 5u) % 2u);
+    depthStencil.stencilLoadOp    = (GPULoadOp)((i / 3u) % 3u);
+    depthStencil.stencilStoreOp   = (GPUStoreOp)((i / 7u) % 2u);
     passInfo.colorAttachmentCount = i % 3u;
+
     if (GPUAcquireCommandBuffer(queue,
                                 "vulkan-offscreen-warm",
-                                &cmdb) != GPU_OK ||
-        !cmdb || !(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
+                                &cmdb) != GPU_OK
+        || !cmdb || !(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
       goto cleanup;
     }
+
     GPUEndRenderPass(pass);
     pass = NULL;
 
     submitInfo.ppCommandBuffers = &cmdb;
-    if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-        GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+        || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
       cmdb = NULL;
       goto cleanup;
     }
+
     cmdb = NULL;
   }
+
   passInfo.colorAttachmentCount = 2u;
-  if (device->currentFrameStats.hotPathAllocCount != 0u ||
-      device->currentFrameStats.hotPathFreeCount != 0u) {
+
+  if (device->currentFrameStats.hotPathAllocCount != 0u
+      || device->currentFrameStats.hotPathFreeCount != 0u) {
     goto cleanup;
   }
+
   ok = 1;
 
 cleanup:
@@ -1238,6 +1356,7 @@ cleanup:
     GPUEndOcclusionQuery(pass);
     GPUEndRenderPass(pass);
   }
+
   GPUDestroyBuffer(resultBuffer);
   GPUDestroyQuerySet(querySet);
   GPUDestroyTextureView(depthView);
@@ -1262,6 +1381,7 @@ main(void) {
   GPUDeviceCapabilities  deviceCaps    = {0};
   CompletionProbe        probe         = {0};
   GPUFrameStats          stats;
+  GPUFeature             requiredFeatures[6];
   GPUInstance           *instance;
   GPUAdapter            *adapter;
   GPUDevice             *device;
@@ -1269,18 +1389,19 @@ main(void) {
   GPUQueue              *compute;
   GPUFence              *fence;
   GPUResult              result;
-  GPUFeature             requiredFeatures[6];
   uint32_t               adapterCount;
   uint32_t               requiredFeatureCount;
+  int                    ok;
+  uint32_t               i;
   bool                   pipelineStatsSupported;
   bool                   bindlessSupported;
-  int                    ok;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_VULKAN;
   instanceInfo.enableValidation = true;
-  instance = NULL;
+  instance                      = NULL;
+
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
     fprintf(stderr, "vulkan instance failed\n");
     return 1;
@@ -1288,64 +1409,69 @@ main(void) {
 
   adapter      = NULL;
   adapterCount = 1u;
-  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
+  result       = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !adapter) {
     fprintf(stderr, "vulkan adapter failed\n");
     GPUDestroyInstance(instance);
     return 1;
   }
-  pipelineStatsSupported =
-    GPUIsFeatureSupported(adapter, GPU_FEATURE_PIPELINE_STATISTICS);
-  bindlessSupported      =
-    GPUIsFeatureSupported(adapter, GPU_FEATURE_BINDLESS);
-  if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_COMPUTE) ||
-      !GPUIsFeatureSupported(adapter, GPU_FEATURE_TIMESTAMPS) ||
-      !GPUIsFeatureSupported(adapter, GPU_FEATURE_INDIRECT_DRAW) ||
-      !GPUIsFeatureSupported(adapter, GPU_FEATURE_MULTI_DRAW) ||
-      GPUGetAdapterCapabilities(adapter, &adapterCaps) != GPU_OK ||
-      feature_set_contains(&adapterCaps.supported,
-                           GPU_FEATURE_PIPELINE_STATISTICS) !=
+
+  pipelineStatsSupported = GPUIsFeatureSupported(adapter, GPU_FEATURE_PIPELINE_STATISTICS);
+  bindlessSupported      = GPUIsFeatureSupported(adapter, GPU_FEATURE_BINDLESS);
+
+  if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_COMPUTE)
+      || !GPUIsFeatureSupported(adapter, GPU_FEATURE_TIMESTAMPS)
+      || !GPUIsFeatureSupported(adapter, GPU_FEATURE_INDIRECT_DRAW)
+      || !GPUIsFeatureSupported(adapter, GPU_FEATURE_MULTI_DRAW)
+      || GPUGetAdapterCapabilities(adapter, &adapterCaps) != GPU_OK
+      || feature_set_contains(&adapterCaps.supported,
+                              GPU_FEATURE_PIPELINE_STATISTICS) !=
         pipelineStatsSupported) {
     fprintf(stderr, "vulkan feature reporting failed\n");
     GPUDestroyInstance(instance);
     return 1;
   }
 
-  requiredFeatures[0]                = GPU_FEATURE_COMPUTE;
-  requiredFeatures[1]                = GPU_FEATURE_TIMESTAMPS;
-  requiredFeatures[2]                = GPU_FEATURE_INDIRECT_DRAW;
-  requiredFeatures[3]                = GPU_FEATURE_MULTI_DRAW;
-  requiredFeatureCount               = 4u;
+  requiredFeatures[0]  = GPU_FEATURE_COMPUTE;
+  requiredFeatures[1]  = GPU_FEATURE_TIMESTAMPS;
+  requiredFeatures[2]  = GPU_FEATURE_INDIRECT_DRAW;
+  requiredFeatures[3]  = GPU_FEATURE_MULTI_DRAW;
+  requiredFeatureCount = 4u;
+
   if (pipelineStatsSupported) {
-    requiredFeatures[requiredFeatureCount++] =
-      GPU_FEATURE_PIPELINE_STATISTICS;
+    requiredFeatures[requiredFeatureCount++] = GPU_FEATURE_PIPELINE_STATISTICS;
   }
+
   if (bindlessSupported) {
     requiredFeatures[requiredFeatureCount++] = GPU_FEATURE_BINDLESS;
   }
-  deviceInfo.chain.sType             = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  deviceInfo.chain.structSize        = sizeof(deviceInfo);
-  deviceInfo.required.featureCount   = requiredFeatureCount;
-  deviceInfo.required.pFeatures      = requiredFeatures;
+
+  deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize      = sizeof(deviceInfo);
+  deviceInfo.required.featureCount = requiredFeatureCount;
+  deviceInfo.required.pFeatures    = requiredFeatures;
+
   if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "vulkan device failed\n");
     GPUDestroyInstance(instance);
     return 1;
   }
-  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE) ||
-      !GPUIsFeatureEnabled(device, GPU_FEATURE_TIMESTAMPS) ||
-      !GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW) ||
-      !GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW) ||
-      GPUIsFeatureEnabled(device, GPU_FEATURE_BINDLESS) !=
-        bindlessSupported ||
-      GPUIsFeatureEnabled(device, GPU_FEATURE_PIPELINE_STATISTICS) !=
-        pipelineStatsSupported ||
-      GPUGetDeviceCapabilities(device, &deviceCaps) != GPU_OK ||
-      feature_set_contains(&deviceCaps.enabled,
-                           GPU_FEATURE_PIPELINE_STATISTICS) !=
-        pipelineStatsSupported ||
-      feature_set_contains(&deviceCaps.enabled, GPU_FEATURE_BINDLESS) !=
+
+  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_COMPUTE)
+      || !GPUIsFeatureEnabled(device, GPU_FEATURE_TIMESTAMPS)
+      || !GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW)
+      || !GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW)
+      || GPUIsFeatureEnabled(device, GPU_FEATURE_BINDLESS) !=
+        bindlessSupported
+      || GPUIsFeatureEnabled(device, GPU_FEATURE_PIPELINE_STATISTICS) !=
+        pipelineStatsSupported
+      || GPUGetDeviceCapabilities(device, &deviceCaps) != GPU_OK
+      || feature_set_contains(&deviceCaps.enabled,
+                              GPU_FEATURE_PIPELINE_STATISTICS) !=
+        pipelineStatsSupported
+      || feature_set_contains(&deviceCaps.enabled, GPU_FEATURE_BINDLESS) !=
         bindlessSupported) {
     fprintf(stderr, "vulkan enabled feature reporting failed\n");
     GPUDestroyDevice(device);
@@ -1362,9 +1488,10 @@ main(void) {
 
   graphics = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   compute  = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
-  if (!graphics || !compute ||
-      !(GPUGetAvailableQueueBits(device) & GPU_QUEUE_GRAPHICS) ||
-      !(GPUGetAvailableQueueBits(device) & GPU_QUEUE_COMPUTE)) {
+
+  if (!graphics || !compute
+      || !(GPUGetAvailableQueueBits(device) & GPU_QUEUE_GRAPHICS)
+      || !(GPUGetAvailableQueueBits(device) & GPU_QUEUE_COMPUTE)) {
     fprintf(stderr, "vulkan queues failed\n");
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
@@ -1372,6 +1499,7 @@ main(void) {
   }
 
   fence = NULL;
+
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
     fprintf(stderr, "vulkan fence failed\n");
     GPUDestroyDevice(device);
@@ -1385,8 +1513,8 @@ main(void) {
   VULKAN_CHECK("descriptor binding path",
                descriptor_binding_path(device, compute, fence, false));
   VULKAN_CHECK("bindless descriptor binding path",
-               !bindlessSupported ||
-                 descriptor_binding_path(device, compute, fence, true));
+               !bindlessSupported
+                 || descriptor_binding_path(device, compute, fence, true));
   VULKAN_CHECK("buffer transfer reuse",
                buffer_transfers_reuse(device, graphics, fence));
   VULKAN_CHECK("texture upload reuse",
@@ -1397,26 +1525,29 @@ main(void) {
                frame_time_roundtrip(device, graphics, fence));
   VULKAN_CHECK("occlusion roundtrip",
                occlusion_roundtrip(device, graphics, fence));
+
   if (pipelineStatsSupported) {
     VULKAN_CHECK("pipeline statistics roundtrip",
                  pipeline_statistics_roundtrip(device, graphics, fence));
   }
+
   VULKAN_CHECK("graphics batch submit",
                submit_empty_batch(graphics, fence, &probe));
   VULKAN_CHECK("compute submit", submit_empty_compute(compute, fence));
   VULKAN_CHECK("completion callback",
                probe.count == 1u && probe.cmdb != NULL);
   GPUResetStats(device);
-  for (uint32_t i = 0; ok && i < VULKAN_WARM_ITERATIONS; i++) {
-    ok = submit_empty_batch(graphics, fence, NULL) &&
-         submit_empty_compute(compute, fence);
+
+  for (i = 0; ok && i < VULKAN_WARM_ITERATIONS; i++) {
+    ok = submit_empty_batch(graphics, fence, NULL)
+         && submit_empty_compute(compute, fence);
   }
 
   device->lastFrameStats = device->currentFrameStats;
   memset(&stats, 0, sizeof(stats));
-  ok = ok && GPUGetLastFrameStats(device, &stats) == GPU_OK &&
-       stats.hotPathAllocCount == 0u &&
-       stats.hotPathFreeCount == 0u;
+  ok = ok && GPUGetLastFrameStats(device, &stats) == GPU_OK
+       && stats.hotPathAllocCount == 0u
+       && stats.hotPathFreeCount == 0u;
 
   GPUDestroyFence(fence);
   GPUDestroyDevice(device);

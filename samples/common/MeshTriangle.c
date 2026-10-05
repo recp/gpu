@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "MeshTriangle.h"
 
 #include <string.h>
@@ -11,24 +27,26 @@ typedef struct MeshTaskParams {
 static bool
 mesh_layout_matches(const GPUShaderLayout *layout) {
   const GPUBindGroupLayoutEntry *entries;
-  uint32_t                       entryCount;
+  uint32_t                       entryCount, i;
 
-  if (!layout || layout->bindGroupLayoutCount != 1u ||
-      !layout->bindGroupLayouts || !layout->bindGroupLayouts[0] ||
-      !layout->pipelineLayout) {
+  if (!layout || layout->bindGroupLayoutCount != 1u
+      || !layout->bindGroupLayouts || !layout->bindGroupLayouts[0]
+      || !layout->pipelineLayout) {
     return false;
   }
 
   entryCount = 0u;
-  entries = GPUGetBindGroupLayoutEntries(layout->bindGroupLayouts[0],
-                                         &entryCount);
-  for (uint32_t i = 0u; entries && i < entryCount; i++) {
-    if (entries[i].binding == 0u && entries[i].arrayCount == 1u &&
-        entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
-        entries[i].visibility == GPU_SHADER_STAGE_TASK_BIT) {
+  entries    = GPUGetBindGroupLayoutEntries(layout->bindGroupLayouts[0],
+                                            &entryCount);
+
+  for (i = 0u; entries && i < entryCount; i++) {
+    if (entries[i].binding == 0u && entries[i].arrayCount == 1u
+        && entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER
+        && entries[i].visibility == GPU_SHADER_STAGE_TASK_BIT) {
       return true;
     }
   }
+
   return false;
 }
 
@@ -39,13 +57,15 @@ create_pipeline(GPUSampleMeshTriangle *state) {
   GPURenderPipelineCreateInfo info        = {0};
   GPUResult                   result;
 
-  meshInfo.chain.sType        = GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT;
-  meshInfo.chain.structSize   = sizeof(meshInfo);
-  meshInfo.taskEntry          = "task_main";
-  meshInfo.meshEntry          = "mesh_main";
-  meshInfo.payloadSizeBytes   = 0u;
+  meshInfo.chain.sType      = GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT;
+  meshInfo.chain.structSize = sizeof(meshInfo);
+  meshInfo.taskEntry        = "task_main";
+  meshInfo.meshEntry        = "mesh_main";
+  meshInfo.payloadSizeBytes = 0u;
+
   colorTarget.format          = GPUGetSwapchainFormat(state->swapchain);
   colorTarget.blend.writeMask = GPU_COLOR_WRITE_ALL;
+
   info.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   info.chain.structSize        = sizeof(info);
   info.chain.pNext             = &meshInfo.chain;
@@ -61,15 +81,15 @@ create_pipeline(GPUSampleMeshTriangle *state) {
   info.frontFace               = GPU_FRONT_FACE_CCW;
   info.multisample.sampleCount = 1u;
   info.multisample.sampleMask  = UINT32_MAX;
+
   result = GPUCreateRenderPipeline(state->device, &info, &state->pipeline);
-  return result == GPU_OK && state->pipeline
-           ? GPU_OK
-           : (result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE);
+
+  return result == GPU_OK && state->pipeline ? GPU_OK : (result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE);
 }
 
 static GPUResult
 create_task_group(GPUSampleMeshTriangle *state) {
-  const MeshTaskParams taskParams = {
+  const MeshTaskParams   taskParams = {
     .meshGroups = {1u, 1u, 1u, 0u},
     .offset     = {0.12f, 0.0f, 0.0f, 0.0f},
     .tint       = {1.0f, 0.75f, 0.5f, 1.0f}
@@ -83,17 +103,20 @@ create_task_group(GPUSampleMeshTriangle *state) {
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "mesh-task-params";
   bufferInfo.sizeBytes        = sizeof(taskParams);
-  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
-                                GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+
   result = GPUCreateBuffer(state->device, &bufferInfo, &state->taskBuffer);
+
   if (result != GPU_OK || !state->taskBuffer) {
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
+
   result = GPUQueueWriteBuffer(state->queue,
                                state->taskBuffer,
                                0u,
                                &taskParams,
                                sizeof(taskParams));
+
   if (result != GPU_OK) {
     return result;
   }
@@ -109,10 +132,10 @@ create_task_group(GPUSampleMeshTriangle *state) {
   groupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
   groupInfo.pEntries         = &entry;
   groupInfo.entryCount       = 1u;
+
   result = GPUCreateBindGroup(state->device, &groupInfo, &state->taskGroup);
-  return result == GPU_OK && state->taskGroup
-           ? GPU_OK
-           : (result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE);
+
+  return result == GPU_OK && state->taskGroup ? GPU_OK : (result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE);
 }
 
 GPUResult
@@ -126,8 +149,8 @@ GPUSampleMeshTriangleInit(GPUSampleMeshTriangle *state,
                           uint32_t               height) {
   GPUResult result;
 
-  if (!state || !device || !queue || !swapchain || !library ||
-      !shaderLayout) {
+  if (!state || !device || !queue || !swapchain || !library
+      || !shaderLayout) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -139,18 +162,23 @@ GPUSampleMeshTriangleInit(GPUSampleMeshTriangle *state,
   state->shaderLayout = shaderLayout;
   state->width        = width;
   state->height       = height;
-  if (!mesh_layout_matches(shaderLayout) || width == 0u || height == 0u ||
-      !GPUIsFeatureEnabled(device, GPU_FEATURE_MESH_SHADER)) {
+
+  if (!mesh_layout_matches(shaderLayout) || width == 0u || height == 0u
+      || !GPUIsFeatureEnabled(device, GPU_FEATURE_MESH_SHADER)) {
     GPUSampleMeshTriangleDestroy(state);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   result = create_pipeline(state);
+
   if (result == GPU_OK) {
     result = create_task_group(state);
   }
+
   if (result != GPU_OK) {
     GPUSampleMeshTriangleDestroy(state);
   }
+
   return result;
 }
 
@@ -161,38 +189,42 @@ GPUSampleMeshTriangleResize(GPUSampleMeshTriangle *state,
   if (!state || width == 0u || height == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   state->width  = width;
   state->height = height;
+
   return GPU_OK;
 }
 
 GPUResult
-GPUSampleMeshTriangleRender(GPUSampleMeshTriangle        *state,
-                            void                         *completionSender,
-                            GPUCommandBufferCompletionFn  completion) {
-  GPUFrame                     *frame;
-  GPUCommandBuffer             *cmdb;
-  GPURenderPassEncoder         *pass;
-  GPURenderPassColorAttachment  color    = {0};
-  GPURenderPassCreateInfo       passInfo = {0};
-  GPUViewport                   viewport = {0};
-  GPUScissorRect                scissor  = {0};
-  GPUResult                     result;
+GPUSampleMeshTriangleRender(GPUSampleMeshTriangle       *state,
+                            void                        *completionSender,
+                            GPUCommandBufferCompletionFn completion) {
+  GPURenderPassColorAttachment color    = {0};
+  GPURenderPassCreateInfo      passInfo = {0};
+  GPUViewport                  viewport = {0};
+  GPUScissorRect               scissor  = {0};
+  GPUFrame                    *frame;
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassEncoder        *pass;
+  GPUResult                    result;
 
   if (!state || !state->swapchain || !state->pipeline || !state->taskGroup) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) {
+  if (!(frame = GPUBeginFrame(state->swapchain))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   cmdb   = NULL;
   result = GPUAcquireCommandBuffer(state->queue, "mesh-triangle-frame", &cmdb);
+
   if (result != GPU_OK || !cmdb) {
     GPUEndFrame(frame);
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
+
   if (completion) {
     GPUSetCommandBufferCompletionHandler(cmdb, completionSender, completion);
   }
@@ -204,13 +236,14 @@ GPUSampleMeshTriangleRender(GPUSampleMeshTriangle        *state,
   color.clearColor.float32[1] = 0.020f;
   color.clearColor.float32[2] = 0.025f;
   color.clearColor.float32[3] = 1.0f;
+
   passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize     = sizeof(passInfo);
   passInfo.label                = "mesh-triangle-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return GPU_ERROR_BACKEND_FAILURE;
@@ -221,6 +254,7 @@ GPUSampleMeshTriangleRender(GPUSampleMeshTriangle        *state,
   viewport.maxDepth = 1.0f;
   scissor.width     = state->width;
   scissor.height    = state->height;
+
   GPUSetViewport(pass, &viewport);
   GPUSetScissor(pass, &scissor);
   GPUBindRenderPipeline(pass, state->pipeline);
@@ -229,9 +263,11 @@ GPUSampleMeshTriangleRender(GPUSampleMeshTriangle        *state,
   GPUEndRenderPass(pass);
 
   result = GPUFinishFrame(state->queue, cmdb, frame);
+
   if (result == GPU_OK) {
     state->frameCount++;
   }
+
   return result;
 }
 

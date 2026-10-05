@@ -81,16 +81,18 @@ bindless_config(int argc, char *argv[], BindlessUpdateConfig *config) {
   config->capacity   = BINDLESS_DEFAULT_CAPACITY;
   config->iterations = BINDLESS_DEFAULT_ITERATIONS;
   config->repeats    = BINDLESS_DEFAULT_REPEATS;
-  if ((argc > 1 && !bench_parseBackend(argv[1], &config->backend)) ||
-      (argc > 2 && !bench_parseU32(argv[2], 2u, &config->capacity)) ||
-      (argc > 3 && !bench_parseU32(argv[3], 1u, &config->iterations)) ||
-      (argc > 4 && !bench_parseU32(argv[4], 1u, &config->repeats)) ||
-      config->capacity > BINDLESS_MAX_CAPACITY ||
-      config->iterations > BINDLESS_MAX_ITERATIONS ||
-      config->repeats > BINDLESS_MAX_REPEATS) {
+
+  if ((argc > 1 && !bench_parseBackend(argv[1], &config->backend))
+      || (argc > 2 && !bench_parseU32(argv[2], 2u, &config->capacity))
+      || (argc > 3 && !bench_parseU32(argv[3], 1u, &config->iterations))
+      || (argc > 4 && !bench_parseU32(argv[4], 1u, &config->repeats))
+      || config->capacity > BINDLESS_MAX_CAPACITY
+      || config->iterations > BINDLESS_MAX_ITERATIONS
+      || config->repeats > BINDLESS_MAX_REPEATS) {
     fprintf(stderr, "invalid bindless-update benchmark arguments\n");
     return false;
   }
+
   return true;
 }
 
@@ -110,10 +112,11 @@ bindless_createTexture(BindlessUpdateBench *bench, uint32_t index) {
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED;
+
   if (GPUCreateTexture(bench->device,
                        &textureInfo,
-                       &bench->textures[index]) != GPU_OK ||
-      !bench->textures[index]) {
+                       &bench->textures[index]) != GPU_OK
+      || !bench->textures[index]) {
     return false;
   }
 
@@ -124,10 +127,11 @@ bindless_createTexture(BindlessUpdateBench *bench, uint32_t index) {
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   return GPUCreateTextureView(bench->textures[index],
                               &viewInfo,
-                              &bench->views[index]) == GPU_OK &&
-         bench->views[index];
+                              &bench->views[index]) == GPU_OK
+         && bench->views[index];
 }
 
 static BindlessInitResult
@@ -142,21 +146,25 @@ bindless_init(BindlessUpdateBench        *bench,
   GPUBindGroupLayoutEntry      layoutEntry  = {0};
   GPUBindGroupLayoutCreateInfo layoutInfo   = {0};
   GPUBindGroupCreateInfo       groupInfo    = {0};
+  GPUBindGroupEntry           *entry;
+  uint32_t                     variant;
+  uint32_t                     slot;
 
   memset(bench, 0, sizeof(*bench));
   memset(properties, 0, sizeof(*properties));
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = config->backend;
-  if (GPUCreateInstance(&instanceInfo, &bench->instance) != GPU_OK ||
-      !bench->instance) {
+
+  if (GPUCreateInstance(&instanceInfo, &bench->instance) != GPU_OK
+      || !bench->instance) {
     return BINDLESS_INIT_FAILED;
   }
 
-  bench->adapter = bench_createAdapter(bench->instance);
-  if (!bench->adapter) {
+  if (!(bench->adapter = bench_createAdapter(bench->instance))) {
     return BINDLESS_INIT_FAILED;
   }
+
   if (!GPUIsFeatureSupported(bench->adapter, GPU_FEATURE_BINDLESS)) {
     return BINDLESS_INIT_UNSUPPORTED;
   }
@@ -165,10 +173,10 @@ bindless_init(BindlessUpdateBench        *bench,
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &feature;
-  bench->device = bench_createDevice(bench->adapter, &deviceInfo);
-  if (!bench->device ||
-      !GPUIsFeatureEnabled(bench->device, GPU_FEATURE_BINDLESS) ||
-      !GPUGetProcAddr(bench->device, "GPUUpdateBindGroupEXT")) {
+
+  if (!(bench->device = bench_createDevice(bench->adapter, &deviceInfo))
+      || !GPUIsFeatureEnabled(bench->device, GPU_FEATURE_BINDLESS)
+      || !GPUGetProcAddr(bench->device, "GPUUpdateBindGroupEXT")) {
     return BINDLESS_INIT_FAILED;
   }
 
@@ -176,31 +184,35 @@ bindless_init(BindlessUpdateBench        *bench,
   runtimeInfo.chain.structSize = sizeof(runtimeInfo);
   runtimeInfo.validationMode   = GPU_VALIDATION_OFF;
   runtimeInfo.enableStats      = true;
-  if (GPUConfigureRuntime(bench->device, &runtimeInfo) != GPU_OK ||
-      GPUGetAdapterProperties(bench->adapter, properties) != GPU_OK ||
-      !bindless_createTexture(bench, 0u) ||
-      !bindless_createTexture(bench, 1u)) {
+
+  if (GPUConfigureRuntime(bench->device, &runtimeInfo) != GPU_OK
+      || GPUGetAdapterProperties(bench->adapter, properties) != GPU_OK
+      || !bindless_createTexture(bench, 0u)
+      || !bindless_createTexture(bench, 1u)) {
     return BINDLESS_INIT_FAILED;
   }
 
   bindlessInfo.chain.sType      = GPU_STRUCTURE_TYPE_BINDLESS_LAYOUT_EXT;
   bindlessInfo.chain.structSize = sizeof(bindlessInfo);
+
   layoutEntry.binding                   = 0u;
   layoutEntry.bindingType               = GPU_BINDING_SAMPLED_TEXTURE;
   layoutEntry.sampledTexture.viewType   = GPU_TEXTURE_VIEW_2D;
   layoutEntry.sampledTexture.sampleType = GPU_TEXTURE_SAMPLE_TYPE_FLOAT;
   layoutEntry.visibility                = GPU_SHADER_STAGE_COMPUTE_BIT;
   layoutEntry.arrayCount                = config->capacity;
-  layoutInfo.chain.sType        = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
-  layoutInfo.chain.structSize   = sizeof(layoutInfo);
-  layoutInfo.chain.pNext        = &bindlessInfo;
-  layoutInfo.label              = "bindless-update-layout";
-  layoutInfo.entryCount         = 1u;
-  layoutInfo.pEntries           = &layoutEntry;
+
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.chain.pNext      = &bindlessInfo;
+  layoutInfo.label            = "bindless-update-layout";
+  layoutInfo.entryCount       = 1u;
+  layoutInfo.pEntries         = &layoutEntry;
+
   if (GPUCreateBindGroupLayout(bench->device,
                                &layoutInfo,
-                               &bench->layout) != GPU_OK ||
-      !bench->layout) {
+                               &bench->layout) != GPU_OK
+      || !bench->layout) {
     return BINDLESS_INIT_FAILED;
   }
 
@@ -208,15 +220,15 @@ bindless_init(BindlessUpdateBench        *bench,
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "bindless-update-group";
   groupInfo.layout           = bench->layout;
-  if (GPUCreateBindGroup(bench->device, &groupInfo, &bench->group) != GPU_OK ||
-      !bench->group) {
+
+  if (GPUCreateBindGroup(bench->device, &groupInfo, &bench->group) != GPU_OK
+      || !bench->group) {
     return BINDLESS_INIT_FAILED;
   }
 
-  for (uint32_t variant = 0u; variant < 2u; variant++) {
-    bench->batchEntries[variant] = calloc(config->capacity,
-                                           sizeof(*bench->batchEntries[variant]));
-    if (!bench->batchEntries[variant]) {
+  for (variant = 0u; variant < 2u; variant++) {
+    if (!(bench->batchEntries[variant] = calloc(config->capacity,
+                                                sizeof(*bench->batchEntries[variant])))) {
       return BINDLESS_INIT_FAILED;
     }
 
@@ -224,9 +236,8 @@ bindless_init(BindlessUpdateBench        *bench,
     bench->singleEntries[variant].arrayIndex  = 0u;
     bench->singleEntries[variant].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
     bench->singleEntries[variant].textureView = bench->views[variant];
-    for (uint32_t slot = 0u; slot < config->capacity; slot++) {
-      GPUBindGroupEntry *entry;
 
+    for (slot = 0u; slot < config->capacity; slot++) {
       entry              = &bench->batchEntries[variant][slot];
       entry->binding     = 0u;
       entry->arrayIndex  = slot;
@@ -234,6 +245,7 @@ bindless_init(BindlessUpdateBench        *bench,
       entry->textureView = bench->views[variant];
     }
   }
+
   return BINDLESS_INIT_READY;
 }
 
@@ -261,20 +273,20 @@ bindless_run(BindlessUpdateBench *bench,
              uint32_t             capacity,
              uint32_t             iterations,
              double              *samples) {
-  uint32_t entryCount;
+  const GPUBindGroupEntry *entries;
+  double                   begin;
+  double                   elapsed;
+  GPUResult                result;
+  uint32_t                 entryCount;
+  uint32_t                 i;
 
   entryCount = path == BINDLESS_UPDATE_SINGLE ? 1u : capacity;
-  for (uint32_t i = 0u; i < iterations; i++) {
-    const GPUBindGroupEntry *entries;
-    double                   begin;
-    double                   elapsed;
-    GPUResult                result;
 
-    entries = path == BINDLESS_UPDATE_SINGLE
-                ? &bench->singleEntries[i & 1u]
-                : bench->batchEntries[i & 1u];
+  for (i = 0u; i < iterations; i++) {
+    entries = path == BINDLESS_UPDATE_SINGLE ? &bench->singleEntries[i & 1u] : bench->batchEntries[i & 1u];
     begin   = bench_now();
-    result = GPUUpdateBindGroupEXT(bench->group, entryCount, entries);
+    result  = GPUUpdateBindGroupEXT(bench->group, entryCount, entries);
+
     if (result != GPU_OK) {
       fprintf(stderr,
               "bindless-update path %u failed at iteration %u: %d\n",
@@ -283,11 +295,14 @@ bindless_run(BindlessUpdateBench *bench,
               result);
       return false;
     }
+
     elapsed = bench_now() - begin;
+
     if (samples) {
       samples[i] = elapsed * 1e9;
     }
   }
+
   return true;
 }
 
@@ -296,29 +311,36 @@ main(int argc, char *argv[]) {
   BindlessUpdateConfig config;
   BindlessUpdateBench  bench;
   GPUAdapterProperties properties;
-  GPUFrameStats         stats;
-  double               *samples[BINDLESS_UPDATE_PATH_COUNT];
-  double                median[BINDLESS_UPDATE_PATH_COUNT];
-  double                p95[BINDLESS_UPDATE_PATH_COUNT];
-  double                p99[BINDLESS_UPDATE_PATH_COUNT];
-  size_t                sampleCount;
-  BindlessInitResult    initResult;
-  bool                  ok;
+  GPUFrameStats        stats;
+  double              *samples[BINDLESS_UPDATE_PATH_COUNT];
+  double               median[BINDLESS_UPDATE_PATH_COUNT];
+  double               p95[BINDLESS_UPDATE_PATH_COUNT];
+  double               p99[BINDLESS_UPDATE_PATH_COUNT];
+  size_t               sampleCount;
+  BindlessInitResult   initResult;
+  uint32_t             path;
+  uint32_t             previous;
+  uint32_t             repeat;
+  bool                 ok;
 
   memset(&bench, 0, sizeof(bench));
   memset(&properties, 0, sizeof(properties));
   memset(&stats, 0, sizeof(stats));
   memset(samples, 0, sizeof(samples));
+
   if (!bindless_config(argc, argv, &config)) {
     return EXIT_FAILURE;
   }
+
   initResult = bindless_init(&bench, &config, &properties);
+
   if (initResult == BINDLESS_INIT_UNSUPPORTED) {
     fprintf(stderr,
             "bindless-update benchmark skipped: feature unsupported\n");
     bindless_cleanup(&bench);
     return EXIT_SUCCESS;
   }
+
   if (initResult != BINDLESS_INIT_READY) {
     fprintf(stderr, "failed to initialize bindless-update benchmark\n");
     bindless_cleanup(&bench);
@@ -326,13 +348,15 @@ main(int argc, char *argv[]) {
   }
 
   sampleCount = (size_t)config.iterations * config.repeats;
-  for (uint32_t path = 0u; path < BINDLESS_UPDATE_PATH_COUNT; path++) {
-    samples[path] = calloc(sampleCount, sizeof(*samples[path]));
-    if (!samples[path]) {
+
+  for (path = 0u; path < BINDLESS_UPDATE_PATH_COUNT; path++) {
+    if (!(samples[path] = calloc(sampleCount, sizeof(*samples[path])))) {
       fprintf(stderr, "failed to allocate bindless-update samples\n");
-      for (uint32_t previous = 0u; previous < path; previous++) {
+
+      for (previous = 0u; previous < path; previous++) {
         free(samples[previous]);
       }
+
       bindless_cleanup(&bench);
       return EXIT_FAILURE;
     }
@@ -342,32 +366,35 @@ main(int argc, char *argv[]) {
                     BINDLESS_UPDATE_SINGLE,
                     config.capacity,
                     BINDLESS_WARMUP_ITERATIONS,
-                    NULL) &&
-       bindless_run(&bench,
-                    BINDLESS_UPDATE_BATCH,
-                    config.capacity,
-                    BINDLESS_WARMUP_ITERATIONS,
-                    NULL);
+                    NULL)
+       && bindless_run(&bench,
+                       BINDLESS_UPDATE_BATCH,
+                       config.capacity,
+                       BINDLESS_WARMUP_ITERATIONS,
+                       NULL);
   GPUResetStats(bench.device);
-  for (uint32_t repeat = 0u; ok && repeat < config.repeats; repeat++) {
+
+  for (repeat = 0u; ok && repeat < config.repeats; repeat++) {
     if ((repeat & 1u) == 0u) {
-      for (uint32_t path = 0u; path < BINDLESS_UPDATE_PATH_COUNT; path++) {
+      for (path = 0u; path < BINDLESS_UPDATE_PATH_COUNT; path++) {
         ok = bindless_run(&bench,
                           (BindlessUpdatePath)path,
                           config.capacity,
                           config.iterations,
                           &samples[path][(size_t)repeat * config.iterations]);
+
         if (!ok) {
           break;
         }
       }
     } else {
-      for (uint32_t path = BINDLESS_UPDATE_PATH_COUNT; path-- > 0u;) {
+      for (path = BINDLESS_UPDATE_PATH_COUNT; path-- > 0u;) {
         ok = bindless_run(&bench,
                           (BindlessUpdatePath)path,
                           config.capacity,
                           config.iterations,
                           &samples[path][(size_t)repeat * config.iterations]);
+
         if (!ok) {
           break;
         }
@@ -376,11 +403,12 @@ main(int argc, char *argv[]) {
   }
 
   stats = bench.device->currentFrameStats;
-  ok    = ok && stats.hotPathAllocCount == 0u &&
-          stats.hotPathAllocBytes == 0u &&
-          stats.hotPathFreeCount == 0u &&
-          stats.hotPathFreeBytes == 0u;
-  for (uint32_t path = 0u; path < BINDLESS_UPDATE_PATH_COUNT; path++) {
+  ok    = ok && stats.hotPathAllocCount == 0u
+          && stats.hotPathAllocBytes == 0u
+          && stats.hotPathFreeCount == 0u
+          && stats.hotPathFreeBytes == 0u;
+
+  for (path = 0u; path < BINDLESS_UPDATE_PATH_COUNT; path++) {
     median[path] = bench_percentile(samples[path], sampleCount, 0.50);
     p95[path]    = bench_percentile(samples[path], sampleCount, 0.95);
     p99[path]    = bench_percentile(samples[path], sampleCount, 0.99);
@@ -410,10 +438,12 @@ main(int argc, char *argv[]) {
            stats.hotPathFreeCount);
   }
 
-  for (uint32_t path = 0u; path < BINDLESS_UPDATE_PATH_COUNT; path++) {
+  for (path = 0u; path < BINDLESS_UPDATE_PATH_COUNT; path++) {
     free(samples[path]);
   }
+
   bindless_cleanup(&bench);
+
   if (!ok) {
     fprintf(stderr,
             "bindless-update benchmark failed: %" PRIu64
@@ -422,5 +452,6 @@ main(int argc, char *argv[]) {
             stats.hotPathFreeCount);
     return EXIT_FAILURE;
   }
+
   return EXIT_SUCCESS;
 }

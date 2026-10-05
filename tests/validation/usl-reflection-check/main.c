@@ -21,19 +21,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void *
+static void*
 read_file(const char *path, uint64_t *outSize) {
   unsigned char *bytes;
-  long length;
-  FILE *file;
+  FILE          *file;
+  long           length;
 
   if (!path || !outSize) {
     return NULL;
   }
 
   *outSize = 0;
-  file = fopen(path, "rb");
-  if (!file) {
+
+  if (!(file = fopen(path, "rb"))) {
     return NULL;
   }
 
@@ -43,6 +43,7 @@ read_file(const char *path, uint64_t *outSize) {
   }
 
   length = ftell(file);
+
   if (length <= 0) {
     fclose(file);
     return NULL;
@@ -53,8 +54,7 @@ read_file(const char *path, uint64_t *outSize) {
     return NULL;
   }
 
-  bytes = malloc((size_t)length);
-  if (!bytes) {
+  if (!(bytes = malloc((size_t)length))) {
     fclose(file);
     return NULL;
   }
@@ -67,42 +67,49 @@ read_file(const char *path, uint64_t *outSize) {
 
   fclose(file);
   *outSize = (uint64_t)length;
+
   return bytes;
 }
 
-static GPUAdapter *
+static GPUAdapter*
 select_adapter(GPUInstance *instance) {
-  GPUAdapter *adapter = NULL;
-  uint32_t adapterCount = 1;
-  GPUResult result;
+  GPUAdapter *adapter      = NULL;
+  uint32_t    adapterCount = 1;
+  GPUResult   result;
 
   result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !adapter) {
     return NULL;
   }
+
   return adapter;
 }
 
 static int
 reflection_has_resource(const GPUShaderReflection *reflection,
-                        GPUBindingType bindingType,
-                        GPUShaderStageFlags visibility,
-                        uint32_t groupIndex,
-                        uint32_t binding,
-                        int hasDynamicOffset) {
+                        GPUBindingType             bindingType,
+                        GPUShaderStageFlags        visibility,
+                        uint32_t                   groupIndex,
+                        uint32_t                   binding,
+                        int                        hasDynamicOffset) {
+  const GPUShaderResourceReflection *item;
+  uint32_t                           i;
+
   if (!reflection || (!reflection->pResources && reflection->resourceCount > 0u)) {
     return 0;
   }
 
-  for (uint32_t i = 0; i < reflection->resourceCount; i++) {
-    const GPUShaderResourceReflection *item = &reflection->pResources[i];
-    if (item->groupIndex == groupIndex &&
-        item->binding == binding &&
-        item->bindingType == bindingType &&
-        item->visibility == visibility &&
-        item->arrayCount == 1u &&
-        (item->hasDynamicOffset ? 1 : 0) == (hasDynamicOffset ? 1 : 0)) {
+  for (i = 0; i < reflection->resourceCount; i++) {
+    item = &reflection->pResources[i];
+
+    if (item->groupIndex == groupIndex
+        && item->binding == binding
+        && item->bindingType == bindingType
+        && item->visibility == visibility
+        && item->arrayCount == 1u
+        && (item->hasDynamicOffset ? 1 : 0) == (hasDynamicOffset ? 1 : 0)) {
       return 1;
     }
   }
@@ -112,21 +119,23 @@ reflection_has_resource(const GPUShaderReflection *reflection,
 
 static int
 layout_has_entry(const GPUBindGroupLayoutEntry *entries,
-                 uint32_t count,
-                 GPUBindingType bindingType,
-                 GPUShaderStageFlags visibility,
-                 uint32_t binding,
-                 int hasDynamicOffset) {
+                 uint32_t                       count,
+                 GPUBindingType                 bindingType,
+                 GPUShaderStageFlags            visibility,
+                 uint32_t                       binding,
+                 int                            hasDynamicOffset) {
+  uint32_t i;
+
   if (!entries && count > 0u) {
     return 0;
   }
 
-  for (uint32_t i = 0; i < count; i++) {
-    if (entries[i].binding == binding &&
-        entries[i].bindingType == bindingType &&
-        entries[i].visibility == visibility &&
-        entries[i].arrayCount == 1u &&
-        (entries[i].hasDynamicOffset ? 1 : 0) == (hasDynamicOffset ? 1 : 0)) {
+  for (i = 0; i < count; i++) {
+    if (entries[i].binding == binding
+        && entries[i].bindingType == bindingType
+        && entries[i].visibility == visibility
+        && entries[i].arrayCount == 1u
+        && (entries[i].hasDynamicOffset ? 1 : 0) == (hasDynamicOffset ? 1 : 0)) {
       return 1;
     }
   }
@@ -135,24 +144,26 @@ layout_has_entry(const GPUBindGroupLayoutEntry *entries,
 }
 
 static int
-check_layout_from_reflection(GPUDevice *device,
-                             GPUShaderLibrary *library,
-                             uint32_t expectedLayoutCount,
+check_layout_from_reflection(GPUDevice                 *device,
+                             GPUShaderLibrary          *library,
+                             uint32_t                   expectedLayoutCount,
                              const GPUShaderReflection *reflection) {
   GPUBindGroupLayout **layouts;
-  GPUPipelineLayout *pipelineLayout;
-  uint32_t layoutCount;
-  GPUResult rc;
-  int ok;
+  GPUPipelineLayout   *pipelineLayout;
+  uint32_t             layoutCount;
+  GPUResult            rc;
+  int                  ok;
 
   layoutCount = 0u;
-  rc = GPUCreateBindGroupLayoutsFromReflection(device, library, &layoutCount, NULL);
+  rc          = GPUCreateBindGroupLayoutsFromReflection(device, library, &layoutCount, NULL);
+
   if (rc != GPU_OK || layoutCount != expectedLayoutCount) {
     fprintf(stderr, "unexpected reflected bind group layout count\n");
     return 0;
   }
 
   pipelineLayout = NULL;
+
   if (layoutCount == 0u) {
     rc = GPUCreatePipelineLayoutFromReflection(device,
                                                library,
@@ -164,12 +175,12 @@ check_layout_from_reflection(GPUDevice *device,
     return ok;
   }
 
-  layouts = calloc(layoutCount, sizeof(*layouts));
-  if (!layouts) {
+  if (!(layouts = calloc(layoutCount, sizeof(*layouts)))) {
     return 0;
   }
 
   rc = GPUCreateBindGroupLayoutsFromReflection(device, library, &layoutCount, layouts);
+
   if (rc != GPU_OK || layoutCount != expectedLayoutCount) {
     fprintf(stderr, "failed to create reflected bind group layout\n");
     free(layouts);
@@ -177,10 +188,11 @@ check_layout_from_reflection(GPUDevice *device,
   }
 
   ok = 1;
+
   for (uint32_t groupIndex = 0; ok && groupIndex < layoutCount; groupIndex++) {
     const GPUBindGroupLayoutEntry *entries;
-    uint32_t expectedEntryCount;
-    uint32_t layoutEntryCount;
+    uint32_t                       expectedEntryCount;
+    uint32_t                       layoutEntryCount;
 
     if (!layouts[groupIndex]) {
       ok = 0;
@@ -188,6 +200,7 @@ check_layout_from_reflection(GPUDevice *device,
     }
 
     expectedEntryCount = 0u;
+
     for (uint32_t i = 0; reflection && i < reflection->resourceCount; i++) {
       if (reflection->pResources[i].groupIndex == groupIndex) {
         expectedEntryCount++;
@@ -195,9 +208,11 @@ check_layout_from_reflection(GPUDevice *device,
     }
 
     entries = GPUGetBindGroupLayoutEntries(layouts[groupIndex], &layoutEntryCount);
-    ok = layoutEntryCount == expectedEntryCount;
+    ok      = layoutEntryCount == expectedEntryCount;
+
     for (uint32_t i = 0; ok && reflection && i < reflection->resourceCount; i++) {
       const GPUShaderResourceReflection *resource = &reflection->pResources[i];
+
       if (resource->groupIndex != groupIndex) {
         continue;
       }
@@ -219,36 +234,38 @@ check_layout_from_reflection(GPUDevice *device,
   ok = ok && rc == GPU_OK && pipelineLayout != NULL;
 
   GPUDestroyPipelineLayout(pipelineLayout);
+
   for (uint32_t i = 0; i < layoutCount; i++) {
     GPUDestroyBindGroupLayout(layouts[i]);
   }
+
   free(layouts);
   return ok;
 }
 
 static int
-check_shader_artifact(GPUDevice *device,
+check_shader_artifact(GPUDevice  *device,
                       const void *bytecode,
-                      uint64_t bytecodeSize,
-                      uint32_t expectedResourceCount,
-                      uint32_t expectedLayoutCount,
-                      int storageOnly) {
+                      uint64_t    bytecodeSize,
+                      uint32_t    expectedResourceCount,
+                      uint32_t    expectedLayoutCount,
+                      int         storageOnly) {
   GPUShaderReflection reflection;
-  GPUShaderLibrary *library;
-  int ok;
+  GPUShaderLibrary   *library;
+  int                 ok;
 
   library = NULL;
-  if (GPUCreateShaderLibraryFromUSL(device, bytecode, bytecodeSize, &library) !=
-        GPU_OK ||
-      !library) {
+
+  if (GPUCreateShaderLibraryFromUSL(device, bytecode, bytecodeSize, &library) != GPU_OK
+      || !library) {
     fprintf(stderr, "failed to create shader library\n");
     return 0;
   }
 
   memset(&reflection, 0, sizeof(reflection));
 
-  ok = GPUGetShaderReflection(library, &reflection) == GPU_OK &&
-       reflection.resourceCount == expectedResourceCount;
+  ok = GPUGetShaderReflection(library, &reflection) == GPU_OK
+       && reflection.resourceCount == expectedResourceCount;
 
   if (ok && storageOnly) {
     ok = reflection_has_resource(&reflection,
@@ -263,25 +280,25 @@ check_shader_artifact(GPUDevice *device,
                                  GPU_SHADER_STAGE_FRAGMENT_BIT,
                                  0u,
                                  0u,
-                                 0) &&
-         reflection_has_resource(&reflection,
-                                 GPU_BINDING_SAMPLED_TEXTURE,
-                                 GPU_SHADER_STAGE_FRAGMENT_BIT,
-                                 0u,
-                                 1u,
-                                 0) &&
-         reflection_has_resource(&reflection,
-                                 GPU_BINDING_UNIFORM_BUFFER,
-                                 GPU_SHADER_STAGE_FRAGMENT_BIT,
-                                 1u,
-                                 0u,
-                                 1) &&
-         reflection_has_resource(&reflection,
-                                 GPU_BINDING_STORAGE_TEXTURE,
-                                 GPU_SHADER_STAGE_COMPUTE_BIT,
-                                 1u,
-                                 1u,
-                                 0);
+                                 0)
+         && reflection_has_resource(&reflection,
+                                    GPU_BINDING_SAMPLED_TEXTURE,
+                                    GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                    0u,
+                                    1u,
+                                    0)
+         && reflection_has_resource(&reflection,
+                                    GPU_BINDING_UNIFORM_BUFFER,
+                                    GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                    1u,
+                                    0u,
+                                    1)
+         && reflection_has_resource(&reflection,
+                                    GPU_BINDING_STORAGE_TEXTURE,
+                                    GPU_SHADER_STAGE_COMPUTE_BIT,
+                                    1u,
+                                    1u,
+                                    0);
   }
 
   ok = ok && check_layout_from_reflection(device,
@@ -291,6 +308,7 @@ check_shader_artifact(GPUDevice *device,
 
   GPUFreeShaderReflection(&reflection);
   GPUDestroyShaderLibrary(library);
+
   if (!ok) {
     fprintf(stderr, "unexpected public shader reflection data\n");
     return 0;
@@ -306,9 +324,9 @@ main(int argc, char **argv) {
   GPUDevice   *device;
   void        *storageBytecode;
   void        *bytecode;
-  uint64_t storageBytecodeSize;
-  uint64_t bytecodeSize;
-  int ok;
+  uint64_t     storageBytecodeSize;
+  uint64_t     bytecodeSize;
+  int          ok;
 
   if (argc < 2 || argc > 3) {
     fprintf(stderr,
@@ -317,17 +335,16 @@ main(int argc, char **argv) {
     return 2;
   }
 
-  bytecode = read_file(argv[1], &bytecodeSize);
-  if (!bytecode) {
+  if (!(bytecode = read_file(argv[1], &bytecodeSize))) {
     fprintf(stderr, "failed to read bytecode: %s\n", argv[1]);
     return 2;
   }
 
-  storageBytecode = NULL;
+  storageBytecode     = NULL;
   storageBytecodeSize = 0u;
+
   if (argc == 3) {
-    storageBytecode = read_file(argv[2], &storageBytecodeSize);
-    if (!storageBytecode) {
+    if (!(storageBytecode = read_file(argv[2], &storageBytecodeSize))) {
       fprintf(stderr, "failed to read storage bytecode: %s\n", argv[2]);
       free(bytecode);
       return 2;
@@ -335,6 +352,7 @@ main(int argc, char **argv) {
   }
 
   instance = NULL;
+
   if (GPUCreateInstance(NULL, &instance) != GPU_OK || !instance) {
     fprintf(stderr, "failed to create instance\n");
     free(storageBytecode);
@@ -343,6 +361,7 @@ main(int argc, char **argv) {
   }
 
   adapter = select_adapter(instance);
+
   if (!adapter) {
     fprintf(stderr, "failed to get adapter\n");
     GPUDestroyInstance(instance);
@@ -352,6 +371,7 @@ main(int argc, char **argv) {
   }
 
   device = GPUCreateDeviceWithDefaultQueues(adapter);
+
   if (!device) {
     fprintf(stderr, "failed to create device\n");
     GPUDestroyInstance(instance);
@@ -360,14 +380,14 @@ main(int argc, char **argv) {
     return 1;
   }
 
-  ok = check_shader_artifact(device, bytecode, bytecodeSize, 4u, 2u, 0) &&
-       (!storageBytecode ||
-        check_shader_artifact(device,
-                              storageBytecode,
-                              storageBytecodeSize,
-                              1u,
-                              1u,
-                              1));
+  ok = check_shader_artifact(device, bytecode, bytecodeSize, 4u, 2u, 0)
+       && (!storageBytecode
+           || check_shader_artifact(device,
+                                    storageBytecode,
+                                    storageBytecodeSize,
+                                    1u,
+                                    1u,
+                                    1));
 
   GPUDestroyDevice(device);
   GPUDestroyInstance(instance);

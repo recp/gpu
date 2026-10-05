@@ -1,16 +1,32 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 #include "../../src/api/instance_internal.h"
 
 static int
 run_adapter_request(void *ctx) {
-  return gpu_test_adapter_request_options(
-    ((GPUApiTestContext *)ctx)->instance
-  );
+  return gpu_test_adapter_request_options(((GPUApiTestContext *)ctx)->instance);
 }
 
 static int
 run_queue(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_queue(testCtx->instance,
                         testCtx->adapter,
@@ -29,7 +45,9 @@ run_bindgroup(void *ctx) {
 
 static int
 run_bindless(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_bindless(testCtx->adapter,
                            testCtx->descriptorIndexingBytecodePath);
@@ -47,7 +65,9 @@ run_copy(void *ctx) {
 
 static int
 run_coordinate(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_coordinate_contract(testCtx->device,
                                       testCtx->coordinateBytecodePath);
@@ -55,14 +75,18 @@ run_coordinate(void *ctx) {
 
 static int
 run_render(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_render(testCtx->device, testCtx->mrtBytecodePath);
 }
 
 static int
 run_msaa(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_msaa_resolve_sample(testCtx->device,
                                       testCtx->msaaBytecodePath);
@@ -70,23 +94,29 @@ run_msaa(void *ctx) {
 
 static int
 run_compute(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_compute(testCtx->device, testCtx->computeBytecodePath);
 }
 
 static int
 run_execution_graph(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
 
-  return gpu_test_execution_graph_validation() &&
-         gpu_test_execution_graph(testCtx->adapter,
-                                  testCtx->executionGraphBytecodePath);
+  testCtx = ctx;
+
+  return gpu_test_execution_graph_validation()
+         && gpu_test_execution_graph(testCtx->adapter,
+                                     testCtx->executionGraphBytecodePath);
 }
 
 static int
 run_query(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_query(testCtx->adapter,
                         testCtx->device,
@@ -105,7 +135,9 @@ run_memory(void *ctx) {
 
 static int
 run_multigpu(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_multigpu(testCtx->adapter, testCtx->device);
 }
@@ -117,14 +149,18 @@ run_runtime(void *ctx) {
 
 static int
 run_threading(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_threading(testCtx->device, testCtx->uslBytecodePath);
 }
 
 static int
 run_shader(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_shader(testCtx->device,
                          testCtx->uslBytecodePath,
@@ -133,7 +169,9 @@ run_shader(void *ctx) {
 
 static int
 run_source_sampler(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_source_sampler_draw(testCtx->device,
                                       testCtx->sourceSamplerBytecodePath);
@@ -141,7 +179,9 @@ run_source_sampler(void *ctx) {
 
 static int
 run_descriptor_array(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_descriptor_array(testCtx->device,
                                    testCtx->descriptorArrayBytecodePath);
@@ -149,28 +189,30 @@ run_descriptor_array(void *ctx) {
 
 static int
 run_descriptor_indexing(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
 
-  return gpu_test_descriptor_indexing(
-    testCtx->adapter,
-    testCtx->descriptorIndexingBytecodePath
-  );
+  testCtx = ctx;
+
+  return gpu_test_descriptor_indexing(testCtx->adapter,
+                                      testCtx->descriptorIndexingBytecodePath);
 }
 
 static int
 run_buffer_descriptor_array(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
 
-  return gpu_test_buffer_descriptor_array(
-    testCtx->adapter,
-    testCtx->bufferDescriptorArrayBytecodePath,
-    testCtx->bufferDescriptorArrayDynamicBytecodePath
-  );
+  testCtx = ctx;
+
+  return gpu_test_buffer_descriptor_array(testCtx->adapter,
+                                          testCtx->bufferDescriptorArrayBytecodePath,
+                                          testCtx->bufferDescriptorArrayDynamicBytecodePath);
 }
 
 static int
 run_storage_texture(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_storage_texture_view(testCtx->device,
                                        testCtx->storageTextureBytecodePath);
@@ -178,7 +220,9 @@ run_storage_texture(void *ctx) {
 
 static int
 run_cube_texture(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_cube_texture_view(testCtx->device,
                                     testCtx->cubeTextureBytecodePath);
@@ -186,7 +230,9 @@ run_cube_texture(void *ctx) {
 
 static int
 run_line_texture(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_line_texture_view(testCtx->device,
                                     testCtx->lineTextureBytecodePath);
@@ -194,7 +240,9 @@ run_line_texture(void *ctx) {
 
 static int
 run_volume_texture(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_volume_texture_view(testCtx->device,
                                       testCtx->volumeTextureBytecodePath);
@@ -202,7 +250,9 @@ run_volume_texture(void *ctx) {
 
 static int
 run_subgroup(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_subgroup(testCtx->adapter,
                            testCtx->subgroupBytecodePath,
@@ -211,7 +261,9 @@ run_subgroup(void *ctx) {
 
 static int
 run_subgroup_matrix(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_subgroup_matrix(testCtx->adapter,
                                   testCtx->subgroupMatrixBytecodePath);
@@ -219,7 +271,9 @@ run_subgroup_matrix(void *ctx) {
 
 static int
 run_shader_f16(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_shader_f16(testCtx->adapter,
                              testCtx->shaderF16BytecodePath);
@@ -227,7 +281,9 @@ run_shader_f16(void *ctx) {
 
 static int
 run_atomic64(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_atomic64(testCtx->adapter,
                            testCtx->atomic64BytecodePath);
@@ -235,7 +291,9 @@ run_atomic64(void *ctx) {
 
 static int
 run_vrs(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_vrs(testCtx->adapter,
                       testCtx->device,
@@ -244,7 +302,9 @@ run_vrs(void *ctx) {
 
 static int
 run_sampler_feedback(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_sampler_feedback(testCtx->adapter,
                                    testCtx->device,
@@ -253,7 +313,9 @@ run_sampler_feedback(void *ctx) {
 
 static int
 run_ray_query(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_ray_query(testCtx->adapter,
                             testCtx->rayQueryBytecodePath);
@@ -261,17 +323,19 @@ run_ray_query(void *ctx) {
 
 static int
 run_intersection_function(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
 
-  return gpu_test_intersection_function_table(
-    testCtx->adapter,
-    testCtx->intersectionFunctionBytecodePath
-  );
+  testCtx = ctx;
+
+  return gpu_test_intersection_function_table(testCtx->adapter,
+                                              testCtx->intersectionFunctionBytecodePath);
 }
 
 static int
 run_ray_pipeline(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_ray_pipeline_feature(testCtx->adapter,
                                        testCtx->rayPipelineBytecodePath);
@@ -279,20 +343,22 @@ run_ray_pipeline(void *ctx) {
 
 static int
 run_clock_derivatives(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
 
-  return gpu_test_clock_derivatives(
-    testCtx->adapter,
-    testCtx->shaderSubgroupClockBytecodePath,
-    testCtx->shaderDeviceClockBytecodePath,
-    testCtx->computeDerivativeQuadsBytecodePath,
-    testCtx->computeDerivativeLinearBytecodePath
-  );
+  testCtx = ctx;
+
+  return gpu_test_clock_derivatives(testCtx->adapter,
+                                    testCtx->shaderSubgroupClockBytecodePath,
+                                    testCtx->shaderDeviceClockBytecodePath,
+                                    testCtx->computeDerivativeQuadsBytecodePath,
+                                    testCtx->computeDerivativeLinearBytecodePath);
 }
 
 static int
 run_untyped_pointer(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
 
   return gpu_test_untyped_pointer(testCtx->device,
                                   testCtx->untypedPointerBytecodePath);
@@ -300,12 +366,15 @@ run_untyped_pointer(void *ctx) {
 
 static int
 run_dx12_binding_plan(void *ctx) {
-  GPUApiTestContext *testCtx = ctx;
   GPUAdapterProperties properties;
+  GPUApiTestContext   *testCtx;
+
+  testCtx = ctx;
 
   if (GPUGetAdapterProperties(testCtx->adapter, &properties) != GPU_OK) {
     return 0;
   }
+
   if (properties.backend != GPU_BACKEND_DX12) {
     printf("DX12 binding-plan execution skipped: non-DX12 backend\n");
     return 1;
@@ -332,21 +401,29 @@ parse_backend(const char *name, GPUBackend *outBackend) {
   } else {
     return false;
   }
+
   return true;
 }
 
 int
 main(int argc, char **argv) {
-  GPUInstanceCreateInfo instanceInfo = {0};
+  GPUInstanceCreateInfo instanceInfo  = {0};
   GPURuntimeConfig      runtimeConfig = {0};
+  GPUApiTestContext     ctx;
+  GPUApiTest            tests[39];
   GPUInstance          *instance;
   GPUAdapter           *adapter;
   GPUDevice            *device;
-  GPUApiTestContext      ctx;
-  GPUApiTest             tests[39];
-  uint64_t               timingStart, timingMark;
-  bool                   timings;
-  int                    ok;
+  uint64_t              timingStart;
+  uint64_t              timingMark;
+  uint64_t              instanceNow;
+  uint64_t              adapterNow;
+  uint64_t              deviceNow;
+  uint64_t              runtimeNow;
+  uint64_t              testsNow;
+  int                   ok;
+  uint32_t              i;
+  bool                  timings;
 
   timings     = getenv("GPU_API_TIMINGS") != NULL;
   timingStart = timings ? gpu_test_now_ns() : 0u;
@@ -368,21 +445,25 @@ main(int argc, char **argv) {
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_DEFAULT;
   instanceInfo.enableValidation = getenv("GPU_API_DISABLE_VALIDATION") == NULL;
-  if (argc == 15 &&
-      !parse_backend(argv[14], &instanceInfo.preferredBackend)) {
+
+  if (argc == 15
+      && !parse_backend(argv[14], &instanceInfo.preferredBackend)) {
     fprintf(stderr, "unknown backend: %s\n", argv[14]);
     return 2;
   }
+
   instance = NULL;
+
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
     fprintf(stderr, "failed to create instance\n");
     return 1;
   }
+
   if (timings) {
-    uint64_t now = gpu_test_now_ns();
+    instanceNow = gpu_test_now_ns();
     printf("api:timing:instance=%.3fms\n",
-           (double)(now - timingMark) / 1000000.0);
-    timingMark = now;
+           (double)(instanceNow - timingMark) / 1000000.0);
+    timingMark = instanceNow;
   }
 
   if (gpu_test_request_adapter(instance, &adapter) != GPU_OK || !adapter) {
@@ -390,29 +471,34 @@ main(int argc, char **argv) {
     GPUDestroyInstance(instance);
     return 1;
   }
+
   if (timings) {
-    uint64_t now = gpu_test_now_ns();
+    adapterNow = gpu_test_now_ns();
     printf("api:timing:adapter=%.3fms\n",
-           (double)(now - timingMark) / 1000000.0);
-    timingMark = now;
+           (double)(adapterNow - timingMark) / 1000000.0);
+    timingMark = adapterNow;
   }
+
   if (getenv("GPU_TEST_ADAPTER") || getenv("GPU_API_VERBOSE")) {
     GPUAdapterCapabilities capabilities;
-    GPUAdapterProperties properties;
+    GPUAdapterProperties   properties;
 
     if (GPUGetAdapterProperties(adapter, &properties) == GPU_OK) {
       printf("api:adapter=%s type=%u\n",
              properties.name ? properties.name : "unknown",
              (unsigned)properties.type);
     }
-    if (getenv("GPU_API_VERBOSE") &&
-        GPUGetAdapterCapabilities(adapter, &capabilities) == GPU_OK) {
+
+    if (getenv("GPU_API_VERBOSE")
+        && GPUGetAdapterCapabilities(adapter, &capabilities) == GPU_OK) {
       fputs("api:features=", stdout);
-      for (uint32_t i = 0u; i < capabilities.supported.featureCount; i++) {
+
+      for (i = 0u; i < capabilities.supported.featureCount; i++) {
         printf("%s%u",
                i == 0u ? "" : ",",
                (unsigned)capabilities.supported.pFeatures[i]);
       }
+
       putchar('\n');
     }
   }
@@ -422,74 +508,66 @@ main(int argc, char **argv) {
     GPUDestroyInstance(instance);
     return 1;
   }
+
   if (timings) {
-    uint64_t now = gpu_test_now_ns();
+    deviceNow = gpu_test_now_ns();
     printf("api:timing:device=%.3fms\n",
-           (double)(now - timingMark) / 1000000.0);
-    timingMark = now;
+           (double)(deviceNow - timingMark) / 1000000.0);
+    timingMark = deviceNow;
   }
 
-  runtimeConfig.chain.sType          = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
-  runtimeConfig.chain.structSize     = sizeof(runtimeConfig);
-  runtimeConfig.enableDebugMarkers   = true;
-  runtimeConfig.enableVerboseLogs    = getenv("GPU_API_VERBOSE") != NULL;
+  runtimeConfig.chain.sType        = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
+  runtimeConfig.chain.structSize   = sizeof(runtimeConfig);
+  runtimeConfig.enableDebugMarkers = true;
+  runtimeConfig.enableVerboseLogs  = getenv("GPU_API_VERBOSE") != NULL;
+
   if (GPUConfigureRuntime(device, &runtimeConfig) != GPU_OK) {
     fprintf(stderr, "failed to enable debug markers\n");
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
     return 1;
   }
+
   if (timings) {
-    uint64_t now = gpu_test_now_ns();
+    runtimeNow = gpu_test_now_ns();
     printf("api:timing:runtime=%.3fms\n",
-           (double)(now - timingMark) / 1000000.0);
-    timingMark = now;
+           (double)(runtimeNow - timingMark) / 1000000.0);
+    timingMark = runtimeNow;
   }
 
-  ctx.instance                    = instance;
-  ctx.adapter                     = adapter;
-  ctx.device                      = device;
-  ctx.uslBytecodePath             = argv[1];
-  ctx.mrtBytecodePath             = argv[2];
-  ctx.msaaBytecodePath            = getenv("GPU_MSAA_USL_PATH");
-  ctx.computeBytecodePath         = argv[3];
-  ctx.sourceSamplerBytecodePath   = argv[4];
-  ctx.storageTextureBytecodePath  = argv[5];
-  ctx.cubeTextureBytecodePath     = argv[6];
-  ctx.lineTextureBytecodePath     = argv[7];
-  ctx.volumeTextureBytecodePath   = argv[8];
-  ctx.descriptorArrayBytecodePath = argv[9];
-  ctx.coordinateBytecodePath         = argv[10];
-  ctx.descriptorIndexingBytecodePath = argv[11];
-  ctx.bufferDescriptorArrayBytecodePath =
-    getenv("GPU_BUFFER_DESCRIPTOR_ARRAY_USL_PATH");
-  ctx.bufferDescriptorArrayDynamicBytecodePath =
-    getenv("GPU_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_PATH");
-  ctx.subgroupBytecodePath           = argv[12];
-  ctx.subgroupRelativeBytecodePath   =
-    getenv("GPU_SUBGROUP_RELATIVE_USL_PATH");
-  ctx.subgroupMatrixBytecodePath     = getenv("GPU_SUBGROUP_MATRIX_USL_PATH");
-  ctx.shaderF16BytecodePath          = argv[13];
-  ctx.atomic64BytecodePath           = getenv("GPU_ATOMIC64_USL_PATH");
-  ctx.rayQueryBytecodePath           = getenv("GPU_RAY_QUERY_USL_PATH");
-  ctx.intersectionFunctionBytecodePath =
-    getenv("GPU_INTERSECTION_FUNCTION_USL_PATH");
-  ctx.rayPipelineBytecodePath        = getenv("GPU_RAY_PIPELINE_USL_PATH");
-  ctx.executionGraphBytecodePath     = getenv("GPU_EXECUTION_GRAPH_USL_PATH");
-  ctx.samplerFeedbackBytecodePath    =
-    getenv("GPU_SAMPLER_FEEDBACK_USL_PATH");
-  ctx.shaderSubgroupClockBytecodePath =
-    getenv("GPU_SHADER_SUBGROUP_CLOCK_USL_PATH");
-  ctx.shaderDeviceClockBytecodePath =
-    getenv("GPU_SHADER_DEVICE_CLOCK_USL_PATH");
-  ctx.computeDerivativeQuadsBytecodePath =
-    getenv("GPU_COMPUTE_DERIVATIVE_QUADS_USL_PATH");
-  ctx.computeDerivativeLinearBytecodePath =
-    getenv("GPU_COMPUTE_DERIVATIVE_LINEAR_USL_PATH");
-  ctx.untypedPointerBytecodePath =
-    getenv("GPU_UNTYPED_POINTER_USL_PATH");
-  ctx.dx12BindingPlanBytecodePath =
-    getenv("GPU_DX12_BINDING_PLAN_USL_PATH");
+  ctx.instance                                 = instance;
+  ctx.adapter                                  = adapter;
+  ctx.device                                   = device;
+  ctx.uslBytecodePath                          = argv[1];
+  ctx.mrtBytecodePath                          = argv[2];
+  ctx.msaaBytecodePath                         = getenv("GPU_MSAA_USL_PATH");
+  ctx.computeBytecodePath                      = argv[3];
+  ctx.sourceSamplerBytecodePath                = argv[4];
+  ctx.storageTextureBytecodePath               = argv[5];
+  ctx.cubeTextureBytecodePath                  = argv[6];
+  ctx.lineTextureBytecodePath                  = argv[7];
+  ctx.volumeTextureBytecodePath                = argv[8];
+  ctx.descriptorArrayBytecodePath              = argv[9];
+  ctx.coordinateBytecodePath                   = argv[10];
+  ctx.descriptorIndexingBytecodePath           = argv[11];
+  ctx.bufferDescriptorArrayBytecodePath        = getenv("GPU_BUFFER_DESCRIPTOR_ARRAY_USL_PATH");
+  ctx.bufferDescriptorArrayDynamicBytecodePath = getenv("GPU_BUFFER_DESCRIPTOR_ARRAY_DYNAMIC_USL_PATH");
+  ctx.subgroupBytecodePath                     = argv[12];
+  ctx.subgroupRelativeBytecodePath             = getenv("GPU_SUBGROUP_RELATIVE_USL_PATH");
+  ctx.subgroupMatrixBytecodePath               = getenv("GPU_SUBGROUP_MATRIX_USL_PATH");
+  ctx.shaderF16BytecodePath                    = argv[13];
+  ctx.atomic64BytecodePath                     = getenv("GPU_ATOMIC64_USL_PATH");
+  ctx.rayQueryBytecodePath                     = getenv("GPU_RAY_QUERY_USL_PATH");
+  ctx.intersectionFunctionBytecodePath         = getenv("GPU_INTERSECTION_FUNCTION_USL_PATH");
+  ctx.rayPipelineBytecodePath                  = getenv("GPU_RAY_PIPELINE_USL_PATH");
+  ctx.executionGraphBytecodePath               = getenv("GPU_EXECUTION_GRAPH_USL_PATH");
+  ctx.samplerFeedbackBytecodePath              = getenv("GPU_SAMPLER_FEEDBACK_USL_PATH");
+  ctx.shaderSubgroupClockBytecodePath          = getenv("GPU_SHADER_SUBGROUP_CLOCK_USL_PATH");
+  ctx.shaderDeviceClockBytecodePath            = getenv("GPU_SHADER_DEVICE_CLOCK_USL_PATH");
+  ctx.computeDerivativeQuadsBytecodePath       = getenv("GPU_COMPUTE_DERIVATIVE_QUADS_USL_PATH");
+  ctx.computeDerivativeLinearBytecodePath      = getenv("GPU_COMPUTE_DERIVATIVE_LINEAR_USL_PATH");
+  ctx.untypedPointerBytecodePath               = getenv("GPU_UNTYPED_POINTER_USL_PATH");
+  ctx.dx12BindingPlanBytecodePath              = getenv("GPU_DX12_BINDING_PLAN_USL_PATH");
 
   tests[0]  = (GPUApiTest){ "adapter-request", run_adapter_request, &ctx };
   tests[1]  = (GPUApiTest){ "queue", run_queue, &ctx };
@@ -550,23 +628,27 @@ main(int argc, char **argv) {
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 
   if (timings) {
-    uint64_t now = gpu_test_now_ns();
+    testsNow = gpu_test_now_ns();
     printf("api:timing:tests=%.3fms\n",
-           (double)(now - timingMark) / 1000000.0);
+           (double)(testsNow - timingMark) / 1000000.0);
     printf("api:timing:total=%.3fms\n",
-           (double)(now - timingStart) / 1000000.0);
+           (double)(testsNow - timingStart) / 1000000.0);
   }
 
   GPUDestroyDevice(device);
+
   if (instance->validationError != 0u) {
     fprintf(stderr, "native validation reported an error\n");
     ok = 0;
   }
+
   GPUDestroyInstance(instance);
+
   if (!ok) {
     return 1;
   }
 
   printf("GPU API validation passed\n");
+
   return 0;
 }

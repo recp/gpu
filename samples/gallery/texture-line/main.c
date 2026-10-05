@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 #include <stdio.h>
@@ -33,6 +49,13 @@ typedef struct WebGPUTextureLine {
   bool                failed;
 } WebGPUTextureLine;
 
+static const uint8_t colors[4][4] = {
+  { 255u,  70u,  22u, 255u },
+  { 255u, 196u,  42u, 255u },
+  {   0u, 195u, 255u, 255u },
+  {  18u,  52u, 178u, 255u }
+};
+
 static WebGPUTextureLine app;
 
 static void
@@ -43,9 +66,11 @@ device_error(GPUDevice                *device,
 
   (void)device;
   state = userData;
+
   if (!state || !error || state->failed) {
     return;
   }
+
   state->failed = true;
   set_status(error->message ? error->message : "GPU: unknown device error", 1);
   emscripten_cancel_main_loop();
@@ -65,78 +90,77 @@ validate_reflection(WebGPUTextureLine *state) {
   uint32_t                       computeCount;
   uint32_t                       renderCount;
 
-  computeEntries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[0],
-    &computeCount
-  );
-  renderEntries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[1],
-    &renderCount
-  );
-  if (!computeEntries || computeCount != 2u ||
-      computeEntries[0].binding != 0u ||
-      computeEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      computeEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
-      computeEntries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_1D ||
-      computeEntries[0].sampledTexture.sampleType !=
-        GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
-      computeEntries[1].binding != 1u ||
-      computeEntries[1].bindingType != GPU_BINDING_STORAGE_TEXTURE ||
-      computeEntries[1].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
-      computeEntries[1].storageTexture.viewType != GPU_TEXTURE_VIEW_1D ||
-      computeEntries[1].storageTexture.format != GPU_FORMAT_RGBA8_UNORM ||
-      computeEntries[1].storageTexture.access !=
-        GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY) {
+  computeEntries = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[0],
+                                                &computeCount);
+  renderEntries  = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[1],
+                                                &renderCount);
+
+  if (!computeEntries || computeCount != 2u
+      || computeEntries[0].binding != 0u
+      || computeEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || computeEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT
+      || computeEntries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_1D
+      || computeEntries[0].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT
+      || computeEntries[1].binding != 1u
+      || computeEntries[1].bindingType != GPU_BINDING_STORAGE_TEXTURE
+      || computeEntries[1].visibility != GPU_SHADER_STAGE_COMPUTE_BIT
+      || computeEntries[1].storageTexture.viewType != GPU_TEXTURE_VIEW_1D
+      || computeEntries[1].storageTexture.format != GPU_FORMAT_RGBA8_UNORM
+      || computeEntries[1].storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY) {
     return 0;
   }
-  if (!renderEntries || renderCount != 2u ||
-      renderEntries[0].binding != 0u ||
-      renderEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      renderEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      renderEntries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_1D ||
-      renderEntries[0].sampledTexture.sampleType !=
-        GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
-      renderEntries[1].binding != 1u ||
-      renderEntries[1].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      renderEntries[1].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      renderEntries[1].sampledTexture.viewType != GPU_TEXTURE_VIEW_1D ||
-      renderEntries[1].sampledTexture.sampleType !=
-        GPU_TEXTURE_SAMPLE_TYPE_FLOAT) {
+
+  if (!renderEntries || renderCount != 2u
+      || renderEntries[0].binding != 0u
+      || renderEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || renderEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT
+      || renderEntries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_1D
+      || renderEntries[0].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT
+      || renderEntries[1].binding != 1u
+      || renderEntries[1].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || renderEntries[1].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT
+      || renderEntries[1].sampledTexture.viewType != GPU_TEXTURE_VIEW_1D
+      || renderEntries[1].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT) {
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_shader(WebGPUTextureLine *state) {
-  void      *artifact;
-  uint64_t   artifactSize;
-  GPUResult  result;
+  void     *artifact;
+  uint64_t  artifactSize;
+  GPUResult result;
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/texture_line.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /texture_line.us", 1);
     return 0;
   }
+
   result = GPUCreateShaderLibraryFromUSL(state->device,
                                          artifact,
                                          artifactSize,
                                          &state->library);
   free(artifact);
-  if (result != GPU_OK || !state->library ||
-      GPUCreateShaderLayout(state->device,
-                            state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 2u ||
-      !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0] ||
-      !state->shaderLayout->bindGroupLayouts[1] ||
-      !validate_reflection(state)) {
+
+  if (result != GPU_OK || !state->library
+      || GPUCreateShaderLayout(state->device,
+                               state->library,
+                               &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 2u
+      || !state->shaderLayout->bindGroupLayouts
+      || !state->shaderLayout->bindGroupLayouts[0]
+      || !state->shaderLayout->bindGroupLayouts[1]
+      || !validate_reflection(state)) {
     set_status("GPU: unexpected texture-line reflection", 1);
     return 0;
   }
+
   return 1;
 }
 
@@ -152,10 +176,11 @@ create_pipelines(WebGPUTextureLine *state) {
   computeInfo.layout           = state->shaderLayout->pipelineLayout;
   computeInfo.library          = state->library;
   computeInfo.entryPoint       = "line_transform_cs";
+
   if (GPUCreateComputePipeline(state->device,
                                &computeInfo,
-                               &state->computePipeline) != GPU_OK ||
-      !state->computePipeline) {
+                               &state->computePipeline) != GPU_OK
+      || !state->computePipeline) {
     set_status("GPU: failed to create the texture-line compute pipeline", 1);
     return 0;
   }
@@ -177,31 +202,28 @@ create_pipelines(WebGPUTextureLine *state) {
   renderInfo.frontFace               = GPU_FRONT_FACE_CCW;
   renderInfo.multisample.sampleCount = 1u;
   renderInfo.multisample.sampleMask  = UINT32_MAX;
+
   if (GPUCreateRenderPipeline(state->device,
                               &renderInfo,
-                              &state->renderPipeline) != GPU_OK ||
-      !state->renderPipeline) {
+                              &state->renderPipeline) != GPU_OK
+      || !state->renderPipeline) {
     set_status("GPU: failed to create the texture-line render pipeline", 1);
     return 0;
   }
+
   return 1;
 }
 
 static void
 fill_line(uint8_t pixels[LINE_ROW_PITCH]) {
-  static const uint8_t colors[4][4] = {
-    { 255u,  70u,  22u, 255u },
-    { 255u, 196u,  42u, 255u },
-    {   0u, 195u, 255u, 255u },
-    {  18u,  52u, 178u, 255u }
-  };
+  const uint8_t *color;
+  uint32_t       offset;
+  uint32_t       x;
 
-  for (uint32_t x = 0u; x < LINE_SIZE; x++) {
-    const uint8_t *color;
-    uint32_t       offset;
-
+  for (x = 0u; x < LINE_SIZE; x++) {
     color  = colors[x >> 2u];
     offset = x * 4u;
+
     pixels[offset + 0u] = color[0];
     pixels[offset + 1u] = color[1];
     pixels[offset + 2u] = color[2];
@@ -211,12 +233,12 @@ fill_line(uint8_t pixels[LINE_ROW_PITCH]) {
 
 static int
 create_resources(WebGPUTextureLine *state) {
-  uint8_t                  pixels[LINE_ROW_PITCH];
   GPUTextureCreateInfo     textureInfo       = {0};
   GPUTextureWriteRegion    writeRegion       = {0};
   GPUTextureViewCreateInfo viewInfo          = {0};
   GPUBindGroupEntry        computeEntries[2] = {0};
   GPUBindGroupEntry        renderEntries[2]  = {0};
+  uint8_t                  pixels[LINE_ROW_PITCH];
   GPUBindGroupCreateInfo   computeGroupInfo  = {0};
   GPUBindGroupCreateInfo   renderGroupInfo   = {0};
 
@@ -232,8 +254,8 @@ create_resources(WebGPUTextureLine *state) {
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
-  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
-                                 GPU_TEXTURE_USAGE_COPY_DST;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
+
   if (GPUCreateTexture(state->device,
                        &textureInfo,
                        &state->inputTexture) != GPU_OK) {
@@ -248,6 +270,7 @@ create_resources(WebGPUTextureLine *state) {
   writeRegion.layerCount   = 1u;
   writeRegion.bytesPerRow  = LINE_ROW_PITCH;
   writeRegion.rowsPerImage = 1u;
+
   if (GPUQueueWriteTexture(state->queue,
                            state->inputTexture,
                            &writeRegion,
@@ -264,6 +287,7 @@ create_resources(WebGPUTextureLine *state) {
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(state->inputTexture,
                            &viewInfo,
                            &state->inputView) != GPU_OK) {
@@ -272,8 +296,8 @@ create_resources(WebGPUTextureLine *state) {
   }
 
   textureInfo.label = "texture-line-webgpu-output";
-  textureInfo.usage = GPU_TEXTURE_USAGE_STORAGE |
-                      GPU_TEXTURE_USAGE_SAMPLED;
+  textureInfo.usage = GPU_TEXTURE_USAGE_STORAGE | GPU_TEXTURE_USAGE_SAMPLED;
+
   if (GPUCreateTexture(state->device,
                        &textureInfo,
                        &state->outputTexture) != GPU_OK) {
@@ -282,6 +306,7 @@ create_resources(WebGPUTextureLine *state) {
   }
 
   viewInfo.label = "texture-line-webgpu-output-view";
+
   if (GPUCreateTextureView(state->outputTexture,
                            &viewInfo,
                            &state->outputView) != GPU_OK) {
@@ -295,12 +320,14 @@ create_resources(WebGPUTextureLine *state) {
   computeEntries[1].textureView = state->outputView;
   computeEntries[1].binding     = 1u;
   computeEntries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
+
   computeGroupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   computeGroupInfo.chain.structSize = sizeof(computeGroupInfo);
   computeGroupInfo.label            = "texture-line-webgpu-compute-group";
   computeGroupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
   computeGroupInfo.pEntries         = computeEntries;
   computeGroupInfo.entryCount       = GPU_ARRAY_LEN(computeEntries);
+
   if (GPUCreateBindGroup(state->device,
                          &computeGroupInfo,
                          &state->computeGroup) != GPU_OK) {
@@ -314,54 +341,60 @@ create_resources(WebGPUTextureLine *state) {
   renderEntries[1].textureView = state->outputView;
   renderEntries[1].binding     = 1u;
   renderEntries[1].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+
   renderGroupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   renderGroupInfo.chain.structSize = sizeof(renderGroupInfo);
   renderGroupInfo.label            = "texture-line-webgpu-render-group";
   renderGroupInfo.layout           = state->shaderLayout->bindGroupLayouts[1];
   renderGroupInfo.pEntries         = renderEntries;
   renderGroupInfo.entryCount       = GPU_ARRAY_LEN(renderEntries);
+
   if (GPUCreateBindGroup(state->device,
                          &renderGroupInfo,
                          &state->renderGroup) != GPU_OK) {
     set_status("GPU: failed to create the texture-line render group", 1);
     return 0;
   }
+
   return 1;
 }
 
 static void
 render_frame(void *userData) {
-  WebGPUTextureLine            *state;
-  GPUFrame                     *frame;
-  GPUCommandBuffer             *cmdb;
-  GPUComputePassEncoder        *compute;
-  GPURenderPassEncoder         *render;
-  GPUTextureBarrier             textureBarrier = {0};
-  GPUBarrierBatch               barrier        = {0};
-  GPURenderPassColorAttachment  color          = {0};
-  GPURenderPassCreateInfo       passInfo       = {0};
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassCreateInfo      passInfo       = {0};
+  GPUBarrierBatch              barrier        = {0};
+  GPURenderPassColorAttachment color          = {0};
+  GPUTextureBarrier            textureBarrier = {0};
+  WebGPUTextureLine           *state;
+  GPUFrame                    *frame;
+  GPUComputePassEncoder       *compute;
+  GPURenderPassEncoder        *render;
 
   state = userData;
-  if (!resize_canvas(state)) return;
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) return;
+  if (!resize_canvas(state))
+    return;
+
+  if (!(frame = GPUBeginFrame(state->swapchain)))
+    return;
 
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(state->queue,
                               "texture-line-webgpu-frame",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+                              &cmdb) != GPU_OK
+      || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
 
-  compute = GPUBeginComputePass(cmdb, "texture-line-webgpu-transform");
-  if (!compute) {
+  if (!(compute = GPUBeginComputePass(cmdb, "texture-line-webgpu-transform"))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
   }
+
   GPUBindComputePipeline(compute, state->computePipeline);
   GPUBindComputeGroup(compute, 0u, state->computeGroup, 0u, NULL);
   GPUDispatch(compute, LINE_SIZE / LINE_WORKGROUP_SIZE, 1u, 1u);
@@ -372,10 +405,12 @@ render_frame(void *userData) {
   textureBarrier.dstAccess  = GPU_ACCESS_SHADER_READ;
   textureBarrier.mipCount   = 1u;
   textureBarrier.layerCount = 1u;
+
   barrier.pTextureBarriers    = &textureBarrier;
   barrier.srcStages           = GPU_STAGE_COMPUTE;
   barrier.dstStages           = GPU_STAGE_FRAGMENT;
   barrier.textureBarrierCount = 1u;
+
   GPUEncodeBarriers(cmdb, &barrier);
 
   color.view                  = GPUFrameGetTargetView(frame);
@@ -385,11 +420,12 @@ render_frame(void *userData) {
   color.clearColor.float32[1] = 0.025f;
   color.clearColor.float32[2] = 0.065f;
   color.clearColor.float32[3] = 1.0f;
+
   passInfo.label                = "texture-line-webgpu-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  render = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!render) {
+
+  if (!(render = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
@@ -399,12 +435,14 @@ render_frame(void *userData) {
   GPUBindRenderGroup(render, 1u, state->renderGroup, 0u, NULL);
   GPUDraw(render, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(render);
+
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     set_status("GPU: failed to finish the texture-line frame", 1);
     return;
   }
 
   state->frameCount++;
+
   if (state->frameCount > WARM_FRAME_COUNT) {
     GPUFrameStats stats;
 
@@ -412,8 +450,8 @@ render_frame(void *userData) {
       if (stats.drawCalls != 1u) {
         set_status("GPU: texture-line draw was not encoded", 1);
         emscripten_cancel_main_loop();
-      } else if (stats.hotPathAllocCount != 0u ||
-                 stats.hotPathFreeCount != 0u) {
+      } else if (stats.hotPathAllocCount != 0u
+                 || stats.hotPathFreeCount != 0u) {
         set_status("GPU: warm texture-line frame allocated wrapper memory", 1);
         emscripten_cancel_main_loop();
       }
@@ -422,14 +460,15 @@ render_frame(void *userData) {
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
-  WebGPUTextureLine *state;
   GPURuntimeConfig   runtime = {0};
+  WebGPUTextureLine *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status(!adapter ? "GPU: failed to request WebGPU adapter"
                         : "GPU: failed to request WebGPU device",
@@ -440,37 +479,39 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (!state->queue || GPUConfigureRuntime(device, &runtime) != GPU_OK) {
     set_status("GPU: failed to configure the WebGPU runtime", 1);
     return;
   }
+
   if (GPUSetDeviceErrorCallback(device, device_error, state) != GPU_OK) {
     set_status("GPU: failed to install the WebGPU error callback", 1);
     return;
   }
 
-  state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               state->adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
-  if (!state->surface || !resize_canvas(state)) {
+  if (!(state->surface = GPUCreateSurfaceFromNative(state->instance,
+                                                    state->adapter,
+                                                    (void *)"#canvas",
+                                                    GPU_SURFACE_WEB_CANVAS,
+                                                    1.0f))
+      || !resize_canvas(state)) {
     set_status("GPU: failed to create the WebGPU canvas surface", 1);
     return;
   }
 
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain ||
-      !create_shader(state) ||
-      !create_pipelines(state) ||
-      !create_resources(state)) {
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))
+      || !create_shader(state)
+      || !create_pipelines(state)
+      || !create_resources(state)) {
     return;
   }
 
@@ -488,7 +529,9 @@ main(void) {
   info.label            = "texture-line-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create the WebGPU instance", 1);
     return 1;
@@ -499,5 +542,6 @@ main(void) {
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   return result == GPU_OK ? 0 : 1;
 }

@@ -24,7 +24,7 @@ extern "C" {
 
 typedef struct GPURenderPipeline GPURenderPipeline;
 
-/* portable Metal, Vulkan, and Direct3D 12 vertex input formats. */
+/* portable metal, vulkan, and direct3d 12 vertex input formats. */
 typedef enum GPUVertexFormat {
   GPU_VERTEX_FORMAT_UNDEFINED = 0,
   GPU_VERTEX_FORMAT_UINT8,

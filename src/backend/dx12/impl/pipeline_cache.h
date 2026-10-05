@@ -32,23 +32,23 @@ dx12_keyWrite(DX12PipelineKey *key, const void *data, size_t size);
 GPU_HIDE
 GPUResult
 dx12_createGraphicsPSO(GPUPipelineCache                         *cache,
-                       GPUDeviceDX12                           *device,
+                       GPUDeviceDX12                            *device,
                        const D3D12_GRAPHICS_PIPELINE_STATE_DESC *desc,
-                       const GPURenderPipelineCreateInfo       *info,
-                       const DX12PipelineKey                   *rootKey,
-                       ID3D12PipelineState                    **outState);
+                       const GPURenderPipelineCreateInfo        *info,
+                       const DX12PipelineKey                    *rootKey,
+                       ID3D12PipelineState                     **outState);
 
 GPU_HIDE
 GPUResult
 dx12_createComputePSO(GPUPipelineCache                        *cache,
-                      GPUDeviceDX12                          *device,
+                      GPUDeviceDX12                           *device,
                       const D3D12_COMPUTE_PIPELINE_STATE_DESC *desc,
-                      const DX12PipelineKey                  *rootKey,
-                      ID3D12PipelineState                   **outState);
+                      const DX12PipelineKey                   *rootKey,
+                      ID3D12PipelineState                    **outState);
 
 GPU_HIDE
 GPUResult
-dx12_createMeshPSO(GPUPipelineCache                        *cache,
+dx12_createMeshPSO(GPUPipelineCache                       *cache,
                    GPUDeviceDX12                          *device,
                    const D3D12_PIPELINE_STATE_STREAM_DESC *desc,
                    D3D12_CACHED_PIPELINE_STATE            *cachedPSO,

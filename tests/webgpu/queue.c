@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
 #  define _POSIX_C_SOURCE 199309L
 #endif
@@ -24,15 +40,15 @@ enum {
 };
 
 typedef struct AdapterRequest {
-  GPUAdapter  *adapter;
-  GPUResult    result;
-  atomic_bool  done;
+  GPUAdapter *adapter;
+  GPUResult   result;
+  atomic_bool done;
 } AdapterRequest;
 
 typedef struct DeviceRequest {
-  GPUDevice   *device;
-  GPUResult    result;
-  atomic_bool  done;
+  GPUDevice  *device;
+  GPUResult   result;
+  atomic_bool done;
 } DeviceRequest;
 
 typedef struct CompletionProbe {
@@ -42,9 +58,13 @@ typedef struct CompletionProbe {
 static void
 sleep_millis(uint32_t milliseconds) {
 #if defined(_WIN32)
-  Sleep(milliseconds);
 #else
   struct timespec duration;
+#endif
+
+#if defined(_WIN32)
+  Sleep(milliseconds);
+#else
 
   duration.tv_sec  = (time_t)(milliseconds / 1000u);
   duration.tv_nsec = (long)(milliseconds % 1000u) * 1000000l;
@@ -54,23 +74,31 @@ sleep_millis(uint32_t milliseconds) {
 
 static bool
 wait_bool(atomic_bool *value) {
-  for (uint32_t i = 0u; i < WAIT_STEP_COUNT; i++) {
+  uint32_t i;
+
+  for (i = 0u; i < WAIT_STEP_COUNT; i++) {
     if (atomic_load_explicit(value, memory_order_acquire)) {
       return true;
     }
+
     sleep_millis(WAIT_STEP_MS);
   }
+
   return false;
 }
 
 static bool
 wait_count(atomic_uint *value, uint32_t expected) {
-  for (uint32_t i = 0u; i < WAIT_STEP_COUNT; i++) {
+  uint32_t i;
+
+  for (i = 0u; i < WAIT_STEP_COUNT; i++) {
     if (atomic_load_explicit(value, memory_order_acquire) >= expected) {
       return true;
     }
+
     sleep_millis(WAIT_STEP_MS);
   }
+
   return false;
 }
 
@@ -105,7 +133,9 @@ command_complete(void *sender, GPUCommandBuffer *cmdb) {
 
 static void
 discard_commands(GPUCommandBuffer **commands, uint32_t count) {
-  for (uint32_t i = 0u; i < count; i++) {
+  uint32_t i;
+
+  for (i = 0u; i < count; i++) {
     if (commands[i]) {
       (void)GPUDiscardCommandBuffer(commands[i]);
     }
@@ -114,17 +144,17 @@ discard_commands(GPUCommandBuffer **commands, uint32_t count) {
 
 int
 main(void) {
-  GPUInstanceCreateInfo     instanceInfo = {0};
-  GPUAdapterRequestOptions  adapterOptions = {0};
-  GPUQueueSubmitInfo        submitInfo = {0};
-  GPUCommandBuffer         *commands[COMMANDS_PER_BATCH] = {0};
-  AdapterRequest            adapterRequest = {0};
-  DeviceRequest             deviceRequest = {0};
-  CompletionProbe           completion = {0};
-  GPUInstance              *instance;
-  GPUQueue                 *queue;
-  GPUFeature                requiredFeature;
-  GPUResult                 result;
+  GPUInstanceCreateInfo    instanceInfo                 = {0};
+  GPUAdapterRequestOptions adapterOptions               = {0};
+  GPUQueueSubmitInfo       submitInfo                   = {0};
+  GPUCommandBuffer        *commands[COMMANDS_PER_BATCH] = {0};
+  AdapterRequest           adapterRequest               = {0};
+  DeviceRequest            deviceRequest                = {0};
+  CompletionProbe          completion                   = {0};
+  GPUInstance             *instance;
+  GPUQueue                *queue;
+  GPUFeature               requiredFeature;
+  GPUResult                result;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
@@ -133,24 +163,25 @@ main(void) {
   instanceInfo.enableValidation = true;
 
   instance = NULL;
-  result = GPUCreateInstance(&instanceInfo, &instance);
+  result   = GPUCreateInstance(&instanceInfo, &instance);
+
   if (result != GPU_OK || !instance) {
     fprintf(stderr, "failed to create WebGPU instance: %d\n", result);
     return 1;
   }
 
-  requiredFeature                       = GPU_FEATURE_COMPUTE;
-  adapterOptions.chain.sType            =
-    GPU_STRUCTURE_TYPE_ADAPTER_REQUEST_OPTIONS;
-  adapterOptions.chain.structSize       = sizeof(adapterOptions);
-  adapterOptions.pRequiredFeatures       = &requiredFeature;
-  adapterOptions.requiredFeatureCount    = 1u;
+  requiredFeature = GPU_FEATURE_COMPUTE;
+  adapterOptions.chain.sType          = GPU_STRUCTURE_TYPE_ADAPTER_REQUEST_OPTIONS;
+  adapterOptions.chain.structSize     = sizeof(adapterOptions);
+  adapterOptions.pRequiredFeatures    = &requiredFeature;
+  adapterOptions.requiredFeatureCount = 1u;
   result = GPURequestAdapter(instance,
                              &adapterOptions,
                              adapter_ready,
                              &adapterRequest);
-  if (result != GPU_OK || !wait_bool(&adapterRequest.done) ||
-      adapterRequest.result != GPU_OK || !adapterRequest.adapter) {
+
+  if (result != GPU_OK || !wait_bool(&adapterRequest.done)
+      || adapterRequest.result != GPU_OK || !adapterRequest.adapter) {
     fprintf(stderr, "failed to request WebGPU adapter: %d\n",
             adapterRequest.result);
     GPUDestroyInstance(instance);
@@ -161,8 +192,9 @@ main(void) {
                             NULL,
                             device_ready,
                             &deviceRequest);
-  if (result != GPU_OK || !wait_bool(&deviceRequest.done) ||
-      deviceRequest.result != GPU_OK || !deviceRequest.device) {
+
+  if (result != GPU_OK || !wait_bool(&deviceRequest.done)
+      || deviceRequest.result != GPU_OK || !deviceRequest.device) {
     fprintf(stderr, "failed to request WebGPU device: %d\n",
             deviceRequest.result);
     GPUDestroyInstance(instance);
@@ -170,6 +202,7 @@ main(void) {
   }
 
   queue = GPUGetQueue(deviceRequest.device, GPU_QUEUE_GRAPHICS, 0u);
+
   if (!queue) {
     fprintf(stderr, "failed to get WebGPU graphics queue\n");
     GPUDestroyDevice(deviceRequest.device);
@@ -186,11 +219,13 @@ main(void) {
     uint32_t acquired;
 
     acquired = 0u;
+
     for (; acquired < COMMANDS_PER_BATCH; acquired++) {
       commands[acquired] = NULL;
-      result = GPUAcquireCommandBuffer(queue,
-                                       "webgpu-native-queue-batch",
-                                       &commands[acquired]);
+      result             = GPUAcquireCommandBuffer(queue,
+                                                   "webgpu-native-queue-batch",
+                                                   &commands[acquired]);
+
       if (result != GPU_OK || !commands[acquired]) {
         fprintf(stderr,
                 "failed to acquire WebGPU command %u in batch %u: %d\n",
@@ -202,15 +237,17 @@ main(void) {
         GPUDestroyInstance(instance);
         return 1;
       }
+
       GPUSetCommandBufferCompletionHandler(commands[acquired],
                                            &completion,
                                            command_complete);
     }
 
     result = GPUQueueSubmit(queue, &submitInfo);
-    if (result != GPU_OK ||
-        !wait_count(&completion.count,
-                    (batch + 1u) * COMMANDS_PER_BATCH)) {
+
+    if (result != GPU_OK
+        || !wait_count(&completion.count,
+                       (batch + 1u) * COMMANDS_PER_BATCH)) {
       fprintf(stderr, "WebGPU batch %u did not complete: %d\n", batch, result);
       GPUDestroyDevice(deviceRequest.device);
       GPUDestroyInstance(instance);

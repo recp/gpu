@@ -29,23 +29,21 @@ typedef struct GPUApiVertex {
   GPUVertexDescriptor* (*newVertexDesc)(void);
 
   void (*destroyVertexDesc)(GPUVertexDescriptor *vert);
-  
+
   void
-  (*attrib)(GPUVertexDescriptor * __restrict vert,
-            uint32_t                         attribIndex,
-            GPUVertexFormat                  format,
-            uint32_t                         offset,
-            uint32_t                         bufferIndex);
-  
+  (*attrib)(GPUVertexDescriptor *__restrict vert,
+            uint32_t                        attribIndex,
+            GPUVertexFormat                 format,
+            uint32_t                        offset,
+            uint32_t                        bufferIndex);
+
   void
-  (*layout)(GPUVertexDescriptor * __restrict vert,
-            uint32_t                         layoutIndex,
-            uint32_t                         stride,
-            GPUVertexStepMode                stepMode);
-  
-  void
-  (*vertexDesc)(GPURenderPipeline   * __restrict pipeline,
-                GPUVertexDescriptor * __restrict vert);
+  (*layout)(GPUVertexDescriptor *__restrict vert,
+            uint32_t                        layoutIndex,
+            uint32_t                        stride,
+            GPUVertexStepMode               stepMode);
+
+  void (*vertexDesc)(GPURenderPipeline *__restrict pipeline, GPUVertexDescriptor *__restrict vert);
 } GPUApiVertex;
 
 #ifdef __cplusplus

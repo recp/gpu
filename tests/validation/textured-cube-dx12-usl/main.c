@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <gpu/gpu.h>
 
 #include "../../../samples/common/SampleStats.h"
@@ -62,40 +78,45 @@ textured_cube_loadArtifact(void **outData, uint64_t *outSize) {
   void    *data;
   long     size;
 
-  if (!outData || !outSize ||
-      GetModuleFileNameW(NULL, path, (DWORD)GPU_ARRAY_LEN(path)) == 0u) {
+  if (!outData || !outSize
+      || GetModuleFileNameW(NULL, path, (DWORD)GPU_ARRAY_LEN(path)) == 0u) {
     return false;
   }
 
   slash = wcsrchr(path, L'\\');
+
   if (!slash) {
     return false;
   }
+
   wcscpy_s(slash + 1u,
            GPU_ARRAY_LEN(path) - (size_t)(slash + 1u - path),
            L"textured_cube.us");
 
   file = NULL;
+
   if (_wfopen_s(&file, path, L"rb") != 0 || !file) {
     return false;
   }
-  if (fseek(file, 0, SEEK_END) != 0 ||
-      (size = ftell(file)) <= 0 ||
-      fseek(file, 0, SEEK_SET) != 0) {
+
+  if (fseek(file, 0, SEEK_END) != 0
+      || (size = ftell(file)) <= 0
+      || fseek(file, 0, SEEK_SET) != 0) {
     fclose(file);
     return false;
   }
 
-  data = malloc((size_t)size);
-  if (!data || fread(data, 1u, (size_t)size, file) != (size_t)size) {
+  if (!(data = malloc((size_t)size)) || fread(data, 1u, (size_t)size, file) != (size_t)size) {
     free(data);
     fclose(file);
     return false;
   }
 
   fclose(file);
+
   *outData = data;
   *outSize = (uint64_t)size;
+
   return true;
 }
 
@@ -108,8 +129,8 @@ textured_cube_createDepthTarget(TexturedCubeApp *app,
   GPUTexture              *texture;
   GPUTextureView          *view;
 
-  texture = NULL;
-  view    = NULL;
+  texture                      = NULL;
+  view                         = NULL;
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "textured-cube-depth";
@@ -121,6 +142,7 @@ textured_cube_createDepthTarget(TexturedCubeApp *app,
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL;
+
   if (GPUCreateTexture(app->device, &textureInfo, &texture) != GPU_OK) {
     return false;
   }
@@ -132,6 +154,7 @@ textured_cube_createDepthTarget(TexturedCubeApp *app,
   viewInfo.format           = GPU_FORMAT_DEPTH32_FLOAT;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK) {
     GPUDestroyTexture(texture);
     return false;
@@ -141,6 +164,7 @@ textured_cube_createDepthTarget(TexturedCubeApp *app,
   GPUDestroyTexture(app->depthTexture);
   app->depthTexture = texture;
   app->depthView    = view;
+
   return true;
 }
 
@@ -152,22 +176,22 @@ textured_cube_createPipeline(TexturedCubeApp *app) {
   GPUDepthStencilState        depth         = {0};
   GPURenderPipelineCreateInfo info          = {0};
 
-  attributes[0].format          = GPU_VERTEX_FORMAT_FLOAT32X3;
-  attributes[0].offset          = offsetof(CubeVertex, position);
+  attributes[0].format         = GPU_VERTEX_FORMAT_FLOAT32X3;
+  attributes[0].offset         = offsetof(CubeVertex, position);
   attributes[0].shaderLocation = 0u;
-  attributes[1].format          = GPU_VERTEX_FORMAT_FLOAT32X3;
-  attributes[1].offset          = offsetof(CubeVertex, normal);
+  attributes[1].format         = GPU_VERTEX_FORMAT_FLOAT32X3;
+  attributes[1].offset         = offsetof(CubeVertex, normal);
   attributes[1].shaderLocation = 1u;
-  attributes[2].format          = GPU_VERTEX_FORMAT_FLOAT32X2;
-  attributes[2].offset          = offsetof(CubeVertex, uv);
+  attributes[2].format         = GPU_VERTEX_FORMAT_FLOAT32X2;
+  attributes[2].offset         = offsetof(CubeVertex, uv);
   attributes[2].shaderLocation = 2u;
-  vertexLayout.pAttributes      = attributes;
-  vertexLayout.strideBytes      = sizeof(CubeVertex);
-  vertexLayout.attributeCount   = 3u;
-  vertexLayout.stepMode         = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.pAttributes     = attributes;
+  vertexLayout.strideBytes     = sizeof(CubeVertex);
+  vertexLayout.attributeCount  = 3u;
+  vertexLayout.stepMode        = GPU_VERTEX_STEP_MODE_VERTEX;
 
-  color.format          = GPUGetSwapchainFormat(app->swapchain);
-  color.blend.writeMask = GPU_COLOR_WRITE_ALL;
+  color.format           = GPUGetSwapchainFormat(app->swapchain);
+  color.blend.writeMask  = GPU_COLOR_WRITE_ALL;
   depth.depthCompare     = GPU_COMPARE_LESS;
   depth.depthTestEnable  = true;
   depth.depthWriteEnable = true;
@@ -190,6 +214,7 @@ textured_cube_createPipeline(TexturedCubeApp *app) {
   info.frontFace                = GPU_FRONT_FACE_CCW;
   info.multisample.sampleCount  = 1u;
   info.multisample.sampleMask   = UINT32_MAX;
+
   return GPUCreateRenderPipeline(app->device,
                                  &info,
                                  &app->pipeline) == GPU_OK;
@@ -207,52 +232,56 @@ textured_cube_createGeometry(TexturedCubeApp *app) {
   info.label            = "textured-cube-vertices";
   info.sizeBytes        = sizeof(kCubeVertices);
   info.usage            = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(app->device, &info, &app->vertexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(app->queue,
-                          app->vertexBuffer,
-                          0u,
-                          kCubeVertices,
-                          sizeof(kCubeVertices)) != GPU_OK) {
+
+  if (GPUCreateBuffer(app->device, &info, &app->vertexBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(app->queue,
+                             app->vertexBuffer,
+                             0u,
+                             kCubeVertices,
+                             sizeof(kCubeVertices)) != GPU_OK) {
     return false;
   }
 
   info.label     = "textured-cube-indices";
   info.sizeBytes = sizeof(kCubeIndices);
   info.usage     = GPU_BUFFER_USAGE_INDEX | GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(app->device, &info, &app->indexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(app->queue,
-                          app->indexBuffer,
-                          0u,
-                          kCubeIndices,
-                          sizeof(kCubeIndices)) != GPU_OK) {
+
+  if (GPUCreateBuffer(app->device, &info, &app->indexBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(app->queue,
+                             app->indexBuffer,
+                             0u,
+                             kCubeIndices,
+                             sizeof(kCubeIndices)) != GPU_OK) {
     return false;
   }
 
   info.label     = "textured-cube-uniforms";
   info.sizeBytes = sizeof(uniforms);
   info.usage     = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(app->device, &info, &app->uniformBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(app->queue,
-                          app->uniformBuffer,
-                          0u,
-                          &uniforms,
-                          sizeof(uniforms)) != GPU_OK) {
+
+  if (GPUCreateBuffer(app->device, &info, &app->uniformBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(app->queue,
+                             app->uniformBuffer,
+                             0u,
+                             &uniforms,
+                             sizeof(uniforms)) != GPU_OK) {
     return false;
   }
+
   return true;
 }
 
 static bool
 textured_cube_createMaterial(TexturedCubeApp *app) {
   uint8_t                  pixels[CUBE_CHECKER_SIZE * CUBE_CHECKER_SIZE * 4u];
-  GPUTextureCreateInfo     textureInfo      = {0};
-  GPUTextureWriteRegion    writeRegion      = {0};
-  GPUTextureViewCreateInfo viewInfo         = {0};
-  GPUSamplerCreateInfo     samplerInfo      = {0};
+  GPUTextureCreateInfo     textureInfo        = {0};
+  GPUTextureWriteRegion    writeRegion        = {0};
+  GPUTextureViewCreateInfo viewInfo           = {0};
+  GPUSamplerCreateInfo     samplerInfo        = {0};
   GPUBindGroupEntry        materialEntries[2] = {0};
-  GPUBindGroupEntry        samplerEntry     = {0};
-  GPUBindGroupCreateInfo   materialInfo     = {0};
-  GPUBindGroupCreateInfo   samplerGroupInfo = {0};
+  GPUBindGroupEntry        samplerEntry       = {0};
+  GPUBindGroupCreateInfo   materialInfo       = {0};
+  GPUBindGroupCreateInfo   samplerGroupInfo   = {0};
 
   CubeFillChecker(pixels);
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
@@ -267,6 +296,7 @@ textured_cube_createMaterial(TexturedCubeApp *app) {
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_DST;
+
   if (GPUCreateTexture(app->device, &textureInfo, &app->texture) != GPU_OK) {
     return false;
   }
@@ -278,6 +308,7 @@ textured_cube_createMaterial(TexturedCubeApp *app) {
   writeRegion.layerCount   = 1u;
   writeRegion.bytesPerRow  = CUBE_CHECKER_SIZE * 4u;
   writeRegion.rowsPerImage = CUBE_CHECKER_SIZE;
+
   if (GPUQueueWriteTexture(app->queue,
                            app->texture,
                            &writeRegion,
@@ -293,6 +324,7 @@ textured_cube_createMaterial(TexturedCubeApp *app) {
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(app->texture,
                            &viewInfo,
                            &app->textureView) != GPU_OK) {
@@ -308,6 +340,7 @@ textured_cube_createMaterial(TexturedCubeApp *app) {
   samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_REPEAT;
   samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_REPEAT;
   samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_REPEAT;
+
   if (GPUCreateSampler(app->device,
                        &samplerInfo,
                        false,
@@ -328,6 +361,7 @@ textured_cube_createMaterial(TexturedCubeApp *app) {
   materialInfo.layout              = app->shaderLayout->bindGroupLayouts[0];
   materialInfo.pEntries            = materialEntries;
   materialInfo.entryCount          = 2u;
+
   if (GPUCreateBindGroup(app->device,
                          &materialInfo,
                          &app->materialGroup) != GPU_OK) {
@@ -352,37 +386,42 @@ static bool
 textured_cube_createGPU(TexturedCubeApp *app) {
   GPUInstanceCreateInfo instanceInfo = {0};
   GPURuntimeConfig      runtime      = {0};
-  GPUResult             result;
   void                 *artifact;
   uint64_t              artifactSize;
+  GPUResult             result;
   uint32_t              adapterCount;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_DX12;
   instanceInfo.enableValidation = true;
-  if (GPUCreateInstance(&instanceInfo, &app->instance) != GPU_OK ||
-      !app->instance) {
+
+  if (GPUCreateInstance(&instanceInfo, &app->instance) != GPU_OK
+      || !app->instance) {
     textured_cube_log("instance creation failed");
     return false;
   }
 
   adapterCount = 1u;
-  result = GPUEnumerateAdapters(app->instance,
-                                &adapterCount,
-                                &app->adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !app->adapter) {
+  result       = GPUEnumerateAdapters(app->instance,
+                                      &adapterCount,
+                                      &app->adapter);
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !app->adapter) {
     textured_cube_log("adapter enumeration failed");
     return false;
   }
 
   app->device = GPUCreateDeviceWithDefaultQueues(app->adapter);
+
   if (!app->device) {
     textured_cube_log("device creation failed");
     return false;
   }
+
   app->queue = GPUGetQueue(app->device, GPU_QUEUE_GRAPHICS, 0u);
+
   if (!app->queue) {
     textured_cube_log("graphics queue creation failed");
     return false;
@@ -392,24 +431,28 @@ textured_cube_createGPU(TexturedCubeApp *app) {
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (GPUConfigureRuntime(app->device, &runtime) != GPU_OK) {
     textured_cube_log("runtime stats configuration failed");
     return false;
   }
 
   app->surface = GPUCreateSurfaceFromNative(app->instance,
-                                             app->adapter,
-                                             app->window,
-                                             GPU_SURFACE_WINDOWS_HWND,
-                                             1.0f);
+                                            app->adapter,
+                                            app->window,
+                                            GPU_SURFACE_WINDOWS_HWND,
+                                            1.0f);
+
   if (!app->surface) {
     textured_cube_log("surface creation failed");
     return false;
   }
+
   app->swapchain = GPUCreateSwapchainDefault(app->device,
-                                              app->surface,
-                                              app->width,
-                                              app->height);
+                                             app->surface,
+                                             app->width,
+                                             app->height);
+
   if (!app->swapchain) {
     textured_cube_log("swapchain creation failed");
     return false;
@@ -417,56 +460,61 @@ textured_cube_createGPU(TexturedCubeApp *app) {
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!textured_cube_loadArtifact(&artifact, &artifactSize)) {
     textured_cube_log("textured_cube.us was not found beside the executable");
     return false;
   }
+
   result = GPUCreateShaderLibraryFromUSL(app->device,
                                          artifact,
                                          artifactSize,
                                          &app->library);
   free(artifact);
+
   if (result != GPU_OK || !app->library) {
     textured_cube_log("USL shader library creation failed");
     return false;
   }
+
   if (GPUCreateShaderLayout(app->device,
                             app->library,
-                            &app->shaderLayout) != GPU_OK ||
-      !app->shaderLayout ||
-      app->shaderLayout->bindGroupLayoutCount != 2u ||
-      !app->shaderLayout->bindGroupLayouts ||
-      !app->shaderLayout->bindGroupLayouts[0] ||
-      !app->shaderLayout->bindGroupLayouts[1] ||
-      !app->shaderLayout->pipelineLayout) {
+                            &app->shaderLayout) != GPU_OK
+      || !app->shaderLayout
+      || app->shaderLayout->bindGroupLayoutCount != 2u
+      || !app->shaderLayout->bindGroupLayouts
+      || !app->shaderLayout->bindGroupLayouts[0]
+      || !app->shaderLayout->bindGroupLayouts[1]
+      || !app->shaderLayout->pipelineLayout) {
     textured_cube_log("shader layout creation failed");
     return false;
   }
 
-  CubeBuildViewProjection(app->height > 0u
-                            ? (float)app->width / (float)app->height
-                            : 1.0f,
+  CubeBuildViewProjection(app->height > 0u ? (float)app->width / (float)app->height : 1.0f,
                           app->viewProjection);
-  if (!textured_cube_createDepthTarget(app, app->width, app->height) ||
-      !textured_cube_createPipeline(app) ||
-      !textured_cube_createGeometry(app) ||
-      !textured_cube_createMaterial(app)) {
+
+  if (!textured_cube_createDepthTarget(app, app->width, app->height)
+      || !textured_cube_createPipeline(app)
+      || !textured_cube_createGeometry(app)
+      || !textured_cube_createMaterial(app)) {
     textured_cube_log("resource creation failed");
     return false;
   }
+
   return true;
 }
 
 static bool
 textured_cube_updateUniforms(TexturedCubeApp *app) {
-  CubeUniforms uniforms;
+  CubeUniforms  uniforms;
   LARGE_INTEGER now;
-  float seconds;
+  float         seconds;
 
   QueryPerformanceCounter(&now);
   seconds = (float)((double)(now.QuadPart - app->animationStart.QuadPart) *
                     app->secondsPerTick);
   CubeBuildUniforms(seconds, 0.0f, 1.0f, app->viewProjection, &uniforms);
+
   return GPUQueueWriteBuffer(app->queue,
                              app->uniformBuffer,
                              0u,
@@ -476,25 +524,27 @@ textured_cube_updateUniforms(TexturedCubeApp *app) {
 
 static bool
 textured_cube_render(TexturedCubeApp *app) {
-  GPUFrame                           *frame;
-  GPUCommandBuffer                   *cmdb;
-  GPURenderPassEncoder               *pass;
   GPUBufferBinding                    vertexBuffer = {0};
   GPURenderPassColorAttachment        color        = {0};
   GPURenderPassDepthStencilAttachment depth        = {0};
   GPURenderPassCreateInfo             passInfo     = {0};
+  GPUFrame                           *frame;
+  GPUCommandBuffer                   *cmdb;
+  GPURenderPassEncoder               *pass;
 
   if (!textured_cube_updateUniforms(app)) {
     return false;
   }
 
   frame = GPUBeginFrame(app->swapchain);
+
   if (!frame) {
     return false;
   }
 
   cmdb = NULL;
   pass = NULL;
+
   if (GPUAcquireCommandBuffer(app->queue,
                               "textured-cube-frame",
                               &cmdb) != GPU_OK || !cmdb) {
@@ -509,12 +559,12 @@ textured_cube_render(TexturedCubeApp *app) {
   color.clearColor.float32[1] = 0.018f;
   color.clearColor.float32[2] = 0.048f;
   color.clearColor.float32[3] = 1.0f;
-  depth.view                  = app->depthView;
-  depth.depthLoadOp           = GPU_LOAD_OP_CLEAR;
-  depth.depthStoreOp          = GPU_STORE_OP_DONT_CARE;
-  depth.stencilLoadOp         = GPU_LOAD_OP_DONT_CARE;
-  depth.stencilStoreOp        = GPU_STORE_OP_DONT_CARE;
-  depth.clearDepth            = 1.0f;
+  depth.view           = app->depthView;
+  depth.depthLoadOp    = GPU_LOAD_OP_CLEAR;
+  depth.depthStoreOp   = GPU_STORE_OP_DONT_CARE;
+  depth.stencilLoadOp  = GPU_LOAD_OP_DONT_CARE;
+  depth.stencilStoreOp = GPU_STORE_OP_DONT_CARE;
+  depth.clearDepth     = 1.0f;
   passInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize        = sizeof(passInfo);
   passInfo.label                   = "textured-cube-pass";
@@ -522,6 +572,7 @@ textured_cube_render(TexturedCubeApp *app) {
   passInfo.pDepthStencilAttachment = &depth;
   passInfo.colorAttachmentCount    = 1u;
   pass = GPUBeginRenderPass(cmdb, &passInfo);
+
   if (!pass) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
@@ -536,44 +587,50 @@ textured_cube_render(TexturedCubeApp *app) {
   GPUBindIndexBuffer(pass, app->indexBuffer, 0u, GPU_INDEX_TYPE_UINT16);
   GPUDrawIndexed(pass, CUBE_INDEX_COUNT, 1u, 0u, 0, 0u);
   GPUEndRenderPass(pass);
+
   if (GPUFinishFrame(app->queue, cmdb, frame) != GPU_OK) {
     return false;
   }
 
   app->frameCount++;
+
   if (!GPUSampleCheckZeroAlloc(app->device,
                                app->frameCount,
                                app->assertZeroAlloc,
                                "GPU DX12 textured cube")) {
     return false;
   }
-  if (app->exitAfterFrames > 0u &&
-      app->frameCount >= app->exitAfterFrames) {
+
+  if (app->exitAfterFrames > 0u
+      && app->frameCount >= app->exitAfterFrames) {
     app->running = false;
   }
+
   return true;
 }
 
 static bool
 textured_cube_waitForGPU(TexturedCubeApp *app) {
-  GPUCommandBuffer   *buffers[1];
-  GPUCommandBuffer   *cmdb;
-  GPUFence           *fence;
-  GPUFenceCreateInfo  fenceInfo  = {0};
-  GPUQueueSubmitInfo  submitInfo = {0};
-  GPUResult           result;
+  GPUCommandBuffer  *buffers[1];
+  GPUFenceCreateInfo fenceInfo  = {0};
+  GPUQueueSubmitInfo submitInfo = {0};
+  GPUCommandBuffer  *cmdb;
+  GPUFence          *fence;
+  GPUResult          result;
 
   fenceInfo.chain.sType      = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fenceInfo.chain.structSize = sizeof(fenceInfo);
   fenceInfo.label            = "textured-cube-shutdown";
+
   if (GPUCreateFence(app->device, &fenceInfo, &fence) != GPU_OK) {
     return false;
   }
 
-  cmdb = NULL;
+  cmdb   = NULL;
   result = GPUAcquireCommandBuffer(app->queue,
                                    "textured-cube-drain",
                                    &cmdb);
+
   if (result != GPU_OK || !cmdb) {
     GPUDestroyFence(fence);
     return false;
@@ -585,12 +642,14 @@ textured_cube_waitForGPU(TexturedCubeApp *app) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = buffers;
   submitInfo.fence              = fence;
-  result = GPUQueueSubmit(app->queue, &submitInfo);
+  result                        = GPUQueueSubmit(app->queue, &submitInfo);
+
   if (result == GPU_OK) {
     result = GPUWaitFence(fence, UINT64_MAX);
   }
 
   GPUDestroyFence(fence);
+
   return result == GPU_OK;
 }
 
@@ -619,31 +678,34 @@ static bool
 textured_cube_resize(TexturedCubeApp *app,
                      uint32_t         width,
                      uint32_t         height) {
-  if (width == 0u || height == 0u ||
-      GPUResizeSwapchain(app->swapchain, width, height) != GPU_OK ||
-      !textured_cube_createDepthTarget(app, width, height)) {
+  if (width == 0u || height == 0u
+      || GPUResizeSwapchain(app->swapchain, width, height) != GPU_OK
+      || !textured_cube_createDepthTarget(app, width, height)) {
     return false;
   }
 
   app->width  = width;
   app->height = height;
-  CubeBuildViewProjection(height > 0u
-                            ? (float)width / (float)height
-                            : 1.0f,
+  CubeBuildViewProjection(height > 0u ? (float)width / (float)height : 1.0f,
                           app->viewProjection);
+
   return true;
 }
 
 static LRESULT CALLBACK
-textured_cube_windowProc(HWND window,
-                         UINT message,
+textured_cube_windowProc(HWND   window,
+                         UINT   message,
                          WPARAM wparam,
                          LPARAM lparam) {
+  uint32_t width;
+  uint32_t height;
+
   switch (message) {
     case WM_CLOSE:
       if (textured_cube_app) {
         textured_cube_app->running = false;
       }
+
       DestroyWindow(window);
       return 0;
     case WM_DESTROY:
@@ -652,18 +714,17 @@ textured_cube_windowProc(HWND window,
     case WM_ERASEBKGND:
       return 1;
     case WM_SIZE:
-      if (textured_cube_app && textured_cube_app->ready &&
-          wparam != SIZE_MINIMIZED) {
-        uint32_t width;
-        uint32_t height;
-
+      if (textured_cube_app && textured_cube_app->ready
+          && wparam != SIZE_MINIMIZED) {
         width  = LOWORD(lparam);
         height = HIWORD(lparam);
+
         if (!textured_cube_resize(textured_cube_app, width, height)) {
           textured_cube_log("resize failed");
           textured_cube_app->running = false;
         }
       }
+
       return 0;
     default:
       return DefWindowProcW(window, message, wparam, lparam);
@@ -679,8 +740,9 @@ textured_cube_createWindow(TexturedCubeApp *app, HINSTANCE instance) {
   windowClass.hInstance     = instance;
   windowClass.hCursor       = LoadCursorW(NULL, MAKEINTRESOURCEW(32512));
   windowClass.lpszClassName = L"GPUUSLDX12TexturedCube";
-  if (!RegisterClassW(&windowClass) &&
-      GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+
+  if (!RegisterClassW(&windowClass)
+      && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
     return false;
   }
 
@@ -701,6 +763,7 @@ textured_cube_createWindow(TexturedCubeApp *app, HINSTANCE instance) {
                                 NULL,
                                 instance,
                                 NULL);
+
   if (!app->window) {
     return false;
   }
@@ -709,6 +772,7 @@ textured_cube_createWindow(TexturedCubeApp *app, HINSTANCE instance) {
   app->height = 640u;
   ShowWindow(app->window, SW_SHOWDEFAULT);
   UpdateWindow(app->window);
+
   return true;
 }
 
@@ -716,14 +780,15 @@ int
 main(void) {
   TexturedCubeApp app = {0};
   LARGE_INTEGER   frequency;
-  HINSTANCE       instance;
   MSG             message;
+  HINSTANCE       instance;
   const char     *exitFrames;
   int             result;
 
   if (GPUSampleShouldSkipNonInteractive()) {
     return GPU_SAMPLE_SKIP_RETURN_CODE;
   }
+
   if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart <= 0) {
     textured_cube_log("performance timer unavailable");
     return 1;
@@ -732,11 +797,13 @@ main(void) {
   app.secondsPerTick = 1.0 / (double)frequency.QuadPart;
   instance           = GetModuleHandleW(NULL);
   textured_cube_app  = &app;
+
   if (!textured_cube_createWindow(&app, instance)) {
     textured_cube_log("window creation failed");
     textured_cube_app = NULL;
     return 1;
   }
+
   if (!textured_cube_createGPU(&app)) {
     textured_cube_destroyGPU(&app);
     DestroyWindow(app.window);
@@ -745,24 +812,29 @@ main(void) {
   }
 
   exitFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+
   if (exitFrames) {
     app.exitAfterFrames = (uint32_t)strtoul(exitFrames, NULL, 10);
   }
+
   app.assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
   app.ready           = true;
   app.running         = true;
   QueryPerformanceCounter(&app.animationStart);
 
   result = 0;
+
   while (app.running) {
     while (PeekMessageW(&message, NULL, 0u, 0u, PM_REMOVE)) {
       if (message.message == WM_QUIT) {
         app.running = false;
         break;
       }
+
       TranslateMessage(&message);
       DispatchMessageW(&message);
     }
+
     if (app.running && !textured_cube_render(&app)) {
       textured_cube_log("frame rendering failed");
       result      = 1;
@@ -774,11 +846,14 @@ main(void) {
     textured_cube_log("queue drain failed");
     result = 1;
   }
+
   app.ready = false;
   textured_cube_destroyGPU(&app);
+
   if (IsWindow(app.window)) {
     DestroyWindow(app.window);
   }
+
   textured_cube_app = NULL;
   return result;
 }

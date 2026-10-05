@@ -3,21 +3,28 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "../common.h"
 #include "../impl.h"
 
+static const WGPUQueryType webgpu_queryTypes[] = {
+  [GPU_QUERY_TIMESTAMP] = WGPUQueryType_Timestamp,
+  [GPU_QUERY_OCCLUSION] = WGPUQueryType_Occlusion
+};
+
 static WGPUQueryType
 webgpu_queryType(GPUQueryType type) {
-  static const WGPUQueryType types[] = {
-    [GPU_QUERY_TIMESTAMP] = WGPUQueryType_Timestamp,
-    [GPU_QUERY_OCCLUSION] = WGPUQueryType_Occlusion
-  };
-
-  return (uint32_t)type < GPU_ARRAY_LEN(types)
-           ? types[type]
-           : WGPUQueryType_Force32;
+  return (uint32_t)type < GPU_ARRAY_LEN(webgpu_queryTypes) ? webgpu_queryTypes[type] : WGPUQueryType_Force32;
 }
 
 static GPUResult
@@ -28,18 +35,22 @@ webgpu_createQuerySet(GPUDevice                   *device,
   GPUDeviceWebGPU       *native;
 
   native = gpu_webgpuDevice(device);
+
   if (!native || !native->device || !info || !set) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   descriptor.type = webgpu_queryType(info->type);
-  if (descriptor.type == WGPUQueryType_Force32 ||
-      info->count > GPU_WEBGPU_MAX_QUERY_COUNT) {
+
+  if (descriptor.type == WGPUQueryType_Force32
+      || info->count > GPU_WEBGPU_MAX_QUERY_COUNT) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
   descriptor.label = gpu_webgpuString(info->label);
   descriptor.count = info->count;
-  set->_priv = wgpuDeviceCreateQuerySet(native->device, &descriptor);
+  set->_priv       = wgpuDeviceCreateQuerySet(native->device, &descriptor);
+
   return set->_priv ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 }
 
@@ -48,6 +59,7 @@ webgpu_destroyQuerySet(GPUQuerySet *set) {
   WGPUQuerySet native;
 
   native = set ? set->_priv : NULL;
+
   if (native) {
     wgpuQuerySetRelease(native);
     set->_priv = NULL;
@@ -61,9 +73,10 @@ webgpu_beginOcclusionQuery(GPURenderPassEncoder *pass,
   GPUCommandWebGPU *command;
 
   command = pass ? pass->_priv : NULL;
+
   if (command && command->renderEncoder && set && set->_priv) {
     wgpuRenderPassEncoderBeginOcclusionQuery(command->renderEncoder,
-                                              queryIndex);
+                                             queryIndex);
   }
 }
 
@@ -76,6 +89,7 @@ webgpu_endOcclusionQuery(GPURenderPassEncoder *pass,
   GPU__UNUSED(set);
   GPU__UNUSED(queryIndex);
   command = pass ? pass->_priv : NULL;
+
   if (command && command->renderEncoder) {
     wgpuRenderPassEncoderEndOcclusionQuery(command->renderEncoder);
   }
@@ -89,19 +103,23 @@ webgpu_queryScratch(GPUCommandWebGPU *command, uint64_t sizeBytes) {
   if (sizeBytes > GPU_WEBGPU_QUERY_RESOLVE_CAPACITY) {
     return NULL;
   }
+
   if (command->queryResolveScratch) {
     return command->queryResolveScratch;
   }
 
   device = gpu_webgpuDevice(gpuCommandBufferDevice(&command->command));
+
   if (!device || !device->device) {
     return NULL;
   }
-  descriptor.label = gpu_webgpuString("gpu-webgpu-query-resolve");
-  descriptor.usage = WGPUBufferUsage_QueryResolve | WGPUBufferUsage_CopySrc;
-  descriptor.size  = GPU_WEBGPU_QUERY_RESOLVE_CAPACITY;
+
+  descriptor.label             = gpu_webgpuString("gpu-webgpu-query-resolve");
+  descriptor.usage             = WGPUBufferUsage_QueryResolve | WGPUBufferUsage_CopySrc;
+  descriptor.size              = GPU_WEBGPU_QUERY_RESOLVE_CAPACITY;
   command->queryResolveScratch = wgpuDeviceCreateBuffer(device->device,
-                                                         &descriptor);
+                                                        &descriptor);
+
   return command->queryResolveScratch;
 }
 
@@ -117,16 +135,17 @@ webgpu_resolveQuerySet(GPUCommandBuffer *cmdb,
   uint64_t          resultBytes;
 
   command = gpu_webgpuCommand(cmdb);
-  if (!command || !command->encoder || !set || !set->_priv ||
-      !dstBuffer || !dstBuffer->_priv) {
+
+  if (!command || !command->encoder || !set || !set->_priv
+      || !dstBuffer || !dstBuffer->_priv) {
     return;
   }
 
   resultBytes = (uint64_t)queryCount * sizeof(uint64_t);
   destination = dstBuffer->_priv;
+
   if ((dstOffset & 255u) != 0u) {
-    destination = webgpu_queryScratch(command, resultBytes);
-    if (!destination) {
+    if (!(destination = webgpu_queryScratch(command, resultBytes))) {
       return;
     }
   }
@@ -136,9 +155,8 @@ webgpu_resolveQuerySet(GPUCommandBuffer *cmdb,
                                     firstQuery,
                                     queryCount,
                                     destination,
-                                    destination == dstBuffer->_priv
-                                      ? dstOffset
-                                      : 0u);
+                                    destination == dstBuffer->_priv ? dstOffset : 0u);
+
   if (destination != dstBuffer->_priv) {
     wgpuCommandEncoderCopyBufferToBuffer(command->encoder,
                                          destination,

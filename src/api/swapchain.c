@@ -21,19 +21,22 @@
 
 static bool
 gpuIsPresentModeValid(GPUPresentMode mode) {
-  return mode == GPU_PRESENT_MODE_FIFO ||
-         mode == GPU_PRESENT_MODE_MAILBOX ||
-         mode == GPU_PRESENT_MODE_IMMEDIATE;
+  return mode == GPU_PRESENT_MODE_FIFO
+         || mode == GPU_PRESENT_MODE_MAILBOX
+         || mode == GPU_PRESENT_MODE_IMMEDIATE;
 }
 
 static bool
 gpuSurfaceSupportsFormat(const GPUSurfaceCapabilities *caps,
                          GPUFormat                     format) {
-  for (uint32_t i = 0u; i < caps->formatCount; i++) {
+  uint32_t i;
+
+  for (i = 0u; i < caps->formatCount; i++) {
     if (caps->pFormats[i] == (uint32_t)format) {
       return true;
     }
   }
+
   return false;
 }
 
@@ -51,26 +54,27 @@ gpuDefaultSwapchainFormat(const GPUSurfaceCapabilities *caps) {
       return preferred[i];
     }
   }
+
   return (GPUFormat)caps->pFormats[0];
 }
 
 static GPUSwapchain*
-gpuCreateSwapchainInternal(GPUDevice              * __restrict device,
-                           struct GPUQueue * __restrict cmdQue,
-                           const GPUSwapchainCreateInfo * __restrict info) {
+gpuCreateSwapchainInternal(GPUDevice                    *__restrict device,
+                           struct GPUQueue              *__restrict cmdQue,
+                           const GPUSwapchainCreateInfo *__restrict info) {
   GPUApi       *api;
   GPUSwapchain *swapchain;
 
   if (!(api = gpuDeviceApi(device)))
     return NULL;
+
   if (!api->swapchain.createSwapchain)
     return NULL;
 
-  swapchain = api->swapchain.createSwapchain(api,
-                                             device,
-                                             cmdQue,
-                                             info);
-  if (swapchain) {
+  if ((swapchain = api->swapchain.createSwapchain(api,
+                                                  device,
+                                                  cmdQue,
+                                                  info))) {
     swapchain->device = device;
     swapchain->width  = info->width;
     swapchain->height = info->height;
@@ -83,15 +87,16 @@ gpuCreateSwapchainInternal(GPUDevice              * __restrict device,
 
 GPU_EXPORT
 GPUResult
-GPUCreateSwapchain(GPUDevice                    * __restrict device,
-                   const GPUSwapchainCreateInfo * __restrict info,
-                   GPUSwapchain                ** __restrict outSwapchain) {
-  GPUFormatCapabilities formatCaps;
+GPUCreateSwapchain(GPUDevice                    *__restrict device,
+                   const GPUSwapchainCreateInfo *__restrict info,
+                   GPUSwapchain                **__restrict outSwapchain) {
   GPUSurfaceCapabilities surfaceCaps;
-  GPUQueue             *queue;
-  GPUResult             result;
-  bool                  formatSupported;
-  bool                  presentModeSupported;
+  GPUFormatCapabilities  formatCaps;
+  GPUQueue              *queue;
+  GPUResult              result;
+  uint32_t               i;
+  bool                   formatSupported;
+  bool                   presentModeSupported;
 
   if (!outSwapchain)
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -100,25 +105,30 @@ GPUCreateSwapchain(GPUDevice                    * __restrict device,
 
   if (!device || !info || !info->surface || info->width == 0 || info->height == 0)
     return GPU_ERROR_INVALID_ARGUMENT;
-  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
-      info->chain.sType != GPU_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO)
+
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE
+      && info->chain.sType != GPU_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO)
     return GPU_ERROR_INVALID_ARGUMENT;
+
   if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info))
     return GPU_ERROR_INVALID_ARGUMENT;
-  if (!device->adapter || !device->inst ||
-      info->surface->inst != device->inst ||
-      info->format <= GPU_FORMAT_UNDEFINED ||
-      info->format >= GPU_FORMAT_COUNT ||
-      !gpuIsPresentModeValid(info->presentMode)) {
+
+  if (!device->adapter || !device->inst
+      || info->surface->inst != device->inst
+      || info->format <= GPU_FORMAT_UNDEFINED
+      || info->format >= GPU_FORMAT_COUNT
+      || !gpuIsPresentModeValid(info->presentMode)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   result = GPUGetFormatCapabilities(device->adapter,
                                     info->format,
                                     &formatCaps);
+
   if (result != GPU_OK) {
     return result;
   }
+
   if (!formatCaps.colorAttachment) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -126,38 +136,42 @@ GPUCreateSwapchain(GPUDevice                    * __restrict device,
   result = GPUGetSurfaceCapabilities(device->adapter,
                                      info->surface,
                                      &surfaceCaps);
+
   if (result != GPU_OK) {
     return result;
   }
+
   formatSupported = gpuSurfaceSupportsFormat(&surfaceCaps, info->format);
+
   if (!formatSupported) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  if (info->imageCount != 0u &&
-      (info->imageCount < surfaceCaps.minImageCount ||
-       info->imageCount > surfaceCaps.maxImageCount)) {
+
+  if (info->imageCount != 0u
+      && (info->imageCount < surfaceCaps.minImageCount
+          || info->imageCount > surfaceCaps.maxImageCount)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   presentModeSupported = false;
-  for (uint32_t i = 0u; i < surfaceCaps.presentModeCount; i++) {
+
+  for (i = 0u; i < surfaceCaps.presentModeCount; i++) {
     if (surfaceCaps.pPresentModes[i] == (uint32_t)info->presentMode) {
       presentModeSupported = true;
       break;
     }
   }
+
   if (!presentModeSupported) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0);
-  if (!queue)
+  if (!(queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0)))
     return GPU_ERROR_BACKEND_FAILURE;
 
-  *outSwapchain = gpuCreateSwapchainInternal(device,
-                                             queue,
-                                             info);
-  if (!*outSwapchain)
+  if (!(*outSwapchain = gpuCreateSwapchainInternal(device,
+                                                   queue,
+                                                   info)))
     return GPU_ERROR_BACKEND_FAILURE;
 
   return GPU_OK;
@@ -165,17 +179,16 @@ GPUCreateSwapchain(GPUDevice                    * __restrict device,
 
 GPU_EXPORT
 GPUSwapchain*
-GPUCreateSwapchainDefault(GPUDevice         * __restrict device,
-                          struct GPUSurface * __restrict surface,
-                          uint32_t                       width,
-                          uint32_t                       height) {
+GPUCreateSwapchainDefault(GPUDevice         *__restrict device,
+                          struct GPUSurface *__restrict surface,
+                          uint32_t                      width,
+                          uint32_t                      height) {
   GPUSwapchainCreateInfo info = {0};
   GPUSurfaceCapabilities surfaceCaps;
   GPUSwapchain          *swapchain;
 
-  if (!device || !device->adapter || !surface || width == 0u || height == 0u ||
-      GPUGetSurfaceCapabilities(device->adapter, surface, &surfaceCaps) !=
-        GPU_OK) {
+  if (!device || !device->adapter || !surface || width == 0u || height == 0u
+      || GPUGetSurfaceCapabilities(device->adapter, surface, &surfaceCaps) != GPU_OK) {
     return NULL;
   }
 
@@ -196,19 +209,19 @@ GPUCreateSwapchainDefault(GPUDevice         * __restrict device,
 
 GPU_EXPORT
 GPUFormat
-GPUGetSwapchainFormat(GPUSwapchain * __restrict swapchain) {
+GPUGetSwapchainFormat(GPUSwapchain *__restrict swapchain) {
   return swapchain ? swapchain->format : GPU_FORMAT_UNDEFINED;
 }
 
 GPU_EXPORT
 GPUSwapchainStatus
-GPUGetSwapchainStatus(GPUSwapchain * __restrict swapchain) {
+GPUGetSwapchainStatus(GPUSwapchain *__restrict swapchain) {
   return swapchain ? swapchain->status : GPU_SWAPCHAIN_STATUS_UNAVAILABLE;
 }
 
 GPU_EXPORT
 void
-GPUDestroySwapchain(GPUSwapchain * __restrict swapchain) {
+GPUDestroySwapchain(GPUSwapchain *__restrict swapchain) {
   GPUApi *api;
 
   if (!swapchain) {
@@ -226,12 +239,12 @@ GPUDestroySwapchain(GPUSwapchain * __restrict swapchain) {
 
 GPU_EXPORT
 GPUResult
-GPUResizeSwapchain(GPUSwapchain * __restrict swapchain,
-                   uint32_t                  width,
-                   uint32_t                  height) {
-  GPUApi      *api;
-  GPUExtent2D  size;
-  GPUResult    result;
+GPUResizeSwapchain(GPUSwapchain *__restrict swapchain,
+                   uint32_t                 width,
+                   uint32_t                 height) {
+  GPUExtent2D size;
+  GPUApi     *api;
+  GPUResult   result;
 
   if (!swapchain || width == 0 || height == 0)
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -244,7 +257,9 @@ GPUResizeSwapchain(GPUSwapchain * __restrict swapchain,
 
   size.width  = width;
   size.height = height;
+
   result = api->swapchain.resizeSwapchain(swapchain, size);
+
   if (result == GPU_OK) {
     swapchain->width  = width;
     swapchain->height = height;

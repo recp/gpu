@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../cuda-ptx-metadata/test.h"
 
 #include <stdio.h>
@@ -7,7 +23,7 @@
 #endif
 
 static bool
-supports_subgroups(const GPUAdapter * __restrict    adapter,
+supports_subgroups(const GPUAdapter     *__restrict adapter,
                    GPUShaderStageFlags              stage,
                    GPUBackendSubgroupOperationFlags operations) {
   (void)adapter;
@@ -23,71 +39,71 @@ validate_contract(const GPUShaderLibrary *library) {
   const char             *ptx;
 
   outputName = GPU_PTX_SUBGROUP_RELATIVE ? "relative" : "shuffled";
-  entryDecl = GPU_PTX_SUBGROUP_RELATIVE
-                ? ".visible .entry subgroup_relative_cs("
-                : ".visible .entry subgroup_cs(";
-  if (!library || library->_reflection.resourceCount != 2u ||
-      !ptx_validate_buffer_resource(&library->_reflection,
-                                    "values",
-                                    0u,
-                                    0u,
-                                    GPU_BINDING_READ_ONLY_STORAGE_BUFFER,
-                                    4u,
-                                    4u) ||
-      !ptx_validate_buffer_resource(&library->_reflection,
-                                    outputName,
-                                    0u,
-                                    1u,
-                                    GPU_BINDING_STORAGE_BUFFER,
-                                    4u,
-                                    4u)) {
+  entryDecl  = GPU_PTX_SUBGROUP_RELATIVE ? ".visible .entry subgroup_relative_cs(" : ".visible .entry subgroup_cs(";
+
+  if (!library || library->_reflection.resourceCount != 2u
+      || !ptx_validate_buffer_resource(&library->_reflection,
+                                       "values",
+                                       0u,
+                                       0u,
+                                       GPU_BINDING_READ_ONLY_STORAGE_BUFFER,
+                                       4u,
+                                       4u)
+      || !ptx_validate_buffer_resource(&library->_reflection,
+                                       outputName,
+                                       0u,
+                                       1u,
+                                       GPU_BINDING_STORAGE_BUFFER,
+                                       4u,
+                                       4u)) {
     return 0;
   }
 
   info = library->_ptxInfo;
-  if (!info || info->entryCount != 1u || info->paramCount != 2u ||
-      info->entries[0].paramStart != 0u ||
-      info->entries[0].paramCount != 2u ||
-      info->entries[0].paramDataSize != 16u ||
-      !ptx_validate_buffer_param(&info->params[0],
-                                 0u,
-                                 0u,
-                                 GPU_BINDING_READ_ONLY_STORAGE_BUFFER,
-                                 0u) ||
-      !ptx_validate_buffer_param(&info->params[1],
-                                 0u,
-                                 1u,
-                                 GPU_BINDING_STORAGE_BUFFER,
-                                 8u)) {
+
+  if (!info || info->entryCount != 1u || info->paramCount != 2u
+      || info->entries[0].paramStart != 0u
+      || info->entries[0].paramCount != 2u
+      || info->entries[0].paramDataSize != 16u
+      || !ptx_validate_buffer_param(&info->params[0],
+                                    0u,
+                                    0u,
+                                    GPU_BINDING_READ_ONLY_STORAGE_BUFFER,
+                                    0u)
+      || !ptx_validate_buffer_param(&info->params[1],
+                                    0u,
+                                    1u,
+                                    GPU_BINDING_STORAGE_BUFFER,
+                                    8u)) {
     return 0;
   }
 
   ptx = ptx_source(library);
-  return ptx && strstr(ptx, ".version 6.2") &&
-         strstr(ptx, ".target sm_70") &&
-         strstr(ptx, entryDecl) &&
-         strstr(ptx, ".reqntid 64, 1, 1") &&
-         ptx_count(ptx, "activemask.b32") == 1u &&
-         ptx_count(ptx, "shfl.sync.bfly.b32") ==
-           (GPU_PTX_SUBGROUP_RELATIVE ? 0u : 1u) &&
-         ptx_count(ptx, "shfl.sync.down.b32") ==
-           (GPU_PTX_SUBGROUP_RELATIVE ? 1u : 0u) &&
-         ptx_count(ptx, "selp.u32") ==
-           (GPU_PTX_SUBGROUP_RELATIVE ? 1u : 0u) &&
-         ptx_count(ptx, "ld.global.u32") == 1u &&
-         ptx_count(ptx, "st.global.u32") == 1u;
+  return ptx && strstr(ptx, ".version 6.2")
+         && strstr(ptx, ".target sm_70")
+         && strstr(ptx, entryDecl)
+         && strstr(ptx, ".reqntid 64, 1, 1")
+         && ptx_count(ptx, "activemask.b32") == 1u
+         && ptx_count(ptx, "shfl.sync.bfly.b32") ==
+           (GPU_PTX_SUBGROUP_RELATIVE ? 0u : 1u)
+         && ptx_count(ptx, "shfl.sync.down.b32") ==
+           (GPU_PTX_SUBGROUP_RELATIVE ? 1u : 0u)
+         && ptx_count(ptx, "selp.u32") ==
+           (GPU_PTX_SUBGROUP_RELATIVE ? 1u : 0u)
+         && ptx_count(ptx, "ld.global.u32") == 1u
+         && ptx_count(ptx, "st.global.u32") == 1u;
 }
 
 int
 validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
   GPUShaderLibrary *library;
-  GPUDevice          device;
-  GPUAdapter         adapter;
-  GPUInstance        instance;
-  GPUApi             api;
-  GPUResult          result;
-  uint64_t           featureMask;
-  int                valid;
+  GPUDevice         device;
+  GPUAdapter        adapter;
+  GPUInstance       instance;
+  GPUApi            api;
+  GPUResult         result;
+  uint64_t          featureMask;
+  int               valid;
 
   featureMask = (UINT64_C(1) << GPU_FEATURE_COMPUTE) |
                 (UINT64_C(1) << GPU_FEATURE_SUBGROUPS);
@@ -104,6 +120,7 @@ validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
                                           artifact,
                                           artifactSize,
                                           &library);
+
   if (result != GPU_OK || !library) {
     fprintf(stderr, "CUDA PTX subgroup metadata failed (%d)\n", result);
     GPUDestroyShaderLibrary(library);
@@ -111,9 +128,11 @@ validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
   }
 
   valid = validate_contract(library);
+
   if (!valid) {
     fprintf(stderr, "CUDA PTX subgroup contract mismatch\n");
   }
+
   GPUDestroyShaderLibrary(library);
   return valid;
 }

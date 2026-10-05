@@ -33,22 +33,22 @@ typedef struct GPUPipelineCacheKey {
 } GPUPipelineCacheKey;
 
 struct GPUPipelineCache {
-  GPUDevice             *device;
-  void                  *_sync;
-  void                  *_priv;
-  GPUPipelineCache      *deviceNext;
-  GPUPipelineCacheEntry *head;
-  GPUPipelineCacheEntry *tail;
+  GPUDevice              *device;
+  void                   *_sync;
+  void                   *_priv;
+  GPUPipelineCache       *deviceNext;
+  GPUPipelineCacheEntry  *head;
+  GPUPipelineCacheEntry  *tail;
   GPUPipelineCacheEntry **buckets;
-  GPUPipelineCompileJob *jobs;
-  GPUPipelineCompileJob *queueHead;
-  GPUPipelineCompileJob *queueTail;
-  GPUCacheStats          stats;
-  uint64_t               maxEntries;
-  uint64_t               entryCount;
-  uint64_t               jobCount;
-  size_t                 bucketCount;
-  bool                   stopWorker;
+  GPUPipelineCompileJob  *jobs;
+  GPUPipelineCompileJob  *queueHead;
+  GPUPipelineCompileJob  *queueTail;
+  GPUCacheStats           stats;
+  uint64_t                maxEntries;
+  uint64_t                entryCount;
+  uint64_t                jobCount;
+  size_t                  bucketCount;
+  bool                    stopWorker;
 };
 
 GPU_HIDE
@@ -75,7 +75,7 @@ gpuPipelineCacheFindRender(GPUPipelineCache                  *cache,
                            GPURenderPipeline                **outPipeline);
 
 GPU_HIDE
-GPURenderPipeline *
+GPURenderPipeline*
 gpuPipelineCacheStoreRender(GPUPipelineCache    *cache,
                             GPUPipelineCacheKey *key,
                             GPURenderPipeline   *pipeline);
@@ -88,7 +88,7 @@ gpuPipelineCacheFindCompute(GPUPipelineCache                   *cache,
                             GPUComputePipeline                **outPipeline);
 
 GPU_HIDE
-GPUComputePipeline *
+GPUComputePipeline*
 gpuPipelineCacheStoreCompute(GPUPipelineCache    *cache,
                              GPUPipelineCacheKey *key,
                              GPUComputePipeline  *pipeline);
@@ -101,20 +101,20 @@ gpuPipelineCacheFindRay(GPUPipelineCache                         *cache,
                         GPURayTracingPipelineEXT                **outPipeline);
 
 GPU_HIDE
-GPURayTracingPipelineEXT *
+GPURayTracingPipelineEXT*
 gpuPipelineCacheStoreRay(GPUPipelineCache         *cache,
                          GPUPipelineCacheKey      *key,
                          GPURayTracingPipelineEXT *pipeline);
 
 GPU_HIDE
 GPUResult
-gpuPipelineCacheFindGraph(GPUPipelineCache                      *cache,
-                          const GPUExecutionGraphCreateInfoEXT  *info,
-                          GPUPipelineCacheKey                   *outKey,
-                          GPUExecutionGraphEXT                 **outGraph);
+gpuPipelineCacheFindGraph(GPUPipelineCache                     *cache,
+                          const GPUExecutionGraphCreateInfoEXT *info,
+                          GPUPipelineCacheKey                  *outKey,
+                          GPUExecutionGraphEXT                **outGraph);
 
 GPU_HIDE
-GPUExecutionGraphEXT *
+GPUExecutionGraphEXT*
 gpuPipelineCacheStoreGraph(GPUPipelineCache     *cache,
                            GPUPipelineCacheKey  *key,
                            GPUExecutionGraphEXT *graph);

@@ -18,14 +18,13 @@
 
 GPU_HIDE
 GPUInstance*
-mt_createInstance(GPUApi * __restrict api,
-                  const GPUInstanceCreateInfo * __restrict info) {
+mt_createInstance(GPUApi                      *__restrict api,
+                  const GPUInstanceCreateInfo *__restrict info) {
   GPUInstance *inst;
 
   GPU__UNUSED(api);
 
-  inst = calloc(1, sizeof(*inst));
-  if (!inst) {
+  if (!(inst = calloc(1, sizeof(*inst)))) {
     return NULL;
   }
 
@@ -38,12 +37,13 @@ mt_createInstance(GPUApi * __restrict api,
 
 GPU_HIDE
 void
-mt_destroyInstance(GPUApi * __restrict api, GPUInstance * __restrict inst) {
+mt_destroyInstance(GPUApi *__restrict api, GPUInstance *__restrict inst) {
   GPU__UNUSED(api);
 
   if (!inst) {
     return;
   }
+
   free(inst->_priv);
   free(inst);
 }
@@ -51,6 +51,6 @@ mt_destroyInstance(GPUApi * __restrict api, GPUInstance * __restrict inst) {
 GPU_HIDE
 void
 mt_initInstance(GPUApiInstance *api) {
-  api->createInstance = mt_createInstance;
+  api->createInstance  = mt_createInstance;
   api->destroyInstance = mt_destroyInstance;
 }

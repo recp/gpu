@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 
 enum {
@@ -19,7 +35,9 @@ enum {
 
 static void
 fill_lines(uint8_t *pixels, uint32_t lineCount) {
-  for (uint32_t i = 0u; i < GPU_LINE_WIDTH * lineCount; i++) {
+  uint32_t i;
+
+  for (i = 0u; i < GPU_LINE_WIDTH * lineCount; i++) {
     pixels[i * GPU_LINE_PIXEL_BYTES + 0u] = 0u;
     pixels[i * GPU_LINE_PIXEL_BYTES + 1u] = 0u;
     pixels[i * GPU_LINE_PIXEL_BYTES + 2u] = 0u;
@@ -36,7 +54,7 @@ set_line_pixel(uint8_t *pixels,
                uint8_t  blue) {
   uint32_t offset;
 
-  offset = (line * GPU_LINE_WIDTH + x) * GPU_LINE_PIXEL_BYTES;
+  offset              = (line * GPU_LINE_WIDTH + x) * GPU_LINE_PIXEL_BYTES;
   pixels[offset + 0u] = red;
   pixels[offset + 1u] = green;
   pixels[offset + 2u] = blue;
@@ -48,43 +66,49 @@ check_line_layout(GPUShaderLayout *shaderLayout) {
   const GPUBindGroupLayoutEntry *entries;
   uint32_t                       count;
   uint32_t                       seen;
+  uint32_t                       i;
+  GPUBindingType                 expectedType;
 
-  if (!shaderLayout || shaderLayout->bindGroupLayoutCount != 1u ||
-      !shaderLayout->bindGroupLayouts ||
-      !shaderLayout->bindGroupLayouts[0] ||
-      !shaderLayout->pipelineLayout) {
+  if (!shaderLayout || shaderLayout->bindGroupLayoutCount != 1u
+      || !shaderLayout->bindGroupLayouts
+      || !shaderLayout->bindGroupLayouts[0]
+      || !shaderLayout->pipelineLayout) {
     return 0;
   }
 
   entries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[0],
-                                          &count);
+                                         &count);
+
   if (!entries || count != 4u) {
     return 0;
   }
 
   seen = 0u;
-  for (uint32_t i = 0u; i < count; i++) {
-    GPUBindingType expectedType;
+
+  for (i = 0u; i < count; i++) {
 
     expectedType = entries[i].binding == 0u || entries[i].binding == 2u
                      ? GPU_BINDING_SAMPLED_TEXTURE
                      : GPU_BINDING_STORAGE_TEXTURE;
-    if (entries[i].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
-        entries[i].binding > 3u ||
-        entries[i].bindingType != expectedType) {
+
+    if (entries[i].visibility != GPU_SHADER_STAGE_COMPUTE_BIT
+        || entries[i].binding > 3u
+        || entries[i].bindingType != expectedType) {
       return 0;
     }
+
     seen |= 1u << entries[i].binding;
   }
+
   return seen == 0xfu;
 }
 
 static GPUResult
-create_line_texture(GPUDevice            *device,
-                    const char           *label,
-                    uint32_t              layerCount,
-                    GPUTextureUsageFlags  usage,
-                    GPUTexture          **outTexture) {
+create_line_texture(GPUDevice           *device,
+                    const char          *label,
+                    uint32_t             layerCount,
+                    GPUTextureUsageFlags usage,
+                    GPUTexture         **outTexture) {
   GPUTextureCreateInfo info = {0};
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
@@ -98,16 +122,17 @@ create_line_texture(GPUDevice            *device,
   info.mipLevelCount    = 1u;
   info.sampleCount      = 1u;
   info.usage            = usage;
+
   return GPUCreateTexture(device, &info, outTexture);
 }
 
 static GPUResult
-create_line_view(GPUTexture         *texture,
-                 const char         *label,
-                 GPUTextureViewType  viewType,
-                 uint32_t            baseLayer,
-                 uint32_t            layerCount,
-                 GPUTextureView    **outView) {
+create_line_view(GPUTexture        *texture,
+                 const char        *label,
+                 GPUTextureViewType viewType,
+                 uint32_t           baseLayer,
+                 uint32_t           layerCount,
+                 GPUTextureView   **outView) {
   GPUTextureViewCreateInfo info = {0};
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
@@ -118,11 +143,13 @@ create_line_view(GPUTexture         *texture,
   info.mipLevelCount    = 1u;
   info.baseArrayLayer   = baseLayer;
   info.arrayLayerCount  = layerCount;
+
   return GPUCreateTextureView(texture, &info, outView);
 }
 
 static int
 check_line_pixels(const uint8_t *pixels) {
+
   for (uint32_t line = 0u; line < GPU_LINE_LAYER_COUNT; line++) {
     for (uint32_t x = 0u; x < GPU_LINE_WIDTH; x++) {
       uint32_t offset;
@@ -133,10 +160,11 @@ check_line_pixels(const uint8_t *pixels) {
                x * GPU_LINE_PIXEL_BYTES;
       green  = line == 2u && x == 2u ? 255u : 0u;
       blue   = line == 1u && x == 2u ? 255u : 0u;
-      if (pixels[offset + 0u] != 0u ||
-          pixels[offset + 1u] != green ||
-          pixels[offset + 2u] != blue ||
-          pixels[offset + 3u] != 255u) {
+
+      if (pixels[offset + 0u] != 0u
+          || pixels[offset + 1u] != green
+          || pixels[offset + 2u] != blue
+          || pixels[offset + 3u] != 255u) {
         fprintf(stderr,
                 "line texture input mismatch at %u,%u: %u %u %u %u\n",
                 line,
@@ -153,25 +181,28 @@ check_line_pixels(const uint8_t *pixels) {
   for (uint32_t line = 0u; line < GPU_LINE_LAYER_COUNT + 1u; line++) {
     uint32_t baseOffset;
 
+
     baseOffset = line == 0u
                    ? GPU_LINE_SINGLE_OFFSET
                    : GPU_LINE_ARRAY_OFFSET +
-                       (line - 1u) * GPU_LINE_IMAGE_BYTES;
+                     (line - 1u) * GPU_LINE_IMAGE_BYTES;
+
     for (uint32_t x = 0u; x < GPU_LINE_WIDTH; x++) {
-      uint8_t green;
-      uint8_t blue;
+      uint8_t  green;
+      uint8_t  blue;
       uint32_t offset;
 
-      green = line == 0u && x == 1u ? 255u : 0u;
-      blue  = ((line == 0u && x == 1u) ||
-               (line == 1u && x == 1u))
-                ? 255u
-                : 0u;
+      green  = line == 0u && x == 1u ? 255u : 0u;
+      blue   = ((line == 0u && x == 1u)
+                || (line == 1u && x == 1u))
+                 ? 255u
+                 : 0u;
       offset = baseOffset + x * GPU_LINE_PIXEL_BYTES;
-      if (pixels[offset + 0u] != 0u ||
-          pixels[offset + 1u] != green ||
-          pixels[offset + 2u] != blue ||
-          pixels[offset + 3u] != 255u) {
+
+      if (pixels[offset + 0u] != 0u
+          || pixels[offset + 1u] != green
+          || pixels[offset + 2u] != blue
+          || pixels[offset + 3u] != 255u) {
         fprintf(stderr,
                 "line texture pixel mismatch at %u,%u: %u %u %u %u\n",
                 line,
@@ -190,42 +221,42 @@ check_line_pixels(const uint8_t *pixels) {
 
 int
 gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
-  GPUQueue                      *queue;
-  GPUShaderLibrary              *library;
-  GPUShaderLayout               *shaderLayout;
-  GPUComputePipeline            *pipeline;
-  GPUTexture                    *inputLine;
-  GPUTexture                    *outputLine;
-  GPUTexture                    *inputLines;
-  GPUTexture                    *outputLines;
-  GPUTextureView                *inputLineView;
-  GPUTextureView                *outputLineView;
-  GPUTextureView                *inputLinesView;
-  GPUTextureView                *outputLinesView;
-  GPUBuffer                     *readback;
-  GPUBindGroup                  *group;
-  GPUCommandBuffer              *cmdb;
-  GPUComputePassEncoder         *computePass;
-  GPUTransferPassEncoder            *copyPass;
-  GPUFence                      *fence;
-  void                          *bytecode;
-  GPUCommandBuffer              *submitBuffers[1];
-  GPUComputePipelineCreateInfo   pipelineInfo       = {0};
-  GPUTextureWriteRegion          writeRegion        = {0};
-  GPUBufferCreateInfo            bufferInfo         = {0};
-  GPUBindGroupEntry              groupEntries[4]    = {0};
-  GPUBindGroupCreateInfo         groupInfo           = {0};
-  GPUTextureBarrier              textureBarriers[2] = {0};
-  GPUBarrierBatch                barrierBatch        = {0};
-  GPUBufferTextureCopyRegion     copyRegion          = {0};
-  GPUQueueSubmitInfo             submitInfo          = {0};
-  uint8_t                        inputLinePixels[GPU_LINE_BYTES];
-  uint8_t                        outputLinePixels[GPU_LINE_BYTES];
-  uint8_t                        inputArrayPixels[GPU_LINE_ARRAY_BYTES];
-  uint8_t                        outputArrayPixels[GPU_LINE_ARRAY_BYTES];
-  uint8_t                        pixels[GPU_LINE_READBACK_BYTES];
-  uint64_t                       bytecodeSize;
-  int                            ok;
+  GPUCommandBuffer            *submitBuffers[1];
+  GPUComputePipelineCreateInfo pipelineInfo       = {0};
+  GPUTextureWriteRegion        writeRegion        = {0};
+  GPUBufferCreateInfo          bufferInfo         = {0};
+  GPUBindGroupEntry            groupEntries[4]    = {0};
+  GPUBindGroupCreateInfo       groupInfo          = {0};
+  GPUTextureBarrier            textureBarriers[2] = {0};
+  GPUBarrierBatch              barrierBatch       = {0};
+  GPUBufferTextureCopyRegion   copyRegion         = {0};
+  GPUQueueSubmitInfo           submitInfo         = {0};
+  uint8_t                      inputLinePixels[GPU_LINE_BYTES];
+  uint8_t                      outputLinePixels[GPU_LINE_BYTES];
+  uint8_t                      inputArrayPixels[GPU_LINE_ARRAY_BYTES];
+  uint8_t                      outputArrayPixels[GPU_LINE_ARRAY_BYTES];
+  uint8_t                      pixels[GPU_LINE_READBACK_BYTES];
+  GPUQueue                    *queue;
+  GPUShaderLibrary            *library;
+  GPUShaderLayout             *shaderLayout;
+  GPUComputePipeline          *pipeline;
+  GPUTexture                  *inputLine;
+  GPUTexture                  *outputLine;
+  GPUTexture                  *inputLines;
+  GPUTexture                  *outputLines;
+  GPUTextureView              *inputLineView;
+  GPUTextureView              *outputLineView;
+  GPUTextureView              *inputLinesView;
+  GPUTextureView              *outputLinesView;
+  GPUBuffer                   *readback;
+  GPUBindGroup                *group;
+  GPUCommandBuffer            *cmdb;
+  GPUComputePassEncoder       *computePass;
+  GPUTransferPassEncoder      *copyPass;
+  GPUFence                    *fence;
+  void                        *bytecode;
+  uint64_t                     bytecodeSize;
+  int                          ok;
 
   if (!device || !bytecodePath) {
     return 0;
@@ -252,6 +283,7 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
   bytecodeSize    = 0u;
   bytecode        = gpu_test_read_file(bytecodePath, &bytecodeSize);
   ok              = queue && bytecode;
+
   if (!ok) {
     fprintf(stderr, "line texture fixture setup failed\n");
     goto cleanup;
@@ -269,10 +301,10 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
   if (GPUCreateShaderLibraryFromUSL(device,
                                     bytecode,
                                     bytecodeSize,
-                                    &library) != GPU_OK ||
-      !library ||
-      GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !check_line_layout(shaderLayout)) {
+                                    &library) != GPU_OK
+      || !library
+      || GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK
+      || !check_line_layout(shaderLayout)) {
     fprintf(stderr, "line texture shader layout creation failed\n");
     ok = 0;
     goto cleanup;
@@ -284,8 +316,9 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
   pipelineInfo.layout           = shaderLayout->pipelineLayout;
   pipelineInfo.library          = library;
   pipelineInfo.entryPoint       = "line_view_cs";
-  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
+
+  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK
+      || !pipeline) {
     fprintf(stderr, "line texture compute pipeline creation failed\n");
     ok = 0;
     goto cleanup;
@@ -300,30 +333,23 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
   if (create_line_texture(device,
                           "api-line-input",
                           1u,
-                          GPU_TEXTURE_USAGE_SAMPLED |
-                            GPU_TEXTURE_USAGE_COPY_DST,
-                          &inputLine) != GPU_OK ||
-      create_line_texture(device,
-                          "api-line-output",
-                          1u,
-                          GPU_TEXTURE_USAGE_STORAGE |
-                            GPU_TEXTURE_USAGE_COPY_SRC |
-                            GPU_TEXTURE_USAGE_COPY_DST,
-                          &outputLine) != GPU_OK ||
-      create_line_texture(device,
-                          "api-lines-input",
-                          GPU_LINE_LAYER_COUNT,
-                          GPU_TEXTURE_USAGE_SAMPLED |
-                            GPU_TEXTURE_USAGE_COPY_SRC |
-                            GPU_TEXTURE_USAGE_COPY_DST,
-                          &inputLines) != GPU_OK ||
-      create_line_texture(device,
-                          "api-lines-output",
-                          GPU_LINE_LAYER_COUNT,
-                          GPU_TEXTURE_USAGE_STORAGE |
-                            GPU_TEXTURE_USAGE_COPY_SRC |
-                            GPU_TEXTURE_USAGE_COPY_DST,
-                          &outputLines) != GPU_OK) {
+                          GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST,
+                          &inputLine) != GPU_OK
+      || create_line_texture(device,
+                             "api-line-output",
+                             1u,
+                             GPU_TEXTURE_USAGE_STORAGE | GPU_TEXTURE_USAGE_COPY_SRC | GPU_TEXTURE_USAGE_COPY_DST,
+                             &outputLine) != GPU_OK
+      || create_line_texture(device,
+                             "api-lines-input",
+                             GPU_LINE_LAYER_COUNT,
+                             GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_SRC | GPU_TEXTURE_USAGE_COPY_DST,
+                             &inputLines) != GPU_OK
+      || create_line_texture(device,
+                             "api-lines-output",
+                             GPU_LINE_LAYER_COUNT,
+                             GPU_TEXTURE_USAGE_STORAGE | GPU_TEXTURE_USAGE_COPY_SRC | GPU_TEXTURE_USAGE_COPY_DST,
+                             &outputLines) != GPU_OK) {
     fprintf(stderr, "line texture creation failed\n");
     ok = 0;
     goto cleanup;
@@ -335,32 +361,34 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
   writeRegion.layerCount   = 1u;
   writeRegion.bytesPerRow  = GPU_LINE_BYTES;
   writeRegion.rowsPerImage = 1u;
+
   if (GPUQueueWriteTexture(queue,
                            inputLine,
                            &writeRegion,
                            inputLinePixels,
-                           sizeof(inputLinePixels)) != GPU_OK ||
-      GPUQueueWriteTexture(queue,
-                           outputLine,
-                           &writeRegion,
-                           outputLinePixels,
-                           sizeof(outputLinePixels)) != GPU_OK) {
+                           sizeof(inputLinePixels)) != GPU_OK
+      || GPUQueueWriteTexture(queue,
+                              outputLine,
+                              &writeRegion,
+                              outputLinePixels,
+                              sizeof(outputLinePixels)) != GPU_OK) {
     fprintf(stderr, "single line texture upload failed\n");
     ok = 0;
     goto cleanup;
   }
 
   writeRegion.layerCount = GPU_LINE_LAYER_COUNT;
+
   if (GPUQueueWriteTexture(queue,
                            inputLines,
                            &writeRegion,
                            inputArrayPixels,
-                           sizeof(inputArrayPixels)) != GPU_OK ||
-      GPUQueueWriteTexture(queue,
-                           outputLines,
-                           &writeRegion,
-                           outputArrayPixels,
-                           sizeof(outputArrayPixels)) != GPU_OK) {
+                           sizeof(inputArrayPixels)) != GPU_OK
+      || GPUQueueWriteTexture(queue,
+                              outputLines,
+                              &writeRegion,
+                              outputArrayPixels,
+                              sizeof(outputArrayPixels)) != GPU_OK) {
     fprintf(stderr, "array line texture upload failed\n");
     ok = 0;
     goto cleanup;
@@ -371,25 +399,25 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
                        GPU_TEXTURE_VIEW_1D,
                        0u,
                        1u,
-                       &inputLineView) != GPU_OK ||
-      create_line_view(outputLine,
-                       "api-line-output-view",
-                       GPU_TEXTURE_VIEW_1D,
-                       0u,
-                       1u,
-                       &outputLineView) != GPU_OK ||
-      create_line_view(inputLines,
-                       "api-lines-input-view",
-                       GPU_TEXTURE_VIEW_1D_ARRAY,
-                       1u,
-                       2u,
-                       &inputLinesView) != GPU_OK ||
-      create_line_view(outputLines,
-                       "api-lines-output-view",
-                       GPU_TEXTURE_VIEW_1D_ARRAY,
-                       0u,
-                       GPU_LINE_LAYER_COUNT,
-                       &outputLinesView) != GPU_OK) {
+                       &inputLineView) != GPU_OK
+      || create_line_view(outputLine,
+                          "api-line-output-view",
+                          GPU_TEXTURE_VIEW_1D,
+                          0u,
+                          1u,
+                          &outputLineView) != GPU_OK
+      || create_line_view(inputLines,
+                          "api-lines-input-view",
+                          GPU_TEXTURE_VIEW_1D_ARRAY,
+                          1u,
+                          2u,
+                          &inputLinesView) != GPU_OK
+      || create_line_view(outputLines,
+                          "api-lines-output-view",
+                          GPU_TEXTURE_VIEW_1D_ARRAY,
+                          0u,
+                          GPU_LINE_LAYER_COUNT,
+                          &outputLinesView) != GPU_OK) {
     fprintf(stderr, "line texture view creation failed\n");
     ok = 0;
     goto cleanup;
@@ -401,6 +429,7 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
   bufferInfo.sizeBytes        = GPU_LINE_READBACK_BYTES;
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
                                 GPU_BUFFER_USAGE_COPY_SRC;
+
   if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK || !readback) {
     fprintf(stderr, "line texture readback buffer creation failed\n");
     ok = 0;
@@ -426,19 +455,21 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
   groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
   groupInfo.entryCount       = 4u;
   groupInfo.pEntries         = groupEntries;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "line texture bind group creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "api-line-texture", &cmdb) != GPU_OK ||
-      !cmdb || !(computePass = GPUBeginComputePass(cmdb,
-                                                   "api-line-texture"))) {
+  if (GPUAcquireCommandBuffer(queue, "api-line-texture", &cmdb) != GPU_OK
+      || !cmdb || !(computePass = GPUBeginComputePass(cmdb,
+                                                      "api-line-texture"))) {
     fprintf(stderr, "line texture compute pass creation failed\n");
     ok = 0;
     goto cleanup;
   }
+
   GPUBindComputePipeline(computePass, pipeline);
   GPUBindComputeGroup(computePass, 0u, group, 0u, NULL);
   GPUDispatch(computePass, 1u, 1u, 1u);
@@ -460,8 +491,7 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
   barrierBatch.pTextureBarriers    = textureBarriers;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginTransferPass(cmdb, "api-line-readback");
-  if (!copyPass) {
+  if (!(copyPass = GPUBeginTransferPass(cmdb, "api-line-readback"))) {
     fprintf(stderr, "line texture copy pass creation failed\n");
     ok = 0;
     goto cleanup;
@@ -498,21 +528,23 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = submitBuffers;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "line texture submission failed\n");
     cmdb = NULL;
-    ok = 0;
+    ok   = 0;
     goto cleanup;
   }
+
   cmdb = NULL;
 
   if (GPUQueueReadBuffer(queue,
                          readback,
                          0u,
                          pixels,
-                         sizeof(pixels)) != GPU_OK ||
-      !check_line_pixels(pixels)) {
+                         sizeof(pixels)) != GPU_OK
+      || !check_line_pixels(pixels)) {
     fprintf(stderr, "line texture readback failed\n");
     ok = 0;
     goto cleanup;
@@ -521,12 +553,15 @@ gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath) {
   ok = 1;
 
 cleanup:
+
   if (copyPass) {
     GPUEndTransferPass(copyPass);
   }
+
   if (computePass) {
     GPUEndComputePass(computePass);
   }
+
   GPUDestroyFence(fence);
   GPUDestroyBindGroup(group);
   GPUDestroyBuffer(readback);

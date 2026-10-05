@@ -32,23 +32,49 @@ static const uint32_t dx12_tearingPresentModes[] = {
   GPU_PRESENT_MODE_IMMEDIATE
 };
 
-GPUSurface *
-dx12_createSurface(GPUApi                    * __restrict api,
-                   GPUInstance               * __restrict inst,
-                   const GPUSurfaceNativeInfo * __restrict info) {
+static GPUResult
+dx12_getSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
+                            GPUSurface             *__restrict surface,
+                            GPUSurfaceCapabilities *__restrict outCaps) {
+  GPUInstanceDX12 *instance;
+
+  if (!adapter || !adapter->inst || !surface || !outCaps
+      || (surface->type != GPU_SURFACE_WINDOWS_HWND
+          && surface->type != GPU_SURFACE_WINDOWS_COREWINDOW)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  instance = adapter->inst->_priv;
+
+  outCaps->pFormats         = dx12_surfaceFormats;
+  outCaps->pPresentModes    = instance && instance->allowTearing
+                              ? dx12_tearingPresentModes : dx12_fifoPresentMode;
+  outCaps->minImageCount    = 2u;
+  outCaps->maxImageCount    = 3u;
+  outCaps->formatCount      = (uint32_t)GPU_ARRAY_LEN(dx12_surfaceFormats);
+  outCaps->presentModeCount = instance && instance->allowTearing
+                              ? (uint32_t)GPU_ARRAY_LEN(dx12_tearingPresentModes)
+                              : (uint32_t)GPU_ARRAY_LEN(dx12_fifoPresentMode);
+
+  return GPU_OK;
+}
+
+GPUSurface*
+dx12_createSurface(GPUApi                     *__restrict api,
+                   GPUInstance                *__restrict inst,
+                   const GPUSurfaceNativeInfo *__restrict info) {
   GPUSurface *surface;
 
   GPU__UNUSED(api);
   GPU__UNUSED(inst);
 
-  if (!info || !info->nativeHandle ||
-      (info->type != GPU_SURFACE_WINDOWS_HWND &&
-       info->type != GPU_SURFACE_WINDOWS_COREWINDOW)) {
+  if (!info || !info->nativeHandle
+      || (info->type != GPU_SURFACE_WINDOWS_HWND
+          && info->type != GPU_SURFACE_WINDOWS_COREWINDOW)) {
     return NULL;
   }
 
-  surface        = calloc(1, sizeof(*surface));
-  if (!surface) {
+  if (!(surface = calloc(1, sizeof(*surface)))) {
     return NULL;
   }
 
@@ -59,34 +85,9 @@ dx12_createSurface(GPUApi                    * __restrict api,
   return surface;
 }
 
-static GPUResult
-dx12_getSurfaceCapabilities(const GPUAdapter       * __restrict adapter,
-                            GPUSurface             * __restrict surface,
-                            GPUSurfaceCapabilities * __restrict outCaps) {
-  GPUInstanceDX12 *instance;
-
-  if (!adapter || !adapter->inst || !surface || !outCaps ||
-      (surface->type != GPU_SURFACE_WINDOWS_HWND &&
-       surface->type != GPU_SURFACE_WINDOWS_COREWINDOW)) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  instance                  = adapter->inst->_priv;
-  outCaps->pFormats         = dx12_surfaceFormats;
-  outCaps->pPresentModes    = instance && instance->allowTearing ?
-    dx12_tearingPresentModes : dx12_fifoPresentMode;
-  outCaps->minImageCount    = 2u;
-  outCaps->maxImageCount    = 3u;
-  outCaps->formatCount      = (uint32_t)GPU_ARRAY_LEN(dx12_surfaceFormats);
-  outCaps->presentModeCount = instance && instance->allowTearing ?
-    (uint32_t)GPU_ARRAY_LEN(dx12_tearingPresentModes) :
-    (uint32_t)GPU_ARRAY_LEN(dx12_fifoPresentMode);
-  return GPU_OK;
-}
-
 GPU_HIDE
 void
-dx12_destroySurface(GPUSurface * __restrict surface) {
+dx12_destroySurface(GPUSurface *__restrict surface) {
   free(surface);
 }
 

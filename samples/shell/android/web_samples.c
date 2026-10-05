@@ -1,40 +1,48 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../common/android_samples.h"
 
 #include <string.h>
 
-int gpu_android_start_triangle(void);
-int gpu_android_start_textured_quad(void);
-int gpu_android_start_compute(void);
-int gpu_android_start_indexed_depth(void);
-int gpu_android_start_instancing(void);
-int gpu_android_start_textured_cube(void);
-int gpu_android_start_storage_texture(void);
-int gpu_android_start_push_constants(void);
-int gpu_android_start_msaa(void);
-int gpu_android_start_mrt_blend(void);
-int gpu_android_start_shadow_compare(void);
-int gpu_android_start_texture_array(void);
-int gpu_android_start_texture_line(void);
-int gpu_android_start_texture_shapes(void);
-int gpu_android_start_descriptor_array(void);
-int gpu_android_start_msaa_samples(void);
-int gpu_android_start_subgroup(void);
-int gpu_android_start_shader_f16(void);
-int gpu_android_start_multi_draw(void);
-int gpu_android_start_dispatch_indirect(void);
-int gpu_android_start_timestamp_query(void);
-int gpu_android_start_compute_particles(void);
-int gpu_android_start_mip_lod(void);
-int gpu_android_start_stencil_outline(void);
-int gpu_android_start_bloom(void);
-int gpu_android_start_image_texture(void);
-int gpu_android_start_integer_cube(void);
-int gpu_android_start_color_pipeline(void);
-int gpu_android_start_compressed_texture(void);
-int gpu_android_start_skinning(void);
-int gpu_android_start_pbr_material(void);
-int gpu_android_start_assetkit_damaged_helmet(void);
-int gpu_android_start_blit(void);
+#define GPU_ANDROID_WEB_SAMPLE(symbol, sampleId, sampleName, startFunction)                     \
+  static const GPUAndroidWebConfig symbol##Config = {                                           \
+    .start = startFunction                                                                      \
+  };                                                                                            \
+  static GPUAndroidSampleDefinition symbol##Definition = {                                      \
+    .callbacks    = NULL,                                                                       \
+    .config       = &symbol##Config,                                                            \
+    .id           = sampleId,                                                                   \
+    .name         = sampleName,                                                                 \
+    .userDataSize = 1u                                                                          \
+  }
+
+#define GPU_ANDROID_WEB_FEATURE_SAMPLE(symbol, sampleId, sampleName, startFunction, featureSet) \
+  static const GPUAndroidWebConfig symbol##Config = {                                           \
+    .start = startFunction                                                                      \
+  };                                                                                            \
+  static GPUAndroidSampleDefinition symbol##Definition = {                                      \
+    .callbacks            = NULL,                                                               \
+    .config               = &symbol##Config,                                                    \
+    .optionalFeatures     = featureSet,                                                         \
+    .id                   = sampleId,                                                           \
+    .name                 = sampleName,                                                         \
+    .userDataSize         = 1u,                                                                 \
+    .optionalFeatureCount = (uint32_t)(sizeof(featureSet) / sizeof((featureSet)[0]))            \
+  }
 
 static const GPUFeature descriptorArrayFeatures[] = {
   GPU_FEATURE_DESCRIPTOR_INDEXING
@@ -52,34 +60,72 @@ static const GPUFeature timestampFeatures[] = {
   GPU_FEATURE_TIMESTAMPS
 };
 
-#define GPU_ANDROID_WEB_SAMPLE(symbol, sampleId, sampleName, startFunction) \
-  static const GPUAndroidWebConfig symbol##Config = {                      \
-    .start = startFunction                                                 \
-  };                                                                       \
-  static GPUAndroidSampleDefinition symbol##Definition = {                 \
-    .callbacks    = NULL,                                                   \
-    .config       = &symbol##Config,                                        \
-    .id           = sampleId,                                               \
-    .name         = sampleName,                                             \
-    .userDataSize = 1u                                                      \
-  }
-
-#define GPU_ANDROID_WEB_FEATURE_SAMPLE(                                    \
-  symbol, sampleId, sampleName, startFunction, featureSet                  \
-)                                                                         \
-  static const GPUAndroidWebConfig symbol##Config = {                      \
-    .start = startFunction                                                 \
-  };                                                                       \
-  static GPUAndroidSampleDefinition symbol##Definition = {                 \
-    .callbacks            = NULL,                                           \
-    .config               = &symbol##Config,                                \
-    .optionalFeatures     = featureSet,                                     \
-    .id                   = sampleId,                                       \
-    .name                 = sampleName,                                     \
-    .userDataSize         = 1u,                                             \
-    .optionalFeatureCount =                                                 \
-      (uint32_t)(sizeof(featureSet) / sizeof((featureSet)[0]))              \
-  }
+int
+gpu_android_start_triangle(void);
+int
+gpu_android_start_textured_quad(void);
+int
+gpu_android_start_compute(void);
+int
+gpu_android_start_indexed_depth(void);
+int
+gpu_android_start_instancing(void);
+int
+gpu_android_start_textured_cube(void);
+int
+gpu_android_start_storage_texture(void);
+int
+gpu_android_start_push_constants(void);
+int
+gpu_android_start_msaa(void);
+int
+gpu_android_start_mrt_blend(void);
+int
+gpu_android_start_shadow_compare(void);
+int
+gpu_android_start_texture_array(void);
+int
+gpu_android_start_texture_line(void);
+int
+gpu_android_start_texture_shapes(void);
+int
+gpu_android_start_descriptor_array(void);
+int
+gpu_android_start_msaa_samples(void);
+int
+gpu_android_start_subgroup(void);
+int
+gpu_android_start_shader_f16(void);
+int
+gpu_android_start_multi_draw(void);
+int
+gpu_android_start_dispatch_indirect(void);
+int
+gpu_android_start_timestamp_query(void);
+int
+gpu_android_start_compute_particles(void);
+int
+gpu_android_start_mip_lod(void);
+int
+gpu_android_start_stencil_outline(void);
+int
+gpu_android_start_bloom(void);
+int
+gpu_android_start_image_texture(void);
+int
+gpu_android_start_integer_cube(void);
+int
+gpu_android_start_color_pipeline(void);
+int
+gpu_android_start_compressed_texture(void);
+int
+gpu_android_start_skinning(void);
+int
+gpu_android_start_pbr_material(void);
+int
+gpu_android_start_assetkit_damaged_helmet(void);
+int
+gpu_android_start_blit(void);
 
 GPU_ANDROID_WEB_SAMPLE(texturedQuad,
                        "textured-quad",
@@ -218,59 +264,61 @@ GPU_ANDROID_WEB_SAMPLE(blit,
                        "GPU + USL Texture Blit",
                        gpu_android_start_blit);
 
+#undef GPU_ANDROID_WEB_FEATURE_SAMPLE
+#undef GPU_ANDROID_WEB_SAMPLE
+
+static GPUAndroidSampleDefinition *definitions[] = {
+  &triangleDefinition,
+  &texturedQuadDefinition,
+  &computeDefinition,
+  &indexedDepthDefinition,
+  &instancingDefinition,
+  &texturedCubeDefinition,
+  &storageTextureDefinition,
+  &pushConstantsDefinition,
+  &msaaDefinition,
+  &mrtBlendDefinition,
+  &shadowCompareDefinition,
+  &textureArrayDefinition,
+  &textureLineDefinition,
+  &textureShapesDefinition,
+  &descriptorArrayDefinition,
+  &msaaSamplesDefinition,
+  &subgroupDefinition,
+  &shaderF16Definition,
+  &multiDrawDefinition,
+  &dispatchIndirectDefinition,
+  &timestampQueryDefinition,
+  &computeParticlesDefinition,
+  &mipLodDefinition,
+  &stencilOutlineDefinition,
+  &bloomDefinition,
+  &imageTextureDefinition,
+  &integerCubeDefinition,
+  &colorPipelineDefinition,
+  &compressedTextureDefinition,
+  &skinningDefinition,
+  &pbrMaterialDefinition,
+  &assetkitDamagedHelmetDefinition,
+  &blitDefinition
+};
+
 const GPUAndroidSampleDefinition*
 GPUSampleAndroidWebDefinition(const char *id) {
-  static GPUAndroidSampleDefinition *definitions[] = {
-    &triangleDefinition,
-    &texturedQuadDefinition,
-    &computeDefinition,
-    &indexedDepthDefinition,
-    &instancingDefinition,
-    &texturedCubeDefinition,
-    &storageTextureDefinition,
-    &pushConstantsDefinition,
-    &msaaDefinition,
-    &mrtBlendDefinition,
-    &shadowCompareDefinition,
-    &textureArrayDefinition,
-    &textureLineDefinition,
-    &textureShapesDefinition,
-    &descriptorArrayDefinition,
-    &msaaSamplesDefinition,
-    &subgroupDefinition,
-    &shaderF16Definition,
-    &multiDrawDefinition,
-    &dispatchIndirectDefinition,
-    &timestampQueryDefinition,
-    &computeParticlesDefinition,
-    &mipLodDefinition,
-    &stencilOutlineDefinition,
-    &bloomDefinition,
-    &imageTextureDefinition,
-    &integerCubeDefinition,
-    &colorPipelineDefinition,
-    &compressedTextureDefinition,
-    &skinningDefinition,
-    &pbrMaterialDefinition,
-    &assetkitDamagedHelmetDefinition,
-    &blitDefinition
-  };
   const GPUAndroidSampleCallbacks *callbacks;
+  GPUAndroidSampleDefinition      *definition;
+  uint32_t                         i;
 
   callbacks = GPUSampleAndroidWebCallbacks();
-  for (uint32_t i = 0u;
-       i < sizeof(definitions) / sizeof(definitions[0]);
-       i++) {
-    GPUAndroidSampleDefinition *definition;
 
-    definition = definitions[i];
+  for (i = 0u; i < sizeof(definitions) / sizeof(definitions[0]); i++) {
+    definition            = definitions[i];
     definition->callbacks = callbacks;
+
     if (id && strcmp(id, definition->id) == 0) {
       return definition;
     }
   }
+
   return NULL;
 }
-
-#undef GPU_ANDROID_WEB_FEATURE_SAMPLE
-#undef GPU_ANDROID_WEB_SAMPLE

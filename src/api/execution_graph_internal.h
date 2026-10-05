@@ -20,24 +20,24 @@
 #include "../common.h"
 
 struct GPUExecutionGraphEXT {
-  void                                   *_priv;
-  GPUApi                                 *_api;
-  GPUDevice                              *device;
-  GPUShaderLibrary                       *library;
-  GPUPipelineLayout                      *layout;
-  GPUExecutionGraphMemoryRequirementsEXT  memoryRequirements;
-  uint32_t                                requiredBindGroupMask;
-  uint32_t                                pushConstantSizeBytes;
-  GPUShaderStageFlags                     pushConstantStages;
-  uint32_t                                refCount;
+  void                                  *_priv;
+  GPUApi                                *_api;
+  GPUDevice                             *device;
+  GPUShaderLibrary                      *library;
+  GPUPipelineLayout                     *layout;
+  GPUExecutionGraphMemoryRequirementsEXT memoryRequirements;
+  uint32_t                               requiredBindGroupMask;
+  uint32_t                               pushConstantSizeBytes;
+  GPUShaderStageFlags                    pushConstantStages;
+  uint32_t                               refCount;
 };
 
 struct GPUExecutionGraphInstanceEXT {
-  void                     *_priv;
-  GPUApi                   *_api;
-  GPUDevice                *device;
-  GPUExecutionGraphEXT     *graph;
-  uint64_t                  memorySizeBytes;
+  void                 *_priv;
+  GPUApi               *_api;
+  GPUDevice            *device;
+  GPUExecutionGraphEXT *graph;
+  uint64_t              memorySizeBytes;
 };
 
 GPU_HIDE

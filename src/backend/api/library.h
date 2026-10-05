@@ -32,25 +32,19 @@ typedef enum GPUShaderSourceCompileFlags {
 } GPUShaderSourceCompileFlags;
 
 typedef struct GPUApiLibrary {
-  GPUShaderLibrary*
-  (*newLibraryWithSource)(GPUDevice *device,
+  GPUShaderLibrary *
+  (*newLibraryWithSource)(GPUDevice  *device,
                           const char *source,
-                          uint64_t sourceSize,
-                          uint32_t compileFlags);
+                          uint64_t    sourceSize,
+                          uint32_t    compileFlags);
 
-  GPUShaderLibrary*
-  (*newLibraryWithBinary)(GPUDevice *device,
-                          const void *data,
-                          uint64_t size);
+  GPUShaderLibrary * (*newLibraryWithBinary)(GPUDevice *device, const void *data, uint64_t size);
 
-  GPUShaderFunction*
-  (*newFunction)(GPUShaderLibrary *lib, const char *name);
+  GPUShaderFunction * (*newFunction)(GPUShaderLibrary *lib, const char *name);
 
-  void
-  (*destroyFunction)(GPUShaderFunction *function);
+  void (*destroyFunction)(GPUShaderFunction *function);
 
-  void
-  (*destroyLibrary)(GPUShaderLibrary *lib);
+  void (*destroyLibrary)(GPUShaderLibrary *lib);
 } GPUApiLibrary;
 
 #ifdef __cplusplus

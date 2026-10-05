@@ -52,16 +52,16 @@ typedef struct DXCCompiler3Vtbl {
   ULONG   (STDMETHODCALLTYPE *AddRef)(DXCCompiler3 *);
   ULONG   (STDMETHODCALLTYPE *Release)(DXCCompiler3 *);
   HRESULT (STDMETHODCALLTYPE *Compile)(DXCCompiler3 *,
-                                        const DXCBuffer *,
-                                        LPCWSTR *,
-                                        UINT32,
-                                        void *,
-                                        REFIID,
-                                        void **);
+                                       const DXCBuffer *,
+                                       LPCWSTR *,
+                                       UINT32,
+                                       void *,
+                                       REFIID,
+                                       void **);
   HRESULT (STDMETHODCALLTYPE *Disassemble)(DXCCompiler3 *,
-                                            const DXCBuffer *,
-                                            REFIID,
-                                            void **);
+                                           const DXCBuffer *,
+                                           REFIID,
+                                           void **);
 } DXCCompiler3Vtbl;
 
 struct DXCCompiler3 {
@@ -85,14 +85,14 @@ typedef struct DXCUtilsVtbl {
   HRESULT (STDMETHODCALLTYPE *QueryInterface)(DXCUtils *, REFIID, void **);
   ULONG   (STDMETHODCALLTYPE *AddRef)(DXCUtils *);
   ULONG   (STDMETHODCALLTYPE *Release)(DXCUtils *);
-  void                            *CreateBlobFromBlob;
-  void                            *CreateBlobFromPinned;
-  void                            *MoveToBlob;
-  void                            *CreateBlob;
-  void                            *LoadFile;
-  void                            *CreateReadOnlyStreamFromBlob;
+  void                      *CreateBlobFromBlob;
+  void                      *CreateBlobFromPinned;
+  void                      *MoveToBlob;
+  void                      *CreateBlob;
+  void                      *LoadFile;
+  void                      *CreateReadOnlyStreamFromBlob;
   HRESULT (STDMETHODCALLTYPE *CreateDefaultIncludeHandler)(DXCUtils *,
-                                                            IUnknown **);
+                                                           IUnknown **);
 } DXCUtilsVtbl;
 
 struct DXCUtils {
@@ -122,7 +122,7 @@ typedef struct DX12RTFormatArray {
   typedef union NAME {                          \
     struct {                                    \
       D3D12_PIPELINE_STATE_SUBOBJECT_TYPE type; \
-      VALUE_TYPE value;                         \
+      VALUE_TYPE                         value; \
     } data;                                     \
     void *alignment;                            \
   } NAME
@@ -201,90 +201,6 @@ static const IID dx12_iidDxcVersionInfo = {
   {0xa8, 0xff, 0xa1, 0xe0, 0xcd, 0xe1, 0xcc, 0x7e}
 };
 
-static bool
-dx12__queryDXCVersion(HMODULE module, UINT32 *outMajor, UINT32 *outMinor) {
-  DXCCreateInstanceFn createInstance;
-  DXCCompiler3       *compiler;
-  DXCVersionInfo     *versionInfo;
-  UINT32              major;
-  UINT32              minor;
-  bool                available;
-
-  if (outMajor) {
-    *outMajor = 0u;
-  }
-  if (outMinor) {
-    *outMinor = 0u;
-  }
-  if (!module ||
-      !(createInstance = (DXCCreateInstanceFn)GetProcAddress(
-          module,
-          "DxcCreateInstance"
-        ))) {
-    return false;
-  }
-
-  compiler    = NULL;
-  versionInfo = NULL;
-  major       = 0u;
-  minor       = 0u;
-  available   = SUCCEEDED(createInstance(&dx12_clsidDxcCompiler,
-                                          &dx12_iidDxcCompiler3,
-                                          (void **)&compiler)) &&
-                compiler &&
-                SUCCEEDED(compiler->lpVtbl->QueryInterface(
-                  compiler,
-                  &dx12_iidDxcVersionInfo,
-                  (void **)&versionInfo
-                )) &&
-                versionInfo &&
-                SUCCEEDED(versionInfo->lpVtbl->GetVersion(versionInfo,
-                                                           &major,
-                                                           &minor));
-  if (versionInfo) {
-    versionInfo->lpVtbl->Release(versionInfo);
-  }
-  if (compiler) {
-    compiler->lpVtbl->Release(compiler);
-  }
-  if (!available) {
-    return false;
-  }
-  if (outMajor) {
-    *outMajor = major;
-  }
-  if (outMinor) {
-    *outMinor = minor;
-  }
-  return true;
-}
-
-GPU_HIDE
-uint32_t
-dx12_queryDXCTargetProfile(HMODULE module) {
-  UINT32 major;
-  UINT32 minor;
-
-  if (!dx12__queryDXCVersion(module, &major, &minor) || major == 0u) {
-    return USL_TARGET_PROFILE_NONE;
-  }
-  if (major > 1u || minor >= 10u) {
-    return USL_TARGET_PROFILE_HLSL_SM_6_10;
-  }
-  switch (minor) {
-    case 9u: return USL_TARGET_PROFILE_HLSL_SM_6_9;
-    case 8u: return USL_TARGET_PROFILE_HLSL_SM_6_8;
-    case 7u: return USL_TARGET_PROFILE_HLSL_SM_6_7;
-    case 6u: return USL_TARGET_PROFILE_HLSL_SM_6_6;
-    case 5u: return USL_TARGET_PROFILE_HLSL_SM_6_5;
-    case 4u: return USL_TARGET_PROFILE_HLSL_SM_6_4;
-    case 3u: return USL_TARGET_PROFILE_HLSL_SM_6_3;
-    case 2u: return USL_TARGET_PROFILE_HLSL_SM_6_2;
-    case 1u: return USL_TARGET_PROFILE_HLSL_SM_6_1;
-    default: return USL_TARGET_PROFILE_HLSL_SM_6_0;
-  }
-}
-
 static const DXGI_FORMAT dx12_vertexFormats[GPU_VERTEX_FORMAT_COUNT] = {
   [GPU_VERTEX_FORMAT_UINT8]           = DXGI_FORMAT_R8_UINT,
   [GPU_VERTEX_FORMAT_UINT8X2]         = DXGI_FORMAT_R8G8_UINT,
@@ -329,63 +245,180 @@ static const DXGI_FORMAT dx12_vertexFormats[GPU_VERTEX_FORMAT_COUNT] = {
   [GPU_VERTEX_FORMAT_UNORM8X4_BGRA]   = DXGI_FORMAT_B8G8R8A8_UNORM
 };
 
-GPU_HIDE
-void
-dx12_freeShaderCode(DX12ShaderCode *code) {
-  if (!code) {
-    return;
+static const wchar_t *dx12_dxcIncludeSuffixes[] = {
+  L"\\include\\hlsl",
+  L"\\..\\include\\hlsl",
+  L"\\..\\..\\include\\hlsl",
+  L"\\..\\..\\inc\\hlsl"
+};
+
+static const wchar_t *dx12_dxcPrefixes[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
+  [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs",
+  [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps",
+  [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs",
+  [GPU_SHADER_STAGE_TASK_BIT]     = L"as",
+  [GPU_SHADER_STAGE_MESH_BIT]     = L"ms"
+};
+
+static const char *dx12_legacyProfiles[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
+  [GPU_SHADER_STAGE_VERTEX_BIT]   = "vs_5_1",
+  [GPU_SHADER_STAGE_FRAGMENT_BIT] = "ps_5_1",
+  [GPU_SHADER_STAGE_COMPUTE_BIT]  = "cs_5_1"
+};
+
+static const D3D12_CULL_MODE dx12_cullModes[] = {
+  [GPU_CULL_MODE_NONE]  = D3D12_CULL_MODE_NONE,
+  [GPU_CULL_MODE_FRONT] = D3D12_CULL_MODE_FRONT,
+  [GPU_CULL_MODE_BACK]  = D3D12_CULL_MODE_BACK
+};
+
+static const D3D12_COMPARISON_FUNC dx12_compareFunctions[] = {
+  [GPU_COMPARE_NEVER]         = D3D12_COMPARISON_FUNC_NEVER,
+  [GPU_COMPARE_LESS]          = D3D12_COMPARISON_FUNC_LESS,
+  [GPU_COMPARE_EQUAL]         = D3D12_COMPARISON_FUNC_EQUAL,
+  [GPU_COMPARE_LESS_EQUAL]    = D3D12_COMPARISON_FUNC_LESS_EQUAL,
+  [GPU_COMPARE_GREATER]       = D3D12_COMPARISON_FUNC_GREATER,
+  [GPU_COMPARE_NOT_EQUAL]     = D3D12_COMPARISON_FUNC_NOT_EQUAL,
+  [GPU_COMPARE_GREATER_EQUAL] = D3D12_COMPARISON_FUNC_GREATER_EQUAL,
+  [GPU_COMPARE_ALWAYS]        = D3D12_COMPARISON_FUNC_ALWAYS
+};
+
+static const D3D12_STENCIL_OP dx12_stencilOperations[] = {
+  [GPU_STENCIL_OP_KEEP]            = D3D12_STENCIL_OP_KEEP,
+  [GPU_STENCIL_OP_ZERO]            = D3D12_STENCIL_OP_ZERO,
+  [GPU_STENCIL_OP_REPLACE]         = D3D12_STENCIL_OP_REPLACE,
+  [GPU_STENCIL_OP_INCREMENT_CLAMP] = D3D12_STENCIL_OP_INCR_SAT,
+  [GPU_STENCIL_OP_DECREMENT_CLAMP] = D3D12_STENCIL_OP_DECR_SAT,
+  [GPU_STENCIL_OP_INVERT]          = D3D12_STENCIL_OP_INVERT,
+  [GPU_STENCIL_OP_INCREMENT_WRAP]  = D3D12_STENCIL_OP_INCR,
+  [GPU_STENCIL_OP_DECREMENT_WRAP]  = D3D12_STENCIL_OP_DECR
+};
+
+static const D3D12_BLEND dx12_blendFactors[] = {
+  [GPU_BLEND_FACTOR_ZERO]                = D3D12_BLEND_ZERO,
+  [GPU_BLEND_FACTOR_ONE]                 = D3D12_BLEND_ONE,
+  [GPU_BLEND_FACTOR_SRC_ALPHA]           = D3D12_BLEND_SRC_ALPHA,
+  [GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA] = D3D12_BLEND_INV_SRC_ALPHA
+};
+
+static const D3D12_BLEND_OP dx12_blendOperations[] = {
+  [GPU_BLEND_OP_ADD]              = D3D12_BLEND_OP_ADD,
+  [GPU_BLEND_OP_SUBTRACT]         = D3D12_BLEND_OP_SUBTRACT,
+  [GPU_BLEND_OP_REVERSE_SUBTRACT] = D3D12_BLEND_OP_REV_SUBTRACT,
+  [GPU_BLEND_OP_MIN]              = D3D12_BLEND_OP_MIN,
+  [GPU_BLEND_OP_MAX]              = D3D12_BLEND_OP_MAX
+};
+
+static bool
+dx12__queryDXCVersion(HMODULE module, UINT32 *outMajor, UINT32 *outMinor) {
+  DXCCreateInstanceFn createInstance;
+  DXCCompiler3       *compiler;
+  DXCVersionInfo     *versionInfo;
+  UINT32              major;
+  UINT32              minor;
+  bool                available;
+
+  if (outMajor) {
+    *outMajor = 0u;
   }
 
-  if (code->owned) {
-    free(code->data);
+  if (outMinor) {
+    *outMinor = 0u;
   }
-  memset(code, 0, sizeof(*code));
+
+  if (!module
+      || !(createInstance = (DXCCreateInstanceFn)GetProcAddress(module,
+                                                                "DxcCreateInstance"))) {
+    return false;
+  }
+
+  compiler    = NULL;
+  versionInfo = NULL;
+  major       = 0u;
+  minor       = 0u;
+  available   = SUCCEEDED(createInstance(&dx12_clsidDxcCompiler,
+                                         &dx12_iidDxcCompiler3,
+                                         (void **)&compiler))
+                && compiler
+                && SUCCEEDED(compiler->lpVtbl->QueryInterface(compiler,
+                                                              &dx12_iidDxcVersionInfo,
+                                                              (void **)&versionInfo))
+                && versionInfo
+                && SUCCEEDED(versionInfo->lpVtbl->GetVersion(versionInfo,
+                                                             &major,
+                                                             &minor));
+
+  if (versionInfo) {
+    versionInfo->lpVtbl->Release(versionInfo);
+  }
+
+  if (compiler) {
+    compiler->lpVtbl->Release(compiler);
+  }
+
+  if (!available) {
+    return false;
+  }
+
+  if (outMajor) {
+    *outMajor = major;
+  }
+
+  if (outMinor) {
+    *outMinor = minor;
+  }
+
+  return true;
 }
 
 static bool
-dx12__copyShaderBlob(const void       *data,
-                     SIZE_T            size,
-                     DX12ShaderCode   *outCode) {
+dx12__copyShaderBlob(const void     *data,
+                     SIZE_T          size,
+                     DX12ShaderCode *outCode) {
   if (!data || size == 0u || !outCode) {
     return false;
   }
 
-  outCode->data = malloc(size);
-  if (!outCode->data) {
+  if (!(outCode->data = malloc(size))) {
     return false;
   }
 
   memcpy(outCode->data, data, size);
   outCode->size  = size;
   outCode->owned = true;
+
   return true;
 }
 
 static bool
 dx12__useLibraryBinary(GPUShaderLibraryDX12 *library,
-                       GPUShaderSourceBlob   *selectedSource,
-                       const void            *source,
-                       uint64_t               sourceSize,
-                       DX12ShaderCode        *outCode) {
-  if (!library || !library->binary || !selectedSource || !outCode ||
-      !source || sourceSize == 0u || sourceSize > (uint64_t)SIZE_MAX) {
+                       GPUShaderSourceBlob  *selectedSource,
+                       const void           *source,
+                       uint64_t              sourceSize,
+                       DX12ShaderCode       *outCode) {
+  if (!library || !library->binary || !selectedSource || !outCode
+      || !source || sourceSize == 0u || sourceSize > (uint64_t)SIZE_MAX) {
     return false;
   }
+
   if (selectedSource->data) {
-    if (selectedSource->size == 0u ||
-        selectedSource->size > (uint64_t)SIZE_MAX) {
+    if (selectedSource->size == 0u
+        || selectedSource->size > (uint64_t)SIZE_MAX) {
       return false;
     }
+
     outCode->data  = selectedSource->data;
     outCode->size  = (SIZE_T)selectedSource->size;
     outCode->owned = true;
     memset(selectedSource, 0, sizeof(*selectedSource));
+
     return true;
   }
+
   return dx12__copyShaderBlob(source, (SIZE_T)sourceSize, outCode);
 }
 
-static DX12ShaderCacheEntry *
+static DX12ShaderCacheEntry*
 dx12__findShader(GPUShaderLibraryDX12 *library,
                  const char           *entry,
                  GPUShaderStageFlags   stage) {
@@ -396,6 +429,7 @@ dx12__findShader(GPUShaderLibraryDX12 *library,
       return cached;
     }
   }
+
   return NULL;
 }
 
@@ -408,12 +442,15 @@ dx12__getCachedShader(GPUShaderLibraryDX12 *library,
 
   AcquireSRWLockShared(&library->cacheLock);
   cached = dx12__findShader(library, entry, stage);
+
   if (cached) {
     outCode->data  = cached->data;
     outCode->size  = cached->size;
     outCode->owned = false;
   }
+
   ReleaseSRWLockShared(&library->cacheLock);
+
   return cached != NULL;
 }
 
@@ -429,22 +466,28 @@ dx12__cacheShader(GPUShaderLibraryDX12 *library,
 
   entrySize = strlen(entry) + 1u;
   newEntry  = calloc(1, sizeof(*newEntry));
+
   if (newEntry) {
     newEntry->entry = malloc(entrySize);
   }
+
   if (!newEntry || !newEntry->entry) {
     if (newEntry) {
       free(newEntry->entry);
     }
+
     free(newEntry);
     *outCode = *code;
     memset(code, 0, sizeof(*code));
+
     return true;
   }
+
   memcpy(newEntry->entry, entry, entrySize);
 
   AcquireSRWLockExclusive(&library->cacheLock);
   cached = dx12__findShader(library, entry, stage);
+
   if (!cached) {
     newEntry->next  = library->cache;
     newEntry->data  = code->data;
@@ -455,6 +498,7 @@ dx12__cacheShader(GPUShaderLibraryDX12 *library,
     newEntry        = NULL;
     memset(code, 0, sizeof(*code));
   }
+
   outCode->data  = cached->data;
   outCode->size  = cached->size;
   outCode->owned = false;
@@ -465,6 +509,7 @@ dx12__cacheShader(GPUShaderLibraryDX12 *library,
     free(newEntry);
     dx12_freeShaderCode(code);
   }
+
   return true;
 }
 
@@ -499,10 +544,11 @@ dx12__wideEntry(const char *entry, wchar_t outEntry[256]) {
                               -1,
                               outEntry,
                               256);
+
   return count > 0;
 }
 
-static IUnknown *
+static IUnknown*
 dx12__newIncludeHandler(DXCCreateInstanceFn createInstance) {
   DXCUtils *utils;
   IUnknown *handler;
@@ -517,25 +563,24 @@ dx12__newIncludeHandler(DXCCreateInstanceFn createInstance) {
   result  = createInstance(&dx12_clsidDxcUtils,
                            &dx12_iidDxcUtils,
                            (void **)&utils);
+
   if (SUCCEEDED(result) && utils) {
     result = utils->lpVtbl->CreateDefaultIncludeHandler(utils, &handler);
     utils->lpVtbl->Release(utils);
   }
+
   return SUCCEEDED(result) ? handler : NULL;
 }
 
 static bool
 dx12__findDXCIncludePath(HMODULE module, wchar_t outPath[4096]) {
-  static const wchar_t *suffixes[] = {
-    L"\\include\\hlsl",
-    L"\\..\\include\\hlsl",
-    L"\\..\\..\\include\\hlsl",
-    L"\\..\\..\\inc\\hlsl"
-  };
-  wchar_t modulePath[4096];
-  wchar_t headerPath[4096];
+  wchar_t  modulePath[4096];
+  wchar_t  headerPath[4096];
   wchar_t *separator;
   DWORD    modulePathLength;
+  uint32_t i;
+  int      pathLength;
+  int      headerLength;
 
   if (!module || !outPath) {
     return false;
@@ -544,137 +589,123 @@ dx12__findDXCIncludePath(HMODULE module, wchar_t outPath[4096]) {
   modulePathLength = GetModuleFileNameW(module,
                                         modulePath,
                                         (DWORD)GPU_ARRAY_LEN(modulePath));
-  if (modulePathLength == 0u ||
-      modulePathLength >= GPU_ARRAY_LEN(modulePath)) {
+
+  if (modulePathLength == 0u
+      || modulePathLength >= GPU_ARRAY_LEN(modulePath)) {
     return false;
   }
+
   separator = wcsrchr(modulePath, L'\\');
+
   if (!separator) {
     separator = wcsrchr(modulePath, L'/');
   }
+
   if (!separator) {
     return false;
   }
+
   *separator = L'\0';
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(suffixes); i++) {
-    int pathLength;
-    int headerLength;
-
+  for (i = 0u; i < GPU_ARRAY_LEN(dx12_dxcIncludeSuffixes); i++) {
     pathLength = swprintf(outPath,
                           4096,
                           L"%ls%ls",
                           modulePath,
-                          suffixes[i]);
+                          dx12_dxcIncludeSuffixes[i]);
+
     if (pathLength <= 0 || pathLength >= 4096) {
       continue;
     }
+
     headerLength = swprintf(headerPath,
                             GPU_ARRAY_LEN(headerPath),
                             L"%ls\\dx\\linalg.h",
                             outPath);
+
     if (headerLength <= 0 || headerLength >= GPU_ARRAY_LEN(headerPath)) {
       continue;
     }
+
     if (GetFileAttributesW(headerPath) != INVALID_FILE_ATTRIBUTES) {
       return true;
     }
   }
+
   outPath[0] = L'\0';
+
   return false;
 }
 
-GPU_HIDE
-bool
-dx12_hasLinearAlgebraCompiler(HMODULE module) {
-  DXCCreateInstanceFn createInstance;
-  IUnknown           *includeHandler;
-  wchar_t             includePath[4096];
-  bool                available;
-
-  if (!module ||
-      !(createInstance = (DXCCreateInstanceFn)GetProcAddress(
-          module,
-          "DxcCreateInstance"
-        ))) {
-    return false;
-  }
-
-  includeHandler = dx12__newIncludeHandler(createInstance);
-  available      =
-                   dx12_queryDXCTargetProfile(module) >=
-                     USL_TARGET_PROFILE_HLSL_SM_6_10 &&
-                   includeHandler != NULL &&
-                   dx12__findDXCIncludePath(module, includePath);
-  if (includeHandler) {
-    includeHandler->lpVtbl->Release(includeHandler);
-  }
-  return available;
-}
-
 static bool
-dx12__dxcProfileName(uint32_t         targetProfile,
-                     const wchar_t   *prefix,
-                     uint32_t         minimumMinor,
-                     wchar_t          outProfile[16]) {
+dx12__dxcProfileName(uint32_t       targetProfile,
+                     const wchar_t *prefix,
+                     uint32_t       minimumMinor,
+                     wchar_t        outProfile[16]) {
   uint32_t major;
   uint32_t minor;
   int      length;
 
   major = (targetProfile >> 8u) & 0xffu;
   minor = targetProfile & 0xffu;
+
   if (!prefix || !outProfile || major != 6u || minor < minimumMinor) {
     return false;
   }
+
   length = swprintf(outProfile, 16u, L"%ls_%u_%u", prefix, major, minor);
+
   return length > 0 && length < 16;
 }
 
 static bool
-dx12__compileDXC(GPUDeviceDX12   *device,
+dx12__compileDXC(GPUDeviceDX12  *device,
                  const char     *source,
                  uint64_t        sourceSize,
                  const char     *entry,
                  const wchar_t  *profile,
                  bool            enable16BitTypes,
                  DX12ShaderCode *outCode) {
+  DXCBuffer           sourceBuffer;
+  wchar_t             entryWide[256];
+  wchar_t             includePath[4096];
+  LPCWSTR             args[11];
   DXCCreateInstanceFn createInstance;
   DXCCompiler3       *compiler;
   DXCResult          *result;
   DXCBlob            *blob;
   DXCBlob            *errors;
   IUnknown           *includeHandler;
-  DXCBuffer           sourceBuffer;
-  wchar_t             entryWide[256];
-  wchar_t             includePath[4096];
-  LPCWSTR             args[11];
   uint32_t            argCount;
   HRESULT             compileStatus;
   HRESULT             rc;
   bool                hasEntry;
 
   hasEntry = entry && entry[0] != '\0';
-  if (!device || !device->dxcAvailable || !device->dxcModule ||
-      !source || sourceSize == 0u || sourceSize > (uint64_t)SIZE_MAX ||
-      !profile || !outCode ||
-      (hasEntry && !dx12__wideEntry(entry, entryWide))) {
+
+  if (!device || !device->dxcAvailable || !device->dxcModule
+      || !source || sourceSize == 0u || sourceSize > (uint64_t)SIZE_MAX
+      || !profile || !outCode
+      || (hasEntry && !dx12__wideEntry(entry, entryWide))) {
     return false;
   }
 
   createInstance = (DXCCreateInstanceFn)GetProcAddress(device->dxcModule,
-                                                        "DxcCreateInstance");
+                                                       "DxcCreateInstance");
+
   if (!createInstance) {
     return false;
   }
 
-  compiler = NULL;
-  result   = NULL;
-  blob     = NULL;
-  errors   = NULL;
+  compiler       = NULL;
+  result         = NULL;
+  blob           = NULL;
+  errors         = NULL;
   includeHandler = NULL;
-  rc = createInstance(&dx12_clsidDxcCompiler,
-                      &dx12_iidDxcCompiler3,
-                      (void **)&compiler);
+  rc             = createInstance(&dx12_clsidDxcCompiler,
+                                  &dx12_iidDxcCompiler3,
+                                  (void **)&compiler);
+
   if (FAILED(rc) || !compiler) {
     return false;
   }
@@ -685,34 +716,42 @@ dx12__compileDXC(GPUDeviceDX12   *device,
   sourceBuffer.size     = (SIZE_T)sourceSize;
   sourceBuffer.encoding = CP_UTF8;
   argCount              = 0u;
+
   if (hasEntry) {
     args[argCount++] = L"-E";
     args[argCount++] = entryWide;
   }
+
   args[argCount++] = L"-T";
   args[argCount++] = profile;
   args[argCount++] = L"-O3";
   args[argCount++] = L"-Ges";
   args[argCount++] = L"-Qstrip_debug";
   args[argCount++] = L"-Qstrip_reflect";
+
   if (enable16BitTypes) {
     args[argCount++] = L"-enable-16bit-types";
   }
+
   if (dx12__findDXCIncludePath(device->dxcModule, includePath)) {
     args[argCount++] = L"-I";
     args[argCount++] = includePath;
   }
+
   rc = compiler->lpVtbl->Compile(compiler,
-                                  &sourceBuffer,
-                                  args,
-                                  argCount,
-                                  includeHandler,
-                                  &dx12_iidDxcResult,
-                                  (void **)&result);
+                                 &sourceBuffer,
+                                 args,
+                                 argCount,
+                                 includeHandler,
+                                 &dx12_iidDxcResult,
+                                 (void **)&result);
+
   if (includeHandler) {
     includeHandler->lpVtbl->Release(includeHandler);
   }
+
   compiler->lpVtbl->Release(compiler);
+
   if (FAILED(rc) || !result) {
     return false;
   }
@@ -720,6 +759,7 @@ dx12__compileDXC(GPUDeviceDX12   *device,
   compileStatus = E_FAIL;
   (void)result->lpVtbl->GetStatus(result, &compileStatus);
   (void)result->lpVtbl->GetErrorBuffer(result, &errors);
+
   if (errors && errors->lpVtbl->GetBufferSize(errors) > 1u) {
     dx12__logShaderDiagnostics(entry,
                                errors->lpVtbl->GetBufferPointer(errors),
@@ -727,9 +767,9 @@ dx12__compileDXC(GPUDeviceDX12   *device,
                                FAILED(compileStatus));
   }
 
-  if (SUCCEEDED(compileStatus) &&
-      SUCCEEDED(result->lpVtbl->GetResult(result, &blob)) &&
-      blob) {
+  if (SUCCEEDED(compileStatus)
+      && SUCCEEDED(result->lpVtbl->GetResult(result, &blob))
+      && blob) {
     rc = dx12__copyShaderBlob(blob->lpVtbl->GetBufferPointer(blob),
                               blob->lpVtbl->GetBufferSize(blob),
                               outCode) ? S_OK : E_OUTOFMEMORY;
@@ -740,10 +780,13 @@ dx12__compileDXC(GPUDeviceDX12   *device,
   if (blob) {
     blob->lpVtbl->Release(blob);
   }
+
   if (errors) {
     errors->lpVtbl->Release(errors);
   }
+
   result->lpVtbl->Release(result);
+
   return SUCCEEDED(rc);
 }
 
@@ -758,8 +801,8 @@ dx12__compileLegacy(const char     *source,
   UINT      flags;
   HRESULT   result;
 
-  if (!source || sourceSize == 0u || sourceSize > (uint64_t)SIZE_MAX ||
-      !entry || !profile || !outCode) {
+  if (!source || sourceSize == 0u || sourceSize > (uint64_t)SIZE_MAX
+      || !entry || !profile || !outCode) {
     return false;
   }
 
@@ -777,12 +820,14 @@ dx12__compileLegacy(const char     *source,
                       0u,
                       &blob,
                       &errors);
+
   if (errors && errors->lpVtbl->GetBufferSize(errors) > 1u) {
     dx12__logShaderDiagnostics(entry,
                                errors->lpVtbl->GetBufferPointer(errors),
                                errors->lpVtbl->GetBufferSize(errors),
                                FAILED(result));
   }
+
   if (SUCCEEDED(result) && blob) {
     result = dx12__copyShaderBlob(blob->lpVtbl->GetBufferPointer(blob),
                                   blob->lpVtbl->GetBufferSize(blob),
@@ -792,10 +837,302 @@ dx12__compileLegacy(const char     *source,
   if (blob) {
     blob->lpVtbl->Release(blob);
   }
+
   if (errors) {
     errors->lpVtbl->Release(errors);
   }
+
   return SUCCEEDED(result);
+}
+
+static bool
+dx12__topology(GPUPrimitiveTopology           topology,
+               D3D12_PRIMITIVE_TOPOLOGY_TYPE *outType,
+               D3D_PRIMITIVE_TOPOLOGY        *outTopology) {
+  if (!outType || !outTopology) {
+    return false;
+  }
+
+  switch (topology) {
+    case GPU_PRIMITIVE_TOPOLOGY_POINT_LIST:
+      *outType     = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
+      *outTopology = D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
+
+      return true;
+    case GPU_PRIMITIVE_TOPOLOGY_LINE_LIST:
+      *outType     = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+      *outTopology = D3D_PRIMITIVE_TOPOLOGY_LINELIST;
+
+      return true;
+    case GPU_PRIMITIVE_TOPOLOGY_LINE_STRIP:
+      *outType     = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+      *outTopology = D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
+
+      return true;
+    case GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
+      *outType     = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+      *outTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+
+      return true;
+    case GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
+      *outType     = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+      *outTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+
+      return true;
+    default:
+      return false;
+  }
+}
+
+static const GPUMeshPipelineEXT*
+dx12__meshPipelineInfo(const GPURenderPipelineCreateInfo *info) {
+  const GPUChainedStruct *chain;
+
+  chain = info ? info->chain.pNext : NULL;
+
+  while (chain) {
+    if (chain->sType == GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT) {
+      return (const GPUMeshPipelineEXT *)chain;
+    }
+
+    chain = chain->pNext;
+  }
+
+  return NULL;
+}
+
+static void
+dx12__meshPipelineStream(DX12MeshPipelineStream                   *stream,
+                         const D3D12_GRAPHICS_PIPELINE_STATE_DESC *desc,
+                         ID3D12RootSignature                      *rootSignature,
+                         const DX12ShaderCode                     *taskCode,
+                         const DX12ShaderCode                     *meshCode,
+                         const DX12ShaderCode                     *fragmentCode) {
+  memset(stream, 0, sizeof(*stream));
+
+  stream->rootSignature.data.type  = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE;
+  stream->rootSignature.data.value = rootSignature;
+  stream->taskShader.data.type     = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_AS;
+
+  if (taskCode) {
+    stream->taskShader.data.value.pShaderBytecode = taskCode->data;
+    stream->taskShader.data.value.BytecodeLength  = taskCode->size;
+  }
+
+  stream->meshShader.data.type                      = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_MS;
+  stream->meshShader.data.value.pShaderBytecode     = meshCode->data;
+  stream->meshShader.data.value.BytecodeLength      = meshCode->size;
+  stream->fragmentShader.data.type                  = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PS;
+  stream->fragmentShader.data.value.pShaderBytecode = fragmentCode->data;
+  stream->fragmentShader.data.value.BytecodeLength  = fragmentCode->size;
+  stream->blend.data.type                           = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_BLEND;
+  stream->blend.data.value                          = desc->BlendState;
+  stream->sampleMask.data.type                      = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_MASK;
+  stream->sampleMask.data.value                     = desc->SampleMask;
+  stream->rasterizer.data.type                      = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER;
+  stream->rasterizer.data.value                     = desc->RasterizerState;
+  stream->depthStencil.data.type                    = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL;
+  stream->depthStencil.data.value                   = desc->DepthStencilState;
+  stream->topology.data.type                        = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PRIMITIVE_TOPOLOGY;
+  stream->topology.data.value                       = desc->PrimitiveTopologyType;
+  stream->renderTargets.data.type                   = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS;
+  stream->renderTargets.data.value.count            = desc->NumRenderTargets;
+  memcpy(stream->renderTargets.data.value.formats,
+         desc->RTVFormats,
+         sizeof(desc->RTVFormats));
+
+  stream->depthFormat.data.type  = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL_FORMAT;
+  stream->depthFormat.data.value = desc->DSVFormat;
+  stream->sampleDesc.data.type   = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_DESC;
+  stream->sampleDesc.data.value  = desc->SampleDesc;
+  stream->cachedPSO.data.type    = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_CACHED_PSO;
+  stream->flags.data.type        = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_FLAGS;
+  stream->flags.data.value       = desc->Flags;
+}
+
+static D3D12_CULL_MODE
+dx12__cullMode(GPUCullMode mode) {
+  return (uint32_t)mode < GPU_ARRAY_LEN(dx12_cullModes) ? dx12_cullModes[mode] : D3D12_CULL_MODE_NONE;
+}
+
+static D3D12_COMPARISON_FUNC
+dx12__compareFunction(GPUCompareOp op) {
+  return (uint32_t)op < GPU_ARRAY_LEN(dx12_compareFunctions) ? dx12_compareFunctions[op] : D3D12_COMPARISON_FUNC_NEVER;
+}
+
+static D3D12_STENCIL_OP
+dx12__stencilOperation(GPUStencilOp op) {
+  return (uint32_t)op < GPU_ARRAY_LEN(dx12_stencilOperations) ? dx12_stencilOperations[op] : D3D12_STENCIL_OP_KEEP;
+}
+
+static D3D12_BLEND
+dx12__blendFactor(GPUBlendFactor factor) {
+  return (uint32_t)factor < GPU_ARRAY_LEN(dx12_blendFactors) ? dx12_blendFactors[factor] : D3D12_BLEND_ZERO;
+}
+
+static D3D12_BLEND_OP
+dx12__blendOperation(GPUBlendOp op) {
+  return (uint32_t)op < GPU_ARRAY_LEN(dx12_blendOperations) ? dx12_blendOperations[op] : D3D12_BLEND_OP_ADD;
+}
+
+static void
+dx12__fillStencilFace(D3D12_DEPTH_STENCILOP_DESC *desc,
+                      const GPUStencilFaceState  *state) {
+  desc->StencilFailOp      = dx12__stencilOperation(state->failOp);
+  desc->StencilDepthFailOp = dx12__stencilOperation(state->depthFailOp);
+  desc->StencilPassOp      = dx12__stencilOperation(state->passOp);
+  desc->StencilFunc        = dx12__compareFunction(state->compare);
+}
+
+static bool
+dx12__inputLayout(const GPUVertexState      *state,
+                  D3D12_INPUT_ELEMENT_DESC **outElements,
+                  uint32_t                  *outCount) {
+  D3D12_INPUT_ELEMENT_DESC    *elements;
+  const GPUVertexBufferLayout *layout;
+  const GPUVertexAttribute    *attribute;
+  uint32_t                     count;
+  uint32_t                     cursor;
+  uint32_t                     countIndex;
+  uint32_t                     layoutIndex;
+  uint32_t                     attributeIndex;
+  DXGI_FORMAT                  format;
+
+  if (!state || !outElements || !outCount) {
+    return false;
+  }
+
+  *outElements = NULL;
+  *outCount    = 0u;
+  count        = 0u;
+
+  for (countIndex = 0u; countIndex < state->bufferLayoutCount; countIndex++) {
+    if (state->pBufferLayouts[countIndex].attributeCount > UINT32_MAX - count) {
+      return false;
+    }
+
+    count += state->pBufferLayouts[countIndex].attributeCount;
+  }
+
+  if (count == 0u) {
+    return true;
+  }
+
+  if (!(elements = calloc(count, sizeof(*elements)))) {
+    return false;
+  }
+
+  cursor = 0u;
+
+  for (layoutIndex = 0u; layoutIndex < state->bufferLayoutCount; layoutIndex++) {
+    layout = &state->pBufferLayouts[layoutIndex];
+
+    for (attributeIndex = 0u; attributeIndex < layout->attributeCount; attributeIndex++) {
+      attribute = &layout->pAttributes[attributeIndex];
+      format    = (uint32_t)attribute->format < GPU_ARRAY_LEN(dx12_vertexFormats)
+                  ? dx12_vertexFormats[attribute->format]
+                  : DXGI_FORMAT_UNKNOWN;
+
+      if (format == DXGI_FORMAT_UNKNOWN) {
+        free(elements);
+        return false;
+      }
+
+      elements[cursor].SemanticName         = "ATTRIBUTE";
+      elements[cursor].SemanticIndex        = attribute->shaderLocation;
+      elements[cursor].Format               = format;
+      elements[cursor].InputSlot            = layoutIndex;
+      elements[cursor].AlignedByteOffset    = attribute->offset;
+      elements[cursor].InputSlotClass       = layout->stepMode == GPU_VERTEX_STEP_MODE_INSTANCE
+                                             ? D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA
+                                             : D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+      elements[cursor].InstanceDataStepRate = layout->stepMode == GPU_VERTEX_STEP_MODE_INSTANCE ? 1u : 0u;
+      cursor++;
+    }
+  }
+
+  *outElements = elements;
+  *outCount    = count;
+
+  return true;
+}
+
+GPU_HIDE
+uint32_t
+dx12_queryDXCTargetProfile(HMODULE module) {
+  UINT32 major;
+  UINT32 minor;
+
+  if (!dx12__queryDXCVersion(module, &major, &minor) || major == 0u) {
+    return USL_TARGET_PROFILE_NONE;
+  }
+
+  if (major > 1u || minor >= 10u) {
+    return USL_TARGET_PROFILE_HLSL_SM_6_10;
+  }
+
+  switch (minor) {
+    case 9u:
+      return USL_TARGET_PROFILE_HLSL_SM_6_9;
+    case 8u:
+      return USL_TARGET_PROFILE_HLSL_SM_6_8;
+    case 7u:
+      return USL_TARGET_PROFILE_HLSL_SM_6_7;
+    case 6u:
+      return USL_TARGET_PROFILE_HLSL_SM_6_6;
+    case 5u:
+      return USL_TARGET_PROFILE_HLSL_SM_6_5;
+    case 4u:
+      return USL_TARGET_PROFILE_HLSL_SM_6_4;
+    case 3u:
+      return USL_TARGET_PROFILE_HLSL_SM_6_3;
+    case 2u:
+      return USL_TARGET_PROFILE_HLSL_SM_6_2;
+    case 1u:
+      return USL_TARGET_PROFILE_HLSL_SM_6_1;
+    default:
+      return USL_TARGET_PROFILE_HLSL_SM_6_0;
+  }
+}
+
+GPU_HIDE
+void
+dx12_freeShaderCode(DX12ShaderCode *code) {
+  if (!code) {
+    return;
+  }
+
+  if (code->owned) {
+    free(code->data);
+  }
+
+  memset(code, 0, sizeof(*code));
+}
+
+GPU_HIDE
+bool
+dx12_hasLinearAlgebraCompiler(HMODULE module) {
+  wchar_t             includePath[4096];
+  DXCCreateInstanceFn createInstance;
+  IUnknown           *includeHandler;
+  bool                available;
+
+  if (!module
+      || !(createInstance = (DXCCreateInstanceFn)GetProcAddress(module,
+                                                                "DxcCreateInstance"))) {
+    return false;
+  }
+
+  includeHandler = dx12__newIncludeHandler(createInstance);
+  available      = dx12_queryDXCTargetProfile(module) >= USL_TARGET_PROFILE_HLSL_SM_6_10
+                   && includeHandler != NULL
+                   && dx12__findDXCIncludePath(module, includePath);
+
+  if (includeHandler) {
+    includeHandler->lpVtbl->Release(includeHandler);
+  }
+
+  return available;
 }
 
 GPU_HIDE
@@ -805,36 +1142,27 @@ dx12_compileShader(GPUDeviceDX12      *device,
                    const char         *entry,
                    GPUShaderStageFlags stage,
                    DX12ShaderCode     *outCode) {
-  static const wchar_t *dxcPrefixes[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
-    [GPU_SHADER_STAGE_VERTEX_BIT]   = L"vs",
-    [GPU_SHADER_STAGE_FRAGMENT_BIT] = L"ps",
-    [GPU_SHADER_STAGE_COMPUTE_BIT]  = L"cs",
-    [GPU_SHADER_STAGE_TASK_BIT]     = L"as",
-    [GPU_SHADER_STAGE_MESH_BIT]     = L"ms"
-  };
-  static const char *legacyProfiles[GPU_SHADER_STAGE_MESH_BIT + 1u] = {
-    [GPU_SHADER_STAGE_VERTEX_BIT]   = "vs_5_1",
-    [GPU_SHADER_STAGE_FRAGMENT_BIT] = "ps_5_1",
-    [GPU_SHADER_STAGE_COMPUTE_BIT]  = "cs_5_1"
-  };
-  GPUShaderLibraryDX12 *native;
   GPUShaderSourceBlob   selectedSource;
   DX12ShaderCode        compiled;
+  wchar_t               dxcProfile[16];
+  GPUShaderLibraryDX12 *native;
   const char           *source;
   uint64_t              sourceSize;
-  wchar_t               dxcProfile[16];
   uint32_t              minimumMinor;
   GPUResult             sourceResult;
   bool                  success;
 
   native = library ? library->_priv : NULL;
-  if (!device || !native || !native->source || native->sourceSize == 0u ||
-      !entry || !outCode || stage == 0u || (stage & (stage - 1u)) != 0u ||
-      stage >= GPU_ARRAY_LEN(dxcPrefixes) || !dxcPrefixes[stage] ||
-      (!native->binary && !device->dxcAvailable && !legacyProfiles[stage])) {
+
+  if (!device || !native || !native->source || native->sourceSize == 0u
+      || !entry || !outCode || stage == 0u || (stage & (stage - 1u)) != 0u
+      || stage >= GPU_ARRAY_LEN(dx12_dxcPrefixes) || !dx12_dxcPrefixes[stage]
+      || (!native->binary && !device->dxcAvailable && !dx12_legacyProfiles[stage])) {
     return false;
   }
+
   memset(outCode, 0, sizeof(*outCode));
+
   if (dx12__getCachedShader(native, entry, stage, outCode)) {
     return true;
   }
@@ -845,6 +1173,7 @@ dx12_compileShader(GPUDeviceDX12      *device,
   sourceResult = gpuCompileShaderLibraryEntry(library,
                                               entry,
                                               &selectedSource);
+
   if (sourceResult == GPU_OK) {
     source     = selectedSource.data;
     sourceSize = selectedSource.size;
@@ -853,6 +1182,7 @@ dx12_compileShader(GPUDeviceDX12      *device,
   }
 
   memset(&compiled, 0, sizeof(compiled));
+
   if (native->binary) {
     success = dx12__useLibraryBinary(native,
                                      &selectedSource,
@@ -860,31 +1190,34 @@ dx12_compileShader(GPUDeviceDX12      *device,
                                      sourceSize,
                                      &compiled);
   } else if (device->dxcAvailable) {
-    minimumMinor = stage == GPU_SHADER_STAGE_TASK_BIT ||
-                   stage == GPU_SHADER_STAGE_MESH_BIT ? 5u : 0u;
+    minimumMinor = stage == GPU_SHADER_STAGE_TASK_BIT
+                   || stage == GPU_SHADER_STAGE_MESH_BIT ? 5u : 0u;
+
     if (!dx12__dxcProfileName(device->uslTargetProfile,
-                              dxcPrefixes[stage],
+                              dx12_dxcPrefixes[stage],
                               minimumMinor,
                               dxcProfile)) {
       gpuFreeShaderSourceBlob(&selectedSource);
       return false;
     }
+
     success = dx12__compileDXC(device,
-                              source,
-                              sourceSize,
-                              entry,
-                              dxcProfile,
-                              device->shaderF16Enabled ||
-                                device->subgroupMatrixEnabled,
-                              &compiled);
+                               source,
+                               sourceSize,
+                               entry,
+                               dxcProfile,
+                               device->shaderF16Enabled || device->subgroupMatrixEnabled,
+                               &compiled);
   } else {
     success = dx12__compileLegacy(source,
                                   sourceSize,
                                   entry,
-                                  legacyProfiles[stage],
+                                  dx12_legacyProfiles[stage],
                                   &compiled);
   }
+
   gpuFreeShaderSourceBlob(&selectedSource);
+
   return success && dx12__cacheShader(native,
                                       entry,
                                       stage,
@@ -898,28 +1231,31 @@ dx12_compileRayLibrary(GPUDeviceDX12    *device,
                        GPUShaderLibrary *library,
                        uint64_t          entryMask,
                        DX12ShaderCode   *outCode) {
-  GPUShaderLibraryDX12 *native;
   GPUShaderSourceBlob   selectedSource;
   DX12ShaderCode        compiled;
   char                  cacheEntry[64];
+  wchar_t               profile[16];
+  GPUShaderLibraryDX12 *native;
   const char           *source;
   uint64_t              sourceSize;
-  wchar_t               profile[16];
   GPUResult             sourceResult;
   bool                  success;
 
   native = library ? library->_priv : NULL;
-  if (!device || !device->rayTracingPipeline ||
-      !native || !native->source || native->sourceSize == 0u ||
-      (!native->binary && !device->dxcAvailable) ||
-      entryMask == 0u || !outCode ||
-      snprintf(cacheEntry,
-               sizeof(cacheEntry),
-               "$ray-library-%016llx",
-               (unsigned long long)entryMask) <= 0) {
+
+  if (!device || !device->rayTracingPipeline
+      || !native || !native->source || native->sourceSize == 0u
+      || (!native->binary && !device->dxcAvailable)
+      || entryMask == 0u || !outCode
+      || snprintf(cacheEntry,
+                  sizeof(cacheEntry),
+                  "$ray-library-%016llx",
+                  (unsigned long long)entryMask) <= 0) {
     return false;
   }
+
   memset(outCode, 0, sizeof(*outCode));
+
   if (dx12__getCachedShader(native,
                             cacheEntry,
                             GPU_SHADER_STAGE_RAY_GENERATION_BIT,
@@ -927,25 +1263,28 @@ dx12_compileRayLibrary(GPUDeviceDX12    *device,
     return true;
   }
 
-  if (!native->binary &&
-      !dx12__dxcProfileName(device->uslTargetProfile,
-                            L"lib",
-                            5u,
-                            profile)) {
+  if (!native->binary
+      && !dx12__dxcProfileName(device->uslTargetProfile,
+                               L"lib",
+                               5u,
+                               profile)) {
     return false;
   }
+
   memset(&selectedSource, 0, sizeof(selectedSource));
   source       = native->source;
   sourceSize   = native->sourceSize;
   sourceResult = gpuCompileShaderLibraryEntryMask(library,
                                                   entryMask,
                                                   &selectedSource);
+
   if (sourceResult == GPU_OK) {
     source     = selectedSource.data;
     sourceSize = selectedSource.size;
   } else if (sourceResult != GPU_ERROR_UNSUPPORTED) {
     return false;
   }
+
   memset(&compiled, 0, sizeof(compiled));
   success = native->binary
               ? dx12__useLibraryBinary(native,
@@ -958,10 +1297,11 @@ dx12_compileRayLibrary(GPUDeviceDX12    *device,
                                  sourceSize,
                                  NULL,
                                  profile,
-                                 device->shaderF16Enabled ||
-                                   device->subgroupMatrixEnabled,
+                                 device->shaderF16Enabled || device->subgroupMatrixEnabled,
                                  &compiled);
+
   gpuFreeShaderSourceBlob(&selectedSource);
+
   return success && dx12__cacheShader(native,
                                       cacheEntry,
                                       GPU_SHADER_STAGE_RAY_GENERATION_BIT,
@@ -972,32 +1312,35 @@ dx12_compileRayLibrary(GPUDeviceDX12    *device,
 GPU_HIDE
 bool
 dx12_compileExecutionGraphLibrary(GPUDeviceDX12    *device,
-                                   GPUShaderLibrary *library,
-                                   uint64_t          entryMask,
-                                   DX12ShaderCode   *outCode) {
-  GPUShaderLibraryDX12 *native;
+                                  GPUShaderLibrary *library,
+                                  uint64_t          entryMask,
+                                  DX12ShaderCode   *outCode) {
   GPUShaderSourceBlob   selectedSource;
   DX12ShaderCode        compiled;
   char                  cacheEntry[64];
+  wchar_t               profile[16];
+  GPUShaderLibraryDX12 *native;
   const char           *source;
   uint64_t              sourceSize;
-  wchar_t               profile[16];
   GPUResult             sourceResult;
   bool                  success;
 
   native = library ? library->_priv : NULL;
-  if (!device || !device->executionGraph ||
-      device->shaderModel < (D3D_SHADER_MODEL)0x68 || !native ||
-      !native->source || native->sourceSize == 0u ||
-      (!native->binary && !device->dxcAvailable) ||
-      entryMask == 0u || !outCode ||
-      snprintf(cacheEntry,
-               sizeof(cacheEntry),
-               "$execution-graph-%016llx",
-               (unsigned long long)entryMask) <= 0) {
+
+  if (!device || !device->executionGraph
+      || device->shaderModel < (D3D_SHADER_MODEL)0x68 || !native
+      || !native->source || native->sourceSize == 0u
+      || (!native->binary && !device->dxcAvailable)
+      || entryMask == 0u || !outCode
+      || snprintf(cacheEntry,
+                  sizeof(cacheEntry),
+                  "$execution-graph-%016llx",
+                  (unsigned long long)entryMask) <= 0) {
     return false;
   }
+
   memset(outCode, 0, sizeof(*outCode));
+
   if (dx12__getCachedShader(native,
                             cacheEntry,
                             GPU_SHADER_STAGE_COMPUTE_BIT,
@@ -1005,25 +1348,28 @@ dx12_compileExecutionGraphLibrary(GPUDeviceDX12    *device,
     return true;
   }
 
-  if (!native->binary &&
-      !dx12__dxcProfileName(device->uslTargetProfile,
-                            L"lib",
-                            8u,
-                            profile)) {
+  if (!native->binary
+      && !dx12__dxcProfileName(device->uslTargetProfile,
+                               L"lib",
+                               8u,
+                               profile)) {
     return false;
   }
+
   memset(&selectedSource, 0, sizeof(selectedSource));
   source       = native->source;
   sourceSize   = native->sourceSize;
   sourceResult = gpuCompileShaderLibraryEntryMask(library,
                                                   entryMask,
                                                   &selectedSource);
+
   if (sourceResult == GPU_OK) {
     source     = selectedSource.data;
     sourceSize = selectedSource.size;
   } else if (sourceResult != GPU_ERROR_UNSUPPORTED) {
     return false;
   }
+
   memset(&compiled, 0, sizeof(compiled));
   success = native->binary
               ? dx12__useLibraryBinary(native,
@@ -1036,10 +1382,11 @@ dx12_compileExecutionGraphLibrary(GPUDeviceDX12    *device,
                                  sourceSize,
                                  NULL,
                                  profile,
-                                 device->shaderF16Enabled ||
-                                   device->subgroupMatrixEnabled,
+                                 device->shaderF16Enabled || device->subgroupMatrixEnabled,
                                  &compiled);
+
   gpuFreeShaderSourceBlob(&selectedSource);
+
   return success && dx12__cacheShader(native,
                                       cacheEntry,
                                       GPU_SHADER_STAGE_COMPUTE_BIT,
@@ -1047,294 +1394,40 @@ dx12_compileExecutionGraphLibrary(GPUDeviceDX12    *device,
                                       outCode);
 }
 
-static bool
-dx12__topology(GPUPrimitiveTopology             topology,
-               D3D12_PRIMITIVE_TOPOLOGY_TYPE *outType,
-               D3D_PRIMITIVE_TOPOLOGY        *outTopology) {
-  if (!outType || !outTopology) {
-    return false;
-  }
-
-  switch (topology) {
-    case GPU_PRIMITIVE_TOPOLOGY_POINT_LIST:
-      *outType     = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
-      *outTopology = D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
-      return true;
-    case GPU_PRIMITIVE_TOPOLOGY_LINE_LIST:
-      *outType     = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
-      *outTopology = D3D_PRIMITIVE_TOPOLOGY_LINELIST;
-      return true;
-    case GPU_PRIMITIVE_TOPOLOGY_LINE_STRIP:
-      *outType     = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
-      *outTopology = D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
-      return true;
-    case GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
-      *outType     = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-      *outTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
-      return true;
-    case GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
-      *outType     = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-      *outTopology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-      return true;
-    default:
-      return false;
-  }
-}
-
-static const GPUMeshPipelineEXT*
-dx12__meshPipelineInfo(const GPURenderPipelineCreateInfo *info) {
-  const GPUChainedStruct *chain;
-
-  chain = info ? info->chain.pNext : NULL;
-  while (chain) {
-    if (chain->sType == GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT) {
-      return (const GPUMeshPipelineEXT *)chain;
-    }
-    chain = chain->pNext;
-  }
-  return NULL;
-}
-
-static void
-dx12__meshPipelineStream(
-  DX12MeshPipelineStream                   *stream,
-  const D3D12_GRAPHICS_PIPELINE_STATE_DESC *desc,
-  ID3D12RootSignature                      *rootSignature,
-  const DX12ShaderCode                     *taskCode,
-  const DX12ShaderCode                     *meshCode,
-  const DX12ShaderCode                     *fragmentCode) {
-  memset(stream, 0, sizeof(*stream));
-
-  stream->rootSignature.data.type =
-    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE;
-  stream->rootSignature.data.value = rootSignature;
-  stream->taskShader.data.type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_AS;
-  if (taskCode) {
-    stream->taskShader.data.value.pShaderBytecode = taskCode->data;
-    stream->taskShader.data.value.BytecodeLength  = taskCode->size;
-  }
-  stream->meshShader.data.type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_MS;
-  stream->meshShader.data.value.pShaderBytecode = meshCode->data;
-  stream->meshShader.data.value.BytecodeLength  = meshCode->size;
-  stream->fragmentShader.data.type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PS;
-  stream->fragmentShader.data.value.pShaderBytecode = fragmentCode->data;
-  stream->fragmentShader.data.value.BytecodeLength  = fragmentCode->size;
-  stream->blend.data.type  = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_BLEND;
-  stream->blend.data.value = desc->BlendState;
-  stream->sampleMask.data.type =
-    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_MASK;
-  stream->sampleMask.data.value = desc->SampleMask;
-  stream->rasterizer.data.type =
-    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER;
-  stream->rasterizer.data.value = desc->RasterizerState;
-  stream->depthStencil.data.type =
-    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL;
-  stream->depthStencil.data.value = desc->DepthStencilState;
-  stream->topology.data.type =
-    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PRIMITIVE_TOPOLOGY;
-  stream->topology.data.value = desc->PrimitiveTopologyType;
-  stream->renderTargets.data.type =
-    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS;
-  stream->renderTargets.data.value.count = desc->NumRenderTargets;
-  memcpy(stream->renderTargets.data.value.formats,
-         desc->RTVFormats,
-         sizeof(desc->RTVFormats));
-  stream->depthFormat.data.type =
-    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL_FORMAT;
-  stream->depthFormat.data.value = desc->DSVFormat;
-  stream->sampleDesc.data.type =
-    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_DESC;
-  stream->sampleDesc.data.value = desc->SampleDesc;
-  stream->cachedPSO.data.type =
-    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_CACHED_PSO;
-  stream->flags.data.type  = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_FLAGS;
-  stream->flags.data.value = desc->Flags;
-}
-
-static D3D12_CULL_MODE
-dx12__cullMode(GPUCullMode mode) {
-  static const D3D12_CULL_MODE modes[] = {
-    [GPU_CULL_MODE_NONE]  = D3D12_CULL_MODE_NONE,
-    [GPU_CULL_MODE_FRONT] = D3D12_CULL_MODE_FRONT,
-    [GPU_CULL_MODE_BACK]  = D3D12_CULL_MODE_BACK
-  };
-
-  return (uint32_t)mode < GPU_ARRAY_LEN(modes)
-           ? modes[mode]
-           : D3D12_CULL_MODE_NONE;
-}
-
-static D3D12_COMPARISON_FUNC
-dx12__compareFunction(GPUCompareOp op) {
-  static const D3D12_COMPARISON_FUNC functions[] = {
-    [GPU_COMPARE_NEVER]         = D3D12_COMPARISON_FUNC_NEVER,
-    [GPU_COMPARE_LESS]          = D3D12_COMPARISON_FUNC_LESS,
-    [GPU_COMPARE_EQUAL]         = D3D12_COMPARISON_FUNC_EQUAL,
-    [GPU_COMPARE_LESS_EQUAL]    = D3D12_COMPARISON_FUNC_LESS_EQUAL,
-    [GPU_COMPARE_GREATER]       = D3D12_COMPARISON_FUNC_GREATER,
-    [GPU_COMPARE_NOT_EQUAL]     = D3D12_COMPARISON_FUNC_NOT_EQUAL,
-    [GPU_COMPARE_GREATER_EQUAL] = D3D12_COMPARISON_FUNC_GREATER_EQUAL,
-    [GPU_COMPARE_ALWAYS]        = D3D12_COMPARISON_FUNC_ALWAYS
-  };
-
-  return (uint32_t)op < GPU_ARRAY_LEN(functions)
-           ? functions[op]
-           : D3D12_COMPARISON_FUNC_NEVER;
-}
-
-static D3D12_STENCIL_OP
-dx12__stencilOperation(GPUStencilOp op) {
-  static const D3D12_STENCIL_OP operations[] = {
-    [GPU_STENCIL_OP_KEEP]            = D3D12_STENCIL_OP_KEEP,
-    [GPU_STENCIL_OP_ZERO]            = D3D12_STENCIL_OP_ZERO,
-    [GPU_STENCIL_OP_REPLACE]         = D3D12_STENCIL_OP_REPLACE,
-    [GPU_STENCIL_OP_INCREMENT_CLAMP] = D3D12_STENCIL_OP_INCR_SAT,
-    [GPU_STENCIL_OP_DECREMENT_CLAMP] = D3D12_STENCIL_OP_DECR_SAT,
-    [GPU_STENCIL_OP_INVERT]          = D3D12_STENCIL_OP_INVERT,
-    [GPU_STENCIL_OP_INCREMENT_WRAP]  = D3D12_STENCIL_OP_INCR,
-    [GPU_STENCIL_OP_DECREMENT_WRAP]  = D3D12_STENCIL_OP_DECR
-  };
-
-  return (uint32_t)op < GPU_ARRAY_LEN(operations)
-           ? operations[op]
-           : D3D12_STENCIL_OP_KEEP;
-}
-
-static D3D12_BLEND
-dx12__blendFactor(GPUBlendFactor factor) {
-  static const D3D12_BLEND factors[] = {
-    [GPU_BLEND_FACTOR_ZERO]                = D3D12_BLEND_ZERO,
-    [GPU_BLEND_FACTOR_ONE]                 = D3D12_BLEND_ONE,
-    [GPU_BLEND_FACTOR_SRC_ALPHA]           = D3D12_BLEND_SRC_ALPHA,
-    [GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA] = D3D12_BLEND_INV_SRC_ALPHA
-  };
-
-  return (uint32_t)factor < GPU_ARRAY_LEN(factors)
-           ? factors[factor]
-           : D3D12_BLEND_ZERO;
-}
-
-static D3D12_BLEND_OP
-dx12__blendOperation(GPUBlendOp op) {
-  static const D3D12_BLEND_OP operations[] = {
-    [GPU_BLEND_OP_ADD]              = D3D12_BLEND_OP_ADD,
-    [GPU_BLEND_OP_SUBTRACT]         = D3D12_BLEND_OP_SUBTRACT,
-    [GPU_BLEND_OP_REVERSE_SUBTRACT] = D3D12_BLEND_OP_REV_SUBTRACT,
-    [GPU_BLEND_OP_MIN]              = D3D12_BLEND_OP_MIN,
-    [GPU_BLEND_OP_MAX]              = D3D12_BLEND_OP_MAX
-  };
-
-  return (uint32_t)op < GPU_ARRAY_LEN(operations)
-           ? operations[op]
-           : D3D12_BLEND_OP_ADD;
-}
-
-static void
-dx12__fillStencilFace(D3D12_DEPTH_STENCILOP_DESC  *desc,
-                      const GPUStencilFaceState   *state) {
-  desc->StencilFailOp      = dx12__stencilOperation(state->failOp);
-  desc->StencilDepthFailOp = dx12__stencilOperation(state->depthFailOp);
-  desc->StencilPassOp      = dx12__stencilOperation(state->passOp);
-  desc->StencilFunc        = dx12__compareFunction(state->compare);
-}
-
-static bool
-dx12__inputLayout(const GPUVertexState       *state,
-                  D3D12_INPUT_ELEMENT_DESC **outElements,
-                  uint32_t                   *outCount) {
-  D3D12_INPUT_ELEMENT_DESC *elements;
-  uint32_t                  count;
-  uint32_t                  cursor;
-
-  if (!state || !outElements || !outCount) {
-    return false;
-  }
-
-  *outElements = NULL;
-  *outCount    = 0u;
-  count        = 0u;
-  for (uint32_t i = 0u; i < state->bufferLayoutCount; i++) {
-    if (state->pBufferLayouts[i].attributeCount > UINT32_MAX - count) {
-      return false;
-    }
-    count += state->pBufferLayouts[i].attributeCount;
-  }
-  if (count == 0u) {
-    return true;
-  }
-
-  elements = calloc(count, sizeof(*elements));
-  if (!elements) {
-    return false;
-  }
-
-  cursor = 0u;
-  for (uint32_t i = 0u; i < state->bufferLayoutCount; i++) {
-    const GPUVertexBufferLayout *layout;
-
-    layout = &state->pBufferLayouts[i];
-    for (uint32_t j = 0u; j < layout->attributeCount; j++) {
-      const GPUVertexAttribute *attribute;
-      DXGI_FORMAT               format;
-
-      attribute = &layout->pAttributes[j];
-      format = (uint32_t)attribute->format < GPU_ARRAY_LEN(dx12_vertexFormats)
-                 ? dx12_vertexFormats[attribute->format]
-                 : DXGI_FORMAT_UNKNOWN;
-      if (format == DXGI_FORMAT_UNKNOWN) {
-        free(elements);
-        return false;
-      }
-
-      elements[cursor].SemanticName         = "ATTRIBUTE";
-      elements[cursor].SemanticIndex        = attribute->shaderLocation;
-      elements[cursor].Format               = format;
-      elements[cursor].InputSlot            = i;
-      elements[cursor].AlignedByteOffset    = attribute->offset;
-      elements[cursor].InputSlotClass       =
-        layout->stepMode == GPU_VERTEX_STEP_MODE_INSTANCE
-          ? D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA
-          : D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-      elements[cursor].InstanceDataStepRate =
-        layout->stepMode == GPU_VERTEX_STEP_MODE_INSTANCE ? 1u : 0u;
-      cursor++;
-    }
-  }
-
-  *outElements = elements;
-  *outCount    = count;
-  return true;
-}
-
 GPU_HIDE
 GPUResult
-dx12_createRenderPipeline(GPUDevice                         * __restrict device,
-                          const GPURenderPipelineCreateInfo * __restrict info,
-                          uint32_t                           requiredBindGroupMask,
-                          GPURenderPipeline                 * __restrict pipeline) {
-  GPUDeviceDX12                      *deviceDX12;
-  GPUShaderLibraryDX12               *library;
-  GPUPipelineLayoutDX12              *layout;
-  GPURenderPipelineDX12              *native;
-  ID3D12RootSignature                *rootSignature;
-  const GPUMeshPipelineEXT           *mesh;
-  const GPUDepthStencilState         *depthStencil;
-  D3D12_INPUT_ELEMENT_DESC           *elements;
-  D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {0};
-  D3D12_PIPELINE_STATE_STREAM_DESC   streamDesc = {0};
+dx12_createRenderPipeline(GPUDevice                         *__restrict device,
+                          const GPURenderPipelineCreateInfo *__restrict info,
+                          uint32_t                                      requiredBindGroupMask,
+                          GPURenderPipeline                 *__restrict pipeline) {
+  D3D12_GRAPHICS_PIPELINE_STATE_DESC desc         = {0};
+  D3D12_PIPELINE_STATE_STREAM_DESC   streamDesc   = {0};
   DX12MeshPipelineStream             meshStream;
-  DX12ShaderCode                     vertexCode = {0};
-  DX12ShaderCode                     taskCode = {0};
-  DX12ShaderCode                     meshCode = {0};
+  DX12ShaderCode                     vertexCode   = {0};
+  DX12ShaderCode                     taskCode     = {0};
+  DX12ShaderCode                     meshCode     = {0};
   DX12ShaderCode                     fragmentCode = {0};
   DX12PipelineKey                    rootKey;
+  GPUStencilFaceState                defaultFace;
+  GPUDeviceDX12                     *deviceDX12;
+  GPUShaderLibraryDX12              *library;
+  GPUPipelineLayoutDX12             *layout;
+  GPURenderPipelineDX12             *native;
+  ID3D12RootSignature               *rootSignature;
+  const GPUMeshPipelineEXT          *mesh;
+  const GPUDepthStencilState        *depthStencil;
+  D3D12_INPUT_ELEMENT_DESC          *elements;
+  const GPUBlendState               *blend;
   uint64_t                           entryMask;
   uint32_t                           elementCount;
   GPUResult                          rootResult;
   HRESULT                            result;
+  uint32_t                           vertexIndex;
+  uint32_t                           colorIndex;
+  UINT8                              writeMask;
 
-  if (!device || !device->_priv || !info || !info->library ||
-      !info->layout || !pipeline) {
+  if (!device || !device->_priv || !info || !info->library
+      || !info->layout || !pipeline) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -1348,38 +1441,43 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
   layout        = info->layout->_native;
   mesh          = dx12__meshPipelineInfo(info);
   depthStencil  = info->pDepthStencilState;
-  if (!library || !library->source || !layout || !layout->rootSignature ||
-      info->vertex.bufferLayoutCount >
-        D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT ||
-      (mesh && (!deviceDX12->meshShader || !deviceDX12->d3dDevice2)) ||
-      (!mesh && !dx12__inputLayout(&info->vertex,
-                                   &elements,
-                                   &elementCount)) ||
-      (mesh && info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_LINE_LIST &&
-       info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)) {
+
+  if (!library || !library->source || !layout || !layout->rootSignature
+      || info->vertex.bufferLayoutCount >
+        D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT
+      || (mesh && (!deviceDX12->meshShader || !deviceDX12->d3dDevice2))
+      || (!mesh && !dx12__inputLayout(&info->vertex,
+                                      &elements,
+                                      &elementCount))
+      || (mesh && info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_LINE_LIST
+          && info->primitiveTopology != GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)) {
     free(elements);
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  native = calloc(1, sizeof(*native));
-  if (!native) {
+  if (!(native = calloc(1, sizeof(*native)))) {
     free(elements);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+
   entryMask = gpuShaderEntryBit(info->library, info->fragmentEntry);
+
   if (mesh) {
     if (mesh->taskEntry)
       entryMask |= gpuShaderEntryBit(info->library, mesh->taskEntry);
+
     entryMask |= gpuShaderEntryBit(info->library, mesh->meshEntry);
   } else {
     entryMask |= gpuShaderEntryBit(info->library, info->vertexEntry);
   }
+
   rootResult = dx12_createShaderRootSignature(device,
                                               info->layout,
                                               info->library,
                                               entryMask,
                                               &rootSignature,
                                               rootKey.value);
+
   if (rootResult != GPU_OK) {
     fprintf(stderr,
             "GPU Direct3D 12 shader root signature failed (%d)\n",
@@ -1388,19 +1486,24 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   native->mesh = mesh != NULL;
+
   if (!mesh) {
     native->vertexBufferCount = info->vertex.bufferLayoutCount;
-    for (uint32_t i = 0u; i < native->vertexBufferCount; i++) {
-      native->vertexStrides[i] = info->vertex.pBufferLayouts[i].strideBytes;
+
+    for (vertexIndex = 0u; vertexIndex < native->vertexBufferCount; vertexIndex++) {
+      native->vertexStrides[vertexIndex] = info->vertex.pBufferLayouts[vertexIndex].strideBytes;
     }
   }
+
   if (!dx12__topology(info->primitiveTopology,
                       &desc.PrimitiveTopologyType,
                       &native->topology)) {
     fprintf(stderr, "GPU Direct3D 12 pipeline topology is unsupported\n");
     goto shader_failed;
   }
+
   if (!dx12_compileShader(deviceDX12,
                           info->library,
                           info->fragmentEntry,
@@ -1411,6 +1514,7 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
             info->fragmentEntry ? info->fragmentEntry : "");
     goto shader_failed;
   }
+
   if (!mesh && !dx12_compileShader(deviceDX12,
                                    info->library,
                                    info->vertexEntry,
@@ -1421,17 +1525,19 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
             info->vertexEntry ? info->vertexEntry : "");
     goto shader_failed;
   }
-  if (mesh && mesh->taskEntry &&
-      !dx12_compileShader(deviceDX12,
-                          info->library,
-                          mesh->taskEntry,
-                          GPU_SHADER_STAGE_TASK_BIT,
-                          &taskCode)) {
+
+  if (mesh && mesh->taskEntry
+      && !dx12_compileShader(deviceDX12,
+                             info->library,
+                             mesh->taskEntry,
+                             GPU_SHADER_STAGE_TASK_BIT,
+                             &taskCode)) {
     fprintf(stderr,
             "GPU Direct3D 12 task shader '%s' failed to compile\n",
             mesh->taskEntry);
     goto shader_failed;
   }
+
   if (mesh && !dx12_compileShader(deviceDX12,
                                   info->library,
                                   mesh->meshEntry,
@@ -1442,90 +1548,80 @@ dx12_createRenderPipeline(GPUDevice                         * __restrict device,
             mesh->meshEntry ? mesh->meshEntry : "");
     goto shader_failed;
   }
+
   goto shaders_ready;
 
 shader_failed:
-    dx12_freeShaderCode(&vertexCode);
-    dx12_freeShaderCode(&taskCode);
-    dx12_freeShaderCode(&meshCode);
-    dx12_freeShaderCode(&fragmentCode);
-    rootSignature->lpVtbl->Release(rootSignature);
-    free(elements);
-    free(native);
-    return GPU_ERROR_BACKEND_FAILURE;
+  dx12_freeShaderCode(&vertexCode);
+  dx12_freeShaderCode(&taskCode);
+  dx12_freeShaderCode(&meshCode);
+  dx12_freeShaderCode(&fragmentCode);
+  rootSignature->lpVtbl->Release(rootSignature);
+  free(elements);
+  free(native);
+  return GPU_ERROR_BACKEND_FAILURE;
 
 shaders_ready:
-  desc.pRootSignature        = rootSignature;
+  desc.pRootSignature = rootSignature;
+
   if (!mesh) {
     desc.VS.pShaderBytecode = vertexCode.data;
     desc.VS.BytecodeLength  = vertexCode.size;
   }
-  desc.PS.pShaderBytecode    = fragmentCode.data;
-  desc.PS.BytecodeLength     = fragmentCode.size;
-  desc.BlendState.AlphaToCoverageEnable  =
-    info->multisample.alphaToCoverageEnable;
-  desc.BlendState.IndependentBlendEnable = info->colorTargetCount > 1u;
-  desc.SampleMask                              =
-    info->multisample.sampleMask ? info->multisample.sampleMask : UINT_MAX;
-  desc.RasterizerState.FillMode                = D3D12_FILL_MODE_SOLID;
-  desc.RasterizerState.CullMode                = dx12__cullMode(info->cullMode);
-  desc.RasterizerState.FrontCounterClockwise   =
-    info->frontFace == GPU_FRONT_FACE_CCW;
-  desc.RasterizerState.DepthBias               = D3D12_DEFAULT_DEPTH_BIAS;
-  desc.RasterizerState.DepthBiasClamp          = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-  desc.RasterizerState.SlopeScaledDepthBias    =
-    D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-  desc.RasterizerState.DepthClipEnable         = TRUE;
-  desc.RasterizerState.MultisampleEnable       =
-    info->multisample.sampleCount > 1u;
-  desc.RasterizerState.AntialiasedLineEnable   = FALSE;
-  desc.RasterizerState.ForcedSampleCount       = 0u;
-  desc.RasterizerState.ConservativeRaster      =
-    D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-  desc.DepthStencilState.DepthEnable           =
-    depthStencil && (depthStencil->depthTestEnable ||
-                     depthStencil->depthWriteEnable);
-  desc.DepthStencilState.DepthWriteMask        =
-    depthStencil && depthStencil->depthWriteEnable
-      ? D3D12_DEPTH_WRITE_MASK_ALL
-      : D3D12_DEPTH_WRITE_MASK_ZERO;
-  desc.DepthStencilState.DepthFunc             =
-    depthStencil && depthStencil->depthTestEnable
-      ? dx12__compareFunction(depthStencil->depthCompare)
-      : D3D12_COMPARISON_FUNC_ALWAYS;
-  desc.DepthStencilState.StencilEnable         =
-    depthStencil && depthStencil->stencilTestEnable;
-  desc.DepthStencilState.StencilReadMask       =
-    depthStencil ? (UINT8)depthStencil->stencilReadMask : 0u;
-  desc.DepthStencilState.StencilWriteMask      =
-    depthStencil ? (UINT8)depthStencil->stencilWriteMask : 0u;
+
+  desc.PS.pShaderBytecode                    = fragmentCode.data;
+  desc.PS.BytecodeLength                     = fragmentCode.size;
+  desc.BlendState.AlphaToCoverageEnable      = info->multisample.alphaToCoverageEnable;
+  desc.BlendState.IndependentBlendEnable     = info->colorTargetCount > 1u;
+  desc.SampleMask                            = info->multisample.sampleMask ? info->multisample.sampleMask : UINT_MAX;
+  desc.RasterizerState.FillMode              = D3D12_FILL_MODE_SOLID;
+  desc.RasterizerState.CullMode              = dx12__cullMode(info->cullMode);
+  desc.RasterizerState.FrontCounterClockwise = info->frontFace == GPU_FRONT_FACE_CCW;
+  desc.RasterizerState.DepthBias             = D3D12_DEFAULT_DEPTH_BIAS;
+  desc.RasterizerState.DepthBiasClamp        = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+  desc.RasterizerState.SlopeScaledDepthBias  = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+  desc.RasterizerState.DepthClipEnable       = TRUE;
+  desc.RasterizerState.MultisampleEnable     = info->multisample.sampleCount > 1u;
+  desc.RasterizerState.AntialiasedLineEnable = FALSE;
+  desc.RasterizerState.ForcedSampleCount     = 0u;
+  desc.RasterizerState.ConservativeRaster    = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+  desc.DepthStencilState.DepthEnable         = depthStencil && (depthStencil->depthTestEnable
+                                                                || depthStencil->depthWriteEnable);
+  desc.DepthStencilState.DepthWriteMask      = depthStencil && depthStencil->depthWriteEnable
+                                               ? D3D12_DEPTH_WRITE_MASK_ALL
+                                               : D3D12_DEPTH_WRITE_MASK_ZERO;
+  desc.DepthStencilState.DepthFunc           = depthStencil && depthStencil->depthTestEnable
+                                               ? dx12__compareFunction(depthStencil->depthCompare)
+                                               : D3D12_COMPARISON_FUNC_ALWAYS;
+  desc.DepthStencilState.StencilEnable       = depthStencil && depthStencil->stencilTestEnable;
+  desc.DepthStencilState.StencilReadMask     = depthStencil ? (UINT8)depthStencil->stencilReadMask : 0u;
+  desc.DepthStencilState.StencilWriteMask    = depthStencil ? (UINT8)depthStencil->stencilWriteMask : 0u;
+
   if (depthStencil) {
     dx12__fillStencilFace(&desc.DepthStencilState.FrontFace,
                           &depthStencil->front);
     dx12__fillStencilFace(&desc.DepthStencilState.BackFace,
                           &depthStencil->back);
   } else {
-    GPUStencilFaceState defaultFace = {0};
+    defaultFace = (GPUStencilFaceState){0};
 
     defaultFace.compare = GPU_COMPARE_ALWAYS;
     dx12__fillStencilFace(&desc.DepthStencilState.FrontFace, &defaultFace);
     dx12__fillStencilFace(&desc.DepthStencilState.BackFace, &defaultFace);
   }
-  desc.InputLayout.pInputElementDescs          = elements;
-  desc.InputLayout.NumElements                 = elementCount;
-  desc.IBStripCutValue                         = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
-  desc.NumRenderTargets                        = info->colorTargetCount;
-  desc.DSVFormat                               = dx12_format(info->depthStencilFormat);
-  desc.SampleDesc.Count                        =
-    info->multisample.sampleCount ? info->multisample.sampleCount : 1u;
-  desc.SampleDesc.Quality                      = 0u;
-  desc.Flags                                   = D3D12_PIPELINE_STATE_FLAG_NONE;
 
-  for (uint32_t i = 0u; i < info->colorTargetCount; i++) {
-    const GPUBlendState *blend;
-    UINT8                writeMask;
+  desc.InputLayout.pInputElementDescs = elements;
+  desc.InputLayout.NumElements        = elementCount;
+  desc.IBStripCutValue                = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
+  desc.NumRenderTargets               = info->colorTargetCount;
+  desc.DSVFormat                      = dx12_format(info->depthStencilFormat);
+  desc.SampleDesc.Count               = info->multisample.sampleCount ? info->multisample.sampleCount : 1u;
+  desc.SampleDesc.Quality             = 0u;
+  desc.Flags                          = D3D12_PIPELINE_STATE_FLAG_NONE;
 
-    blend = &info->pColorTargets[i].blend;
+  for (colorIndex = 0u; colorIndex < info->colorTargetCount; colorIndex++) {
+    blend = &info->pColorTargets[colorIndex].blend;
+
     if (blend->writeMask == GPU_COLOR_WRITE_DEFAULT) {
       writeMask = GPU_COLOR_WRITE_ALL;
     } else if (blend->writeMask == GPU_COLOR_WRITE_NONE) {
@@ -1533,29 +1629,24 @@ shaders_ready:
     } else {
       writeMask = (UINT8)blend->writeMask;
     }
-    desc.RTVFormats[i] = dx12_format(info->pColorTargets[i].format);
-    if (desc.RTVFormats[i] == DXGI_FORMAT_UNKNOWN) {
+
+    desc.RTVFormats[colorIndex] = dx12_format(info->pColorTargets[colorIndex].format);
+
+    if (desc.RTVFormats[colorIndex] == DXGI_FORMAT_UNKNOWN) {
       result = E_INVALIDARG;
       goto done;
     }
 
-    desc.BlendState.RenderTarget[i].BlendEnable           = blend->enabled;
-    desc.BlendState.RenderTarget[i].LogicOpEnable         = FALSE;
-    desc.BlendState.RenderTarget[i].SrcBlend              =
-      dx12__blendFactor(blend->color.srcFactor);
-    desc.BlendState.RenderTarget[i].DestBlend             =
-      dx12__blendFactor(blend->color.dstFactor);
-    desc.BlendState.RenderTarget[i].BlendOp               =
-      dx12__blendOperation(blend->color.op);
-    desc.BlendState.RenderTarget[i].SrcBlendAlpha         =
-      dx12__blendFactor(blend->alpha.srcFactor);
-    desc.BlendState.RenderTarget[i].DestBlendAlpha        =
-      dx12__blendFactor(blend->alpha.dstFactor);
-    desc.BlendState.RenderTarget[i].BlendOpAlpha          =
-      dx12__blendOperation(blend->alpha.op);
-    desc.BlendState.RenderTarget[i].LogicOp               = D3D12_LOGIC_OP_NOOP;
-    desc.BlendState.RenderTarget[i].RenderTargetWriteMask =
-      writeMask;
+    desc.BlendState.RenderTarget[colorIndex].BlendEnable           = blend->enabled;
+    desc.BlendState.RenderTarget[colorIndex].LogicOpEnable         = FALSE;
+    desc.BlendState.RenderTarget[colorIndex].SrcBlend              = dx12__blendFactor(blend->color.srcFactor);
+    desc.BlendState.RenderTarget[colorIndex].DestBlend             = dx12__blendFactor(blend->color.dstFactor);
+    desc.BlendState.RenderTarget[colorIndex].BlendOp               = dx12__blendOperation(blend->color.op);
+    desc.BlendState.RenderTarget[colorIndex].SrcBlendAlpha         = dx12__blendFactor(blend->alpha.srcFactor);
+    desc.BlendState.RenderTarget[colorIndex].DestBlendAlpha        = dx12__blendFactor(blend->alpha.dstFactor);
+    desc.BlendState.RenderTarget[colorIndex].BlendOpAlpha          = dx12__blendOperation(blend->alpha.op);
+    desc.BlendState.RenderTarget[colorIndex].LogicOp               = D3D12_LOGIC_OP_NOOP;
+    desc.BlendState.RenderTarget[colorIndex].RenderTargetWriteMask = writeMask;
   }
 
   if (mesh) {
@@ -1565,10 +1656,10 @@ shaders_ready:
                              mesh->taskEntry ? &taskCode : NULL,
                              &meshCode,
                              &fragmentCode);
-    streamDesc.SizeInBytes = mesh->taskEntry
-                               ? sizeof(meshStream)
-                               : offsetof(DX12MeshPipelineStream, taskShader);
+    streamDesc.SizeInBytes = mesh->taskEntry ? sizeof(meshStream) : offsetof(DX12MeshPipelineStream, taskShader);
+
     streamDesc.pPipelineStateSubobjectStream = &meshStream;
+
     result = dx12_createMeshPSO(info->cache,
                                 deviceDX12,
                                 &streamDesc,
@@ -1578,18 +1669,14 @@ shaders_ready:
                                 mesh->taskEntry ? &taskCode : NULL,
                                 &meshCode,
                                 &fragmentCode,
-                                &native->pipelineState) == GPU_OK
-               ? S_OK
-               : E_FAIL;
+                                &native->pipelineState) == GPU_OK ? S_OK : E_FAIL;
   } else {
     result = dx12_createGraphicsPSO(info->cache,
                                     deviceDX12,
                                     &desc,
                                     info,
                                     &rootKey,
-                                    &native->pipelineState) == GPU_OK
-               ? S_OK
-               : E_FAIL;
+                                    &native->pipelineState) == GPU_OK ? S_OK : E_FAIL;
   }
 
 done:
@@ -1598,6 +1685,7 @@ done:
   dx12_freeShaderCode(&meshCode);
   dx12_freeShaderCode(&fragmentCode);
   free(elements);
+
   if (FAILED(result)) {
     rootSignature->lpVtbl->Release(rootSignature);
     free(native);
@@ -1605,7 +1693,8 @@ done:
   }
 
   native->rootSignature = rootSignature;
-  pipeline->_state = native;
+  pipeline->_state      = native;
+
   return GPU_OK;
 }
 
@@ -1619,15 +1708,19 @@ dx12_destroyRenderPipeline(GPURenderPipeline *pipeline) {
   }
 
   native = pipeline->_state;
+
   if (native) {
     if (native->pipelineState) {
       native->pipelineState->lpVtbl->Release(native->pipelineState);
     }
+
     if (native->rootSignature) {
       native->rootSignature->lpVtbl->Release(native->rootSignature);
     }
+
     free(native);
   }
+
   free(pipeline);
 }
 

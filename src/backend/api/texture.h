@@ -25,27 +25,25 @@ extern "C" {
 
 typedef struct GPUApiTexture {
   GPUResult
-  (*create)(GPUDevice                   * __restrict device,
-            const GPUTextureCreateInfo  * __restrict info,
-            GPUTexture                 ** __restrict outTexture);
+  (*create)(GPUDevice                  *__restrict device,
+            const GPUTextureCreateInfo *__restrict info,
+            GPUTexture                **__restrict outTexture);
 
-  void
-  (*destroy)(GPUTexture * __restrict texture);
-
-  GPUResult
-  (*createView)(GPUTexture                      * __restrict texture,
-                const GPUTextureViewCreateInfo  * __restrict info,
-                GPUTextureView                 ** __restrict outView);
-
-  void
-  (*destroyView)(GPUTextureView * __restrict view);
+  void (*destroy)(GPUTexture *__restrict texture);
 
   GPUResult
-  (*write)(GPUQueue             * __restrict queue,
-           GPUTexture                  * __restrict texture,
-           const GPUTextureWriteRegion * __restrict region,
-           const void                  * __restrict data,
-           uint64_t                                 sizeBytes);
+  (*createView)(GPUTexture                     *__restrict texture,
+                const GPUTextureViewCreateInfo *__restrict info,
+                GPUTextureView                **__restrict outView);
+
+  void (*destroyView)(GPUTextureView *__restrict view);
+
+  GPUResult
+  (*write)(GPUQueue                    *__restrict queue,
+           GPUTexture                  *__restrict texture,
+           const GPUTextureWriteRegion *__restrict region,
+           const void                  *__restrict data,
+           uint64_t                                sizeBytes);
 } GPUApiTexture;
 
 #ifdef __cplusplus

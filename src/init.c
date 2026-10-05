@@ -24,5 +24,4 @@ gpu__init(void) {
 void
 GPU_DESTRUCTOR
 gpu__cleanup(void) {
-  
 }

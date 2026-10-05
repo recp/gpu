@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 #include <stdio.h>
@@ -74,31 +90,33 @@ create_depth_group(WebGPUIndexedDepth *state,
                    GPUTextureView     *view,
                    GPUBindGroup      **outGroup) {
   GPUBindGroupEntry      entries[2] = {0};
-  GPUBindGroupCreateInfo info  = {0};
+  GPUBindGroupCreateInfo info       = {0};
 
-  if (!state || !view || !outGroup || !state->occlusionBuffer ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 1u ||
-      !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0]) {
+  if (!state || !view || !outGroup || !state->occlusionBuffer
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 1u
+      || !state->shaderLayout->bindGroupLayouts
+      || !state->shaderLayout->bindGroupLayouts[0]) {
     return 0;
   }
 
-  entries[0].textureView      = view;
-  entries[0].binding          = 0u;
-  entries[0].bindingType      = GPU_BINDING_SAMPLED_TEXTURE;
-  entries[1].buffer.buffer    = state->occlusionBuffer;
-  entries[1].buffer.size      = 16u;
-  entries[1].binding          = 1u;
-  entries[1].bindingType      = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
-  info.chain.sType       = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
-  info.chain.structSize  = sizeof(info);
-  info.label             = "indexed-depth-webgpu-preview-group";
-  info.layout            = state->shaderLayout->bindGroupLayouts[0];
-  info.pEntries          = entries;
-  info.entryCount        = 2u;
-  return GPUCreateBindGroup(state->device, &info, outGroup) == GPU_OK &&
-         *outGroup;
+  entries[0].textureView   = view;
+  entries[0].binding       = 0u;
+  entries[0].bindingType   = GPU_BINDING_SAMPLED_TEXTURE;
+  entries[1].buffer.buffer = state->occlusionBuffer;
+  entries[1].buffer.size   = 16u;
+  entries[1].binding       = 1u;
+  entries[1].bindingType   = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.label            = "indexed-depth-webgpu-preview-group";
+  info.layout           = state->shaderLayout->bindGroupLayouts[0];
+  info.pEntries         = entries;
+  info.entryCount       = 2u;
+
+  return GPUCreateBindGroup(state->device, &info, outGroup) == GPU_OK
+         && *outGroup;
 }
 
 static int
@@ -114,6 +132,7 @@ create_depth_target(WebGPUIndexedDepth *state,
   texture = NULL;
   view    = NULL;
   group   = NULL;
+
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "indexed-depth-webgpu-depth";
@@ -124,8 +143,8 @@ create_depth_target(WebGPUIndexedDepth *state,
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
-  textureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL |
-                                 GPU_TEXTURE_USAGE_SAMPLED;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_DEPTH_STENCIL | GPU_TEXTURE_USAGE_SAMPLED;
+
   if (GPUCreateTexture(state->device, &textureInfo, &texture) != GPU_OK) {
     return 0;
   }
@@ -137,10 +156,12 @@ create_depth_target(WebGPUIndexedDepth *state,
   viewInfo.format           = GPU_FORMAT_DEPTH32_FLOAT;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK) {
     GPUDestroyTexture(texture);
     return 0;
   }
+
   if (state->shaderLayout && !create_depth_group(state, view, &group)) {
     GPUDestroyTextureView(view);
     GPUDestroyTexture(texture);
@@ -153,6 +174,7 @@ create_depth_target(WebGPUIndexedDepth *state,
   state->depthTexture = texture;
   state->depthView    = view;
   state->depthGroup   = group;
+
   return 1;
 }
 
@@ -163,34 +185,38 @@ resize_canvas(WebGPUIndexedDepth *state) {
 
   oldWidth  = state->width;
   oldHeight = state->height;
+
   if (!resize_webgpu_canvas(state->swapchain,
                             &state->width,
                             &state->height)) {
     return 0;
   }
-  if (state->swapchain &&
-      (oldWidth != state->width || oldHeight != state->height) &&
-      !create_depth_target(state, state->width, state->height)) {
+
+  if (state->swapchain
+      && (oldWidth != state->width || oldHeight != state->height)
+      && !create_depth_target(state, state->width, state->height)) {
     state->width  = 0u;
     state->height = 0u;
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_pipeline(WebGPUIndexedDepth *state) {
   GPUVertexAttribute          attributes[2] = {0};
-  GPUVertexBufferLayout       vertexLayout  = {0};
-  GPUColorTargetState         color         = {0};
-  GPUDepthStencilState        depth         = {0};
   GPURenderPipelineCreateInfo info          = {0};
+  GPUDepthStencilState        depth         = {0};
+  GPUColorTargetState         color         = {0};
+  GPUVertexBufferLayout       vertexLayout  = {0};
   void                       *artifact;
   uint64_t                    artifactSize;
   GPUResult                   result;
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/indexed_depth.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /indexed_depth.us", 1);
     return 0;
@@ -201,34 +227,38 @@ create_pipeline(WebGPUIndexedDepth *state) {
                                          artifactSize,
                                          &state->library);
   free(artifact);
+
   if (result != GPU_OK || !state->library) {
     set_status("GPU: failed to compile the indexed-depth artifact", 1);
     return 0;
   }
+
   if (GPUCreateShaderLayout(state->device,
                             state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 1u ||
-      !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0]) {
+                            &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 1u
+      || !state->shaderLayout->bindGroupLayouts
+      || !state->shaderLayout->bindGroupLayouts[0]) {
     set_status("GPU: unexpected indexed-depth shader reflection", 1);
     return 0;
   }
 
-  attributes[0].format          = GPU_VERTEX_FORMAT_FLOAT32X4;
-  attributes[0].offset          = offsetof(CubeVertex, position);
+  attributes[0].format         = GPU_VERTEX_FORMAT_FLOAT32X4;
+  attributes[0].offset         = offsetof(CubeVertex, position);
   attributes[0].shaderLocation = 0u;
-  attributes[1].format          = GPU_VERTEX_FORMAT_FLOAT32X4;
-  attributes[1].offset          = offsetof(CubeVertex, color);
+  attributes[1].format         = GPU_VERTEX_FORMAT_FLOAT32X4;
+  attributes[1].offset         = offsetof(CubeVertex, color);
   attributes[1].shaderLocation = 1u;
-  vertexLayout.pAttributes      = attributes;
-  vertexLayout.strideBytes      = sizeof(CubeVertex);
-  vertexLayout.attributeCount   = 2u;
-  vertexLayout.stepMode         = GPU_VERTEX_STEP_MODE_VERTEX;
+
+  vertexLayout.pAttributes    = attributes;
+  vertexLayout.strideBytes    = sizeof(CubeVertex);
+  vertexLayout.attributeCount = 2u;
+  vertexLayout.stepMode       = GPU_VERTEX_STEP_MODE_VERTEX;
 
   color.format          = GPUGetSwapchainFormat(state->swapchain);
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
+
   depth.depthCompare     = GPU_COMPARE_LESS;
   depth.depthTestEnable  = true;
   depth.depthWriteEnable = true;
@@ -244,14 +274,16 @@ create_pipeline(WebGPUIndexedDepth *state) {
   info.pDepthStencilState       = &depth;
   info.vertex.pBufferLayouts    = &vertexLayout;
   info.vertex.bufferLayoutCount = 1u;
-  info.colorTargetCount        = 1u;
-  info.depthStencilFormat      = GPU_FORMAT_DEPTH32_FLOAT;
-  info.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  info.cullMode                = GPU_CULL_MODE_NONE;
-  info.frontFace               = GPU_FRONT_FACE_CCW;
-  info.multisample.sampleCount = 1u;
-  info.multisample.sampleMask  = UINT32_MAX;
+  info.colorTargetCount         = 1u;
+  info.depthStencilFormat       = GPU_FORMAT_DEPTH32_FLOAT;
+  info.primitiveTopology        = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  info.cullMode                 = GPU_CULL_MODE_NONE;
+  info.frontFace                = GPU_FRONT_FACE_CCW;
+  info.multisample.sampleCount  = 1u;
+  info.multisample.sampleMask   = UINT32_MAX;
+
   result = GPUCreateRenderPipeline(state->device, &info, &state->pipeline);
+
   if (result != GPU_OK || !state->pipeline) {
     set_status("GPU: failed to create indexed-depth pipeline", 1);
     return 0;
@@ -264,20 +296,23 @@ create_pipeline(WebGPUIndexedDepth *state) {
   info.vertex.pBufferLayouts    = NULL;
   info.vertex.bufferLayoutCount = 0u;
   info.depthStencilFormat       = GPU_FORMAT_UNDEFINED;
+
   result = GPUCreateRenderPipeline(state->device,
                                    &info,
                                    &state->previewPipeline);
-  if (result != GPU_OK || !state->previewPipeline ||
-      !create_depth_group(state, state->depthView, &state->depthGroup)) {
+
+  if (result != GPU_OK || !state->previewPipeline
+      || !create_depth_group(state, state->depthView, &state->depthGroup)) {
     set_status("GPU: failed to create sampled-depth preview", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_geometry(WebGPUIndexedDepth *state) {
-  GPUBufferCreateInfo   info = {0};
+  GPUBufferCreateInfo   info      = {0};
   GPUQuerySetCreateInfo queryInfo = {0};
   GPUResult             queryResult;
 
@@ -286,24 +321,26 @@ create_geometry(WebGPUIndexedDepth *state) {
   info.label            = "indexed-depth-webgpu-vertices";
   info.sizeBytes        = sizeof(kCubeVertices);
   info.usage            = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(state->device, &info, &state->vertexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->vertexBuffer,
-                          0u,
-                          kCubeVertices,
-                          sizeof(kCubeVertices)) != GPU_OK) {
+
+  if (GPUCreateBuffer(state->device, &info, &state->vertexBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->vertexBuffer,
+                             0u,
+                             kCubeVertices,
+                             sizeof(kCubeVertices)) != GPU_OK) {
     return 0;
   }
 
   info.label     = "indexed-depth-webgpu-indices";
   info.sizeBytes = sizeof(kCubeIndices);
   info.usage     = GPU_BUFFER_USAGE_INDEX | GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(state->device, &info, &state->indexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->indexBuffer,
-                          0u,
-                          kCubeIndices,
-                          sizeof(kCubeIndices)) != GPU_OK) {
+
+  if (GPUCreateBuffer(state->device, &info, &state->indexBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->indexBuffer,
+                             0u,
+                             kCubeIndices,
+                             sizeof(kCubeIndices)) != GPU_OK) {
     return 0;
   }
 
@@ -312,73 +349,81 @@ create_geometry(WebGPUIndexedDepth *state) {
   queryInfo.label            = "indexed-depth-webgpu-occlusion";
   queryInfo.type             = GPU_QUERY_OCCLUSION;
   queryInfo.count            = 1u;
-  info.label                 = "indexed-depth-webgpu-occlusion-result";
-  info.sizeBytes             = sizeof(kVisibleFallback);
-  info.usage                 = GPU_BUFFER_USAGE_COPY_DST |
-                               GPU_BUFFER_USAGE_STORAGE;
+
+  info.label     = "indexed-depth-webgpu-occlusion-result";
+  info.sizeBytes = sizeof(kVisibleFallback);
+  info.usage     = GPU_BUFFER_USAGE_COPY_DST | GPU_BUFFER_USAGE_STORAGE;
+
   if (GPUCreateBuffer(state->device,
                       &info,
-                      &state->occlusionBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->occlusionBuffer,
-                          0u,
-                          kVisibleFallback,
-                          sizeof(kVisibleFallback)) != GPU_OK) {
+                      &state->occlusionBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->occlusionBuffer,
+                             0u,
+                             kVisibleFallback,
+                             sizeof(kVisibleFallback)) != GPU_OK) {
     return 0;
   }
+
   queryResult = GPUCreateQuerySet(state->device,
                                   &queryInfo,
                                   &state->occlusionQuery);
+
   if (queryResult != GPU_OK) {
     state->occlusionQuery = NULL;
   }
+
   if (GPUIsFeatureEnabled(state->device, GPU_FEATURE_INDIRECT_DRAW)) {
     info.label     = "indexed-depth-webgpu-indirect";
     info.sizeBytes = sizeof(kIndexedDraw);
     info.usage     = GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_COPY_DST;
+
     if (GPUCreateBuffer(state->device,
                         &info,
-                        &state->indirectBuffer) != GPU_OK ||
-        GPUQueueWriteBuffer(state->queue,
-                            state->indirectBuffer,
-                            0u,
-                            kIndexedDraw,
-                            sizeof(kIndexedDraw)) != GPU_OK) {
+                        &state->indirectBuffer) != GPU_OK
+        || GPUQueueWriteBuffer(state->queue,
+                               state->indirectBuffer,
+                               0u,
+                               kIndexedDraw,
+                               sizeof(kIndexedDraw)) != GPU_OK) {
       return 0;
     }
   }
+
   return 1;
 }
 
 static void
 render_frame(void *userData) {
+  GPURenderPassCreateInfo             passInfo        = {0};
+  GPURenderPassCreateInfo             previewPassInfo = {0};
+  GPUBarrierBatch                     barriers        = {0};
+  GPUTextureBarrier                   depthBarrier    = {0};
+  GPURenderPassColorAttachment        color           = {0};
+  GPURenderPassColorAttachment        previewColor    = {0};
+  GPURenderPassDepthStencilAttachment depth           = {0};
+  GPUViewport                         viewport        = {0};
+  GPUBufferBinding                    vertexBuffer    = {0};
+  GPUScissorRect                      scissor         = {0};
   WebGPUIndexedDepth                 *state;
   GPUFrame                           *frame;
   GPUCommandBuffer                   *cmdb;
   GPURenderPassEncoder               *pass;
-  GPUBufferBinding                    vertexBuffer = {0};
-  GPURenderPassColorAttachment        color        = {0};
-  GPURenderPassColorAttachment        previewColor = {0};
-  GPURenderPassDepthStencilAttachment depth = {0};
-  GPURenderPassCreateInfo             passInfo        = {0};
-  GPURenderPassCreateInfo             previewPassInfo = {0};
-  GPUTextureBarrier                   depthBarrier    = {0};
-  GPUBarrierBatch                     barriers        = {0};
-  GPUViewport                         viewport        = {0};
-  GPUScissorRect                      scissor         = {0};
   uint32_t                            previewWidth;
   uint32_t                            previewHeight;
 
   state = userData;
+
   if (!resize_canvas(state)) {
     return;
   }
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) {
+  if (!(frame = GPUBeginFrame(state->swapchain))) {
     return;
   }
+
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(state->queue,
                               "indexed-depth-webgpu-frame",
                               &cmdb) != GPU_OK || !cmdb) {
@@ -393,33 +438,38 @@ render_frame(void *userData) {
   color.clearColor.float32[1] = 0.035f;
   color.clearColor.float32[2] = 0.085f;
   color.clearColor.float32[3] = 1.0f;
-  depth.view                  = state->depthView;
-  depth.depthLoadOp           = GPU_LOAD_OP_CLEAR;
-  depth.depthStoreOp          = GPU_STORE_OP_STORE;
-  depth.stencilLoadOp         = GPU_LOAD_OP_DONT_CARE;
-  depth.stencilStoreOp        = GPU_STORE_OP_DONT_CARE;
-  depth.clearDepth            = 1.0f;
+
+  depth.view           = state->depthView;
+  depth.depthLoadOp    = GPU_LOAD_OP_CLEAR;
+  depth.depthStoreOp   = GPU_STORE_OP_STORE;
+  depth.stencilLoadOp  = GPU_LOAD_OP_DONT_CARE;
+  depth.stencilStoreOp = GPU_STORE_OP_DONT_CARE;
+  depth.clearDepth     = 1.0f;
+
   passInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize        = sizeof(passInfo);
   passInfo.label                   = "indexed-depth-webgpu-pass";
   passInfo.pColorAttachments       = &color;
   passInfo.pDepthStencilAttachment = &depth;
-  passInfo.occlusionQuerySet        = state->occlusionQuery;
+  passInfo.occlusionQuerySet       = state->occlusionQuery;
   passInfo.colorAttachmentCount    = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
   }
 
   vertexBuffer.buffer = state->vertexBuffer;
+
   GPUBindRenderPipeline(pass, state->pipeline);
   GPUBindVertexBuffers(pass, 0u, 1u, &vertexBuffer);
   GPUBindIndexBuffer(pass, state->indexBuffer, 0u, GPU_INDEX_TYPE_UINT16);
+
   if (state->occlusionQuery && !state->occlusionRecorded) {
     GPUBeginOcclusionQuery(pass, state->occlusionQuery, 0u);
   }
+
   if (state->indirectBuffer) {
     GPUDrawIndexedIndirect(pass, state->indirectBuffer, 0u);
   } else {
@@ -430,10 +480,13 @@ render_frame(void *userData) {
                    0,
                    0u);
   }
+
   if (state->occlusionQuery && !state->occlusionRecorded) {
     GPUEndOcclusionQuery(pass);
   }
+
   GPUEndRenderPass(pass);
+
   if (state->occlusionQuery && !state->occlusionRecorded) {
     GPUResolveQuerySet(cmdb,
                        state->occlusionQuery,
@@ -449,22 +502,25 @@ render_frame(void *userData) {
   depthBarrier.dstAccess  = GPU_ACCESS_SHADER_READ;
   depthBarrier.mipCount   = 1u;
   depthBarrier.layerCount = 1u;
+
   barriers.pTextureBarriers    = &depthBarrier;
   barriers.srcStages           = GPU_STAGE_FRAGMENT;
   barriers.dstStages           = GPU_STAGE_FRAGMENT;
   barriers.textureBarrierCount = 1u;
+
   GPUEncodeBarriers(cmdb, &barriers);
 
-  previewColor.view     = GPUFrameGetTargetView(frame);
-  previewColor.loadOp   = GPU_LOAD_OP_LOAD;
-  previewColor.storeOp  = GPU_STORE_OP_STORE;
-  previewPassInfo.chain.sType      = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  previewPassInfo.chain.structSize = sizeof(previewPassInfo);
+  previewColor.view    = GPUFrameGetTargetView(frame);
+  previewColor.loadOp  = GPU_LOAD_OP_LOAD;
+  previewColor.storeOp = GPU_STORE_OP_STORE;
+
+  previewPassInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  previewPassInfo.chain.structSize     = sizeof(previewPassInfo);
   previewPassInfo.label                = "indexed-depth-webgpu-preview-pass";
   previewPassInfo.pColorAttachments    = &previewColor;
   previewPassInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &previewPassInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &previewPassInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
@@ -472,16 +528,19 @@ render_frame(void *userData) {
 
   previewWidth  = state->width / 3u;
   previewHeight = state->height / 3u;
+
   viewport.x        = (float)(state->width - previewWidth - 16u);
   viewport.y        = (float)(state->height - previewHeight - 16u);
   viewport.width    = (float)previewWidth;
   viewport.height   = (float)previewHeight;
   viewport.minDepth = 0.0f;
   viewport.maxDepth = 1.0f;
-  scissor.x          = (int32_t)viewport.x;
-  scissor.y          = (int32_t)viewport.y;
-  scissor.width      = previewWidth;
-  scissor.height     = previewHeight;
+
+  scissor.x      = (int32_t)viewport.x;
+  scissor.y      = (int32_t)viewport.y;
+  scissor.width  = previewWidth;
+  scissor.height = previewHeight;
+
   GPUSetViewport(pass, &viewport);
   GPUSetScissor(pass, &scissor);
   GPUBindRenderPipeline(pass, state->previewPipeline);
@@ -495,10 +554,11 @@ render_frame(void *userData) {
     GPUFrameStats stats;
 
     state->frameCount++;
-    if (state->frameCount > WARM_FRAME_COUNT &&
-        GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.drawCalls != 2u || stats.hotPathAllocCount != 0u ||
-         stats.hotPathFreeCount != 0u)) {
+
+    if (state->frameCount > WARM_FRAME_COUNT
+        && GPUGetLastFrameStats(state->device, &stats) == GPU_OK
+        && (stats.drawCalls != 2u || stats.hotPathAllocCount != 0u
+            || stats.hotPathFreeCount != 0u)) {
       set_status(stats.drawCalls != 2u
                    ? "GPU: indexed-depth frame did not encode both draws"
                    : "GPU: warm indexed-depth frame allocated wrapper memory",
@@ -509,14 +569,15 @@ render_frame(void *userData) {
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
-  WebGPUIndexedDepth *state;
   GPURuntimeConfig    runtime = {0};
+  WebGPUIndexedDepth *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status(!adapter ? "GPU: failed to request WebGPU adapter"
                         : "GPU: failed to request WebGPU device",
@@ -527,41 +588,46 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (GPUConfigureRuntime(device, &runtime) != GPU_OK) {
     set_status("GPU: failed to configure WebGPU runtime stats", 1);
     return;
   }
 
   state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               state->adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
+                                              state->adapter,
+                                              (void *)"#canvas",
+                                              GPU_SURFACE_WEB_CANVAS,
+                                              1.0f);
+
   if (!state->queue || !state->surface || !resize_canvas(state)) {
     set_status("GPU: failed to create WebGPU queue or canvas surface", 1);
     return;
   }
 
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain) {
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))) {
     set_status("GPU: failed to create indexed-depth swapchain", 1);
     return;
   }
+
   if (!create_depth_target(state, state->width, state->height)) {
     set_status("GPU: failed to create sampled depth target", 1);
     return;
   }
+
   if (!create_geometry(state)) {
     set_status("GPU: failed to create indexed-depth geometry", 1);
     return;
   }
+
   if (!create_pipeline(state)) {
     return;
   }
@@ -580,7 +646,9 @@ main(void) {
   info.label            = "indexed-depth-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create WebGPU instance", 1);
     return 1;
@@ -591,8 +659,10 @@ main(void) {
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   if (result != GPU_OK) {
     return 1;
   }
+
   return 0;
 }

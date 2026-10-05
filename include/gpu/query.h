@@ -49,7 +49,7 @@ typedef enum GPUPipelineStatisticBits {
   GPU_PIPESTAT_ALL                                = (1u << 11) - 1u
 } GPUPipelineStatisticBits;
 
-/* Fields outside the query set mask are undefined. */
+/* fields outside the query set mask are undefined. */
 typedef struct GPUPipelineStatisticsResult {
   uint64_t inputAssemblyVertices;
   uint64_t inputAssemblyPrimitives;
@@ -74,9 +74,9 @@ typedef struct GPUQuerySetCreateInfo {
 
 GPU_EXPORT
 GPUResult
-GPUCreateQuerySet(struct GPUDevice          *device,
+GPUCreateQuerySet(struct GPUDevice            *device,
                   const GPUQuerySetCreateInfo *info,
-                  GPUQuerySet              **outSet);
+                  GPUQuerySet                **outSet);
 
 GPU_EXPORT
 void

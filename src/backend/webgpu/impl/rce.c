@@ -3,33 +3,46 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "../common.h"
 #include "../impl.h"
 
-static GPUCommandWebGPU *
+static const uint8_t webgpu_zeroPushConstants[GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT];
+
+static GPUCommandWebGPU*
 webgpu_renderCommand(GPURenderPassEncoder *encoder) {
   return encoder ? encoder->_priv : NULL;
 }
 
 static void
 webgpu_renderPushConstants(GPURenderPassEncoder *encoder,
-                           GPUShaderStageFlags    stages,
-                           const void            *data,
-                           uint32_t               sizeBytes) {
+                           GPUShaderStageFlags   stages,
+                           const void           *data,
+                           uint32_t              sizeBytes) {
   GPUCommandWebGPU *command;
   uint32_t          dynamicOffset;
 
   GPU__UNUSED(stages);
   command = webgpu_renderCommand(encoder);
-  if (!command || !command->renderEncoder ||
-      !gpu_webgpuUploadPushConstants(command,
-                                     data,
-                                     sizeBytes,
-                                     &dynamicOffset)) {
+
+  if (!command || !command->renderEncoder
+      || !gpu_webgpuUploadPushConstants(command,
+                                        data,
+                                        sizeBytes,
+                                        &dynamicOffset)) {
     return;
   }
+
   wgpuRenderPassEncoderSetBindGroup(command->renderEncoder,
                                     GPU_WEBGPU_PUSH_CONSTANT_GROUP,
                                     command->pushConstantGroup,
@@ -37,21 +50,20 @@ webgpu_renderPushConstants(GPURenderPassEncoder *encoder,
                                     &dynamicOffset);
 }
 
-static GPURenderPassEncoder *
+static GPURenderPassEncoder*
 webgpu_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   GPUCommandWebGPU *command;
 
   command = gpu_webgpuCommand(cmdb);
+
   if (!command || pass->_priv != command || !command->encoder) {
     return NULL;
   }
 
   memset(&command->render, 0, sizeof(command->render));
-  command->renderEncoder = wgpuCommandEncoderBeginRenderPass(
-    command->encoder,
-    &command->renderPassDesc
-  );
-  if (!command->renderEncoder) {
+
+  if (!(command->renderEncoder = wgpuCommandEncoderBeginRenderPass(command->encoder,
+                                                                   &command->renderPassDesc))) {
     return NULL;
   }
 
@@ -60,11 +72,12 @@ webgpu_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   command->boundIndexBuffer      = NULL;
   command->boundIndexOffset      = 0u;
   command->boundIndexFormat      = WGPUIndexFormat_Undefined;
+
   return &command->render;
 }
 
 static void
-webgpu_setPipeline(GPURenderPassEncoder *encoder,
+webgpu_setPipeline(GPURenderPassEncoder   *encoder,
                    GPURenderPipelineState *pipeline,
                    GPUCullMode             cullMode,
                    GPUFrontFace            frontFace) {
@@ -75,15 +88,15 @@ webgpu_setPipeline(GPURenderPassEncoder *encoder,
   GPU__UNUSED(frontFace);
   command = webgpu_renderCommand(encoder);
   state   = pipeline ? pipeline->_priv : NULL;
-  if (command && command->renderEncoder && state && state->pipeline) {
-    static const uint8_t zero[GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT];
 
+  if (command && command->renderEncoder && state && state->pipeline) {
     wgpuRenderPassEncoderSetPipeline(command->renderEncoder, state->pipeline);
     gpu_webgpuBindRenderAutomaticGroups(encoder, &state->layout);
+
     if (state->layout.pushConstantSizeBytes > 0u) {
       webgpu_renderPushConstants(encoder,
                                  0u,
-                                 zero,
+                                 webgpu_zeroPushConstants,
                                  state->layout.pushConstantSizeBytes);
     }
   }
@@ -94,6 +107,7 @@ webgpu_viewport(GPURenderPassEncoder *encoder, const GPUViewport *viewport) {
   GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
+
   if (command && command->renderEncoder && viewport) {
     wgpuRenderPassEncoderSetViewport(command->renderEncoder,
                                      viewport->x,
@@ -120,6 +134,7 @@ webgpu_scissorAxis(int32_t   origin,
   }
 
   *outOrigin = (uint32_t)origin;
+
   if ((uint32_t)origin >= limit) {
     *outOrigin = limit;
     *outExtent = 0u;
@@ -140,6 +155,7 @@ webgpu_scissor(GPURenderPassEncoder *encoder, const GPUScissorRect *scissor) {
   uint32_t          height;
 
   command = webgpu_renderCommand(encoder);
+
   if (command && command->renderEncoder && scissor) {
     webgpu_scissorAxis(scissor->x,
                        scissor->width,
@@ -161,10 +177,11 @@ webgpu_scissor(GPURenderPassEncoder *encoder, const GPUScissorRect *scissor) {
 
 static void
 webgpu_blendConstant(GPURenderPassEncoder *encoder, const float rgba[4]) {
-  GPUCommandWebGPU *command;
   WGPUColor         color;
+  GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
+
   if (command && command->renderEncoder && rgba) {
     color.r = rgba[0];
     color.g = rgba[1];
@@ -179,9 +196,10 @@ webgpu_stencilReference(GPURenderPassEncoder *encoder, uint32_t reference) {
   GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
+
   if (command && command->renderEncoder) {
     wgpuRenderPassEncoderSetStencilReference(command->renderEncoder,
-                                              reference);
+                                             reference);
   }
 }
 
@@ -193,10 +211,12 @@ webgpu_vertexInputBuffer(GPURenderPassEncoder *encoder,
   GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
-  if (!command || !command->renderEncoder || !buffer || !buffer->_priv ||
-      offset > buffer->sizeBytes) {
+
+  if (!command || !command->renderEncoder || !buffer || !buffer->_priv
+      || offset > buffer->sizeBytes) {
     return;
   }
+
   wgpuRenderPassEncoderSetVertexBuffer(command->renderEncoder,
                                        index,
                                        buffer->_priv,
@@ -215,10 +235,12 @@ webgpu_draw(GPURenderPassEncoder *encoder,
 
   GPU__UNUSED(primitive);
   command = webgpu_renderCommand(encoder);
-  if (!command || !command->renderEncoder ||
-      firstVertex > UINT32_MAX || vertexCount > UINT32_MAX) {
+
+  if (!command || !command->renderEncoder
+      || firstVertex > UINT32_MAX || vertexCount > UINT32_MAX) {
     return;
   }
+
   wgpuRenderPassEncoderDraw(command->renderEncoder,
                             (uint32_t)vertexCount,
                             instanceCount,
@@ -236,25 +258,25 @@ webgpu_bindIndexBuffer(GPURenderPassEncoder *encoder,
   format = encoder && encoder->_indexType == GPU_INDEX_TYPE_UINT32
              ? WGPUIndexFormat_Uint32
              : WGPUIndexFormat_Uint16;
-  if (!command || !command->renderEncoder || !buffer || !buffer->_priv ||
-      encoder->_indexBufferOffset >= buffer->sizeBytes) {
+
+  if (!command || !command->renderEncoder || !buffer || !buffer->_priv
+      || encoder->_indexBufferOffset >= buffer->sizeBytes) {
     return false;
   }
 
-  if (command->boundIndexBuffer != buffer->_priv ||
-      command->boundIndexOffset != encoder->_indexBufferOffset ||
-      command->boundIndexFormat != format) {
-    wgpuRenderPassEncoderSetIndexBuffer(
-      command->renderEncoder,
-      buffer->_priv,
-      format,
-      encoder->_indexBufferOffset,
-      buffer->sizeBytes - encoder->_indexBufferOffset
-    );
+  if (command->boundIndexBuffer != buffer->_priv
+      || command->boundIndexOffset != encoder->_indexBufferOffset
+      || command->boundIndexFormat != format) {
+    wgpuRenderPassEncoderSetIndexBuffer(command->renderEncoder,
+                                        buffer->_priv,
+                                        format,
+                                        encoder->_indexBufferOffset,
+                                        buffer->sizeBytes - encoder->_indexBufferOffset);
     command->boundIndexBuffer = buffer->_priv;
     command->boundIndexOffset = encoder->_indexBufferOffset;
     command->boundIndexFormat = format;
   }
+
   return true;
 }
 
@@ -268,6 +290,7 @@ webgpu_drawIndexed(GPURenderPassEncoder *encoder,
   GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
+
   if (!webgpu_bindIndexBuffer(encoder, command)) {
     return;
   }
@@ -287,6 +310,7 @@ webgpu_indirectEnabled(const GPURenderPassEncoder *encoder) {
   device = encoder && encoder->_cmdb && encoder->_cmdb->_queue
              ? encoder->_cmdb->_queue->_device
              : NULL;
+
   return GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_DRAW);
 }
 
@@ -299,11 +323,13 @@ webgpu_drawIndirect(GPURenderPassEncoder *encoder,
 
   GPU__UNUSED(primitive);
   command = webgpu_renderCommand(encoder);
-  if (!webgpu_indirectEnabled(encoder) ||
-      !command || !command->renderEncoder ||
-      !argsBuffer || !argsBuffer->_priv) {
+
+  if (!webgpu_indirectEnabled(encoder)
+      || !command || !command->renderEncoder
+      || !argsBuffer || !argsBuffer->_priv) {
     return;
   }
+
   wgpuRenderPassEncoderDrawIndirect(command->renderEncoder,
                                     argsBuffer->_priv,
                                     argsOffset);
@@ -316,11 +342,13 @@ webgpu_drawIndexedIndirect(GPURenderPassEncoder *encoder,
   GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
-  if (!webgpu_indirectEnabled(encoder) ||
-      !argsBuffer || !argsBuffer->_priv ||
-      !webgpu_bindIndexBuffer(encoder, command)) {
+
+  if (!webgpu_indirectEnabled(encoder)
+      || !argsBuffer || !argsBuffer->_priv
+      || !webgpu_bindIndexBuffer(encoder, command)) {
     return;
   }
+
   wgpuRenderPassEncoderDrawIndexedIndirect(command->renderEncoder,
                                            argsBuffer->_priv,
                                            argsOffset);
@@ -341,15 +369,18 @@ webgpu_multiDrawIndirect(GPURenderPassEncoder *encoder,
   device  = encoder && encoder->_cmdb && encoder->_cmdb->_queue
               ? encoder->_cmdb->_queue->_device
               : NULL;
-  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW) ||
-      strideBytes != 16u || !command || !command->renderEncoder ||
-      !argsBuffer || !argsBuffer->_priv) {
+
+  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW)
+      || strideBytes != 16u || !command || !command->renderEncoder
+      || !argsBuffer || !argsBuffer->_priv) {
     return false;
   }
+
   gpu_webgpuMultiDrawIndirect(command->renderEncoder,
                               argsBuffer->_priv,
                               argsOffset,
                               drawCount);
+
   return true;
 }
 
@@ -366,15 +397,18 @@ webgpu_multiDrawIndexedIndirect(GPURenderPassEncoder *encoder,
   device  = encoder && encoder->_cmdb && encoder->_cmdb->_queue
               ? encoder->_cmdb->_queue->_device
               : NULL;
-  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW) ||
-      strideBytes != 20u || !argsBuffer || !argsBuffer->_priv ||
-      !webgpu_bindIndexBuffer(encoder, command)) {
+
+  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_MULTI_DRAW)
+      || strideBytes != 20u || !argsBuffer || !argsBuffer->_priv
+      || !webgpu_bindIndexBuffer(encoder, command)) {
     return false;
   }
+
   gpu_webgpuMultiDrawIndexedIndirect(command->renderEncoder,
                                      argsBuffer->_priv,
                                      argsOffset,
                                      drawCount);
+
   return true;
 }
 
@@ -383,9 +417,11 @@ webgpu_endEncoding(GPURenderPassEncoder *encoder) {
   GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
+
   if (!command || !command->renderEncoder) {
     return;
   }
+
   wgpuRenderPassEncoderEnd(command->renderEncoder);
   wgpuRenderPassEncoderRelease(command->renderEncoder);
   command->renderEncoder = NULL;

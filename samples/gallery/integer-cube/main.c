@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 #include <stdio.h>
@@ -33,6 +49,22 @@ typedef struct WebGPUIntegerCube {
   bool               failed;
 } WebGPUIntegerCube;
 
+static const uint8_t faceColors[CUBE_FACE_COUNT][3] = {
+  {255u,  54u,  26u},
+  { 34u, 224u,  92u},
+  { 32u, 116u, 255u},
+  {255u, 204u,  32u},
+  {218u,  66u, 232u},
+  { 24u, 214u, 224u}
+};
+
+static const char *fragmentEntries[PANEL_COUNT] = {
+  "integer_cube_nearest_fs",
+  "integer_cube_level_fs",
+  "integer_cube_gradient_fs",
+  "integer_cube_bias_fs"
+};
+
 static WebGPUIntegerCube app;
 
 static void
@@ -43,9 +75,11 @@ device_error(GPUDevice                *device,
 
   (void)device;
   state = userData;
+
   if (!state || !error || state->failed) {
     return;
   }
+
   state->failed = true;
   set_status(error->message ? error->message : "GPU: unknown device error", 1);
   emscripten_cancel_main_loop();
@@ -68,22 +102,16 @@ fill_cube_face(uint8_t *pixels,
                uint32_t size,
                uint32_t face,
                uint32_t mip) {
-  static const uint8_t faceColors[CUBE_FACE_COUNT][3] = {
-    {255u,  54u,  26u},
-    { 34u, 224u,  92u},
-    { 32u, 116u, 255u},
-    {255u, 204u,  32u},
-    {218u,  66u, 232u},
-    { 24u, 214u, 224u}
-  };
+  uint32_t y;
+  uint32_t x;
+  uint32_t checker;
+  uint32_t offset;
 
-  for (uint32_t y = 0u; y < size; y++) {
-    for (uint32_t x = 0u; x < size; x++) {
-      uint32_t checker;
-      uint32_t offset;
-
+  for (y = 0u; y < size; y++) {
+    for (x = 0u; x < size; x++) {
       checker = ((x >> (mip + 1u)) + (y >> (mip + 1u))) & 1u;
       offset  = (y * size + x) * CUBE_PIXEL_SIZE;
+
       if (mip == 0u) {
         pixels[offset + 0u] = darken_channel(faceColors[face][0],
                                              checker * 44u);
@@ -100,6 +128,7 @@ fill_cube_face(uint8_t *pixels,
         pixels[offset + 1u] = 238u - face * 20u;
         pixels[offset + 2u] = 48u + face * 28u;
       }
+
       pixels[offset + 3u] = 255u;
     }
   }
@@ -107,22 +136,18 @@ fill_cube_face(uint8_t *pixels,
 
 static int
 create_shader(WebGPUIntegerCube *state) {
-  static const char *fragmentEntries[PANEL_COUNT] = {
-    "integer_cube_nearest_fs",
-    "integer_cube_level_fs",
-    "integer_cube_gradient_fs",
-    "integer_cube_bias_fs"
-  };
-  const GPUBindGroupLayoutEntry *entries;
   GPUColorTargetState            color = {0};
   GPURenderPipelineCreateInfo    info  = {0};
+  const GPUBindGroupLayoutEntry *entries;
   void                          *artifact;
   uint64_t                       artifactSize;
   uint32_t                       entryCount;
+  uint32_t                       i;
   GPUResult                      result;
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/integer_cube.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /integer_cube.us", 1);
     return 0;
@@ -133,30 +158,30 @@ create_shader(WebGPUIntegerCube *state) {
                                          artifactSize,
                                          &state->library);
   free(artifact);
+
   if (result != GPU_OK || !state->library) {
     set_status("GPU: failed to compile the integer-cube artifact", 1);
     return 0;
   }
+
   if (GPUCreateShaderLayout(state->device,
                             state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 1u ||
-      !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0]) {
+                            &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 1u
+      || !state->shaderLayout->bindGroupLayouts
+      || !state->shaderLayout->bindGroupLayouts[0]) {
     set_status("GPU: unexpected integer-cube reflection", 1);
     return 0;
   }
 
-  entries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[0],
-    &entryCount
-  );
-  if (!entries || entryCount != 1u ||
-      entries[0].binding != 0u ||
-      entries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      entries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_CUBE ||
-      entries[0].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_UINT) {
+  if (!(entries = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[0],
+                                               &entryCount))
+      || entryCount != 1u
+      || entries[0].binding != 0u
+      || entries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || entries[0].sampledTexture.viewType != GPU_TEXTURE_VIEW_CUBE
+      || entries[0].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_UINT) {
     set_status("GPU: integer cube lost its typed reflection", 1);
     return 0;
   }
@@ -177,11 +202,14 @@ create_shader(WebGPUIntegerCube *state) {
   info.frontFace               = GPU_FRONT_FACE_CCW;
   info.multisample.sampleCount = 1u;
   info.multisample.sampleMask  = UINT32_MAX;
-  for (uint32_t i = 0u; i < PANEL_COUNT; i++) {
+
+  for (i = 0u; i < PANEL_COUNT; i++) {
     info.fragmentEntry = fragmentEntries[i];
+
     result = GPUCreateRenderPipeline(state->device,
                                      &info,
                                      &state->pipelines[i]);
+
     if (result != GPU_OK || !state->pipelines[i]) {
       fprintf(stderr,
               "GPU: integer-cube pipeline %u failed (%d)\n",
@@ -191,6 +219,7 @@ create_shader(WebGPUIntegerCube *state) {
       return 0;
     }
   }
+
   return 1;
 }
 
@@ -198,10 +227,14 @@ static int
 create_resources(WebGPUIntegerCube *state) {
   uint8_t                  pixels[CUBE_MAX_SIZE];
   GPUTextureCreateInfo     textureInfo = {0};
-  GPUTextureWriteRegion    write       = {0};
+  GPUBindGroupCreateInfo   groupInfo   = {0};
   GPUTextureViewCreateInfo viewInfo    = {0};
   GPUBindGroupEntry        entry       = {0};
-  GPUBindGroupCreateInfo   groupInfo   = {0};
+  GPUTextureWriteRegion    write       = {0};
+  uint64_t                 uploadSize;
+  uint32_t                 mip;
+  uint32_t                 mipSize;
+  uint32_t                 face;
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
@@ -213,8 +246,8 @@ create_resources(WebGPUIntegerCube *state) {
   textureInfo.depthOrLayers    = CUBE_FACE_COUNT;
   textureInfo.mipLevelCount    = CUBE_MIP_COUNT;
   textureInfo.sampleCount      = 1u;
-  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
-                                 GPU_TEXTURE_USAGE_COPY_DST;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
+
   if (GPUCreateTexture(state->device,
                        &textureInfo,
                        &state->texture) != GPU_OK) {
@@ -225,21 +258,21 @@ create_resources(WebGPUIntegerCube *state) {
   write.aspect     = GPU_TEXTURE_ASPECT_ALL;
   write.depth      = 1u;
   write.layerCount = 1u;
-  for (uint32_t mip = 0u; mip < CUBE_MIP_COUNT; mip++) {
-    uint32_t mipSize;
 
+  for (mip = 0u; mip < CUBE_MIP_COUNT; mip++) {
     mipSize            = CUBE_SIZE >> mip;
     write.mipLevel     = mip;
     write.width        = mipSize;
     write.height       = mipSize;
     write.bytesPerRow  = mipSize * CUBE_PIXEL_SIZE;
     write.rowsPerImage = mipSize;
-    for (uint32_t face = 0u; face < CUBE_FACE_COUNT; face++) {
-      uint64_t uploadSize;
 
+    for (face = 0u; face < CUBE_FACE_COUNT; face++) {
       fill_cube_face(pixels, mipSize, face, mip);
-      uploadSize                = (uint64_t)write.bytesPerRow * mipSize;
-      write.baseArrayLayer      = face;
+
+      uploadSize           = (uint64_t)write.bytesPerRow * mipSize;
+      write.baseArrayLayer = face;
+
       if (GPUQueueWriteTexture(state->queue,
                                state->texture,
                                &write,
@@ -258,6 +291,7 @@ create_resources(WebGPUIntegerCube *state) {
   viewInfo.format           = GPU_FORMAT_RGBA8_UINT;
   viewInfo.mipLevelCount    = CUBE_MIP_COUNT;
   viewInfo.arrayLayerCount  = CUBE_FACE_COUNT;
+
   if (GPUCreateTextureView(state->texture,
                            &viewInfo,
                            &state->view) != GPU_OK) {
@@ -268,38 +302,45 @@ create_resources(WebGPUIntegerCube *state) {
   entry.textureView = state->view;
   entry.binding     = 0u;
   entry.bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "integer-cube-webgpu-usl-group0";
   groupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
   groupInfo.pEntries         = &entry;
   groupInfo.entryCount       = 1u;
+
   if (GPUCreateBindGroup(state->device,
                          &groupInfo,
                          &state->bindGroup) != GPU_OK) {
     set_status("GPU: failed to create the integer cube bind group", 1);
     return 0;
   }
+
   return 1;
 }
 
 static void
 render_frame(void *userData) {
-  WebGPUIntegerCube             *state;
-  GPUFrame                      *frame;
-  GPUCommandBuffer              *cmdb;
-  GPURenderPassEncoder          *pass;
-  GPURenderPassColorAttachment   color    = {0};
-  GPURenderPassCreateInfo        passInfo = {0};
-  GPUViewport                    viewport = {0};
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassColorAttachment color    = {0};
+  GPURenderPassCreateInfo      passInfo = {0};
+  GPUViewport                  viewport = {0};
+  WebGPUIntegerCube           *state;
+  GPUFrame                    *frame;
+  GPURenderPassEncoder        *pass;
+  uint32_t                     i;
 
   state = userData;
-  if (!resize_canvas(state)) return;
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) return;
+  if (!resize_canvas(state))
+    return;
+
+  if (!(frame = GPUBeginFrame(state->swapchain)))
+    return;
 
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(state->queue,
                               "integer-cube-webgpu-frame",
                               &cmdb) != GPU_OK || !cmdb) {
@@ -314,11 +355,12 @@ render_frame(void *userData) {
   color.clearColor.float32[1] = 0.018f;
   color.clearColor.float32[2] = 0.045f;
   color.clearColor.float32[3] = 1.0f;
+
   passInfo.label                = "integer-cube-webgpu-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
@@ -328,23 +370,28 @@ render_frame(void *userData) {
   viewport.height   = (float)state->height;
   viewport.minDepth = 0.0f;
   viewport.maxDepth = 1.0f;
-  for (uint32_t i = 0u; i < PANEL_COUNT; i++) {
+
+  for (i = 0u; i < PANEL_COUNT; i++) {
     viewport.x = viewport.width * (float)i;
+
     GPUBindRenderPipeline(pass, state->pipelines[i]);
     GPUBindRenderGroup(pass, 0u, state->bindGroup, 0u, NULL);
     GPUSetViewport(pass, &viewport);
     GPUDraw(pass, 6u, 1u, 0u, 0u);
   }
+
   GPUEndRenderPass(pass);
+
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     fprintf(stderr, "GPU: failed to finish WebGPU integer-cube frame\n");
   } else {
     GPUFrameStats stats;
 
     state->frameCount++;
-    if (state->frameCount > WARM_FRAME_COUNT &&
-        GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.hotPathAllocCount != 0u || stats.hotPathFreeCount != 0u)) {
+
+    if (state->frameCount > WARM_FRAME_COUNT
+        && GPUGetLastFrameStats(state->device, &stats) == GPU_OK
+        && (stats.hotPathAllocCount != 0u || stats.hotPathFreeCount != 0u)) {
       set_status("GPU: warm WebGPU frame allocated wrapper memory", 1);
       emscripten_cancel_main_loop();
     }
@@ -352,14 +399,15 @@ render_frame(void *userData) {
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
-  WebGPUIntegerCube *state;
   GPURuntimeConfig   runtime = {0};
+  WebGPUIntegerCube *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status(!adapter ? "GPU: failed to request WebGPU adapter"
                         : "GPU: failed to request WebGPU device",
@@ -370,34 +418,39 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (GPUConfigureRuntime(device, &runtime) != GPU_OK) {
     set_status("GPU: failed to configure WebGPU runtime stats", 1);
     return;
   }
+
   if (GPUSetDeviceErrorCallback(device, device_error, state) != GPU_OK) {
     set_status("GPU: failed to install the WebGPU error callback", 1);
     return;
   }
 
   state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               state->adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
+                                              state->adapter,
+                                              (void *)"#canvas",
+                                              GPU_SURFACE_WEB_CANVAS,
+                                              1.0f);
+
   if (!state->queue || !state->surface || !resize_canvas(state)) {
     set_status("GPU: failed to create WebGPU queue or canvas surface", 1);
     return;
   }
 
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain || !create_shader(state) || !create_resources(state)) {
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))
+      || !create_shader(state)
+      || !create_resources(state)) {
     set_status("GPU: failed to initialize integer-cube resources", 1);
     return;
   }
@@ -420,7 +473,9 @@ main(void) {
   info.label            = "integer-cube-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create WebGPU instance", 1);
     return 1;
@@ -431,5 +486,6 @@ main(void) {
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   return result == GPU_OK ? 0 : 1;
 }

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef gpu_cuda_driver_h
 #define gpu_cuda_driver_h
 
@@ -10,20 +26,20 @@
 #  define CUDA_CALL
 #endif
 
-typedef int                       CUdevice;
-typedef int                       CUresult;
-typedef uint64_t                  CUdeviceptr;
-typedef uint64_t                  CUsurfObject;
-typedef uint64_t                  CUtexObject;
-typedef struct CUarray_st         *CUarray;
-typedef struct CUctx_st           *CUcontext;
-typedef struct CUevent_st         *CUevent;
-typedef struct CUextMemory_st     *CUexternalMemory;
-typedef struct CUextSemaphore_st  *CUexternalSemaphore;
-typedef struct CUfunc_st          *CUfunction;
+typedef int                         CUdevice;
+typedef int                         CUresult;
+typedef uint64_t                    CUdeviceptr;
+typedef uint64_t                    CUsurfObject;
+typedef uint64_t                    CUtexObject;
+typedef struct CUarray_st          *CUarray;
+typedef struct CUctx_st            *CUcontext;
+typedef struct CUevent_st          *CUevent;
+typedef struct CUextMemory_st      *CUexternalMemory;
+typedef struct CUextSemaphore_st   *CUexternalSemaphore;
+typedef struct CUfunc_st           *CUfunction;
 typedef struct CUmipmappedArray_st *CUmipmappedArray;
-typedef struct CUmod_st           *CUmodule;
-typedef struct CUstream_st        *CUstream;
+typedef struct CUmod_st            *CUmodule;
+typedef struct CUstream_st         *CUstream;
 
 typedef enum CUarray_format {
   CU_AD_FORMAT_UNSIGNED_INT8  = 0x01,
@@ -56,10 +72,10 @@ typedef enum CUmemorytype {
 } CUmemorytype;
 
 typedef enum CUresourcetype {
-  CU_RESOURCE_TYPE_ARRAY            = 0x00,
+  CU_RESOURCE_TYPE_ARRAY           = 0x00,
   CU_RESOURCE_TYPE_MIPMAPPED_ARRAY = 0x01,
-  CU_RESOURCE_TYPE_LINEAR           = 0x02,
-  CU_RESOURCE_TYPE_PITCH2D          = 0x03
+  CU_RESOURCE_TYPE_LINEAR          = 0x02,
+  CU_RESOURCE_TYPE_PITCH2D         = 0x03
 } CUresourcetype;
 
 typedef enum CUresourceViewFormat {
@@ -303,30 +319,30 @@ _Static_assert(sizeof(CUDA_RESOURCE_VIEW_DESC) == 112u,
 #endif
 
 enum {
-  CUDA_MIN_DRIVER_VERSION                    = 11000,
-  CUDA_SUCCESS                               = 0,
-  CUDA_ERROR_INVALID_VALUE                   = 1,
-  CUDA_ERROR_OUT_OF_MEMORY                   = 2,
-  CUDA_EXTERNAL_MEMORY_DEDICATED             = 1u,
-  CUDA_ARRAY3D_LAYERED                       = 0x01u,
-  CUDA_ARRAY3D_SURFACE_LDST                  = 0x02u,
-  CUDA_ARRAY3D_CUBEMAP                       = 0x04u,
-  CUDA_ARRAY3D_COLOR_ATTACHMENT              = 0x20u,
-  CU_TRSF_READ_AS_INTEGER                    = 0x01u,
-  CU_TRSF_NORMALIZED_COORDINATES             = 0x02u,
-  CU_TRSF_SRGB                               = 0x10u,
-  CU_TRSF_SEAMLESS_CUBEMAP                   = 0x40u,
-  CU_STREAM_NON_BLOCKING                     = 1,
-  CU_EVENT_DISABLE_TIMING                    = 2,
-  CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK  = 1,
-  CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X        = 2,
-  CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y        = 3,
-  CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z        = 4,
-  CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_X         = 5,
-  CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Y         = 6,
-  CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Z         = 7,
-  CU_DEVICE_ATTRIBUTE_WARP_SIZE              = 10,
-  CU_DEVICE_ATTRIBUTE_UNIFIED_ADDRESSING     = 41,
+  CUDA_MIN_DRIVER_VERSION                      = 11000,
+  CUDA_SUCCESS                                 = 0,
+  CUDA_ERROR_INVALID_VALUE                     = 1,
+  CUDA_ERROR_OUT_OF_MEMORY                     = 2,
+  CUDA_EXTERNAL_MEMORY_DEDICATED               = 1u,
+  CUDA_ARRAY3D_LAYERED                         = 0x01u,
+  CUDA_ARRAY3D_SURFACE_LDST                    = 0x02u,
+  CUDA_ARRAY3D_CUBEMAP                         = 0x04u,
+  CUDA_ARRAY3D_COLOR_ATTACHMENT                = 0x20u,
+  CU_TRSF_READ_AS_INTEGER                      = 0x01u,
+  CU_TRSF_NORMALIZED_COORDINATES               = 0x02u,
+  CU_TRSF_SRGB                                 = 0x10u,
+  CU_TRSF_SEAMLESS_CUBEMAP                     = 0x40u,
+  CU_STREAM_NON_BLOCKING                       = 1,
+  CU_EVENT_DISABLE_TIMING                      = 2,
+  CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK    = 1,
+  CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X          = 2,
+  CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y          = 3,
+  CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z          = 4,
+  CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_X           = 5,
+  CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Y           = 6,
+  CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Z           = 7,
+  CU_DEVICE_ATTRIBUTE_WARP_SIZE                = 10,
+  CU_DEVICE_ATTRIBUTE_UNIFIED_ADDRESSING       = 41,
   CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR = 75,
   CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR = 76
 };
@@ -340,12 +356,8 @@ typedef struct GPUCUDA {
   CUresult (CUDA_CALL *deviceGet)(CUdevice *device, int ordinal);
   CUresult (CUDA_CALL *deviceGetName)(char *name, int length, CUdevice device);
   CUresult (CUDA_CALL *deviceGetUuid)(CUuuid *uuid, CUdevice device);
-  CUresult (CUDA_CALL *deviceGetLuid)(char *luid,
-                                     unsigned int *nodeMask,
-                                     CUdevice device);
-  CUresult (CUDA_CALL *deviceGetAttribute)(int *value,
-                                          int attribute,
-                                          CUdevice device);
+  CUresult (CUDA_CALL *deviceGetLuid)(char *luid, unsigned int *nodeMask, CUdevice device);
+  CUresult (CUDA_CALL *deviceGetAttribute)(int *value, int attribute, CUdevice device);
   CUresult (CUDA_CALL *primaryCtxRetain)(CUcontext *context, CUdevice device);
   CUresult (CUDA_CALL *primaryCtxRelease)(CUdevice device);
   CUresult (CUDA_CALL *ctxPushCurrent)(CUcontext context);
@@ -357,102 +369,69 @@ typedef struct GPUCUDA {
   CUresult (CUDA_CALL *eventDestroy)(CUevent event);
   CUresult (CUDA_CALL *eventRecord)(CUevent event, CUstream stream);
   CUresult (CUDA_CALL *eventSynchronize)(CUevent event);
-  CUresult (CUDA_CALL *importExternalMemory)(
-    CUexternalMemory                   *externalMemory,
-    const CUDAExternalMemoryHandleDesc *desc
-  );
-  CUresult (CUDA_CALL *externalMemoryGetMappedBuffer)(
-    CUdeviceptr                        *address,
-    CUexternalMemory                    externalMemory,
-    const CUDAExternalMemoryBufferDesc *desc
-  );
-  CUresult (CUDA_CALL *externalMemoryGetMappedMipmappedArray)(
-    CUmipmappedArray                           *mipmap,
-    CUexternalMemory                            externalMemory,
-    const CUDAExternalMemoryMipmappedArrayDesc *desc
-  );
-  CUresult (CUDA_CALL *destroyExternalMemory)(
-    CUexternalMemory externalMemory
-  );
-  CUresult (CUDA_CALL *importExternalSemaphore)(
-    CUexternalSemaphore                   *externalSemaphore,
-    const CUDAExternalSemaphoreHandleDesc *desc
-  );
-  CUresult (CUDA_CALL *signalExternalSemaphoresAsync)(
-    const CUexternalSemaphore                *semaphores,
-    const CUDAExternalSemaphoreSignalParams  *params,
-    unsigned int                              count,
-    CUstream                                  stream
-  );
-  CUresult (CUDA_CALL *waitExternalSemaphoresAsync)(
-    const CUexternalSemaphore              *semaphores,
-    const CUDAExternalSemaphoreWaitParams  *params,
-    unsigned int                            count,
-    CUstream                                stream
-  );
-  CUresult (CUDA_CALL *destroyExternalSemaphore)(
-    CUexternalSemaphore externalSemaphore
-  );
+  CUresult (CUDA_CALL *importExternalMemory)(CUexternalMemory                   *externalMemory,
+                                             const CUDAExternalMemoryHandleDesc *desc);
+  CUresult (CUDA_CALL *externalMemoryGetMappedBuffer)(CUdeviceptr                        *address,
+                                                      CUexternalMemory                    externalMemory,
+                                                      const CUDAExternalMemoryBufferDesc *desc);
+  CUresult (CUDA_CALL *externalMemoryGetMappedMipmappedArray)(CUmipmappedArray                           *mipmap,
+                                                              CUexternalMemory                            externalMemory,
+                                                              const CUDAExternalMemoryMipmappedArrayDesc *desc);
+  CUresult (CUDA_CALL *destroyExternalMemory)(CUexternalMemory externalMemory);
+  CUresult (CUDA_CALL *importExternalSemaphore)(CUexternalSemaphore                   *externalSemaphore,
+                                                const CUDAExternalSemaphoreHandleDesc *desc);
+  CUresult (CUDA_CALL *signalExternalSemaphoresAsync)(const CUexternalSemaphore               *semaphores,
+                                                      const CUDAExternalSemaphoreSignalParams *params,
+                                                      unsigned int                             count,
+                                                      CUstream                                 stream);
+  CUresult (CUDA_CALL *waitExternalSemaphoresAsync)(const CUexternalSemaphore             *semaphores,
+                                                    const CUDAExternalSemaphoreWaitParams *params,
+                                                    unsigned int                           count,
+                                                    CUstream                               stream);
+  CUresult (CUDA_CALL *destroyExternalSemaphore)(CUexternalSemaphore externalSemaphore);
   CUresult (CUDA_CALL *memAlloc)(CUdeviceptr *address, size_t sizeBytes);
   CUresult (CUDA_CALL *memFree)(CUdeviceptr address);
-  CUresult (CUDA_CALL *memcpyHtoD)(CUdeviceptr dst,
-                                  const void *src,
-                                  size_t sizeBytes);
-  CUresult (CUDA_CALL *memcpyDtoH)(void *dst,
-                                  CUdeviceptr src,
-                                  size_t sizeBytes);
-  CUresult (CUDA_CALL *array3DCreate)(
-    CUarray                       *array,
-    const CUDA_ARRAY3D_DESCRIPTOR *desc
-  );
+  CUresult (CUDA_CALL *memcpyHtoD)(CUdeviceptr dst, const void *src, size_t sizeBytes);
+  CUresult (CUDA_CALL *memcpyDtoH)(void *dst, CUdeviceptr src, size_t sizeBytes);
+  CUresult (CUDA_CALL *array3DCreate)(CUarray *array, const CUDA_ARRAY3D_DESCRIPTOR *desc);
   CUresult (CUDA_CALL *arrayDestroy)(CUarray array);
-  CUresult (CUDA_CALL *mipmappedArrayCreate)(
-    CUmipmappedArray              *array,
-    const CUDA_ARRAY3D_DESCRIPTOR *desc,
-    unsigned int                   mipLevelCount
-  );
+  CUresult (CUDA_CALL *mipmappedArrayCreate)(CUmipmappedArray              *array,
+                                             const CUDA_ARRAY3D_DESCRIPTOR *desc,
+                                             unsigned int                   mipLevelCount);
   CUresult (CUDA_CALL *mipmappedArrayDestroy)(CUmipmappedArray array);
-  CUresult (CUDA_CALL *mipmappedArrayGetLevel)(CUarray          *level,
-                                                CUmipmappedArray  array,
-                                                unsigned int      mipLevel);
+  CUresult (CUDA_CALL *mipmappedArrayGetLevel)(CUarray *level, CUmipmappedArray array, unsigned int mipLevel);
   CUresult (CUDA_CALL *memcpy3D)(const CUDA_MEMCPY3D *copy);
-  CUresult (CUDA_CALL *surfObjectCreate)(
-    CUsurfObject             *surface,
-    const CUDA_RESOURCE_DESC *desc
-  );
+  CUresult (CUDA_CALL *surfObjectCreate)(CUsurfObject *surface, const CUDA_RESOURCE_DESC *desc);
   CUresult (CUDA_CALL *surfObjectDestroy)(CUsurfObject surface);
-  CUresult (CUDA_CALL *texObjectCreate)(
-    CUtexObject                   *texture,
-    const CUDA_RESOURCE_DESC      *resourceDesc,
-    const CUDA_TEXTURE_DESC       *textureDesc,
-    const CUDA_RESOURCE_VIEW_DESC *resourceViewDesc
-  );
+  CUresult (CUDA_CALL *texObjectCreate)(CUtexObject                   *texture,
+                                        const CUDA_RESOURCE_DESC      *resourceDesc,
+                                        const CUDA_TEXTURE_DESC       *textureDesc,
+                                        const CUDA_RESOURCE_VIEW_DESC *resourceViewDesc);
   CUresult (CUDA_CALL *texObjectDestroy)(CUtexObject texture);
-  CUresult (CUDA_CALL *moduleLoadData)(CUmodule *module,
-                                      const void *image,
-                                      unsigned int optionCount,
-                                      int *options,
-                                      void **optionValues);
+  CUresult (CUDA_CALL *moduleLoadData)(CUmodule    *module,
+                                       const void  *image,
+                                       unsigned int optionCount,
+                                       int         *options,
+                                       void       **optionValues);
   CUresult (CUDA_CALL *moduleUnload)(CUmodule module);
-  CUresult (CUDA_CALL *moduleGetFunction)(CUfunction *function,
-                                         CUmodule module,
-                                         const char *name);
-  CUresult (CUDA_CALL *launchKernel)(CUfunction function,
-                                    unsigned int gridX,
-                                    unsigned int gridY,
-                                    unsigned int gridZ,
-                                    unsigned int blockX,
-                                    unsigned int blockY,
-                                    unsigned int blockZ,
-                                    unsigned int sharedMemoryBytes,
-                                    CUstream stream,
-                                    void **kernelParams,
-                                    void **extra);
+  CUresult (CUDA_CALL *moduleGetFunction)(CUfunction *function, CUmodule module, const char *name);
+  CUresult (CUDA_CALL *launchKernel)(CUfunction   function,
+                                     unsigned int gridX,
+                                     unsigned int gridY,
+                                     unsigned int gridZ,
+                                     unsigned int blockX,
+                                     unsigned int blockY,
+                                     unsigned int blockZ,
+                                     unsigned int sharedMemoryBytes,
+                                     CUstream     stream,
+                                     void       **kernelParams,
+                                     void       **extra);
   CUresult (CUDA_CALL *getErrorName)(CUresult result, const char **name);
   CUresult (CUDA_CALL *getErrorString)(CUresult result, const char **message);
   int driverVersion;
 } GPUCUDA;
 
-GPUCUDA *cuda_driver(void);
+GPUCUDA*
+cuda_driver(void);
 
-#endif
+#endif /* gpu_cuda_driver_h */

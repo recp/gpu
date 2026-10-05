@@ -25,21 +25,24 @@ static_encode(GPURenderPassEncoder *pass,
               uint32_t              drawCount,
               void                 *userData) {
   GPURenderPipeline *pipeline;
+  uint32_t           draw;
 
   pipeline = userData;
   GPUBindRenderPipeline(pass, pipeline);
-  for (uint32_t draw = 0u; draw < drawCount; draw++) {
+
+  for (draw = 0u; draw < drawCount; draw++) {
     GPUDraw(pass, 3u, 1u, 0u, 0u);
   }
+
   return true;
 }
 
 int
 main(int argc, char *argv[]) {
-  BenchRenderConfig config;
-  BenchRender       bench;
-  BenchPipelineInfo pipelineInfo;
-  BenchSceneMetrics metrics;
+  BenchRenderConfig  config;
+  BenchRender        bench;
+  BenchPipelineInfo  pipelineInfo;
+  BenchSceneMetrics  metrics;
   GPURenderPipeline *pipeline;
   bool               ok;
 
@@ -47,8 +50,8 @@ main(int argc, char *argv[]) {
   memset(&pipelineInfo, 0, sizeof(pipelineInfo));
   memset(&metrics, 0, sizeof(metrics));
   pipeline = NULL;
-  if (!bench_renderConfig(argc, argv, &config) ||
-      !bench_renderInit(&bench, &config, 1u, 1u)) {
+
+  if (!bench_renderConfig(argc, argv, &config) || !bench_renderInit(&bench, &config, 1u, 1u)) {
     bench_renderCleanup(&bench);
     return EXIT_FAILURE;
   }
@@ -56,6 +59,7 @@ main(int argc, char *argv[]) {
   pipelineInfo.label       = "static-scene-pipeline";
   pipelineInfo.frontFace   = GPU_FRONT_FACE_CCW;
   pipelineInfo.vertexInput = true;
+
   if (!bench_renderPipeline(&bench, &pipelineInfo, &pipeline)) {
     fprintf(stderr, "failed to create static scene pipeline\n");
     bench_renderCleanup(&bench);
@@ -67,6 +71,7 @@ main(int argc, char *argv[]) {
                        static_encode,
                        pipeline,
                        &metrics);
+
   if (ok) {
     bench_renderPrint("static scene", &bench, &config, &metrics);
     ok = bench_renderMetricsPass(&metrics);
@@ -75,9 +80,11 @@ main(int argc, char *argv[]) {
   bench_renderFreeMetrics(&metrics);
   GPUDestroyRenderPipeline(pipeline);
   bench_renderCleanup(&bench);
+
   if (!ok) {
     fprintf(stderr, "static scene benchmark failed\n");
     return EXIT_FAILURE;
   }
+
   return EXIT_SUCCESS;
 }

@@ -1,44 +1,58 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef gpu_validation_f16_builtins_h
 #define gpu_validation_f16_builtins_h
 
 #include <stdint.h>
 
 enum {
-  F16_BUILTIN_CASES                 = 5u,
-  F16_BUILTIN_INPUT_ROWS            = F16_BUILTIN_CASES * 2u,
-  F16_BUILTIN_MATH_ROWS             = 32u,
-  F16_BUILTIN_GEOMETRIC_ROWS        = 8u,
-  F16_BUILTIN_TRIG_ROWS             = 16u,
-  F16_BUILTIN_BASE_OUTPUTS_PER_CASE = F16_BUILTIN_MATH_ROWS +
-                                      F16_BUILTIN_GEOMETRIC_ROWS +
-                                      F16_BUILTIN_TRIG_ROWS,
-  F16_BUILTIN_WIDTHS                = 3u,
-  F16_BUILTIN_WIDTH_ROWS            = F16_BUILTIN_MATH_ROWS +
-                                      F16_BUILTIN_TRIG_ROWS,
-  F16_BUILTIN_WIDTH_ROWS_PER_CASE   = F16_BUILTIN_WIDTHS *
-                                      F16_BUILTIN_WIDTH_ROWS,
-  F16_BUILTIN_GEOMETRIC_WIDTH_ROWS  = 7u,
-  F16_BUILTIN_GEOMETRIC_EXTRA_ROWS  = 2u * F16_BUILTIN_GEOMETRIC_WIDTH_ROWS + 2u,
-  F16_BUILTIN_OUTPUTS_PER_CASE      = F16_BUILTIN_BASE_OUTPUTS_PER_CASE +
-                                      F16_BUILTIN_WIDTH_ROWS_PER_CASE +
-                                      F16_BUILTIN_GEOMETRIC_EXTRA_ROWS,
-  F16_BUILTIN_OUTPUT_ROWS           = F16_BUILTIN_CASES *
-                                      F16_BUILTIN_OUTPUTS_PER_CASE,
-  F16_BUILTIN_BASE_CHECKS           = F16_BUILTIN_CASES *
-                                      F16_BUILTIN_BASE_OUTPUTS_PER_CASE * 4u,
-  F16_BUILTIN_WIDTH_CHECKS_PER_CASE = F16_BUILTIN_WIDTH_ROWS * 6u,
+  F16_BUILTIN_CASES                  = 5u,
+  F16_BUILTIN_INPUT_ROWS             = F16_BUILTIN_CASES * 2u,
+  F16_BUILTIN_MATH_ROWS              = 32u,
+  F16_BUILTIN_GEOMETRIC_ROWS         = 8u,
+  F16_BUILTIN_TRIG_ROWS              = 16u,
+  F16_BUILTIN_BASE_OUTPUTS_PER_CASE  = F16_BUILTIN_MATH_ROWS +
+                                       F16_BUILTIN_GEOMETRIC_ROWS +
+                                       F16_BUILTIN_TRIG_ROWS,
+  F16_BUILTIN_WIDTHS                 = 3u,
+  F16_BUILTIN_WIDTH_ROWS             = F16_BUILTIN_MATH_ROWS +
+                                       F16_BUILTIN_TRIG_ROWS,
+  F16_BUILTIN_WIDTH_ROWS_PER_CASE    = F16_BUILTIN_WIDTHS *
+                                       F16_BUILTIN_WIDTH_ROWS,
+  F16_BUILTIN_GEOMETRIC_WIDTH_ROWS   = 7u,
+  F16_BUILTIN_GEOMETRIC_EXTRA_ROWS   = 2u * F16_BUILTIN_GEOMETRIC_WIDTH_ROWS + 2u,
+  F16_BUILTIN_OUTPUTS_PER_CASE       = F16_BUILTIN_BASE_OUTPUTS_PER_CASE +
+                                       F16_BUILTIN_WIDTH_ROWS_PER_CASE +
+                                       F16_BUILTIN_GEOMETRIC_EXTRA_ROWS,
+  F16_BUILTIN_OUTPUT_ROWS            = F16_BUILTIN_CASES *
+                                       F16_BUILTIN_OUTPUTS_PER_CASE,
+  F16_BUILTIN_BASE_CHECKS            = F16_BUILTIN_CASES *
+                                       F16_BUILTIN_BASE_OUTPUTS_PER_CASE * 4u,
+  F16_BUILTIN_WIDTH_CHECKS_PER_CASE  = F16_BUILTIN_WIDTH_ROWS * 6u,
   F16_BUILTIN_GEOMETRIC_EXTRA_CHECKS = 2u * 3u + 6u * (2u + 3u) + 8u,
-  F16_BUILTIN_CHECKS                = F16_BUILTIN_BASE_CHECKS +
-                                      F16_BUILTIN_CASES *
-                                      (F16_BUILTIN_WIDTH_CHECKS_PER_CASE +
-                                       F16_BUILTIN_GEOMETRIC_EXTRA_CHECKS)
+  F16_BUILTIN_CHECKS                 = F16_BUILTIN_BASE_CHECKS +
+                                       F16_BUILTIN_CASES *
+                                       (F16_BUILTIN_WIDTH_CHECKS_PER_CASE +
+                                        F16_BUILTIN_GEOMETRIC_EXTRA_CHECKS)
 };
 
 extern const float gpu_f16_builtin_inputs[F16_BUILTIN_INPUT_ROWS][4];
 
 int
-gpu_f16_builtin_validate(
-  const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]
-);
+gpu_f16_builtin_validate(const uint16_t output[F16_BUILTIN_OUTPUT_ROWS][4]);
 
 #endif /* gpu_validation_f16_builtins_h */

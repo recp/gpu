@@ -28,7 +28,7 @@ typedef struct GPUFrame     GPUFrame;
 
 GPU_EXPORT
 GPUFrame*
-GPUBeginFrame(GPUSwapchain* swapchain);
+GPUBeginFrame(GPUSwapchain *swapchain);
 
 /* returns the acquired render target for this frame. */
 GPU_EXPORT
@@ -41,7 +41,7 @@ GPUFrameGetTargetView(GPUFrame *frame);
 
 GPU_EXPORT
 void
-GPUEndFrame(GPUFrame* frame);
+GPUEndFrame(GPUFrame *frame);
 
 /* schedules frame presentation on the command buffer. */
 GPU_EXPORT
@@ -56,9 +56,9 @@ GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame);
 /* schedules, submits, and consumes a frame with one command buffer. */
 GPU_EXPORT
 GPUResult
-GPUFinishFrame(GPUQueue         * __restrict cmdq,
-               GPUCommandBuffer * __restrict cmdb,
-               GPUFrame         * __restrict frame);
+GPUFinishFrame(GPUQueue         *__restrict cmdq,
+               GPUCommandBuffer *__restrict cmdb,
+               GPUFrame         *__restrict frame);
 
 #ifdef __cplusplus
 }

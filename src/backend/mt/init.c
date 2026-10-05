@@ -52,5 +52,6 @@ backend_metal(void) {
 
     mt.initialized = true;
   }
+
   return &mt;
 }

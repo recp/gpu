@@ -35,6 +35,13 @@ enum {
   MARKER_WARMUP_ITERATIONS = 1000000
 };
 
+typedef struct MarkerFixture {
+  GPUCommandBuffer cmdb;
+  GPUQueue         queue;
+  GPUDevice        device;
+  GPUApi           api;
+} MarkerFixture;
+
 #if GPU_BUILD_WITH_DEBUG_MARKERS
 static const bool markerModes[] = {
   false,
@@ -55,50 +62,46 @@ static const char *markerModeNames[] = {
 };
 #endif
 
-typedef struct MarkerFixture {
-  GPUCommandBuffer      cmdb;
-  GPUQueue              queue;
-  GPUDevice             device;
-  GPUApi                api;
-} MarkerFixture;
+enum { MODE_COUNT = (int)GPU_ARRAY_LEN(markerModes) };
 
 static const char       *markerCommandLabel;
 static const char       *markerComputeLabel;
 static const char       *markerCopyLabel;
 static volatile uint64_t markerSink;
 
-static GPUCommandBuffer *
-marker_newCommandBuffer(GPUQueue                    * __restrict queue,
-                        const char                  * __restrict label,
-                        void                        * __restrict sender,
-                        GPUCommandBufferCompletionFn             oncomplete) {
-  static GPUCommandBuffer cmdb;
+static GPUCommandBuffer       markerCommandBuffer;
+static GPUComputePassEncoder  markerComputePass;
+static GPUTransferPassEncoder markerTransferPass;
 
+static GPUCommandBuffer*
+marker_newCommandBuffer(GPUQueue         *__restrict queue,
+                        const char       *__restrict label,
+                        void             *__restrict sender,
+                        GPUCommandBufferCompletionFn oncomplete) {
   GPU__UNUSED(sender);
   GPU__UNUSED(oncomplete);
-  memset(&cmdb, 0, sizeof(cmdb));
+  memset(&markerCommandBuffer, 0, sizeof(markerCommandBuffer));
   markerCommandLabel = label;
   markerSink += (uint64_t)(queue != NULL) + (uint64_t)(label != NULL);
-  return &cmdb;
+
+  return &markerCommandBuffer;
 }
 
-static BENCH_NOINLINE GPUComputePassEncoder *
+static BENCH_NOINLINE GPUComputePassEncoder*
 marker_beginCompute(GPUCommandBuffer               *cmdb,
                     const GPUComputePassCreateInfo *info) {
-  static GPUComputePassEncoder pass;
-
   markerComputeLabel = info->label;
   markerSink += (uint64_t)(cmdb != NULL) + (uint64_t)(info->label != NULL);
-  return &pass;
+
+  return &markerComputePass;
 }
 
-static GPUTransferPassEncoder *
+static GPUTransferPassEncoder*
 marker_beginTransfer(GPUCommandBuffer *cmdb, const char *label) {
-  static GPUTransferPassEncoder pass;
-
   markerCopyLabel = label;
   markerSink += (uint64_t)(cmdb != NULL) + (uint64_t)(label != NULL);
-  return &pass;
+
+  return &markerTransferPass;
 }
 
 static double
@@ -106,18 +109,20 @@ marker_runDirect(MarkerFixture *fixture,
                  bool           enabled,
                  uint64_t       iterations) {
   GPUComputePassCreateInfo info = {0};
+  GPUComputePassEncoder   *pass;
   double                   begin;
+  uint64_t                 i;
 
   info.label = enabled ? "marker-benchmark" : NULL;
   begin      = bench_now();
-  for (uint64_t i = 0u; i < iterations; i++) {
-    GPUComputePassEncoder *pass;
 
-    pass = marker_beginCompute(&fixture->cmdb, &info);
-    pass->_cmdb = &fixture->cmdb;
+  for (i = 0u; i < iterations; i++) {
+    pass                         = marker_beginCompute(&fixture->cmdb, &info);
+    pass->_cmdb                  = &fixture->cmdb;
     fixture->cmdb._activeEncoder = true;
     fixture->cmdb._activeEncoder = false;
   }
+
   return (bench_now() - begin) * 1e9 / (double)iterations;
 }
 
@@ -125,26 +130,31 @@ static double
 marker_runBegin(MarkerFixture *fixture,
                 bool           enabled,
                 uint64_t       iterations) {
-  double begin;
+  double   begin;
+  uint64_t i;
 
   fixture->device.runtimeConfig.enableDebugMarkers = enabled;
+
   begin = bench_now();
-  for (uint64_t i = 0u; i < iterations; i++) {
+
+  for (i = 0u; i < iterations; i++) {
     fixture->cmdb._activeEncoder = false;
     GPUBeginComputePass(&fixture->cmdb, "marker-benchmark");
   }
+
   return (bench_now() - begin) * 1e9 / (double)iterations;
 }
 
 static void
 marker_init(MarkerFixture *fixture) {
   memset(fixture, 0, sizeof(*fixture));
-  fixture->api.cmdque.newCommandBuffer         = marker_newCommandBuffer;
-  fixture->api.compute.computeCommandEncoder   = marker_beginCompute;
-  fixture->api.renderPass.beginTransferPass     = marker_beginTransfer;
-  fixture->device._api                         = &fixture->api;
-  fixture->queue._device                       = &fixture->device;
-  fixture->cmdb._queue                         = &fixture->queue;
+  fixture->api.cmdque.newCommandBuffer       = marker_newCommandBuffer;
+  fixture->api.compute.computeCommandEncoder = marker_beginCompute;
+  fixture->api.renderPass.beginTransferPass  = marker_beginTransfer;
+
+  fixture->device._api   = &fixture->api;
+  fixture->queue._device = &fixture->device;
+  fixture->cmdb._queue   = &fixture->queue;
 }
 
 static bool
@@ -152,26 +162,30 @@ marker_checkMode(MarkerFixture *fixture, bool enabled, bool expectLabel) {
   GPUCommandBuffer *cmdb;
 
   fixture->device.runtimeConfig.enableDebugMarkers = enabled;
+
   markerCommandLabel = NULL;
   markerComputeLabel = NULL;
   markerCopyLabel    = NULL;
 
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(&fixture->queue,
                               "marker-benchmark",
                               &cmdb) != GPU_OK || !cmdb) {
     return false;
   }
+
   fixture->cmdb._activeEncoder = false;
   GPUBeginComputePass(&fixture->cmdb, "marker-benchmark");
   fixture->cmdb._activeEncoder = false;
   GPUBeginTransferPass(&fixture->cmdb, "marker-benchmark");
 
-  if ((markerCommandLabel != NULL) != expectLabel ||
-      (markerComputeLabel != NULL) != expectLabel ||
-      (markerCopyLabel != NULL) != expectLabel) {
+  if ((markerCommandLabel != NULL) != expectLabel
+      || (markerComputeLabel != NULL) != expectLabel
+      || (markerCopyLabel != NULL) != expectLabel) {
     return false;
   }
+
   return true;
 }
 
@@ -190,26 +204,31 @@ marker_checkBehavior(MarkerFixture *fixture) {
 
 int
 main(int argc, char *argv[]) {
-  enum { MODE_COUNT = (int)GPU_ARRAY_LEN(markerModes) };
   MarkerFixture fixture;
   double        directSamples[MODE_COUNT][MARKER_REPEATS];
   double        beginSamples[MODE_COUNT][MARKER_REPEATS];
+  double        direct;
+  double        begin;
   uint32_t      iterations;
+  uint32_t      mode;
+  uint32_t      repeat;
 
   iterations = 20000000u;
-  if (argc > 2 ||
-      (argc == 2 && !bench_parseU32(argv[1], 10000u, &iterations))) {
+
+  if (argc > 2
+      || (argc == 2 && !bench_parseU32(argv[1], 10000u, &iterations))) {
     fprintf(stderr, "usage: %s [iterations >= 10000]\n", argv[0]);
     return EXIT_FAILURE;
   }
 
   marker_init(&fixture);
+
   if (!marker_checkBehavior(&fixture)) {
     fprintf(stderr, "debug marker label gate failed\n");
     return EXIT_FAILURE;
   }
 
-  for (uint32_t mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
+  for (mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
     marker_runDirect(&fixture,
                      markerModes[mode],
                      MARKER_WARMUP_ITERATIONS);
@@ -218,20 +237,16 @@ main(int argc, char *argv[]) {
                     MARKER_WARMUP_ITERATIONS);
   }
 
-  for (uint32_t repeat = 0u; repeat < MARKER_REPEATS; repeat++) {
+  for (repeat = 0u; repeat < MARKER_REPEATS; repeat++) {
     if ((repeat & 1u) == 0u) {
-      for (uint32_t mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
-        directSamples[mode][repeat] =
-          marker_runDirect(&fixture, markerModes[mode], iterations);
-        beginSamples[mode][repeat] =
-          marker_runBegin(&fixture, markerModes[mode], iterations);
+      for (mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
+        directSamples[mode][repeat] = marker_runDirect(&fixture, markerModes[mode], iterations);
+        beginSamples[mode][repeat]  = marker_runBegin(&fixture, markerModes[mode], iterations);
       }
     } else {
-      for (uint32_t mode = (uint32_t)MODE_COUNT; mode-- > 0u;) {
-        beginSamples[mode][repeat] =
-          marker_runBegin(&fixture, markerModes[mode], iterations);
-        directSamples[mode][repeat] =
-          marker_runDirect(&fixture, markerModes[mode], iterations);
+      for (mode = (uint32_t)MODE_COUNT; mode-- > 0u;) {
+        beginSamples[mode][repeat]  = marker_runBegin(&fixture, markerModes[mode], iterations);
+        directSamples[mode][repeat] = marker_runDirect(&fixture, markerModes[mode], iterations);
       }
     }
   }
@@ -241,10 +256,8 @@ main(int argc, char *argv[]) {
          GPU_BUILD_WITH_DEBUG_MARKERS ? "compiled" : "removed",
          iterations,
          MARKER_REPEATS);
-  for (uint32_t mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
-    double direct;
-    double begin;
 
+  for (mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
     direct = bench_percentile(directSamples[mode], MARKER_REPEATS, 0.5);
     begin  = bench_percentile(beginSamples[mode], MARKER_REPEATS, 0.5);
     printf("markers %-8s direct: %8.3f ns  begin: %8.3f ns  delta %+7.3f ns\n",
@@ -253,6 +266,8 @@ main(int argc, char *argv[]) {
            begin,
            begin - direct);
   }
+
   printf("sink: %" PRIu64 "\n", markerSink);
+
   return EXIT_SUCCESS;
 }

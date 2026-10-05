@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 #include "../../src/api/device_internal.h"
 
@@ -11,6 +27,10 @@ enum {
   GPU_DESCRIPTOR_RENDER_READBACK_BYTES =
     GPU_DESCRIPTOR_RENDER_ROW_BYTES * GPU_DESCRIPTOR_RENDER_HEIGHT
 };
+
+static const uint8_t red[4]   = {255u, 0u, 0u, 255u};
+static const uint8_t green[4] = {0u, 255u, 0u, 255u};
+static const uint8_t black[4] = {0u, 0u, 0u, 255u};
 
 static int
 create_color_texture(GPUDevice       *device,
@@ -37,8 +57,9 @@ create_color_texture(GPUDevice       *device,
                                  GPU_TEXTURE_USAGE_STORAGE |
                                  GPU_TEXTURE_USAGE_COPY_SRC |
                                  GPU_TEXTURE_USAGE_COPY_DST;
-  if (GPUCreateTexture(device, &textureInfo, outTexture) != GPU_OK ||
-      !*outTexture) {
+
+  if (GPUCreateTexture(device, &textureInfo, outTexture) != GPU_OK
+      || !*outTexture) {
     return 0;
   }
 
@@ -48,6 +69,7 @@ create_color_texture(GPUDevice       *device,
   writeRegion.layerCount   = 1u;
   writeRegion.bytesPerRow  = 4u;
   writeRegion.rowsPerImage = 1u;
+
   if (GPUQueueWriteTexture(queue,
                            *outTexture,
                            &writeRegion,
@@ -63,18 +85,19 @@ create_color_texture(GPUDevice       *device,
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
-  return GPUCreateTextureView(*outTexture, &viewInfo, outView) == GPU_OK &&
-         *outView;
+
+  return GPUCreateTextureView(*outTexture, &viewInfo, outView) == GPU_OK
+         && *outView;
 }
 
 static int
-encode_descriptor_render(GPUCommandBuffer     *cmdb,
-                         GPURenderPipeline    *pipeline,
-                         GPUBindGroup         *group,
-                         GPUTextureView       *targetView) {
-  GPURenderPassEncoder        *renderPass;
+encode_descriptor_render(GPUCommandBuffer  *cmdb,
+                         GPURenderPipeline *pipeline,
+                         GPUBindGroup      *group,
+                         GPUTextureView    *targetView) {
   GPURenderPassColorAttachment color    = {0};
   GPURenderPassCreateInfo      passInfo = {0};
+  GPURenderPassEncoder        *renderPass;
 
   color.view                    = targetView;
   color.loadOp                  = GPU_LOAD_OP_CLEAR;
@@ -85,8 +108,8 @@ encode_descriptor_render(GPUCommandBuffer     *cmdb,
   passInfo.label                = "api-descriptor-array-render";
   passInfo.colorAttachmentCount = 1u;
   passInfo.pColorAttachments    = &color;
-  renderPass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!renderPass) {
+
+  if (!(renderPass = GPUBeginRenderPass(cmdb, &passInfo))) {
     return 0;
   }
 
@@ -98,33 +121,33 @@ encode_descriptor_render(GPUCommandBuffer     *cmdb,
 }
 
 static int
-render_descriptor_array(GPUDevice          *device,
-                        GPUQueue           *queue,
-                        GPUShaderLibrary   *library,
-                        GPUPipelineLayout  *pipelineLayout,
-                        GPUBindGroup       *group) {
-  GPURenderPipeline           *pipeline;
-  GPUTexture                  *target;
-  GPUTextureView              *targetView;
-  GPUBuffer                   *readback;
-  GPUCommandBuffer            *cmdb;
-  GPUCommandBuffer            *submitBuffers[1];
-  GPUTransferPassEncoder          *copyPass;
-  GPUFence                    *fence;
-  GPURenderPipelineCreateInfo  pipelineInfo = {0};
-  GPUColorTargetState          colorTarget  = {0};
-  GPUTextureCreateInfo         textureInfo  = {0};
-  GPUTextureViewCreateInfo     viewInfo     = {0};
-  GPUBufferCreateInfo          bufferInfo   = {0};
-  GPUTextureBarrier            barrier      = {0};
-  GPUBarrierBatch              barrierBatch = {0};
-  GPUBufferTextureCopyRegion   copyRegion   = {0};
-  GPUQueueSubmitInfo           submitInfo   = {0};
-  GPURuntimeConfig             savedRuntime;
-  GPURuntimeConfig             statsRuntime;
-  uint8_t                      pixels[GPU_DESCRIPTOR_RENDER_READBACK_BYTES];
-  bool                         restoreRuntime;
-  int                          ok;
+render_descriptor_array(GPUDevice         *device,
+                        GPUQueue          *queue,
+                        GPUShaderLibrary  *library,
+                        GPUPipelineLayout *pipelineLayout,
+                        GPUBindGroup      *group) {
+  GPURenderPipeline          *pipeline;
+  GPUTexture                 *target;
+  GPUTextureView             *targetView;
+  GPUBuffer                  *readback;
+  GPUCommandBuffer           *cmdb;
+  GPUCommandBuffer           *submitBuffers[1];
+  GPUTransferPassEncoder     *copyPass;
+  GPUFence                   *fence;
+  GPURenderPipelineCreateInfo pipelineInfo = {0};
+  GPUColorTargetState         colorTarget  = {0};
+  GPUTextureCreateInfo        textureInfo  = {0};
+  GPUTextureViewCreateInfo    viewInfo     = {0};
+  GPUBufferCreateInfo         bufferInfo   = {0};
+  GPUTextureBarrier           barrier      = {0};
+  GPUBarrierBatch             barrierBatch = {0};
+  GPUBufferTextureCopyRegion  copyRegion   = {0};
+  GPUQueueSubmitInfo          submitInfo   = {0};
+  GPURuntimeConfig            savedRuntime;
+  GPURuntimeConfig            statsRuntime;
+  uint8_t                     pixels[GPU_DESCRIPTOR_RENDER_READBACK_BYTES];
+  bool                        restoreRuntime;
+  int                         ok;
 
   if (!device) {
     return 0;
@@ -133,10 +156,12 @@ render_descriptor_array(GPUDevice          *device,
   savedRuntime   = device->runtimeConfig;
   statsRuntime   = savedRuntime;
   restoreRuntime = !savedRuntime.enableStats;
+
   if (restoreRuntime) {
     statsRuntime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
     statsRuntime.chain.structSize = sizeof(statsRuntime);
     statsRuntime.enableStats      = true;
+
     if (GPUConfigureRuntime(device, &statsRuntime) != GPU_OK) {
       return 0;
     }
@@ -151,24 +176,25 @@ render_descriptor_array(GPUDevice          *device,
   fence      = NULL;
   ok         = 0;
 
-  colorTarget.format          = GPU_FORMAT_RGBA8_UNORM;
-  colorTarget.blend.writeMask = GPU_COLOR_WRITE_ALL;
-  pipelineInfo.chain.sType       = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  pipelineInfo.chain.structSize  = sizeof(pipelineInfo);
-  pipelineInfo.label             = "api-descriptor-array-render";
-  pipelineInfo.layout            = pipelineLayout;
-  pipelineInfo.library           = library;
-  pipelineInfo.vertexEntry       = "descriptor_array_vs";
-  pipelineInfo.fragmentEntry     = "descriptor_array_bindless_fs";
-  pipelineInfo.colorTargetCount  = 1u;
-  pipelineInfo.pColorTargets     = &colorTarget;
-  pipelineInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  pipelineInfo.cullMode          = GPU_CULL_MODE_NONE;
-  pipelineInfo.frontFace         = GPU_FRONT_FACE_CCW;
+  colorTarget.format                   = GPU_FORMAT_RGBA8_UNORM;
+  colorTarget.blend.writeMask          = GPU_COLOR_WRITE_ALL;
+  pipelineInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize        = sizeof(pipelineInfo);
+  pipelineInfo.label                   = "api-descriptor-array-render";
+  pipelineInfo.layout                  = pipelineLayout;
+  pipelineInfo.library                 = library;
+  pipelineInfo.vertexEntry             = "descriptor_array_vs";
+  pipelineInfo.fragmentEntry           = "descriptor_array_bindless_fs";
+  pipelineInfo.colorTargetCount        = 1u;
+  pipelineInfo.pColorTargets           = &colorTarget;
+  pipelineInfo.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineInfo.cullMode                = GPU_CULL_MODE_NONE;
+  pipelineInfo.frontFace               = GPU_FRONT_FACE_CCW;
   pipelineInfo.multisample.sampleCount = 1u;
   pipelineInfo.multisample.sampleMask  = 0xffffffffu;
-  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
+
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK
+      || !pipeline) {
     fprintf(stderr, "descriptor array render pipeline failed\n");
     goto cleanup;
   }
@@ -185,6 +211,7 @@ render_descriptor_array(GPUDevice          *device,
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET |
                                  GPU_TEXTURE_USAGE_COPY_SRC;
+
   if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target) {
     fprintf(stderr, "descriptor array render target failed\n");
     goto cleanup;
@@ -197,8 +224,9 @@ render_descriptor_array(GPUDevice          *device,
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
-  if (GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK ||
-      !targetView) {
+
+  if (GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK
+      || !targetView) {
     fprintf(stderr, "descriptor array render view failed\n");
     goto cleanup;
   }
@@ -209,6 +237,7 @@ render_descriptor_array(GPUDevice          *device,
   bufferInfo.sizeBytes        = sizeof(pixels);
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
                                 GPU_BUFFER_USAGE_COPY_SRC;
+
   if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK || !readback) {
     fprintf(stderr, "descriptor array render readback failed\n");
     goto cleanup;
@@ -216,8 +245,8 @@ render_descriptor_array(GPUDevice          *device,
 
   if (GPUAcquireCommandBuffer(queue,
                               "api-descriptor-array-render",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+                              &cmdb) != GPU_OK
+      || !cmdb) {
     fprintf(stderr, "descriptor array render command buffer failed\n");
     goto cleanup;
   }
@@ -227,22 +256,22 @@ render_descriptor_array(GPUDevice          *device,
     goto cleanup;
   }
 
-  barrier.texture    = target;
-  barrier.srcAccess  = GPU_ACCESS_COLOR_WRITE;
-  barrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
-  barrier.mipCount   = 1u;
-  barrier.layerCount = 1u;
+  barrier.texture                  = target;
+  barrier.srcAccess                = GPU_ACCESS_COLOR_WRITE;
+  barrier.dstAccess                = GPU_ACCESS_TRANSFER_READ;
+  barrier.mipCount                 = 1u;
+  barrier.layerCount               = 1u;
   barrierBatch.srcStages           = GPU_STAGE_FRAGMENT;
   barrierBatch.dstStages           = GPU_STAGE_TRANSFER;
   barrierBatch.textureBarrierCount = 1u;
   barrierBatch.pTextureBarriers    = &barrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginTransferPass(cmdb, "api-descriptor-array-render-readback");
-  if (!copyPass) {
+  if (!(copyPass = GPUBeginTransferPass(cmdb, "api-descriptor-array-render-readback"))) {
     fprintf(stderr, "descriptor array render copy pass failed\n");
     goto cleanup;
   }
+
   copyRegion.bytesPerRow        = GPU_DESCRIPTOR_RENDER_ROW_BYTES;
   copyRegion.rowsPerImage       = GPU_DESCRIPTOR_RENDER_HEIGHT;
   copyRegion.texture.width      = GPU_DESCRIPTOR_RENDER_WIDTH;
@@ -257,21 +286,25 @@ render_descriptor_array(GPUDevice          *device,
     fprintf(stderr, "descriptor array render fence failed\n");
     goto cleanup;
   }
+
   submitBuffers[0]              = cmdb;
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = submitBuffers;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "descriptor array render submission failed\n");
     cmdb = NULL;
     goto cleanup;
   }
+
   cmdb = NULL;
 
   memset(pixels, 0, sizeof(pixels));
+
   if (GPUQueueReadBuffer(queue,
                          readback,
                          0u,
@@ -280,16 +313,19 @@ render_descriptor_array(GPUDevice          *device,
     fprintf(stderr, "descriptor array render readback failed\n");
     goto cleanup;
   }
+
   for (uint32_t y = 0u; y < GPU_DESCRIPTOR_RENDER_HEIGHT; y++) {
     const uint8_t *row;
 
     row = pixels + y * GPU_DESCRIPTOR_RENDER_ROW_BYTES;
+
     for (uint32_t x = 0u; x < GPU_DESCRIPTOR_RENDER_WIDTH; x++) {
       const uint8_t *pixel;
 
       pixel = row + x * 4u;
-      if (pixel[0] != 0u || pixel[1] != 255u ||
-          pixel[2] != 0u || pixel[3] != 255u) {
+
+      if (pixel[0] != 0u || pixel[1] != 255u
+          || pixel[2] != 0u || pixel[3] != 255u) {
         fprintf(stderr,
                 "descriptor array render mismatch: %u,%u,%u,%u\n",
                 (unsigned)pixel[0],
@@ -302,34 +338,38 @@ render_descriptor_array(GPUDevice          *device,
   }
 
   GPUResetStats(device);
+
   for (uint32_t frame = 0u;
        frame < GPU_DESCRIPTOR_RENDER_WARM_FRAMES;
        frame++) {
     if (GPUAcquireCommandBuffer(queue,
                                 "api-descriptor-array-render-warm",
-                                &cmdb) != GPU_OK ||
-        !cmdb ||
-        !encode_descriptor_render(cmdb, pipeline, group, targetView)) {
+                                &cmdb) != GPU_OK
+        || !cmdb
+        || !encode_descriptor_render(cmdb, pipeline, group, targetView)) {
       fprintf(stderr, "descriptor array warm render encode failed\n");
       goto cleanup;
     }
 
     submitBuffers[0]            = cmdb;
     submitInfo.ppCommandBuffers = submitBuffers;
-    if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-        GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+        || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
       fprintf(stderr, "descriptor array warm render submission failed\n");
       cmdb = NULL;
       goto cleanup;
     }
+
     cmdb = NULL;
   }
+
   if (device->currentFrameStats.drawCalls !=
-        GPU_DESCRIPTOR_RENDER_WARM_FRAMES ||
-      device->currentFrameStats.hotPathAllocCount != 0u ||
-      device->currentFrameStats.hotPathAllocBytes != 0u ||
-      device->currentFrameStats.hotPathFreeCount != 0u ||
-      device->currentFrameStats.hotPathFreeBytes != 0u) {
+        GPU_DESCRIPTOR_RENDER_WARM_FRAMES
+      || device->currentFrameStats.hotPathAllocCount != 0u
+      || device->currentFrameStats.hotPathAllocBytes != 0u
+      || device->currentFrameStats.hotPathFreeCount != 0u
+      || device->currentFrameStats.hotPathFreeBytes != 0u) {
     fprintf(stderr,
             "descriptor array warm render stats mismatch: "
             "%u draws, %llu allocations, %llu frees\n",
@@ -338,109 +378,113 @@ render_descriptor_array(GPUDevice          *device,
             (unsigned long long)device->currentFrameStats.hotPathFreeCount);
     goto cleanup;
   }
+
   ok = 1;
 
 cleanup:
+
   if (copyPass) {
     GPUEndTransferPass(copyPass);
   }
+
   GPUDestroyFence(fence);
   GPUDestroyBuffer(readback);
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(target);
   GPUDestroyRenderPipeline(pipeline);
-  if (restoreRuntime &&
-      GPUConfigureRuntime(device, &savedRuntime) != GPU_OK) {
+
+  if (restoreRuntime
+      && GPUConfigureRuntime(device, &savedRuntime) != GPU_OK) {
     ok = 0;
   }
+
   return ok;
 }
 
 static int
-gpu_testDescriptorArray(GPUDevice *device,
+gpu_testDescriptorArray(GPUDevice  *device,
                         const char *bytecodePath,
-                        bool bindless) {
-  static const uint8_t red[4]   = {255u, 0u, 0u, 255u};
-  static const uint8_t green[4] = {0u, 255u, 0u, 255u};
-  static const uint8_t black[4] = {0u, 0u, 0u, 255u};
-  GPUQueue                         *queue;
-  GPUShaderLibrary                 *library;
-  GPUShaderLayout                  *shaderLayout;
-  GPUBindGroupLayout               *bindlessLayout;
-  GPUPipelineLayout                *bindlessPipelineLayout;
-  GPUBindGroupLayout               *activeGroupLayout;
-  GPUPipelineLayout                *activePipelineLayout;
-  GPUComputePipeline               *pipeline;
-  GPUBindGroup                     *group;
-  GPUTexture                       *textures[2];
-  GPUTextureView                   *views[2];
-  GPUTexture                       *storageTextures[2];
-  GPUTextureView                   *storageViews[2];
-  GPUSampler                       *samplers[2];
-  GPUBuffer                        *selectionBuffer;
-  GPUBuffer                        *outputBuffer;
-  GPUBuffer                        *textureReadback;
-  GPUCommandBuffer                 *cmdb;
-  GPUCommandBuffer                 *submitBuffers[1];
-  GPUComputePassEncoder            *computePass;
-  GPUTransferPassEncoder               *copyPass;
-  GPUFence                         *fence;
-  void                             *bytecode;
-  const GPUBindGroupLayoutEntry    *layoutEntries;
-  GPUBindGroupLayout               *pipelineGroups[2];
-  GPUBindlessLayoutEXT              bindlessInfo      = {0};
-  GPUBindGroupLayoutCreateInfo      bindlessLayoutInfo = {0};
-  GPUPipelineLayoutCreateInfo       pipelineLayoutInfo = {0};
-  GPUComputePipelineCreateInfo      pipelineInfo   = {0};
-  GPUSamplerCreateInfo              samplerInfo    = {0};
-  GPUBufferCreateInfo               bufferInfo     = {0};
-  GPUBindGroupEntry                 groupEntries[9] = {0};
-  GPUBindGroupCreateInfo            groupInfo      = {0};
-  GPUBufferBarrier                  outputBarrier  = {0};
-  GPUTextureBarrier                 textureBarrier = {0};
-  GPUBarrierBatch                   barrierBatch   = {0};
-  GPUBufferTextureCopyRegion        copyRegion     = {0};
-  GPUQueueSubmitInfo                submitInfo     = {0};
-  uint32_t                          selection[64]   = {1u};
-  float                             output[4]       = {0.0f};
-  uint8_t                           pixels[GPU_DESCRIPTOR_ARRAY_READBACK_BYTES] = {0};
-  uint64_t                          bytecodeSize;
-  uint32_t                          layoutEntryCount;
-  int                               ok;
+                        bool        bindless) {
+  GPUQueue                      *queue;
+  GPUShaderLibrary              *library;
+  GPUShaderLayout               *shaderLayout;
+  GPUBindGroupLayout            *bindlessLayout;
+  GPUPipelineLayout             *bindlessPipelineLayout;
+  GPUBindGroupLayout            *activeGroupLayout;
+  GPUPipelineLayout             *activePipelineLayout;
+  GPUComputePipeline            *pipeline;
+  GPUBindGroup                  *group;
+  GPUTexture                    *textures[2];
+  GPUTextureView                *views[2];
+  GPUTexture                    *storageTextures[2];
+  GPUTextureView                *storageViews[2];
+  GPUSampler                    *samplers[2];
+  GPUBuffer                     *selectionBuffer;
+  GPUBuffer                     *outputBuffer;
+  GPUBuffer                     *textureReadback;
+  GPUCommandBuffer              *cmdb;
+  GPUCommandBuffer              *submitBuffers[1];
+  GPUComputePassEncoder         *computePass;
+  GPUTransferPassEncoder        *copyPass;
+  GPUFence                      *fence;
+  void                          *bytecode;
+  const GPUBindGroupLayoutEntry *layoutEntries;
+  GPUBindGroupLayout            *pipelineGroups[2];
+  GPUBindlessLayoutEXT           bindlessInfo      = {0};
+  GPUBindGroupLayoutCreateInfo   bindlessLayoutInfo = {0};
+  GPUPipelineLayoutCreateInfo    pipelineLayoutInfo = {0};
+  GPUComputePipelineCreateInfo   pipelineInfo   = {0};
+  GPUSamplerCreateInfo           samplerInfo    = {0};
+  GPUBufferCreateInfo            bufferInfo     = {0};
+  GPUBindGroupEntry              groupEntries[9] = {0};
+  GPUBindGroupCreateInfo         groupInfo      = {0};
+  GPUBufferBarrier               outputBarrier  = {0};
+  GPUTextureBarrier              textureBarrier = {0};
+  GPUBarrierBatch                barrierBatch   = {0};
+  GPUBufferTextureCopyRegion     copyRegion     = {0};
+  GPUQueueSubmitInfo             submitInfo     = {0};
+  uint32_t                       selection[64]   = {1u};
+  float                          output[4]       = {0.0f};
+  uint8_t                        pixels[GPU_DESCRIPTOR_ARRAY_READBACK_BYTES] = {0};
+  uint64_t                       bytecodeSize;
+  uint32_t                       layoutEntryCount;
+  uint32_t                       i;
+  int                            ok;
 
   if (!device || !bytecodePath) {
     return 0;
   }
 
-  queue              = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
-  library            = NULL;
-  shaderLayout       = NULL;
+  queue                  = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  library                = NULL;
+  shaderLayout           = NULL;
   bindlessLayout         = NULL;
   bindlessPipelineLayout = NULL;
   activeGroupLayout      = NULL;
   activePipelineLayout   = NULL;
   pipeline               = NULL;
   group                  = NULL;
-  textures[0]        = NULL;
-  textures[1]        = NULL;
-  views[0]           = NULL;
-  views[1]           = NULL;
-  storageTextures[0] = NULL;
-  storageTextures[1] = NULL;
-  storageViews[0]    = NULL;
-  storageViews[1]    = NULL;
-  samplers[0]        = NULL;
-  samplers[1]        = NULL;
-  selectionBuffer    = NULL;
-  outputBuffer       = NULL;
-  textureReadback    = NULL;
-  cmdb               = NULL;
-  computePass        = NULL;
-  copyPass           = NULL;
-  fence              = NULL;
-  bytecodeSize       = 0u;
-  bytecode           = gpu_test_read_file(bytecodePath, &bytecodeSize);
-  ok                 = queue && bytecode;
+  textures[0]            = NULL;
+  textures[1]            = NULL;
+  views[0]               = NULL;
+  views[1]               = NULL;
+  storageTextures[0]     = NULL;
+  storageTextures[1]     = NULL;
+  storageViews[0]        = NULL;
+  storageViews[1]        = NULL;
+  samplers[0]            = NULL;
+  samplers[1]            = NULL;
+  selectionBuffer        = NULL;
+  outputBuffer           = NULL;
+  textureReadback        = NULL;
+  cmdb                   = NULL;
+  computePass            = NULL;
+  copyPass               = NULL;
+  fence                  = NULL;
+  bytecodeSize           = 0u;
+  bytecode               = gpu_test_read_file(bytecodePath, &bytecodeSize);
+  ok                     = queue && bytecode;
+
   if (!ok) {
     fprintf(stderr, "descriptor array fixture setup failed\n");
     goto cleanup;
@@ -449,22 +493,21 @@ gpu_testDescriptorArray(GPUDevice *device,
   if (GPUCreateShaderLibraryFromUSL(device,
                                     bytecode,
                                     bytecodeSize,
-                                    &library) != GPU_OK ||
-      !library ||
-      GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !shaderLayout || shaderLayout->bindGroupLayoutCount != 2u ||
-      !shaderLayout->bindGroupLayouts ||
-      !shaderLayout->bindGroupLayouts[1] ||
-      !shaderLayout->pipelineLayout) {
+                                    &library) != GPU_OK
+      || !library
+      || GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK
+      || !shaderLayout || shaderLayout->bindGroupLayoutCount != 2u
+      || !shaderLayout->bindGroupLayouts
+      || !shaderLayout->bindGroupLayouts[1]
+      || !shaderLayout->pipelineLayout) {
     fprintf(stderr, "descriptor array shader layout creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
-  layoutEntries = GPUGetBindGroupLayoutEntries(
-    shaderLayout->bindGroupLayouts[1],
-    &layoutEntryCount
-  );
+  layoutEntries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[1],
+                                               &layoutEntryCount);
+
   if (!layoutEntries || layoutEntryCount != 6u) {
     fprintf(stderr, "descriptor array layout entry mismatch\n");
     ok = 0;
@@ -473,40 +516,42 @@ gpu_testDescriptorArray(GPUDevice *device,
 
   activeGroupLayout    = shaderLayout->bindGroupLayouts[1];
   activePipelineLayout = shaderLayout->pipelineLayout;
+
   if (bindless) {
-    bindlessInfo.chain.sType      = GPU_STRUCTURE_TYPE_BINDLESS_LAYOUT_EXT;
-    bindlessInfo.chain.structSize = sizeof(bindlessInfo);
-    bindlessInfo.sourceLayout     = shaderLayout->bindGroupLayouts[1];
-    bindlessLayoutInfo.chain.sType =
-      GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+    bindlessInfo.chain.sType            = GPU_STRUCTURE_TYPE_BINDLESS_LAYOUT_EXT;
+    bindlessInfo.chain.structSize       = sizeof(bindlessInfo);
+    bindlessInfo.sourceLayout           = shaderLayout->bindGroupLayouts[1];
+    bindlessLayoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
     bindlessLayoutInfo.chain.structSize = sizeof(bindlessLayoutInfo);
     bindlessLayoutInfo.chain.pNext      = &bindlessInfo;
     bindlessLayoutInfo.label            = "api-bindless-descriptor-array";
+
     if (GPUCreateBindGroupLayout(device,
                                  &bindlessLayoutInfo,
-                                 &bindlessLayout) != GPU_OK ||
-        !bindlessLayout) {
+                                 &bindlessLayout) != GPU_OK
+        || !bindlessLayout) {
       fprintf(stderr, "bindless descriptor array layout creation failed\n");
       ok = 0;
       goto cleanup;
     }
 
-    pipelineGroups[0] = shaderLayout->bindGroupLayouts[0];
-    pipelineGroups[1] = bindlessLayout;
-    pipelineLayoutInfo.chain.sType =
-      GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.chain.structSize   = sizeof(pipelineLayoutInfo);
-    pipelineLayoutInfo.label              = "api-bindless-descriptor-array";
+    pipelineGroups[0]                       = shaderLayout->bindGroupLayouts[0];
+    pipelineGroups[1]                       = bindlessLayout;
+    pipelineLayoutInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.chain.structSize     = sizeof(pipelineLayoutInfo);
+    pipelineLayoutInfo.label                = "api-bindless-descriptor-array";
     pipelineLayoutInfo.bindGroupLayoutCount = 2u;
-    pipelineLayoutInfo.ppBindGroupLayouts = pipelineGroups;
+    pipelineLayoutInfo.ppBindGroupLayouts   = pipelineGroups;
+
     if (GPUCreatePipelineLayout(device,
                                 &pipelineLayoutInfo,
-                                &bindlessPipelineLayout) != GPU_OK ||
-        !bindlessPipelineLayout) {
+                                &bindlessPipelineLayout) != GPU_OK
+        || !bindlessPipelineLayout) {
       fprintf(stderr, "bindless descriptor pipeline layout creation failed\n");
       ok = 0;
       goto cleanup;
     }
+
     activeGroupLayout    = bindlessLayout;
     activePipelineLayout = bindlessPipelineLayout;
   }
@@ -517,8 +562,9 @@ gpu_testDescriptorArray(GPUDevice *device,
   pipelineInfo.layout           = activePipelineLayout;
   pipelineInfo.library          = library;
   pipelineInfo.entryPoint       = "descriptor_array_cs";
-  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
+
+  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK
+      || !pipeline) {
     fprintf(stderr, "descriptor array compute pipeline creation failed\n");
     ok = 0;
     goto cleanup;
@@ -535,25 +581,25 @@ gpu_testDescriptorArray(GPUDevice *device,
                             "api-descriptor-array-red",
                             red,
                             &textures[0],
-                            &views[0]) ||
-      !create_color_texture(device,
-                            queue,
-                            "api-descriptor-array-green",
-                            green,
-                            &textures[1],
-                            &views[1]) ||
-      !create_color_texture(device,
-                            queue,
-                            "api-descriptor-array-storage-0",
-                            black,
-                            &storageTextures[0],
-                            &storageViews[0]) ||
-      !create_color_texture(device,
-                            queue,
-                            "api-descriptor-array-storage-1",
-                            black,
-                            &storageTextures[1],
-                            &storageViews[1])) {
+                            &views[0])
+      || !create_color_texture(device,
+                               queue,
+                               "api-descriptor-array-green",
+                               green,
+                               &textures[1],
+                               &views[1])
+      || !create_color_texture(device,
+                               queue,
+                               "api-descriptor-array-storage-0",
+                               black,
+                               &storageTextures[0],
+                               &storageViews[0])
+      || !create_color_texture(device,
+                               queue,
+                               "api-descriptor-array-storage-1",
+                               black,
+                               &storageTextures[1],
+                               &storageViews[1])) {
     fprintf(stderr, "descriptor array texture creation failed\n");
     ok = 0;
     goto cleanup;
@@ -568,10 +614,11 @@ gpu_testDescriptorArray(GPUDevice *device,
   samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
-  if (GPUCreateSampler(device, &samplerInfo, false, &samplers[0]) != GPU_OK ||
-      !samplers[0] ||
-      GPUCreateSampler(device, &samplerInfo, false, &samplers[1]) != GPU_OK ||
-      !samplers[1]) {
+
+  if (GPUCreateSampler(device, &samplerInfo, false, &samplers[0]) != GPU_OK
+      || !samplers[0]
+      || GPUCreateSampler(device, &samplerInfo, false, &samplers[1]) != GPU_OK
+      || !samplers[1]) {
     fprintf(stderr, "descriptor array sampler creation failed\n");
     ok = 0;
     goto cleanup;
@@ -583,13 +630,14 @@ gpu_testDescriptorArray(GPUDevice *device,
   bufferInfo.sizeBytes        = GPU_DESCRIPTOR_ARRAY_UNIFORM_BYTES;
   bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(device, &bufferInfo, &selectionBuffer) != GPU_OK ||
-      !selectionBuffer ||
-      GPUQueueWriteBuffer(queue,
-                          selectionBuffer,
-                          0u,
-                          selection,
-                          sizeof(selection)) != GPU_OK) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &selectionBuffer) != GPU_OK
+      || !selectionBuffer
+      || GPUQueueWriteBuffer(queue,
+                             selectionBuffer,
+                             0u,
+                             selection,
+                             sizeof(selection)) != GPU_OK) {
     fprintf(stderr, "descriptor array selection buffer creation failed\n");
     ok = 0;
     goto cleanup;
@@ -600,13 +648,14 @@ gpu_testDescriptorArray(GPUDevice *device,
   bufferInfo.usage     = GPU_BUFFER_USAGE_STORAGE |
                          GPU_BUFFER_USAGE_COPY_SRC |
                          GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(device, &bufferInfo, &outputBuffer) != GPU_OK ||
-      !outputBuffer ||
-      GPUQueueWriteBuffer(queue,
-                          outputBuffer,
-                          0u,
-                          output,
-                          sizeof(output)) != GPU_OK) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &outputBuffer) != GPU_OK
+      || !outputBuffer
+      || GPUQueueWriteBuffer(queue,
+                             outputBuffer,
+                             0u,
+                             output,
+                             sizeof(output)) != GPU_OK) {
     fprintf(stderr, "descriptor array output buffer creation failed\n");
     ok = 0;
     goto cleanup;
@@ -616,14 +665,15 @@ gpu_testDescriptorArray(GPUDevice *device,
   bufferInfo.sizeBytes = sizeof(pixels);
   bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_DST |
                          GPU_BUFFER_USAGE_COPY_SRC;
-  if (GPUCreateBuffer(device, &bufferInfo, &textureReadback) != GPU_OK ||
-      !textureReadback) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &textureReadback) != GPU_OK
+      || !textureReadback) {
     fprintf(stderr, "descriptor array readback buffer creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
-  for (uint32_t i = 0u; i < 2u; i++) {
+  for (i = 0u; i < 2u; i++) {
     groupEntries[i].binding     = 0u;
     groupEntries[i].arrayIndex  = i;
     groupEntries[i].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
@@ -639,6 +689,7 @@ gpu_testDescriptorArray(GPUDevice *device,
     groupEntries[7u + i].bindingType = GPU_BINDING_STORAGE_TEXTURE;
     groupEntries[7u + i].textureView = storageViews[i];
   }
+
   groupEntries[2].binding       = 1u;
   groupEntries[2].bindingType   = GPU_BINDING_SAMPLED_TEXTURE;
   groupEntries[2].textureView   = views[0];
@@ -659,24 +710,27 @@ gpu_testDescriptorArray(GPUDevice *device,
                                  ? 0u
                                  : (uint32_t)GPU_ARRAY_LEN(groupEntries);
   groupInfo.pEntries         = bindless ? NULL : groupEntries;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "descriptor array bind group creation failed\n");
     ok = 0;
     goto cleanup;
   }
+
   if (bindless) {
     groupEntries[1].textureView = views[0];
-    if (GPUUpdateBindGroupEXT(group, 4u, groupEntries) != GPU_OK ||
-        GPUUpdateBindGroupEXT(
-          group,
-          (uint32_t)GPU_ARRAY_LEN(groupEntries) - 4u,
-          &groupEntries[4]) != GPU_OK) {
+
+    if (GPUUpdateBindGroupEXT(group, 4u, groupEntries) != GPU_OK
+        || GPUUpdateBindGroupEXT(group,
+                                 (uint32_t)GPU_ARRAY_LEN(groupEntries) - 4u,
+                                 &groupEntries[4]) != GPU_OK) {
       fprintf(stderr, "bindless descriptor array partial update failed\n");
       ok = 0;
       goto cleanup;
     }
 
     groupEntries[1].textureView = views[1];
+
     if (GPUUpdateBindGroupEXT(group, 1u, &groupEntries[1]) != GPU_OK) {
       fprintf(stderr, "bindless descriptor array replacement failed\n");
       ok = 0;
@@ -684,13 +738,14 @@ gpu_testDescriptorArray(GPUDevice *device,
     }
   }
 
-  if (GPUAcquireCommandBuffer(queue, "api-descriptor-array", &cmdb) != GPU_OK ||
-      !cmdb ||
-      !(computePass = GPUBeginComputePass(cmdb, "api-descriptor-array"))) {
+  if (GPUAcquireCommandBuffer(queue, "api-descriptor-array", &cmdb) != GPU_OK
+      || !cmdb
+      || !(computePass = GPUBeginComputePass(cmdb, "api-descriptor-array"))) {
     fprintf(stderr, "descriptor array compute pass creation failed\n");
     ok = 0;
     goto cleanup;
   }
+
   GPUBindComputePipeline(computePass, pipeline);
   GPUBindComputeGroup(computePass, 1u, group, 0u, NULL);
   GPUDispatch(computePass, 1u, 1u, 1u);
@@ -716,17 +771,17 @@ gpu_testDescriptorArray(GPUDevice *device,
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginTransferPass(cmdb, "api-descriptor-array-readback");
-  if (!copyPass) {
+  if (!(copyPass = GPUBeginTransferPass(cmdb, "api-descriptor-array-readback"))) {
     fprintf(stderr, "descriptor array copy pass creation failed\n");
     ok = 0;
     goto cleanup;
   }
-  copyRegion.bytesPerRow         = GPU_DESCRIPTOR_ARRAY_READBACK_BYTES;
-  copyRegion.rowsPerImage        = 1u;
-  copyRegion.texture.width       = 1u;
-  copyRegion.texture.height      = 1u;
-  copyRegion.texture.depth       = 1u;
+
+  copyRegion.bytesPerRow        = GPU_DESCRIPTOR_ARRAY_READBACK_BYTES;
+  copyRegion.rowsPerImage       = 1u;
+  copyRegion.texture.width      = 1u;
+  copyRegion.texture.height     = 1u;
+  copyRegion.texture.depth      = 1u;
   copyRegion.texture.layerCount = 1u;
   GPUCopyTextureToBuffer(copyPass,
                          storageTextures[1],
@@ -747,31 +802,33 @@ gpu_testDescriptorArray(GPUDevice *device,
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = submitBuffers;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "descriptor array submission failed\n");
     cmdb = NULL;
-    ok = 0;
+    ok   = 0;
     goto cleanup;
   }
+
   cmdb = NULL;
 
   if (GPUQueueReadBuffer(queue,
                          outputBuffer,
                          0u,
                          output,
-                         sizeof(output)) != GPU_OK ||
-      output[0] < -0.01f || output[0] > 0.01f ||
-      output[1] < 0.99f || output[1] > 1.01f ||
-      output[2] < -0.01f || output[2] > 0.01f ||
-      output[3] < 0.99f || output[3] > 1.01f ||
-      GPUQueueReadBuffer(queue,
-                         textureReadback,
-                         0u,
-                         pixels,
-                         sizeof(pixels)) != GPU_OK ||
-      pixels[0] != 0u || pixels[1] != 255u ||
-      pixels[2] != 0u || pixels[3] != 255u) {
+                         sizeof(output)) != GPU_OK
+      || output[0] < -0.01f || output[0] > 0.01f
+      || output[1] < 0.99f || output[1] > 1.01f
+      || output[2] < -0.01f || output[2] > 0.01f
+      || output[3] < 0.99f || output[3] > 1.01f
+      || GPUQueueReadBuffer(queue,
+                            textureReadback,
+                            0u,
+                            pixels,
+                            sizeof(pixels)) != GPU_OK
+      || pixels[0] != 0u || pixels[1] != 255u
+      || pixels[2] != 0u || pixels[3] != 255u) {
     fprintf(stderr,
             "descriptor array readback mismatch: %.3f %.3f %.3f %.3f\n",
             output[0],
@@ -794,12 +851,15 @@ gpu_testDescriptorArray(GPUDevice *device,
   ok = 1;
 
 cleanup:
+
   if (copyPass) {
     GPUEndTransferPass(copyPass);
   }
+
   if (computePass) {
     GPUEndComputePass(computePass);
   }
+
   GPUDestroyFence(fence);
   GPUDestroyBindGroup(group);
   GPUDestroyBuffer(textureReadback);
@@ -830,14 +890,15 @@ gpu_test_descriptor_array(GPUDevice *device, const char *bytecodePath) {
 }
 
 int
-gpu_test_bindless_descriptor_array(GPUDevice *device,
+gpu_test_bindless_descriptor_array(GPUDevice  *device,
                                    const char *bytecodePath) {
   return gpu_testDescriptorArray(device, bytecodePath, true);
 }
 
 int
 gpu_test_descriptor_indexing(GPUAdapter *adapter, const char *bytecodePath) {
-  GPUFeature          feature         = GPU_FEATURE_DESCRIPTOR_INDEXING;
+  GPUFeature          feature = GPU_FEATURE_DESCRIPTOR_INDEXING;
+
   GPUDeviceCreateInfo deviceInfo      = {0};
   GPUDevice          *disabledDevice  = NULL;
   GPUShaderLibrary   *disabledLibrary = NULL;
@@ -850,32 +911,36 @@ gpu_test_descriptor_indexing(GPUAdapter *adapter, const char *bytecodePath) {
     puts("descriptor indexing execution skipped: unsupported adapter");
     return 1;
   }
-  if (!bytecodePath ||
-      !(bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize))) {
+
+  if (!bytecodePath
+      || !(bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize))) {
     fprintf(stderr, "descriptor indexing artifact load failed\n");
     goto cleanup;
   }
 
   deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize = sizeof(deviceInfo);
-  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK ||
-      !disabledDevice || GPUIsFeatureEnabled(disabledDevice, feature) ||
-      GPUCreateShaderLibraryFromUSL(disabledDevice,
-                                    bytecode,
-                                    bytecodeSize,
-                                    &disabledLibrary) == GPU_OK ||
-      disabledLibrary) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabledDevice) != GPU_OK
+      || !disabledDevice || GPUIsFeatureEnabled(disabledDevice, feature)
+      || GPUCreateShaderLibraryFromUSL(disabledDevice,
+                                       bytecode,
+                                       bytecodeSize,
+                                       &disabledLibrary) == GPU_OK
+      || disabledLibrary) {
     fprintf(stderr,
             "descriptor indexing was accepted without feature enablement\n");
     goto cleanup;
   }
+
   GPUDestroyDevice(disabledDevice);
   disabledDevice = NULL;
 
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &feature;
-  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
-      !GPUIsFeatureEnabled(device, feature)) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device
+      || !GPUIsFeatureEnabled(device, feature)) {
     fprintf(stderr, "descriptor indexing feature enablement failed\n");
     goto cleanup;
   }

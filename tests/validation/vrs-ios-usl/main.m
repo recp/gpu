@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <QuartzCore/QuartzCore.h>
 #import <UIKit/UIKit.h>
 
@@ -18,6 +34,45 @@ typedef struct VRSVertex {
   float uv[2];
 } VRSVertex;
 
+@interface VRSViewController : UIViewController {
+@private
+  CADisplayLink              *_displayLink;
+  GPUInstance                *_instance;
+  GPUAdapter                 *_adapter;
+  GPUDevice                  *_device;
+  GPUQueue                   *_queue;
+  GPUSurface                 *_surface;
+  GPUSwapchain               *_swapchain;
+  GPUShaderLibrary           *_library;
+  GPUShaderLayout            *_shaderLayout;
+  GPURenderPipeline          *_gridPipeline;
+  GPURenderPipeline          *_presentPipeline;
+  GPURasterizationRateMapEXT *_rateMap;
+  GPUTexture                 *_rateTarget;
+  GPUTextureView             *_rateTargetView;
+  GPUBuffer                  *_fullscreenBuffer;
+  GPUBuffer                  *_warpBuffer;
+  GPUSampler                 *_sampler;
+  GPUBindGroup               *_textureGroup;
+  GPUBindGroup               *_samplerGroup;
+  GPUFence                   *_frameFences[VRS_FRAMES_IN_FLIGHT];
+  uint32_t                    _warpVertexCount;
+  uint32_t                    _frameIndex;
+  uint32_t                    _viewWidth;
+  uint32_t                    _viewHeight;
+  uint32_t                    _drawableWidth;
+  uint32_t                    _drawableHeight;
+  bool                        _fenceSubmitted[VRS_FRAMES_IN_FLIGHT];
+}
+
+- (void)setRenderingPaused:(BOOL)paused;
+@end
+
+@interface VRSAppDelegate : UIResponder <UIApplicationDelegate>
+@property(nonatomic, strong) UIWindow          *window;
+@property(nonatomic, strong) VRSViewController *controller;
+@end
+
 static const VRSVertex kFullscreenVertices[] = {
   { { -1.0f, -1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f } },
   { {  1.0f, -1.0f, 0.0f, 1.0f }, { 1.0f, 1.0f } },
@@ -27,7 +82,10 @@ static const VRSVertex kFullscreenVertices[] = {
   { {  1.0f,  1.0f, 0.0f, 1.0f }, { 1.0f, 0.0f } }
 };
 
-static GPUAdapter *
+static const float kHorizontal[] = {0.30f, 0.55f, 1.0f, 0.55f, 0.30f};
+static const float kVertical[]   = {0.30f, 0.55f, 1.0f, 0.55f, 0.30f};
+
+static GPUAdapter*
 SelectAdapter(GPUInstance *instance) {
   GPUAdapter *adapter;
   uint32_t    count;
@@ -36,50 +94,21 @@ SelectAdapter(GPUInstance *instance) {
   adapter = NULL;
   count   = 1u;
   result  = GPUEnumerateAdapters(instance, &count, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !adapter) {
     return NULL;
   }
+
   return adapter;
 }
-
-@interface VRSViewController : UIViewController {
-@private
-  CADisplayLink                 *_displayLink;
-  GPUInstance                   *_instance;
-  GPUAdapter                    *_adapter;
-  GPUDevice                     *_device;
-  GPUQueue                      *_queue;
-  GPUSurface                    *_surface;
-  GPUSwapchain                  *_swapchain;
-  GPUShaderLibrary              *_library;
-  GPUShaderLayout               *_shaderLayout;
-  GPURenderPipeline             *_gridPipeline;
-  GPURenderPipeline             *_presentPipeline;
-  GPURasterizationRateMapEXT    *_rateMap;
-  GPUTexture                    *_rateTarget;
-  GPUTextureView                *_rateTargetView;
-  GPUBuffer                     *_fullscreenBuffer;
-  GPUBuffer                     *_warpBuffer;
-  GPUSampler                    *_sampler;
-  GPUBindGroup                  *_textureGroup;
-  GPUBindGroup                  *_samplerGroup;
-  GPUFence                      *_frameFences[VRS_FRAMES_IN_FLIGHT];
-  uint32_t                       _warpVertexCount;
-  uint32_t                       _frameIndex;
-  uint32_t                       _viewWidth;
-  uint32_t                       _viewHeight;
-  uint32_t                       _drawableWidth;
-  uint32_t                       _drawableHeight;
-  bool                           _fenceSubmitted[VRS_FRAMES_IN_FLIGHT];
-}
-- (void)setRenderingPaused:(BOOL)paused;
-@end
 
 @implementation VRSViewController
 
 - (void)waitForGPU {
-  for (uint32_t i = 0u; i < VRS_FRAMES_IN_FLIGHT; i++) {
+  uint32_t i;
+
+  for (i = 0u; i < VRS_FRAMES_IN_FLIGHT; i++) {
     if (_fenceSubmitted[i]) {
       (void)GPUWaitFence(_frameFences[i], UINT64_MAX);
       _fenceSubmitted[i] = false;
@@ -104,7 +133,7 @@ SelectAdapter(GPUInstance *instance) {
 }
 
 - (BOOL)createPipelines {
-  GPUVertexAttribute attributes[] = {
+  GPUVertexAttribute          attributes[] = {
     {
       .shaderLocation = 0u,
       .format         = GPU_VERTEX_FORMAT_FLOAT32X4,
@@ -116,7 +145,7 @@ SelectAdapter(GPUInstance *instance) {
       .offset         = offsetof(VRSVertex, uv)
     }
   };
-  GPUVertexBufferLayout vertexLayouts[] = {
+  GPUVertexBufferLayout       vertexLayouts[] = {
     {
       .strideBytes    = sizeof(VRSVertex),
       .stepMode       = GPU_VERTEX_STEP_MODE_VERTEX,
@@ -124,7 +153,7 @@ SelectAdapter(GPUInstance *instance) {
       .pAttributes    = attributes
     }
   };
-  GPUColorTargetState colorTargets[] = {
+  GPUColorTargetState         colorTargets[] = {
     {
       .format = GPUGetSwapchainFormat(_swapchain),
       .blend  = {
@@ -160,9 +189,11 @@ SelectAdapter(GPUInstance *instance) {
 
   info.label         = "vrs-ios-grid-pipeline";
   info.fragmentEntry = "grid_fs";
+
   if (GPUCreateRenderPipeline(_device, &info, &_gridPipeline) != GPU_OK) {
     return NO;
   }
+
   info.label         = "vrs-ios-present-pipeline";
   info.fragmentEntry = "present_fs";
   return GPUCreateRenderPipeline(_device,
@@ -171,7 +202,7 @@ SelectAdapter(GPUInstance *instance) {
 }
 
 - (BOOL)createStaticResources {
-  GPUBufferCreateInfo vertexInfo = {
+  GPUBufferCreateInfo  vertexInfo = {
     .chain = {
       .sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
       .structSize = sizeof(GPUBufferCreateInfo)
@@ -195,21 +226,7 @@ SelectAdapter(GPUInstance *instance) {
       .addressW  = GPU_ADDRESS_MODE_CLAMP_TO_EDGE
     }
   };
-
-  if (GPUCreateBuffer(_device,
-                      &vertexInfo,
-                      &_fullscreenBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(_queue,
-                          _fullscreenBuffer,
-                          0u,
-                          kFullscreenVertices,
-                          sizeof(kFullscreenVertices)) != GPU_OK ||
-      GPUCreateSampler(_device, &samplerInfo, false, &_sampler) != GPU_OK) {
-    return NO;
-  }
-
-  for (uint32_t i = 0u; i < VRS_FRAMES_IN_FLIGHT; i++) {
-    GPUFenceCreateInfo fenceInfo = {
+  GPUFenceCreateInfo   fenceInfo = {
       .chain = {
         .sType      = GPU_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .structSize = sizeof(GPUFenceCreateInfo)
@@ -217,26 +234,50 @@ SelectAdapter(GPUInstance *instance) {
       .label    = "vrs-ios-frame-fence",
       .signaled = true
     };
+  uint32_t             i;
+
+  if (GPUCreateBuffer(_device,
+                      &vertexInfo,
+                      &_fullscreenBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(_queue,
+                             _fullscreenBuffer,
+                             0u,
+                             kFullscreenVertices,
+                             sizeof(kFullscreenVertices)) != GPU_OK
+      || GPUCreateSampler(_device, &samplerInfo, false, &_sampler) != GPU_OK) {
+    return NO;
+  }
+
+  for (i = 0u; i < VRS_FRAMES_IN_FLIGHT; i++) {
     if (GPUCreateFence(_device, &fenceInfo, &_frameFences[i]) != GPU_OK) {
       return NO;
     }
   }
+
   return YES;
 }
 
 - (BOOL)createWarpVertices:(GPUExtent2D)physicalSize {
-  const uint32_t pointWidth  = VRS_WARP_DIVISIONS + 1u;
-  const uint32_t pointCount  = pointWidth * pointWidth;
-  const uint32_t vertexCount = VRS_WARP_DIVISIONS *
-                               VRS_WARP_DIVISIONS * 6u;
+  GPUBufferCreateInfo bufferInfo;
+  GPUCoordinate2D     screen;
+  GPUCoordinate2D     physical;
   VRSVertex          *points;
   VRSVertex          *vertices;
-  GPUBufferCreateInfo bufferInfo;
+  VRSVertex          *vertex;
+  const uint32_t      pointWidth = VRS_WARP_DIVISIONS + 1u;
+  const uint32_t      pointCount = pointWidth * pointWidth;
+  const uint32_t      vertexCount = VRS_WARP_DIVISIONS *
+                                    VRS_WARP_DIVISIONS * 6u;
   uint32_t            cursor;
+  uint32_t            pointY;
+  uint32_t            pointX;
+  uint32_t            vertexY;
+  uint32_t            vertexX;
   BOOL                ok;
 
   points   = calloc(pointCount, sizeof(*points));
   vertices = calloc(vertexCount, sizeof(*vertices));
+
   if (!points || !vertices) {
     free(vertices);
     free(points);
@@ -244,24 +285,24 @@ SelectAdapter(GPUInstance *instance) {
   }
 
   ok = YES;
-  for (uint32_t y = 0u; y < pointWidth && ok; y++) {
-    for (uint32_t x = 0u; x < pointWidth; x++) {
-      const float fx = (float)x / (float)VRS_WARP_DIVISIONS;
-      const float fy = (float)y / (float)VRS_WARP_DIVISIONS;
-      GPUCoordinate2D screen;
-      GPUCoordinate2D physical;
-      VRSVertex       *vertex;
+
+  for (pointY = 0u; pointY < pointWidth && ok; pointY++) {
+    for (pointX = 0u; pointX < pointWidth; pointX++) {
+      const float fx = (float)pointX / (float)VRS_WARP_DIVISIONS;
+      const float fy = (float)pointY / (float)VRS_WARP_DIVISIONS;
 
       screen.x = fx * (float)_drawableWidth;
       screen.y = fy * (float)_drawableHeight;
+
       if (GPUMapRasterizationRateScreenToPhysicalEXT(_rateMap,
-                                                      0u,
-                                                      screen,
-                                                      &physical) != GPU_OK) {
+                                                     0u,
+                                                     screen,
+                                                     &physical) != GPU_OK) {
         ok = NO;
         break;
       }
-      vertex              = &points[y * pointWidth + x];
+
+      vertex              = &points[pointY * pointWidth + pointX];
       vertex->position[0] = fx * 2.0f - 1.0f;
       vertex->position[1] = 1.0f - fy * 2.0f;
       vertex->position[2] = 0.0f;
@@ -272,12 +313,13 @@ SelectAdapter(GPUInstance *instance) {
   }
 
   cursor = 0u;
-  for (uint32_t y = 0u; y < VRS_WARP_DIVISIONS && ok; y++) {
-    for (uint32_t x = 0u; x < VRS_WARP_DIVISIONS; x++) {
-      const VRSVertex p00 = points[y * pointWidth + x];
-      const VRSVertex p10 = points[y * pointWidth + x + 1u];
-      const VRSVertex p01 = points[(y + 1u) * pointWidth + x];
-      const VRSVertex p11 = points[(y + 1u) * pointWidth + x + 1u];
+
+  for (vertexY = 0u; vertexY < VRS_WARP_DIVISIONS && ok; vertexY++) {
+    for (vertexX = 0u; vertexX < VRS_WARP_DIVISIONS; vertexX++) {
+      const VRSVertex p00 = points[vertexY * pointWidth + vertexX];
+      const VRSVertex p10 = points[vertexY * pointWidth + vertexX + 1u];
+      const VRSVertex p01 = points[(vertexY + 1u) * pointWidth + vertexX];
+      const VRSVertex p11 = points[(vertexY + 1u) * pointWidth + vertexX + 1u];
 
       vertices[cursor++] = p00;
       vertices[cursor++] = p01;
@@ -287,7 +329,9 @@ SelectAdapter(GPUInstance *instance) {
       vertices[cursor++] = p11;
     }
   }
+
   free(points);
+
   if (!ok) {
     free(vertices);
     return NO;
@@ -300,21 +344,23 @@ SelectAdapter(GPUInstance *instance) {
   bufferInfo.sizeBytes        = (uint64_t)vertexCount * sizeof(*vertices);
   bufferInfo.usage            = GPU_BUFFER_USAGE_VERTEX |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  ok = GPUCreateBuffer(_device, &bufferInfo, &_warpBuffer) == GPU_OK &&
-       GPUQueueWriteBuffer(_queue,
-                           _warpBuffer,
-                           0u,
-                           vertices,
-                           bufferInfo.sizeBytes) == GPU_OK;
+  ok = GPUCreateBuffer(_device, &bufferInfo, &_warpBuffer) == GPU_OK
+       && GPUQueueWriteBuffer(_queue,
+                              _warpBuffer,
+                              0u,
+                              vertices,
+                              bufferInfo.sizeBytes) == GPU_OK;
   free(vertices);
+
   if (ok) {
     _warpVertexCount = vertexCount;
   }
+
   return ok;
 }
 
 - (BOOL)createRateBindGroups {
-  GPUBindGroupEntry textureEntry = {
+  GPUBindGroupEntry      textureEntry = {
     .binding     = 0u,
     .bindingType = GPU_BINDING_SAMPLED_TEXTURE,
     .textureView = _rateTargetView
@@ -329,7 +375,7 @@ SelectAdapter(GPUInstance *instance) {
     .entryCount = 1u,
     .pEntries   = &textureEntry
   };
-  GPUBindGroupEntry samplerEntry = {
+  GPUBindGroupEntry      samplerEntry = {
     .binding     = 0u,
     .bindingType = GPU_BINDING_SAMPLER,
     .sampler     = _sampler
@@ -347,21 +393,19 @@ SelectAdapter(GPUInstance *instance) {
 
   return GPUCreateBindGroup(_device,
                             &textureInfo,
-                            &_textureGroup) == GPU_OK &&
-         GPUCreateBindGroup(_device,
-                            &samplerInfo,
-                            &_samplerGroup) == GPU_OK;
+                            &_textureGroup) == GPU_OK
+         && GPUCreateBindGroup(_device,
+                               &samplerInfo,
+                               &_samplerGroup) == GPU_OK;
 }
 
 - (BOOL)rebuildRateResourcesWithWidth:(uint32_t)width
                                height:(uint32_t)height {
-  static const float horizontal[] = {0.30f, 0.55f, 1.0f, 0.55f, 0.30f};
-  static const float vertical[]   = {0.30f, 0.55f, 1.0f, 0.55f, 0.30f};
-  GPURasterizationRateLayerEXT layer = {
-    .pHorizontal     = horizontal,
-    .pVertical       = vertical,
-    .horizontalCount = (uint32_t)GPU_ARRAY_LEN(horizontal),
-    .verticalCount   = (uint32_t)GPU_ARRAY_LEN(vertical)
+  GPURasterizationRateLayerEXT         layer = {
+    .pHorizontal     = kHorizontal,
+    .pVertical       = kVertical,
+    .horizontalCount = (uint32_t)GPU_ARRAY_LEN(kHorizontal),
+    .verticalCount   = (uint32_t)GPU_ARRAY_LEN(kVertical)
   };
   GPURasterizationRateMapCreateInfoEXT mapInfo = {
     .chain = {
@@ -373,7 +417,7 @@ SelectAdapter(GPUInstance *instance) {
     .screenSize  = {width, height},
     .layerCount  = 1u
   };
-  GPUTextureCreateInfo textureInfo = {
+  GPUTextureCreateInfo                 textureInfo = {
     .chain = {
       .sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO,
       .structSize = sizeof(GPUTextureCreateInfo)
@@ -387,7 +431,7 @@ SelectAdapter(GPUInstance *instance) {
     .usage         = GPU_TEXTURE_USAGE_COLOR_TARGET |
                      GPU_TEXTURE_USAGE_SAMPLED
   };
-  GPUTextureViewCreateInfo viewInfo = {
+  GPUTextureViewCreateInfo             viewInfo = {
     .chain = {
       .sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO,
       .structSize = sizeof(GPUTextureViewCreateInfo)
@@ -400,21 +444,22 @@ SelectAdapter(GPUInstance *instance) {
     .baseArrayLayer  = 0u,
     .arrayLayerCount = 1u
   };
-  GPUExtent2D physicalSize;
+  GPUExtent2D                          physicalSize;
 
   if (width == 0u || height == 0u) {
     return NO;
   }
+
   [self waitForGPU];
   [self destroyRateResources];
 
   if (GPUCreateRasterizationRateMapEXT(_device,
                                        &mapInfo,
-                                       &_rateMap) != GPU_OK ||
-      GPUGetRasterizationRateMapPhysicalSizeEXT(_rateMap,
-                                                 0u,
-                                                 &physicalSize) != GPU_OK ||
-      physicalSize.width == 0u || physicalSize.height == 0u) {
+                                       &_rateMap) != GPU_OK
+      || GPUGetRasterizationRateMapPhysicalSizeEXT(_rateMap,
+                                                   0u,
+                                                   &physicalSize) != GPU_OK
+      || physicalSize.width == 0u || physicalSize.height == 0u) {
     NSLog(@"GPU: failed to create the rasterization-rate map");
     return NO;
   }
@@ -423,12 +468,13 @@ SelectAdapter(GPUInstance *instance) {
   textureInfo.height = physicalSize.height;
   _drawableWidth     = width;
   _drawableHeight    = height;
-  if (GPUCreateTexture(_device, &textureInfo, &_rateTarget) != GPU_OK ||
-      GPUCreateTextureView(_rateTarget,
-                           &viewInfo,
-                           &_rateTargetView) != GPU_OK ||
-      ![self createWarpVertices:physicalSize] ||
-      ![self createRateBindGroups]) {
+
+  if (GPUCreateTexture(_device, &textureInfo, &_rateTarget) != GPU_OK
+      || GPUCreateTextureView(_rateTarget,
+                              &viewInfo,
+                              &_rateTargetView) != GPU_OK
+      || ![self createWarpVertices:physicalSize]
+      || ![self createRateBindGroups]) {
     NSLog(@"GPU: failed to create VRS intermediate resources");
     [self destroyRateResources];
     return NO;
@@ -443,21 +489,23 @@ SelectAdapter(GPUInstance *instance) {
 }
 
 - (BOOL)createGPU {
-  GPUDeviceCreateInfo deviceInfo;
+  GPUDeviceCreateInfo   deviceInfo;
   GPUVRSCapabilitiesEXT caps;
-  GPUFeature feature;
-  NSURL     *artifactURL;
-  NSData    *artifact;
-  CGFloat    scale;
+  NSURL                *artifactURL;
+  NSData               *artifact;
+  CGFloat               scale;
+  GPUFeature            feature;
 
   if (GPUCreateInstance(NULL, &_instance) != GPU_OK || !_instance) {
     return NO;
   }
+
   _adapter = SelectAdapter(_instance);
   memset(&caps, 0, sizeof(caps));
-  if (!_adapter ||
-      GPUGetVRSCapabilitiesEXT(_adapter, &caps) != GPU_OK ||
-      (caps.modes & GPU_VRS_RATE_MAP_BIT_EXT) == 0u) {
+
+  if (!_adapter
+      || GPUGetVRSCapabilitiesEXT(_adapter, &caps) != GPU_OK
+      || (caps.modes & GPU_VRS_RATE_MAP_BIT_EXT) == 0u) {
     NSLog(@"GPU: this device has no Metal rasterization-rate map support");
     return NO;
   }
@@ -469,43 +517,46 @@ SelectAdapter(GPUInstance *instance) {
   deviceInfo.label                 = "vrs-ios-device";
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &feature;
-  if (GPUCreateDevice(_adapter, &deviceInfo, &_device) != GPU_OK ||
-      !(_queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0u))) {
+
+  if (GPUCreateDevice(_adapter, &deviceInfo, &_device) != GPU_OK
+      || !(_queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0u))) {
     return NO;
   }
 
-  scale    = UIScreen.mainScreen.scale;
-  _surface = GPUCreateSurfaceFromNative(_instance,
-                                        _adapter,
-                                        (__bridge void *)self.view,
-                                        GPU_SURFACE_APPLE_UIVIEW,
-                                        scale);
+  scale       = UIScreen.mainScreen.scale;
+  _surface    = GPUCreateSurfaceFromNative(_instance,
+                                           _adapter,
+                                           (__bridge void *)self.view,
+                                           GPU_SURFACE_APPLE_UIVIEW,
+                                           scale);
   _viewWidth  = (uint32_t)self.view.bounds.size.width;
   _viewHeight = (uint32_t)self.view.bounds.size.height;
   _swapchain  = GPUCreateSwapchainDefault(_device,
-                                           _surface,
-                                           _viewWidth,
-                                           _viewHeight);
+                                          _surface,
+                                          _viewWidth,
+                                          _viewHeight);
+
   if (!_surface || !_swapchain) {
     return NO;
   }
 
   artifactURL = [NSBundle.mainBundle URLForResource:@"vrs"
                                       withExtension:@"us"];
-  artifact = artifactURL ? [NSData dataWithContentsOfURL:artifactURL] : nil;
-  if (!artifact ||
-      GPUCreateShaderLibraryFromUSL(_device,
-                                    artifact.bytes,
-                                    (uint64_t)artifact.length,
-                                    &_library) != GPU_OK ||
-      GPUCreateShaderLayout(_device,
-                            _library,
-                            &_shaderLayout) != GPU_OK ||
-      !_shaderLayout || _shaderLayout->bindGroupLayoutCount != 2u ||
-      !_shaderLayout->bindGroupLayouts[0] ||
-      !_shaderLayout->bindGroupLayouts[1] ||
-      ![self createPipelines] ||
-      ![self createStaticResources]) {
+  artifact    = artifactURL ? [NSData dataWithContentsOfURL:artifactURL] : nil;
+
+  if (!artifact
+      || GPUCreateShaderLibraryFromUSL(_device,
+                                       artifact.bytes,
+                                       (uint64_t)artifact.length,
+                                       &_library) != GPU_OK
+      || GPUCreateShaderLayout(_device,
+                               _library,
+                               &_shaderLayout) != GPU_OK
+      || !_shaderLayout || _shaderLayout->bindGroupLayoutCount != 2u
+      || !_shaderLayout->bindGroupLayouts[0]
+      || !_shaderLayout->bindGroupLayouts[1]
+      || ![self createPipelines]
+      || ![self createStaticResources]) {
     NSLog(@"GPU: failed to create VRS shader resources");
     return NO;
   }
@@ -517,7 +568,6 @@ SelectAdapter(GPUInstance *instance) {
 }
 
 - (void)drawFrame {
-  const uint32_t fenceIndex = _frameIndex % VRS_FRAMES_IN_FLIGHT;
   GPURasterizationRateMapRenderPassEXT rateExtension;
   GPURenderPassColorAttachment         color;
   GPURenderPassCreateInfo              passInfo;
@@ -525,36 +575,40 @@ SelectAdapter(GPUInstance *instance) {
   GPUBarrierBatch                      barrierBatch;
   GPUBufferBinding                     vertexBinding;
   GPUViewport                          viewport;
+  GPUQueueSubmitInfo                   submit;
   GPURenderPassEncoder                *pass;
   GPUCommandBuffer                    *cmdb;
   GPUFrame                            *frame;
-  GPUQueueSubmitInfo                   submit;
+  const uint32_t                       fenceIndex = _frameIndex % VRS_FRAMES_IN_FLIGHT;
 
   if (!_rateMap || !_rateTargetView || !_warpBuffer) {
     return;
   }
+
   if (_fenceSubmitted[fenceIndex]) {
     if (GPUWaitFence(_frameFences[fenceIndex], UINT64_MAX) != GPU_OK) {
       return;
     }
+
     _fenceSubmitted[fenceIndex] = false;
   }
+
   GPUResetFence(_frameFences[fenceIndex]);
 
   frame = GPUBeginFrame(_swapchain);
   cmdb  = NULL;
-  if (!frame ||
-      GPUAcquireCommandBuffer(_queue,
-                              "vrs-ios-frame",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+
+  if (!frame
+      || GPUAcquireCommandBuffer(_queue,
+                                 "vrs-ios-frame",
+                                 &cmdb) != GPU_OK
+      || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
 
   memset(&rateExtension, 0, sizeof(rateExtension));
-  rateExtension.chain.sType =
-    GPU_STRUCTURE_TYPE_RASTERIZATION_RATE_MAP_RENDER_PASS_EXT;
+  rateExtension.chain.sType      = GPU_STRUCTURE_TYPE_RASTERIZATION_RATE_MAP_RENDER_PASS_EXT;
   rateExtension.chain.structSize = sizeof(rateExtension);
   rateExtension.map              = _rateMap;
   memset(&color, 0, sizeof(color));
@@ -570,17 +624,18 @@ SelectAdapter(GPUInstance *instance) {
   passInfo.colorAttachmentCount = 1u;
   passInfo.pColorAttachments    = &color;
   pass = GPUBeginRenderPass(cmdb, &passInfo);
+
   if (!pass) {
     GPUEndFrame(frame);
     return;
   }
 
-  viewport.x          = 0.0f;
-  viewport.y          = 0.0f;
-  viewport.width      = (float)_drawableWidth;
-  viewport.height     = (float)_drawableHeight;
-  viewport.minDepth   = 0.0f;
-  viewport.maxDepth   = 1.0f;
+  viewport.x           = 0.0f;
+  viewport.y           = 0.0f;
+  viewport.width       = (float)_drawableWidth;
+  viewport.height      = (float)_drawableHeight;
+  viewport.minDepth    = 0.0f;
+  viewport.maxDepth    = 1.0f;
   vertexBinding.buffer = _fullscreenBuffer;
   vertexBinding.offset = 0u;
   GPUBindRenderPipeline(pass, _gridPipeline);
@@ -607,13 +662,13 @@ SelectAdapter(GPUInstance *instance) {
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
   memset(&color, 0, sizeof(color));
-  color.view                    = GPUFrameGetTargetView(frame);
-  color.loadOp                  = GPU_LOAD_OP_CLEAR;
-  color.storeOp                 = GPU_STORE_OP_STORE;
-  color.clearColor.float32[0]   = 0.005f;
-  color.clearColor.float32[1]   = 0.008f;
-  color.clearColor.float32[2]   = 0.015f;
-  color.clearColor.float32[3]   = 1.0f;
+  color.view                  = GPUFrameGetTargetView(frame);
+  color.loadOp                = GPU_LOAD_OP_CLEAR;
+  color.storeOp               = GPU_STORE_OP_STORE;
+  color.clearColor.float32[0] = 0.005f;
+  color.clearColor.float32[1] = 0.008f;
+  color.clearColor.float32[2] = 0.015f;
+  color.clearColor.float32[3] = 1.0f;
   memset(&passInfo, 0, sizeof(passInfo));
   passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize     = sizeof(passInfo);
@@ -621,6 +676,7 @@ SelectAdapter(GPUInstance *instance) {
   passInfo.colorAttachmentCount = 1u;
   passInfo.pColorAttachments    = &color;
   pass = GPUBeginRenderPass(cmdb, &passInfo);
+
   if (!pass) {
     GPUEndFrame(frame);
     return;
@@ -642,10 +698,12 @@ SelectAdapter(GPUInstance *instance) {
   submit.commandBufferCount = 1u;
   submit.ppCommandBuffers   = &cmdb;
   submit.fence              = _frameFences[fenceIndex];
+
   if (GPUQueueSubmit(_queue, &submit) == GPU_OK) {
     _fenceSubmitted[fenceIndex] = true;
     _frameIndex++;
   }
+
   GPUEndFrame(frame);
 }
 
@@ -656,40 +714,45 @@ SelectAdapter(GPUInstance *instance) {
   if (![self createGPU]) {
     return;
   }
-  _displayLink = [CADisplayLink displayLinkWithTarget:self
+
+  _displayLink                         = [CADisplayLink displayLinkWithTarget:self
                                               selector:@selector(drawFrame)];
   _displayLink.preferredFrameRateRange = CAFrameRateRangeMake(30.0f,
-                                                               120.0f,
-                                                               60.0f);
+                                                              120.0f,
+                                                              60.0f);
   [_displayLink addToRunLoop:NSRunLoop.mainRunLoop
                      forMode:NSRunLoopCommonModes];
 }
 
 - (void)viewDidLayoutSubviews {
+  CGFloat  scale;
   uint32_t width;
   uint32_t height;
   uint32_t drawableWidth;
   uint32_t drawableHeight;
-  CGFloat  scale;
 
   [super viewDidLayoutSubviews];
+
   if (!_swapchain) {
     return;
   }
+
   width          = (uint32_t)self.view.bounds.size.width;
   height         = (uint32_t)self.view.bounds.size.height;
   scale          = UIScreen.mainScreen.scale;
   drawableWidth  = (uint32_t)lround(self.view.bounds.size.width * scale);
   drawableHeight = (uint32_t)lround(self.view.bounds.size.height * scale);
-  if (width == 0u || height == 0u || drawableWidth == 0u ||
-      drawableHeight == 0u ||
-      (width == _viewWidth && height == _viewHeight &&
-       drawableWidth == _drawableWidth &&
-       drawableHeight == _drawableHeight)) {
+
+  if (width == 0u || height == 0u || drawableWidth == 0u
+      || drawableHeight == 0u
+      || (width == _viewWidth && height == _viewHeight
+          && drawableWidth == _drawableWidth
+          && drawableHeight == _drawableHeight)) {
     return;
   }
-  if (GPUResizeSwapchain(_swapchain, width, height) == GPU_OK &&
-      [self rebuildRateResourcesWithWidth:drawableWidth
+
+  if (GPUResizeSwapchain(_swapchain, width, height) == GPU_OK
+      && [self rebuildRateResourcesWithWidth:drawableWidth
                                    height:drawableHeight]) {
     _viewWidth  = width;
     _viewHeight = height;
@@ -701,12 +764,16 @@ SelectAdapter(GPUInstance *instance) {
 }
 
 - (void)dealloc {
+  uint32_t i;
+
   [_displayLink invalidate];
   [self waitForGPU];
   [self destroyRateResources];
-  for (uint32_t i = 0u; i < VRS_FRAMES_IN_FLIGHT; i++) {
+
+  for (i = 0u; i < VRS_FRAMES_IN_FLIGHT; i++) {
     GPUDestroyFence(_frameFences[i]);
   }
+
   GPUDestroySampler(_sampler);
   GPUDestroyBuffer(_fullscreenBuffer);
   GPUDestroyRenderPipeline(_presentPipeline);
@@ -721,11 +788,6 @@ SelectAdapter(GPUInstance *instance) {
 
 @end
 
-@interface VRSAppDelegate : UIResponder <UIApplicationDelegate>
-@property(nonatomic, strong) UIWindow            *window;
-@property(nonatomic, strong) VRSViewController  *controller;
-@end
-
 @implementation VRSAppDelegate
 
 - (BOOL)application:(UIApplication *)application
@@ -733,8 +795,8 @@ SelectAdapter(GPUInstance *instance) {
   (void)application;
   (void)launchOptions;
 
-  self.controller = [VRSViewController new];
-  self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
+  self.controller                = [VRSViewController new];
+  self.window                    = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.rootViewController = self.controller;
   [self.window makeKeyAndVisible];
   return YES;

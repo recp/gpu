@@ -30,12 +30,10 @@ struct GPUAdapter {
   bool               supportsDisplayTiming;
   bool               supportsIncrementalPresent;
   bool               separatePresentQueue;
-  GPUFeature         supportedFeatureStorage[
-    GPU_FEATURE_INTERSECTION_FUNCTION_TABLE + 1u
-  ];
+  GPUFeature         supportedFeatureStorage[GPU_FEATURE_INTERSECTION_FUNCTION_TABLE + 1u];
 };
 
-static inline GPUApi *
+static inline GPUApi*
 gpuAdapterApi(const GPUAdapter *adapter) {
   return adapter ? gpuInstanceApi(adapter->inst) : NULL;
 }
@@ -43,11 +41,9 @@ gpuAdapterApi(const GPUAdapter *adapter) {
 static inline uint32_t
 gpuAdapterFeatureStateLoad(const GPUAdapter *adapter) {
 #if defined(_WIN32) || defined(WIN32)
-  return (uint32_t)InterlockedCompareExchange(
-    (volatile LONG *)&adapter->supportedFeatureState,
-    0,
-    0
-  );
+  return (uint32_t)InterlockedCompareExchange((volatile LONG *)&adapter->supportedFeatureState,
+                                              0,
+                                              0);
 #else
   return __atomic_load_n(&adapter->supportedFeatureState, __ATOMIC_ACQUIRE);
 #endif
@@ -56,15 +52,14 @@ gpuAdapterFeatureStateLoad(const GPUAdapter *adapter) {
 static inline bool
 gpuAdapterFeatureStateBegin(GPUAdapter *adapter) {
 #if defined(_WIN32) || defined(WIN32)
-  return InterlockedCompareExchange(
-    (volatile LONG *)&adapter->supportedFeatureState,
-    1,
-    0
-  ) == 0;
+  return InterlockedCompareExchange((volatile LONG *)&adapter->supportedFeatureState,
+                                    1,
+                                    0) == 0;
 #else
   uint32_t expected;
 
   expected = 0u;
+
   return __atomic_compare_exchange_n(&adapter->supportedFeatureState,
                                      &expected,
                                      1u,

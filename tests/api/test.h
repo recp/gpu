@@ -6,6 +6,12 @@
  * You may obtain a copy of the License at
  *
  *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef gpu_tests_api_test_h
@@ -61,94 +67,198 @@ typedef struct GPUApiTestContext {
 typedef int (*GPUApiTestRunFn)(void *ctx);
 
 typedef struct GPUApiTest {
-  const char      *name;
+  const char     *name;
   GPUApiTestRunFn run;
   void           *ctx;
 } GPUApiTest;
 
-int gpu_run_api_tests(const GPUApiTest *tests, uint32_t count);
-uint64_t gpu_test_now_ns(void);
-void *gpu_test_read_file(const char *path, uint64_t *outSize);
-GPUResult gpu_test_request_adapter(GPUInstance *instance,
-                                   GPUAdapter **outAdapter);
-GPUResult gpu_test_request_adapter_options(
-  GPUInstance                    *instance,
-  const GPUAdapterRequestOptions *options,
-  GPUAdapter                    **outAdapter
-);
-int gpu_test_adapter_request_options(GPUInstance *instance);
-GPUResult gpu_test_create_device(GPUAdapter                *adapter,
-                                 const GPUDeviceCreateInfo *info,
-                                 GPUDevice                **outDevice);
-bool gpu_test_storage_format_supported(GPUDevice *device, GPUFormat format);
+int
+gpu_run_api_tests(const GPUApiTest *tests, uint32_t count);
 
-int gpu_test_queue(GPUInstance *instance,
-                   GPUAdapter  *adapter,
-                   GPUDevice   *device);
-int gpu_test_sampler(GPUDevice *device);
-int gpu_test_bindgroup(GPUDevice *device);
-int gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath);
-int gpu_test_resources(GPUDevice *device);
-int gpu_test_copy(GPUDevice *device);
-int gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath);
-int gpu_test_texture_transfer(GPUDevice *device);
-int gpu_test_texture_view_render(GPUDevice *device);
-int gpu_test_texture_integer_clear(GPUDevice *device);
-int gpu_test_texture_view_depth(GPUDevice *device);
-int gpu_test_texture_view_depth_stencil(GPUDevice *device);
-int gpu_test_render(GPUDevice *device, const char *mrtBytecodePath);
-int gpu_test_msaa_resolve_sample(GPUDevice *device,
-                                 const char *bytecodePath);
-int gpu_test_metal_vertex_slots(GPUDevice *device, const char *bytecodePath);
-int gpu_test_compute(GPUDevice *device, const char *bytecodePath);
-int gpu_test_execution_graph_validation(void);
-int gpu_test_execution_graph(GPUAdapter *adapter, const char *bytecodePath);
-int gpu_test_query(GPUAdapter *adapter,
-                   GPUDevice  *device,
-                   const char *computeBytecodePath);
-int gpu_test_barrier(GPUDevice *device);
-int gpu_test_memory(GPUAdapter *adapter);
-int gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice);
-int gpu_test_runtime(GPUDevice *device);
-int gpu_test_threading(GPUDevice *device, const char *artifactPath);
-int gpu_test_shader(GPUDevice *device,
-                    const char *bytecodePath,
-                    const char *descriptorArrayBytecodePath);
-int gpu_test_descriptor_array(GPUDevice *device, const char *bytecodePath);
-int gpu_test_bindless_descriptor_array(GPUDevice *device,
-                                       const char *bytecodePath);
-int gpu_test_descriptor_indexing(GPUAdapter *adapter, const char *bytecodePath);
-int gpu_test_buffer_descriptor_array(GPUAdapter *adapter,
-                                     const char *bytecodePath,
-                                     const char *dynamicBytecodePath);
-int gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath);
-int gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath);
-int gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath);
-int gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath);
-int gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath);
-int gpu_test_subgroup(GPUAdapter *adapter,
-                      const char *bytecodePath,
-                      const char *relativeBytecodePath);
-int gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath);
-int gpu_test_shader_f16(GPUAdapter *adapter, const char *bytecodePath);
-int gpu_test_atomic64(GPUAdapter *adapter, const char *bytecodePath);
-int gpu_test_vrs(GPUAdapter *adapter,
-                 GPUDevice  *defaultDevice,
-                 const char *bytecodePath);
-int gpu_test_sampler_feedback(GPUAdapter *adapter,
-                              GPUDevice  *defaultDevice,
+uint64_t
+gpu_test_now_ns(void);
+
+void*
+gpu_test_read_file(const char *path, uint64_t *outSize);
+
+GPUResult
+gpu_test_request_adapter(GPUInstance *instance,
+                         GPUAdapter **outAdapter);
+
+GPUResult
+gpu_test_request_adapter_options(GPUInstance                    *instance,
+                                 const GPUAdapterRequestOptions *options,
+                                 GPUAdapter                    **outAdapter);
+
+int
+gpu_test_adapter_request_options(GPUInstance *instance);
+
+GPUResult
+gpu_test_create_device(GPUAdapter                *adapter,
+                       const GPUDeviceCreateInfo *info,
+                       GPUDevice                **outDevice);
+
+bool
+gpu_test_storage_format_supported(GPUDevice *device, GPUFormat format);
+
+int
+gpu_test_queue(GPUInstance *instance,
+               GPUAdapter  *adapter,
+               GPUDevice   *device);
+
+int
+gpu_test_sampler(GPUDevice *device);
+
+int
+gpu_test_bindgroup(GPUDevice *device);
+
+int
+gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath);
+
+int
+gpu_test_resources(GPUDevice *device);
+
+int
+gpu_test_copy(GPUDevice *device);
+
+int
+gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath);
+
+int
+gpu_test_texture_transfer(GPUDevice *device);
+
+int
+gpu_test_texture_view_render(GPUDevice *device);
+
+int
+gpu_test_texture_integer_clear(GPUDevice *device);
+
+int
+gpu_test_texture_view_depth(GPUDevice *device);
+
+int
+gpu_test_texture_view_depth_stencil(GPUDevice *device);
+
+int
+gpu_test_render(GPUDevice *device, const char *mrtBytecodePath);
+
+int
+gpu_test_msaa_resolve_sample(GPUDevice  *device,
+                             const char *bytecodePath);
+
+int
+gpu_test_metal_vertex_slots(GPUDevice *device, const char *bytecodePath);
+
+int
+gpu_test_compute(GPUDevice *device, const char *bytecodePath);
+
+int
+gpu_test_execution_graph_validation(void);
+
+int
+gpu_test_execution_graph(GPUAdapter *adapter, const char *bytecodePath);
+
+int
+gpu_test_query(GPUAdapter *adapter,
+               GPUDevice  *device,
+               const char *computeBytecodePath);
+
+int
+gpu_test_barrier(GPUDevice *device);
+
+int
+gpu_test_memory(GPUAdapter *adapter);
+
+int
+gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice);
+
+int
+gpu_test_runtime(GPUDevice *device);
+
+int
+gpu_test_threading(GPUDevice *device, const char *artifactPath);
+
+int
+gpu_test_shader(GPUDevice  *device,
+                const char *bytecodePath,
+                const char *descriptorArrayBytecodePath);
+
+int
+gpu_test_descriptor_array(GPUDevice *device, const char *bytecodePath);
+
+int
+gpu_test_bindless_descriptor_array(GPUDevice  *device,
+                                   const char *bytecodePath);
+
+int
+gpu_test_descriptor_indexing(GPUAdapter *adapter, const char *bytecodePath);
+
+int
+gpu_test_buffer_descriptor_array(GPUAdapter *adapter,
+                                 const char *bytecodePath,
+                                 const char *dynamicBytecodePath);
+
+int
+gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath);
+
+int
+gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath);
+
+int
+gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath);
+
+int
+gpu_test_line_texture_view(GPUDevice *device, const char *bytecodePath);
+
+int
+gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath);
+
+int
+gpu_test_subgroup(GPUAdapter *adapter,
+                  const char *bytecodePath,
+                  const char *relativeBytecodePath);
+
+int
+gpu_test_subgroup_matrix(GPUAdapter *adapter, const char *bytecodePath);
+
+int
+gpu_test_shader_f16(GPUAdapter *adapter, const char *bytecodePath);
+
+int
+gpu_test_atomic64(GPUAdapter *adapter, const char *bytecodePath);
+
+int
+gpu_test_vrs(GPUAdapter *adapter,
+             GPUDevice  *defaultDevice,
+             const char *bytecodePath);
+
+int
+gpu_test_sampler_feedback(GPUAdapter *adapter,
+                          GPUDevice  *defaultDevice,
+                          const char *bytecodePath);
+
+int
+gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath);
+
+int
+gpu_test_intersection_function_table(GPUAdapter *adapter,
+                                     const char *bytecodePath);
+
+int
+gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
                               const char *bytecodePath);
-int gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath);
-int gpu_test_intersection_function_table(GPUAdapter *adapter,
-                                         const char *bytecodePath);
-int gpu_test_ray_pipeline_feature(GPUAdapter *adapter,
-                                  const char *bytecodePath);
-int gpu_test_clock_derivatives(GPUAdapter *adapter,
-                               const char *subgroupClockPath,
-                               const char *deviceClockPath,
-                               const char *derivativeQuadsPath,
-                               const char *derivativeLinearPath);
-int gpu_test_untyped_pointer(GPUDevice *device, const char *bytecodePath);
-int gpu_test_dx12_binding_plan(GPUDevice *device, const char *bytecodePath);
+
+int
+gpu_test_clock_derivatives(GPUAdapter *adapter,
+                           const char *subgroupClockPath,
+                           const char *deviceClockPath,
+                           const char *derivativeQuadsPath,
+                           const char *derivativeLinearPath);
+
+int
+gpu_test_untyped_pointer(GPUDevice *device, const char *bytecodePath);
+
+int
+gpu_test_dx12_binding_plan(GPUDevice *device, const char *bytecodePath);
 
 #endif /* gpu_tests_api_test_h */

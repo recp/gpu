@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <AppKit/AppKit.h>
 #import <dispatch/dispatch.h>
 
@@ -13,42 +29,39 @@
 #  define GPU_SAMPLE_BACKEND GPU_BACKEND_METAL
 #endif
 
-static NSString *
-ShadowCompareWindowTitle(void) {
-  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN
-           ? @"GPU Vulkan USL Shadow Compare"
-           : @"GPU Metal USL Shadow Compare";
-}
-
-static const char *
-ShadowCompareStatsLabel(void) {
-  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN
-           ? "GPU Vulkan shadow compare"
-           : "GPU Metal shadow compare";
-}
-
 @interface ShadowCompareApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
 @private
-  NSWindow          *_window;
-  NSView            *_view;
-  GPUInstance       *_instance;
-  GPUAdapter        *_adapter;
-  GPUDevice         *_device;
-  GPUQueue          *_queue;
-  GPUSurface        *_surface;
-  GPUSwapchain           *_swapchain;
-  NSTimer                *_timer;
-  GPUSampleShadowCompare  _renderer;
-  NSInteger               _exitAfterFrames;
-  NSInteger               _submittedFrames;
-  NSInteger               _completedFrames;
-  BOOL                    _assertZeroAlloc;
-  BOOL                    _statsFailed;
-  BOOL                    _terminating;
+  NSWindow              *_window;
+  NSView                *_view;
+  GPUInstance           *_instance;
+  GPUAdapter            *_adapter;
+  GPUDevice             *_device;
+  GPUQueue              *_queue;
+  GPUSurface            *_surface;
+  GPUSwapchain          *_swapchain;
+  NSTimer               *_timer;
+  GPUSampleShadowCompare _renderer;
+  NSInteger              _exitAfterFrames;
+  NSInteger              _submittedFrames;
+  NSInteger              _completedFrames;
+  BOOL                   _assertZeroAlloc;
+  BOOL                   _statsFailed;
+  BOOL                   _terminating;
 }
+
 - (void)frameCompleted;
 - (BOOL)statsFailed;
 @end
+
+static NSString*
+ShadowCompareWindowTitle(void) {
+  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN ? @"GPU Vulkan USL Shadow Compare" : @"GPU Metal USL Shadow Compare";
+}
+
+static const char*
+ShadowCompareStatsLabel(void) {
+  return GPU_SAMPLE_BACKEND == GPU_BACKEND_VULKAN ? "GPU Vulkan shadow compare" : "GPU Metal shadow compare";
+}
 
 static void
 ShadowCompareFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
@@ -69,6 +82,7 @@ ShadowCompareDeviceError(GPUDevice                *device,
   app = (__bridge ShadowCompareApp *)userData;
   NSLog(@"GPU shadow compare error: %s",
         error && error->message ? error->message : "unknown error");
+
   if (app) {
     dispatch_async(dispatch_get_main_queue(), ^{
       [NSApp terminate:nil];
@@ -84,9 +98,11 @@ ShadowCompareDeviceError(GPUDevice                *device,
   if (!outWidth || !outHeight) {
     return NO;
   }
+
   scale      = _window.backingScaleFactor ?: 1.0f;
   *outWidth  = (uint32_t)(_view.bounds.size.width * scale);
   *outHeight = (uint32_t)(_view.bounds.size.height * scale);
+
   return *outWidth > 0u && *outHeight > 0u;
 }
 
@@ -102,22 +118,29 @@ ShadowCompareDeviceError(GPUDevice                *device,
   instanceInfo.label            = "shadow-compare-native-usl";
   instanceInfo.preferredBackend = GPU_SAMPLE_BACKEND;
   instanceInfo.enableValidation = true;
+
   if (GPUCreateInstance(&instanceInfo, &_instance) != GPU_OK || !_instance) {
     return NO;
   }
 
   _adapter = GPUSampleSelectAdapter(_instance);
+
   if (!_adapter) {
     return NO;
   }
+
   _device = GPUCreateDeviceWithDefaultQueues(_adapter);
+
   if (!_device) {
     return NO;
   }
+
   _queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0u);
+
   if (!_queue) {
     return NO;
   }
+
   if (GPUSetDeviceErrorCallback(_device,
                                 ShadowCompareDeviceError,
                                 (__bridge void *)self) != GPU_OK) {
@@ -129,19 +152,23 @@ ShadowCompareDeviceError(GPUDevice                *device,
                                         (__bridge void *)_view,
                                         GPU_SURFACE_APPLE_NSVIEW,
                                         _window.backingScaleFactor ?: 1.0f);
+
   if (!_surface) {
     return NO;
   }
+
   _swapchain = GPUCreateSwapchainDefault(_device,
                                          _surface,
                                          (uint32_t)_view.bounds.size.width,
                                          (uint32_t)_view.bounds.size.height);
+
   if (!_swapchain || ![self drawableSizeWidth:&width height:&height]) {
     return NO;
   }
 
   library      = NULL;
   shaderLayout = NULL;
+
   if (!GPUSampleLoadUSL(_device,
                         @"shadow_compare.us",
                         1u,
@@ -149,6 +176,7 @@ ShadowCompareDeviceError(GPUDevice                *device,
                         &shaderLayout)) {
     return NO;
   }
+
   return GPUSampleShadowCompareInit(&_renderer,
                                     _device,
                                     _queue,
@@ -165,26 +193,29 @@ ShadowCompareDeviceError(GPUDevice                *device,
   uint32_t                     width;
   uint32_t                     height;
 
-  if (_terminating ||
-      (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) ||
-      !GPUSampleRecoverSwapchain(_swapchain, _view) ||
-      ![self drawableSizeWidth:&width height:&height]) {
+  if (_terminating
+      || (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames)
+      || !GPUSampleRecoverSwapchain(_swapchain, _view)
+      || ![self drawableSizeWidth:&width height:&height]) {
     return;
   }
+
   if (GPUSampleShadowCompareResize(&_renderer, width, height) != GPU_OK) {
     return;
   }
 
   completion = _exitAfterFrames > 0 ? ShadowCompareFrameComplete : NULL;
-  result = GPUSampleShadowCompareRender(&_renderer,
-                                        (__bridge void *)self,
-                                        completion);
+  result     = GPUSampleShadowCompareRender(&_renderer,
+                                            (__bridge void *)self,
+                                            completion);
+
   if (result != GPU_OK) {
     NSLog(@"GPU shadow compare frame failed: %d", result);
     return;
   }
 
   _submittedFrames++;
+
   if (!GPUSampleCheckZeroAlloc(_device,
                                (uint32_t)_submittedFrames,
                                _assertZeroAlloc,
@@ -192,8 +223,8 @@ ShadowCompareDeviceError(GPUDevice                *device,
     _statsFailed = YES;
     _terminating = YES;
     [NSApp terminate:nil];
-  } else if (_exitAfterFrames > 0 &&
-             _submittedFrames >= _exitAfterFrames) {
+  } else if (_exitAfterFrames > 0
+             && _submittedFrames >= _exitAfterFrames) {
     [_timer invalidate];
     _timer = nil;
   }
@@ -202,9 +233,10 @@ ShadowCompareDeviceError(GPUDevice                *device,
 - (void)frameCompleted {
   dispatch_async(dispatch_get_main_queue(), ^{
     self->_completedFrames++;
-    if (self->_exitAfterFrames > 0 &&
-        self->_completedFrames >= self->_exitAfterFrames &&
-        !self->_terminating) {
+
+    if (self->_exitAfterFrames > 0
+        && self->_completedFrames >= self->_exitAfterFrames
+        && !self->_terminating) {
       self->_terminating = YES;
       [NSApp terminate:nil];
     }
@@ -234,18 +266,21 @@ ShadowCompareDeviceError(GPUDevice                *device,
   const char *exitAfterFrames;
 
   (void)notification;
-  if (!GPUSampleCreateWindow(ShadowCompareWindowTitle(), self, &_window, &_view) ||
-      ![self setupGPU]) {
+
+  if (!GPUSampleCreateWindow(ShadowCompareWindowTitle(), self, &_window, &_view)
+      || ![self setupGPU]) {
     [NSApp terminate:nil];
     return;
   }
 
   exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+
   if (exitAfterFrames) {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
   }
+
   _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
-  _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
+  _timer           = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
                                    target:self
                                  selector:@selector(tick:)
                                  userInfo:nil
@@ -277,6 +312,7 @@ main(int argc, const char *argv[]) {
   int result;
 
   result = 0;
+
   @autoreleasepool {
     ShadowCompareApp *delegate;
 
@@ -289,5 +325,6 @@ main(int argc, const char *argv[]) {
     [NSApp run];
     result = [delegate statsFailed] ? 1 : 0;
   }
+
   return result;
 }

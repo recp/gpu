@@ -3,6 +3,15 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "../common.h"
@@ -22,6 +31,24 @@ typedef struct WebGPUDeviceRequest {
   GPUQueueFlagBits                 queueBits;
   bool                             ready;
 } WebGPUDeviceRequest;
+
+static const WGPUFeatureName webgpu_optionalFeatures[] = {
+  WGPUFeatureName_CoreFeaturesAndLimits,
+  WGPUFeatureName_Depth32FloatStencil8,
+  WGPUFeatureName_TextureCompressionBC,
+  WGPUFeatureName_TextureCompressionBCSliced3D,
+  WGPUFeatureName_TextureCompressionETC2,
+  WGPUFeatureName_TextureCompressionASTC,
+  WGPUFeatureName_TextureCompressionASTCSliced3D,
+  WGPUFeatureName_RG11B10UfloatRenderable,
+  WGPUFeatureName_BGRA8UnormStorage,
+  WGPUFeatureName_Float32Filterable,
+  WGPUFeatureName_Float32Blendable,
+  WGPUFeatureName_TextureFormatsTier1,
+  WGPUFeatureName_TextureFormatsTier2,
+  GPU_WEBGPU_FEATURE_NORM16,
+  WGPUFeatureName_IndirectFirstInstance
+};
 
 static GPUAdapterType
 webgpu_adapterType(WGPUAdapterType type) {
@@ -44,35 +71,41 @@ webgpu_copyString(char *dst, size_t capacity, WGPUStringView src) {
   if (!dst || capacity == 0u) {
     return;
   }
+
   size = src.data ? src.length : 0u;
+
   if (size == WGPU_STRLEN && src.data) {
     size = strlen(src.data);
   }
+
   if (size >= capacity) {
     size = capacity - 1u;
   }
+
   if (size > 0u) {
     memcpy(dst, src.data, size);
   }
+
   dst[size] = '\0';
 }
 
 static void
 webgpu_uncapturedError(WGPUDevice const *nativeDevice,
-                       WGPUErrorType      type,
-                       WGPUStringView     message,
-                       void              *userData,
-                       void              *unused) {
+                       WGPUErrorType     type,
+                       WGPUStringView    message,
+                       void             *userData,
+                       void             *unused) {
+  char                 text[512];
   WebGPUDeviceRequest *request;
   GPUDeviceErrorType   errorType;
   GPUResult            result;
-  char                 text[512];
 
   GPU__UNUSED(nativeDevice);
   GPU__UNUSED(unused);
   request = userData;
-  if (!request || !request->ready || !request->device ||
-      type == WGPUErrorType_NoError) {
+
+  if (!request || !request->ready || !request->device
+      || type == WGPUErrorType_NoError) {
     return;
   }
 
@@ -90,6 +123,7 @@ webgpu_uncapturedError(WGPUDevice const *nativeDevice,
       result    = GPU_ERROR_BACKEND_FAILURE;
       break;
   }
+
   webgpu_copyString(text, sizeof(text), message);
   gpuDeviceReportError(request->device,
                        errorType,
@@ -104,16 +138,17 @@ webgpu_deviceLost(WGPUDevice const    *nativeDevice,
                   WGPUStringView       message,
                   void                *userData,
                   void                *unused) {
+  char                 text[512];
   WebGPUDeviceRequest *request;
   GPUDeviceLostReason  lostReason;
-  char                 text[512];
 
   GPU__UNUSED(nativeDevice);
   GPU__UNUSED(unused);
   request = userData;
-  if (!request || !request->ready || !request->device ||
-      reason == WGPUDeviceLostReason_Destroyed ||
-      reason == WGPUDeviceLostReason_CallbackCancelled) {
+
+  if (!request || !request->ready || !request->device
+      || reason == WGPUDeviceLostReason_Destroyed
+      || reason == WGPUDeviceLostReason_CallbackCancelled) {
     return;
   }
 
@@ -134,10 +169,10 @@ webgpu_adapterReady(WGPURequestAdapterStatus status,
                     WGPUStringView           message,
                     void                    *userData,
                     void                    *unused) {
+  WGPUAdapterInfo       info = WGPU_ADAPTER_INFO_INIT;
   WebGPUAdapterRequest *request;
   GPUAdapterWebGPU     *native;
   GPUAdapter           *adapter;
-  WGPUAdapterInfo       info = WGPU_ADAPTER_INFO_INIT;
 
   GPU__UNUSED(message);
   GPU__UNUSED(unused);
@@ -148,18 +183,22 @@ webgpu_adapterReady(WGPURequestAdapterStatus status,
   if (status == WGPURequestAdapterStatus_Success && nativeAdapter) {
     adapter = calloc(1, sizeof(*adapter));
     native  = calloc(1, sizeof(*native));
+
     if (adapter && native) {
-      native->adapter = nativeAdapter;
-      adapter->_priv  = native;
-      adapter->inst   = request->instance;
+      native->adapter            = nativeAdapter;
+      adapter->_priv             = native;
+      adapter->inst              = request->instance;
       adapter->supportsSwapchain = true;
+
       if (wgpuAdapterGetInfo(nativeAdapter, &info) == WGPUStatus_Success) {
         webgpu_copyString(native->name, sizeof(native->name), info.device);
+
         if (!native->name[0]) {
           webgpu_copyString(native->name,
                             sizeof(native->name),
                             info.description);
         }
+
         wgpuAdapterInfoFreeMembers(info);
       }
     } else {
@@ -172,6 +211,7 @@ webgpu_adapterReady(WGPURequestAdapterStatus status,
   if (!adapter && nativeAdapter) {
     wgpuAdapterRelease(nativeAdapter);
   }
+
   request->callback(adapter ? GPU_OK : GPU_ERROR_BACKEND_FAILURE,
                     adapter,
                     request->userData);
@@ -179,30 +219,31 @@ webgpu_adapterReady(WGPURequestAdapterStatus status,
 }
 
 static GPUResult
-webgpu_requestAdapter(GPUInstance                      *instance,
-                      GPUPowerPreference                powerPreference,
-                      GPUBackendAdapterRequestCallback  callback,
-                      void                             *userData) {
-  WGPURequestAdapterCallbackInfo callbackInfo =
-    WGPU_REQUEST_ADAPTER_CALLBACK_INFO_INIT;
-  WGPURequestAdapterOptions options = WGPU_REQUEST_ADAPTER_OPTIONS_INIT;
-  GPUInstanceWebGPU       *native;
-  WebGPUAdapterRequest    *request;
+webgpu_requestAdapter(GPUInstance                     *instance,
+                      GPUPowerPreference               powerPreference,
+                      GPUBackendAdapterRequestCallback callback,
+                      void                            *userData) {
+  WGPURequestAdapterCallbackInfo callbackInfo = WGPU_REQUEST_ADAPTER_CALLBACK_INFO_INIT;
+  WGPURequestAdapterOptions      options      = WGPU_REQUEST_ADAPTER_OPTIONS_INIT;
+  GPUInstanceWebGPU             *native;
+  WebGPUAdapterRequest          *request;
 
   native = gpu_webgpuInstance(instance);
+
   if (!native || !native->instance || !callback) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  request = calloc(1, sizeof(*request));
-  if (!request) {
+  if (!(request = calloc(1, sizeof(*request)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+
   request->instance = instance;
   request->callback = callback;
   request->userData = userData;
 
   options.featureLevel = WGPUFeatureLevel_Core;
+
   switch (powerPreference) {
     case GPU_POWER_PREFERENCE_LOW_POWER:
       options.powerPreference = WGPUPowerPreference_LowPower;
@@ -215,10 +256,12 @@ webgpu_requestAdapter(GPUInstance                      *instance,
       options.powerPreference = WGPUPowerPreference_Undefined;
       break;
   }
-  callbackInfo.mode       = WGPUCallbackMode_AllowSpontaneous;
-  callbackInfo.callback   = webgpu_adapterReady;
-  callbackInfo.userdata1  = request;
+
+  callbackInfo.mode      = WGPUCallbackMode_AllowSpontaneous;
+  callbackInfo.callback  = webgpu_adapterReady;
+  callbackInfo.userdata1 = request;
   wgpuInstanceRequestAdapter(native->instance, &options, callbackInfo);
+
   return GPU_OK;
 }
 
@@ -227,22 +270,26 @@ webgpu_destroyAdapter(GPUAdapter *adapter) {
   GPUAdapterWebGPU *native;
 
   native = gpu_webgpuAdapter(adapter);
+
   if (native) {
     if (native->adapter) {
       wgpuAdapterRelease(native->adapter);
     }
+
     free(native);
   }
+
   free(adapter);
 }
 
 static GPUResult
 webgpu_getAdapterProperties(const GPUAdapter     *adapter,
                             GPUAdapterProperties *properties) {
-  GPUAdapterWebGPU *native;
   WGPUAdapterInfo   info = WGPU_ADAPTER_INFO_INIT;
+  GPUAdapterWebGPU *native;
 
   native = gpu_webgpuAdapter(adapter);
+
   if (!native || !native->adapter || !properties) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -252,29 +299,31 @@ webgpu_getAdapterProperties(const GPUAdapter     *adapter,
   properties->name    = native->name[0] ? native->name : "WebGPU adapter";
   properties->executionFlags = GPU_EXECUTION_GRAPHICS_BIT |
                                GPU_EXECUTION_COMPUTE_BIT;
+
   if (wgpuAdapterGetInfo(native->adapter, &info) == WGPUStatus_Success) {
     properties->type = webgpu_adapterType(info.adapterType);
     wgpuAdapterInfoFreeMembers(info);
   }
+
   return GPU_OK;
 }
 
 static bool
 webgpu_isBCFormat(GPUFormat format) {
-  return format >= GPU_FORMAT_BC1_RGBA_UNORM &&
-         format <= GPU_FORMAT_BC7_RGBA_UNORM_SRGB;
+  return format >= GPU_FORMAT_BC1_RGBA_UNORM
+         && format <= GPU_FORMAT_BC7_RGBA_UNORM_SRGB;
 }
 
 static bool
 webgpu_isETC2Format(GPUFormat format) {
-  return format >= GPU_FORMAT_EAC_R11_UNORM &&
-         format <= GPU_FORMAT_ETC2_RGB8A1_UNORM_SRGB;
+  return format >= GPU_FORMAT_EAC_R11_UNORM
+         && format <= GPU_FORMAT_ETC2_RGB8A1_UNORM_SRGB;
 }
 
 static bool
 webgpu_isASTCFormat(GPUFormat format) {
-  return format >= GPU_FORMAT_ASTC_4X4_UNORM &&
-         format <= GPU_FORMAT_ASTC_12X12_UNORM_SRGB;
+  return format >= GPU_FORMAT_ASTC_4X4_UNORM
+         && format <= GPU_FORMAT_ASTC_12X12_UNORM_SRGB;
 }
 
 static bool
@@ -294,22 +343,22 @@ webgpu_isWideNormFormat(GPUFormat format) {
 
 static bool
 webgpu_isUnorm16Format(GPUFormat format) {
-  return format == GPU_FORMAT_R16_UNORM ||
-         format == GPU_FORMAT_RG16_UNORM ||
-         format == GPU_FORMAT_RGBA16_UNORM;
+  return format == GPU_FORMAT_R16_UNORM
+         || format == GPU_FORMAT_RG16_UNORM
+         || format == GPU_FORMAT_RGBA16_UNORM;
 }
 
 static bool
 webgpu_isSRGBFormat(GPUFormat format) {
-  return format == GPU_FORMAT_RGBA8_UNORM_SRGB ||
-         format == GPU_FORMAT_BGRA8_UNORM_SRGB;
+  return format == GPU_FORMAT_RGBA8_UNORM_SRGB
+         || format == GPU_FORMAT_BGRA8_UNORM_SRGB;
 }
 
 static bool
 webgpu_isFloat32Format(GPUFormat format) {
-  return format == GPU_FORMAT_R32_FLOAT ||
-         format == GPU_FORMAT_RG32_FLOAT ||
-         format == GPU_FORMAT_RGBA32_FLOAT;
+  return format == GPU_FORMAT_R32_FLOAT
+         || format == GPU_FORMAT_RG32_FLOAT
+         || format == GPU_FORMAT_RGBA32_FLOAT;
 }
 
 static bool
@@ -369,9 +418,9 @@ webgpu_hasCoreStorage(GPUFormat format) {
 
 static bool
 webgpu_hasCoreFeaturesStorage(GPUFormat format) {
-  return format == GPU_FORMAT_RG32_UINT ||
-         format == GPU_FORMAT_RG32_SINT ||
-         format == GPU_FORMAT_RG32_FLOAT;
+  return format == GPU_FORMAT_RG32_UINT
+         || format == GPU_FORMAT_RG32_SINT
+         || format == GPU_FORMAT_RG32_FLOAT;
 }
 
 static bool
@@ -411,28 +460,28 @@ webgpu_hasAdapterFeature(const GPUAdapter *adapter, WGPUFeatureName feature) {
   GPUAdapterWebGPU *native;
 
   native = gpu_webgpuAdapter(adapter);
-  return native && native->adapter &&
-         wgpuAdapterHasFeature(native->adapter, feature);
+
+  return native && native->adapter
+         && wgpuAdapterHasFeature(native->adapter, feature);
 }
 
 #if defined(WGPU_SUPPORTED_WGSL_LANGUAGE_FEATURES_INIT)
 static bool
-webgpu_hasWGSLLanguageFeature(
-  const GPUAdapter            *adapter,
-  WGPUWGSLLanguageFeatureName  feature) {
+webgpu_hasWGSLLanguageFeature(const GPUAdapter           *adapter,
+                              WGPUWGSLLanguageFeatureName feature) {
   GPUInstanceWebGPU *native;
 
   native = adapter ? gpu_webgpuInstance(adapter->inst) : NULL;
-  return native && native->instance &&
-         wgpuInstanceHasWGSLLanguageFeature(native->instance, feature);
+
+  return native && native->instance
+         && wgpuInstanceHasWGSLLanguageFeature(native->instance, feature);
 }
 #endif
 
 static void
-webgpu_getFormatCapabilities(
-  const GPUAdapter      * __restrict adapter,
-  GPUFormat                          format,
-  GPUFormatCapabilities * __restrict outCaps) {
+webgpu_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
+                             GPUFormat                         format,
+                             GPUFormatCapabilities *__restrict outCaps) {
   bool float32Blendable;
   bool float32Filterable;
   bool coreFeatures;
@@ -444,33 +493,33 @@ webgpu_getFormatCapabilities(
   if (!outCaps) {
     return;
   }
+
   memset(outCaps, 0, sizeof(*outCaps));
+
   if (gpu_webgpuFormat(format) == WGPUTextureFormat_Undefined) {
     return;
   }
-  if (format == GPU_FORMAT_BGRA8_UNORM_SRGB &&
-      !webgpu_hasAdapterFeature(adapter,
-                                WGPUFeatureName_CoreFeaturesAndLimits)) {
+
+  if (format == GPU_FORMAT_BGRA8_UNORM_SRGB
+      && !webgpu_hasAdapterFeature(adapter,
+                                   WGPUFeatureName_CoreFeaturesAndLimits)) {
     return;
   }
 
   if (webgpu_isBCFormat(format)) {
-    outCaps->sampled = outCaps->filterable =
-      webgpu_hasAdapterFeature(adapter, WGPUFeatureName_TextureCompressionBC);
+    outCaps->sampled = outCaps->filterable = webgpu_hasAdapterFeature(adapter, WGPUFeatureName_TextureCompressionBC);
     return;
   }
+
   if (webgpu_isETC2Format(format)) {
-    outCaps->sampled = outCaps->filterable = webgpu_hasAdapterFeature(
-      adapter,
-      WGPUFeatureName_TextureCompressionETC2
-    );
+    outCaps->sampled = outCaps->filterable = webgpu_hasAdapterFeature(adapter,
+                                                                      WGPUFeatureName_TextureCompressionETC2);
     return;
   }
+
   if (webgpu_isASTCFormat(format)) {
-    outCaps->sampled = outCaps->filterable = webgpu_hasAdapterFeature(
-      adapter,
-      WGPUFeatureName_TextureCompressionASTC
-    );
+    outCaps->sampled = outCaps->filterable = webgpu_hasAdapterFeature(adapter,
+                                                                      WGPUFeatureName_TextureCompressionASTC);
     return;
   }
 
@@ -479,20 +528,18 @@ webgpu_getFormatCapabilities(
     case GPU_FORMAT_STENCIL8:
     case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
     case GPU_FORMAT_DEPTH32_FLOAT:
-      outCaps->supportedSampleCounts =
-        GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT;
-      outCaps->sampled      = true;
-      outCaps->depthStencil = true;
+      outCaps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT;
+      outCaps->sampled               = true;
+      outCaps->depthStencil          = true;
       return;
     case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
-      outCaps->sampled = outCaps->depthStencil = webgpu_hasAdapterFeature(
-        adapter,
-        WGPUFeatureName_Depth32FloatStencil8
-      );
+      outCaps->sampled = outCaps->depthStencil = webgpu_hasAdapterFeature(adapter,
+                                                                          WGPUFeatureName_Depth32FloatStencil8);
+
       if (outCaps->depthStencil) {
-        outCaps->supportedSampleCounts =
-          GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT;
+        outCaps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT;
       }
+
       return;
     case GPU_FORMAT_RGB9E5_UFLOAT:
       outCaps->sampled    = true;
@@ -502,69 +549,62 @@ webgpu_getFormatCapabilities(
       break;
   }
 
-  coreFeatures = webgpu_hasAdapterFeature(
-    adapter,
-    WGPUFeatureName_CoreFeaturesAndLimits
-  );
-  tier1 = webgpu_hasAdapterFeature(adapter,
-                                   WGPUFeatureName_TextureFormatsTier1);
-  wideNorm = webgpu_isWideNormFormat(format);
-  norm16Filterable = webgpu_hasAdapterFeature(
-    adapter,
-    GPU_WEBGPU_FEATURE_NORM16);
-  legacyUnorm16 =
-    !tier1 &&
-    webgpu_isUnorm16Format(format) &&
-    norm16Filterable;
+  coreFeatures     = webgpu_hasAdapterFeature(adapter,
+                                              WGPUFeatureName_CoreFeaturesAndLimits);
+  tier1            = webgpu_hasAdapterFeature(adapter,
+                                              WGPUFeatureName_TextureFormatsTier1);
+  wideNorm         = webgpu_isWideNormFormat(format);
+  norm16Filterable = webgpu_hasAdapterFeature(adapter,
+                                              GPU_WEBGPU_FEATURE_NORM16);
+  legacyUnorm16    =
+    !tier1
+    && webgpu_isUnorm16Format(format)
+    && norm16Filterable;
+
   if (wideNorm && !tier1 && !legacyUnorm16) {
     return;
   }
 
-  float32Filterable = webgpu_hasAdapterFeature(
-    adapter,
-    WGPUFeatureName_Float32Filterable
-  );
-  float32Blendable = webgpu_hasAdapterFeature(
-    adapter,
-    WGPUFeatureName_Float32Blendable
-  );
-  outCaps->sampled = true;
+  float32Filterable   = webgpu_hasAdapterFeature(adapter,
+                                                 WGPUFeatureName_Float32Filterable);
+  float32Blendable    = webgpu_hasAdapterFeature(adapter,
+                                                 WGPUFeatureName_Float32Blendable);
+  outCaps->sampled    = true;
   outCaps->filterable =
-    gpuFormatNumericType(format) == GPU_FORMAT_NUMERIC_FLOAT &&
-    (!wideNorm || norm16Filterable) &&
-    (!webgpu_isFloat32Format(format) || float32Filterable);
+    gpuFormatNumericType(format) == GPU_FORMAT_NUMERIC_FLOAT
+    && (!wideNorm || norm16Filterable)
+    && (!webgpu_isFloat32Format(format) || float32Filterable);
 
   outCaps->colorAttachment = !wideNorm || tier1 || legacyUnorm16;
-  if (format == GPU_FORMAT_R8_SNORM ||
-      format == GPU_FORMAT_RG8_SNORM ||
-      format == GPU_FORMAT_RGBA8_SNORM) {
+
+  if (format == GPU_FORMAT_R8_SNORM
+      || format == GPU_FORMAT_RG8_SNORM
+      || format == GPU_FORMAT_RGBA8_SNORM) {
     outCaps->colorAttachment = tier1;
   } else if (format == GPU_FORMAT_RG11B10_UFLOAT) {
-    outCaps->colorAttachment = webgpu_hasAdapterFeature(
-      adapter,
-      WGPUFeatureName_RG11B10UfloatRenderable
-    );
+    outCaps->colorAttachment = webgpu_hasAdapterFeature(adapter,
+                                                        WGPUFeatureName_RG11B10UfloatRenderable);
   }
 
-  outCaps->blendable = outCaps->colorAttachment &&
-                       gpuFormatNumericType(format) ==
-                         GPU_FORMAT_NUMERIC_FLOAT &&
-                       (!wideNorm || tier1) &&
-                       (!webgpu_isFloat32Format(format) ||
-                        float32Blendable);
-  outCaps->storage =
-    !webgpu_isSRGBFormat(format) &&
-    (webgpu_hasCoreStorage(format) ||
-     (coreFeatures && webgpu_hasCoreFeaturesStorage(format)) ||
-     (tier1 && webgpu_hasTier1Storage(format)));
+  outCaps->blendable = outCaps->colorAttachment
+                       && gpuFormatNumericType(format) == GPU_FORMAT_NUMERIC_FLOAT
+                       && (!wideNorm || tier1)
+                       && (!webgpu_isFloat32Format(format)
+                           || float32Blendable);
+  outCaps->storage   =
+    !webgpu_isSRGBFormat(format)
+    && (webgpu_hasCoreStorage(format)
+        || (coreFeatures && webgpu_hasCoreFeaturesStorage(format))
+        || (tier1 && webgpu_hasTier1Storage(format)));
+
   if (format == GPU_FORMAT_BGRA8_UNORM) {
-    outCaps->storage = webgpu_hasAdapterFeature(
-      adapter,
-      WGPUFeatureName_BGRA8UnormStorage
-    );
+    outCaps->storage = webgpu_hasAdapterFeature(adapter,
+                                                WGPUFeatureName_BGRA8UnormStorage);
   }
+
   if (outCaps->colorAttachment) {
     outCaps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
+
     if (webgpu_supportsMultisampling(format, coreFeatures)) {
       outCaps->supportedSampleCounts |= GPU_SAMPLE_COUNT_4_BIT;
     }
@@ -576,6 +616,7 @@ webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
   GPUAdapterWebGPU *native;
 
   native = gpu_webgpuAdapter(adapter);
+
   if (!native || !native->adapter) {
     return false;
   }
@@ -605,52 +646,47 @@ webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
 }
 
 static bool
-webgpu_supportsSubgroupOperations(
-  const GPUAdapter                 * __restrict adapter,
-  GPUShaderStageFlags                           stage,
-  GPUBackendSubgroupOperationFlags              operations) {
-  const GPUShaderStageFlags supportedStages =
-    GPU_SHADER_STAGE_FRAGMENT_BIT |
-    GPU_SHADER_STAGE_COMPUTE_BIT;
-  const GPUBackendSubgroupOperationFlags supportedOperations =
-    GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
-    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
-    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
+webgpu_supportsSubgroupOperations(const GPUAdapter     *__restrict adapter,
+                                  GPUShaderStageFlags              stage,
+                                  GPUBackendSubgroupOperationFlags operations) {
+  const GPUShaderStageFlags              supportedStages     = GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                                               GPU_SHADER_STAGE_COMPUTE_BIT;
+  const GPUBackendSubgroupOperationFlags supportedOperations = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
+                                                               GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
+                                                               GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
 
-  return webgpu_hasAdapterFeature(adapter, WGPUFeatureName_Subgroups) &&
-         (supportedStages & stage) == stage &&
-         (supportedOperations & operations) == operations;
+  return webgpu_hasAdapterFeature(adapter, WGPUFeatureName_Subgroups)
+         && (supportedStages & stage) == stage
+         && (supportedOperations & operations) == operations;
 }
 
 static void
 webgpu_getLimits(const GPUAdapter *adapter, GPULimits *limits) {
-  GPUAdapterWebGPU *native;
-  WGPUAdapterInfo   info = WGPU_ADAPTER_INFO_INIT;
+  WGPUAdapterInfo   info      = WGPU_ADAPTER_INFO_INIT;
   WGPULimits        webLimits = WGPU_LIMITS_INIT;
+  GPUAdapterWebGPU *native;
 
   native = gpu_webgpuAdapter(adapter);
+
   if (!native || !native->adapter || !limits) {
     return;
   }
-  if (wgpuAdapterGetLimits(native->adapter, &webLimits) ==
-      WGPUStatus_Success) {
-    limits->maxBindGroups            = webLimits.maxBindGroups;
-    limits->maxBindingsPerGroup      = webLimits.maxBindingsPerBindGroup;
-    limits->maxDynamicUniformBuffers =
-      webLimits.maxDynamicUniformBuffersPerPipelineLayout;
-    limits->maxDynamicStorageBuffers =
-      webLimits.maxDynamicStorageBuffersPerPipelineLayout;
-    limits->minUniformBufferOffsetAlignment =
-      webLimits.minUniformBufferOffsetAlignment;
-    limits->minStorageBufferOffsetAlignment =
-      webLimits.minStorageBufferOffsetAlignment;
-    limits->maxColorAttachments      = webLimits.maxColorAttachments;
-    limits->maxComputeWorkgroupSizeX = webLimits.maxComputeWorkgroupSizeX;
-    limits->maxComputeWorkgroupSizeY = webLimits.maxComputeWorkgroupSizeY;
-    limits->maxComputeWorkgroupSizeZ = webLimits.maxComputeWorkgroupSizeZ;
-    limits->maxPushConstantSizeBytes = 256u;
-    limits->maxSamplerAnisotropy     = 16u;
+
+  if (wgpuAdapterGetLimits(native->adapter, &webLimits) == WGPUStatus_Success) {
+    limits->maxBindGroups                   = webLimits.maxBindGroups;
+    limits->maxBindingsPerGroup             = webLimits.maxBindingsPerBindGroup;
+    limits->maxDynamicUniformBuffers        = webLimits.maxDynamicUniformBuffersPerPipelineLayout;
+    limits->maxDynamicStorageBuffers        = webLimits.maxDynamicStorageBuffersPerPipelineLayout;
+    limits->minUniformBufferOffsetAlignment = webLimits.minUniformBufferOffsetAlignment;
+    limits->minStorageBufferOffsetAlignment = webLimits.minStorageBufferOffsetAlignment;
+    limits->maxColorAttachments             = webLimits.maxColorAttachments;
+    limits->maxComputeWorkgroupSizeX        = webLimits.maxComputeWorkgroupSizeX;
+    limits->maxComputeWorkgroupSizeY        = webLimits.maxComputeWorkgroupSizeY;
+    limits->maxComputeWorkgroupSizeZ        = webLimits.maxComputeWorkgroupSizeZ;
+    limits->maxPushConstantSizeBytes        = 256u;
+    limits->maxSamplerAnisotropy            = 16u;
   }
+
   if (wgpuAdapterGetInfo(native->adapter, &info) == WGPUStatus_Success) {
     limits->minSubgroupSize = info.subgroupMinSize;
     limits->maxSubgroupSize = info.subgroupMaxSize;
@@ -661,12 +697,13 @@ webgpu_getLimits(const GPUAdapter *adapter, GPULimits *limits) {
 static void
 webgpu_deviceReady(WGPURequestDeviceStatus status,
                    WGPUDevice              nativeDevice,
-                   WGPUStringView           message,
-                   void                    *userData,
-                   void                    *unused) {
+                   WGPUStringView          message,
+                   void                   *userData,
+                   void                   *unused) {
   WebGPUDeviceRequest *request;
   GPUDeviceWebGPU     *native;
   GPUDevice           *device;
+  uint32_t             i;
   bool                 usable;
 
   GPU__UNUSED(message);
@@ -679,8 +716,8 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
     if (device && native) {
       native->device = nativeDevice;
       native->queue  = wgpuDeviceGetQueue(nativeDevice);
-      usable = native->queue &&
-               gpu_webgpuInitPushConstants(native) == GPU_OK;
+      usable         = native->queue
+                       && gpu_webgpuInitPushConstants(native) == GPU_OK;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
       if (usable) {
         usable = gpu_webgpuStartCompletionWorker(native);
@@ -690,9 +727,11 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
         native->queueHandle._priv   = native->queue;
         native->queueHandle._device = device;
         native->queueHandle.bits    = request->queueBits;
-        for (uint32_t i = 0u; i < GPU_WEBGPU_COMMAND_SLOT_COUNT; i++) {
+
+        for (i = 0u; i < GPU_WEBGPU_COMMAND_SLOT_COUNT; i++) {
           native->commands[i].command._priv = &native->commands[i];
         }
+
         device->_priv         = native;
         device->queueFamilies = native->queueHandle.bits;
       } else {
@@ -700,6 +739,7 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
           wgpuQueueRelease(native->queue);
           native->queue = NULL;
         }
+
         gpu_webgpuDestroyPushConstants(native);
         device = NULL;
       }
@@ -711,6 +751,7 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
   if (!device && nativeDevice) {
     wgpuDeviceRelease(nativeDevice);
   }
+
   if (!device) {
     free(request->native);
     free(request->device);
@@ -718,9 +759,11 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
     native->errorContext = request;
     request->ready       = true;
   }
+
   request->callback(device ? GPU_OK : GPU_ERROR_BACKEND_FAILURE,
                     device,
                     request->userData);
+
   if (!device) {
     free(request);
   }
@@ -733,151 +776,145 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
                      uint64_t                        enabledFeatureMask,
                      GPUBackendDeviceRequestCallback callback,
                      void                           *userData) {
-  WGPURequestDeviceCallbackInfo callbackInfo =
-    WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
-  WGPUDeviceDescriptor descriptor     = WGPU_DEVICE_DESCRIPTOR_INIT;
-  WGPULimits           requiredLimits = WGPU_LIMITS_INIT;
-  static const WGPUFeatureName optionalFeatures[] = {
-    WGPUFeatureName_CoreFeaturesAndLimits,
-    WGPUFeatureName_Depth32FloatStencil8,
-    WGPUFeatureName_TextureCompressionBC,
-    WGPUFeatureName_TextureCompressionBCSliced3D,
-    WGPUFeatureName_TextureCompressionETC2,
-    WGPUFeatureName_TextureCompressionASTC,
-    WGPUFeatureName_TextureCompressionASTCSliced3D,
-    WGPUFeatureName_RG11B10UfloatRenderable,
-    WGPUFeatureName_BGRA8UnormStorage,
-    WGPUFeatureName_Float32Filterable,
-    WGPUFeatureName_Float32Blendable,
-    WGPUFeatureName_TextureFormatsTier1,
-    WGPUFeatureName_TextureFormatsTier2,
-    GPU_WEBGPU_FEATURE_NORM16,
-    WGPUFeatureName_IndirectFirstInstance
-  };
-  WGPUFeatureName       requiredFeatures[20];
-  GPUAdapterWebGPU    *native;
-  WebGPUDeviceRequest *request;
-  uint64_t             supportedMask;
-  GPUQueueFlagBits      queueBits;
-  uint32_t              graphicsCount;
-  uint32_t              computeCount;
-  uint32_t              transferCount;
+  WGPURequestDeviceCallbackInfo callbackInfo   = WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
+  WGPUDeviceDescriptor          descriptor     = WGPU_DEVICE_DESCRIPTOR_INIT;
+  WGPULimits                    requiredLimits = WGPU_LIMITS_INIT;
+  WGPUFeatureName               requiredFeatures[20];
+  GPUAdapterWebGPU             *native;
+  WebGPUDeviceRequest          *request;
+  uint64_t                      supportedMask;
+  GPUQueueFlagBits              queueBits;
+  uint32_t                      graphicsCount;
+  uint32_t                      computeCount;
+  uint32_t                      transferCount;
+  uint32_t                      queueIndex;
+  uint32_t                      featureIndex;
 
-  _Static_assert(GPU_ARRAY_LEN(optionalFeatures) + 4u <=
+  _Static_assert(GPU_ARRAY_LEN(webgpu_optionalFeatures) + 4u <=
                    GPU_ARRAY_LEN(requiredFeatures),
                  "WebGPU device feature storage is too small");
 
   native = gpu_webgpuAdapter(adapter);
+
   if (!native || !native->adapter || !callback) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if ((!queueInfos && queueInfoCount != 0u) ||
-      (queueInfos && queueInfoCount == 0u)) {
+
+  if ((!queueInfos && queueInfoCount != 0u)
+      || (queueInfos && queueInfoCount == 0u)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  queueBits      = GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT;
+  queueBits     = GPU_QUEUE_GRAPHICS_BIT | GPU_QUEUE_COMPUTE_BIT;
   graphicsCount = 1u;
   computeCount  = 1u;
   transferCount = 0u;
+
   if (queueInfos) {
-    queueBits      = 0u;
+    queueBits     = 0u;
     graphicsCount = 0u;
     computeCount  = 0u;
-    for (uint32_t i = 0u; i < queueInfoCount; i++) {
-      queueBits |= queueInfos[i].flags;
-      if ((queueInfos[i].flags & GPU_QUEUE_GRAPHICS_BIT) != 0u) {
-        graphicsCount += queueInfos[i].count;
+
+    for (queueIndex = 0u; queueIndex < queueInfoCount; queueIndex++) {
+      queueBits |= queueInfos[queueIndex].flags;
+
+      if ((queueInfos[queueIndex].flags & GPU_QUEUE_GRAPHICS_BIT) != 0u) {
+        graphicsCount += queueInfos[queueIndex].count;
       }
-      if ((queueInfos[i].flags & GPU_QUEUE_COMPUTE_BIT) != 0u) {
-        computeCount += queueInfos[i].count;
+
+      if ((queueInfos[queueIndex].flags & GPU_QUEUE_COMPUTE_BIT) != 0u) {
+        computeCount += queueInfos[queueIndex].count;
       }
-      if ((queueInfos[i].flags & GPU_QUEUE_TRANSFER_BIT) != 0u) {
-        transferCount += queueInfos[i].count;
+
+      if ((queueInfos[queueIndex].flags & GPU_QUEUE_TRANSFER_BIT) != 0u) {
+        transferCount += queueInfos[queueIndex].count;
       }
     }
   }
+
   if (graphicsCount > 1u || computeCount > 1u || transferCount > 1u) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  if (wgpuAdapterGetLimits(native->adapter, &requiredLimits) !=
-      WGPUStatus_Success) {
+
+  if (wgpuAdapterGetLimits(native->adapter, &requiredLimits) != WGPUStatus_Success) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   supportedMask = (1ull << GPU_FEATURE_COMPUTE) |
                   (1ull << GPU_FEATURE_INDIRECT_DRAW) |
                   (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING);
+
   if (webgpu_supportsFeature(adapter, GPU_FEATURE_TIMESTAMPS)) {
     supportedMask |= 1ull << GPU_FEATURE_TIMESTAMPS;
   }
+
   if (wgpuAdapterHasFeature(native->adapter, WGPUFeatureName_ShaderF16)) {
     supportedMask |= 1ull << GPU_FEATURE_SHADER_F16;
   }
+
   if (wgpuAdapterHasFeature(native->adapter, WGPUFeatureName_Subgroups)) {
     supportedMask |= 1ull << GPU_FEATURE_SUBGROUPS;
   }
+
   if (wgpuAdapterHasFeature(native->adapter,
                             GPU_WEBGPU_FEATURE_MULTI_DRAW)) {
     supportedMask |= 1ull << GPU_FEATURE_MULTI_DRAW;
   }
+
   if ((enabledFeatureMask & ~supportedMask) != 0u) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  request = calloc(1, sizeof(*request));
-  if (!request ||
-      !(request->device = calloc(1, sizeof(*request->device))) ||
-      !(request->native = calloc(1, sizeof(*request->native)))) {
+  if (!(request = calloc(1, sizeof(*request)))
+      || !(request->device = calloc(1, sizeof(*request->device)))
+      || !(request->native = calloc(1, sizeof(*request->native)))) {
     free(request ? request->native : NULL);
     free(request ? request->device : NULL);
     free(request);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
-  request->callback = callback;
-  request->userData = userData;
-  request->queueBits = queueBits;
+
+  request->callback       = callback;
+  request->userData       = userData;
+  request->queueBits      = queueBits;
   request->native->limits = requiredLimits;
 #if defined(WGPU_SUPPORTED_WGSL_LANGUAGE_FEATURES_INIT)
-  request->device->uslStorageExtAccess =
+  request->device->uslStorageExtAccess  =
     wgpuAdapterHasFeature(native->adapter,
-                          WGPUFeatureName_TextureFormatsTier2) &&
-    webgpu_hasWGSLLanguageFeature(
-      adapter,
-      WGPUWGSLLanguageFeatureName_ReadonlyAndReadwriteStorageTextures
-    );
+                          WGPUFeatureName_TextureFormatsTier2)
+    && webgpu_hasWGSLLanguageFeature(adapter,
+                                     WGPUWGSLLanguageFeatureName_ReadonlyAndReadwriteStorageTextures);
   request->device->uslStorageExtFormats =
     wgpuAdapterHasFeature(native->adapter,
-                          WGPUFeatureName_TextureFormatsTier1) &&
-    webgpu_hasWGSLLanguageFeature(
-      adapter,
-      WGPUWGSLLanguageFeatureName_TextureFormatsTier1
-    );
+                          WGPUFeatureName_TextureFormatsTier1)
+    && webgpu_hasWGSLLanguageFeature(adapter,
+                                     WGPUWGSLLanguageFeatureName_TextureFormatsTier1);
 #endif
 
   descriptor.label = gpu_webgpuString("gpu-webgpu-device");
+
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_TIMESTAMPS)) != 0u) {
-    requiredFeatures[descriptor.requiredFeatureCount++] =
-      WGPUFeatureName_TimestampQuery;
+    requiredFeatures[descriptor.requiredFeatureCount++] = WGPUFeatureName_TimestampQuery;
   }
+
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u) {
-    requiredFeatures[descriptor.requiredFeatureCount++] =
-      WGPUFeatureName_ShaderF16;
+    requiredFeatures[descriptor.requiredFeatureCount++] = WGPUFeatureName_ShaderF16;
   }
+
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUPS)) != 0u) {
-    requiredFeatures[descriptor.requiredFeatureCount++] =
-      WGPUFeatureName_Subgroups;
+    requiredFeatures[descriptor.requiredFeatureCount++] = WGPUFeatureName_Subgroups;
   }
+
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_MULTI_DRAW)) != 0u) {
-    requiredFeatures[descriptor.requiredFeatureCount++] =
-      GPU_WEBGPU_FEATURE_MULTI_DRAW;
+    requiredFeatures[descriptor.requiredFeatureCount++] = GPU_WEBGPU_FEATURE_MULTI_DRAW;
   }
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(optionalFeatures); i++) {
-    if (wgpuAdapterHasFeature(native->adapter, optionalFeatures[i])) {
-      requiredFeatures[descriptor.requiredFeatureCount++] =
-        optionalFeatures[i];
+
+  for (featureIndex = 0u; featureIndex < GPU_ARRAY_LEN(webgpu_optionalFeatures); featureIndex++) {
+    if (wgpuAdapterHasFeature(native->adapter, webgpu_optionalFeatures[featureIndex])) {
+      requiredFeatures[descriptor.requiredFeatureCount++] = webgpu_optionalFeatures[featureIndex];
     }
   }
+
   descriptor.requiredFeatures = descriptor.requiredFeatureCount
                                   ? requiredFeatures
                                   : NULL;
@@ -891,53 +928,62 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   callbackInfo.callback  = webgpu_deviceReady;
   callbackInfo.userdata1 = request;
   wgpuAdapterRequestDevice(native->adapter, &descriptor, callbackInfo);
+
   return GPU_OK;
 }
 
 static void
 webgpu_destroyDevice(GPUDevice *device) {
-  GPUDeviceWebGPU *native;
+  GPUDeviceWebGPU     *native;
+  WebGPUDeviceRequest *request;
+  uint32_t             i;
 
   native = gpu_webgpuDevice(device);
-  if (native) {
-    WebGPUDeviceRequest *request;
 
+  if (native) {
     request = native->errorContext;
+
     if (request) {
       request->device = NULL;
       request->ready  = false;
     }
+
     if (native->queue) {
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
       gpu_webgpuStopCompletionWorker(native);
 #endif
       wgpuQueueRelease(native->queue);
     }
+
     gpu_webgpuDestroyPushConstants(native);
-    for (uint32_t i = 0u; i < GPU_WEBGPU_COMMAND_SLOT_COUNT; i++) {
+
+    for (i = 0u; i < GPU_WEBGPU_COMMAND_SLOT_COUNT; i++) {
       if (native->commands[i].queryResolveScratch) {
         wgpuBufferDestroy(native->commands[i].queryResolveScratch);
         wgpuBufferRelease(native->commands[i].queryResolveScratch);
       }
     }
+
     if (native->device) {
       wgpuDeviceRelease(native->device);
     }
+
     free(request);
     free(native);
   }
+
   free(device);
 }
 
 void
 webgpu_initDevice(GPUApiDevice *api) {
-  api->requestAdapter              = webgpu_requestAdapter;
-  api->destroyAdapter              = webgpu_destroyAdapter;
-  api->getAdapterProperties        = webgpu_getAdapterProperties;
-  api->supportsFeature             = webgpu_supportsFeature;
+  api->requestAdapter             = webgpu_requestAdapter;
+  api->destroyAdapter             = webgpu_destroyAdapter;
+  api->getAdapterProperties       = webgpu_getAdapterProperties;
+  api->supportsFeature            = webgpu_supportsFeature;
   api->supportsSubgroupOperations = webgpu_supportsSubgroupOperations;
-  api->getLimits                   = webgpu_getLimits;
-  api->getFormatCapabilities       = webgpu_getFormatCapabilities;
-  api->requestDevice               = webgpu_requestDevice;
-  api->destroyDevice               = webgpu_destroyDevice;
+  api->getLimits                  = webgpu_getLimits;
+  api->getFormatCapabilities      = webgpu_getFormatCapabilities;
+  api->requestDevice              = webgpu_requestDevice;
+  api->destroyDevice              = webgpu_destroyDevice;
 }

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 #include "../../src/api/device_internal.h"
 
@@ -22,10 +38,13 @@ fill_cube_layer(uint8_t *pixels,
                 uint8_t  green,
                 uint8_t  blue) {
   uint32_t layerOffset;
+  uint32_t i;
+  uint32_t offset;
 
   layerOffset = layer * size * size * GPU_CUBE_PIXEL_BYTES;
-  for (uint32_t i = 0u; i < size * size; i++) {
-    uint32_t offset = layerOffset + i * GPU_CUBE_PIXEL_BYTES;
+
+  for (i = 0u; i < size * size; i++) {
+    offset = layerOffset + i * GPU_CUBE_PIXEL_BYTES;
 
     pixels[offset + 0u] = red;
     pixels[offset + 1u] = green;
@@ -39,92 +58,103 @@ check_cube_layout(GPUShaderLayout *shaderLayout, bool webgpu) {
   const GPUBindGroupLayoutEntry *entries;
   uint32_t                       count;
   uint32_t                       seen;
+  uint32_t                       i;
+  GPUTextureViewType             expectedViewType;
   bool                           foundImmutableSampler;
 
-  if (!shaderLayout || shaderLayout->bindGroupLayoutCount != 1u ||
-      !shaderLayout->bindGroupLayouts ||
-      !shaderLayout->bindGroupLayouts[0] ||
-      !shaderLayout->pipelineLayout) {
+  if (!shaderLayout || shaderLayout->bindGroupLayoutCount != 1u
+      || !shaderLayout->bindGroupLayouts
+      || !shaderLayout->bindGroupLayouts[0]
+      || !shaderLayout->pipelineLayout) {
     return 0;
   }
 
   entries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[0],
-                                          &count);
+                                         &count);
+
   if (!entries || count != (webgpu ? 4u : 3u)) {
     return 0;
   }
 
   seen                  = 0u;
   foundImmutableSampler = false;
-  for (uint32_t i = 0u; i < count; i++) {
-    if (entries[i].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
-        entries[i].binding > (webgpu ? 3u : 2u)) {
-      return 0;
-    }
-    if (entries[i].binding < 2u) {
-      GPUTextureViewType expectedViewType = entries[i].binding == 0u
-                                              ? GPU_TEXTURE_VIEW_CUBE
-                                              : GPU_TEXTURE_VIEW_CUBE_ARRAY;
 
-      if (entries[i].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-          entries[i].sampledTexture.viewType != expectedViewType ||
-          entries[i].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
-          entries[i].sampledTexture.multisampled) {
-        return 0;
-      }
-    }
-    if (entries[i].binding == 2u &&
-        entries[i].bindingType != GPU_BINDING_STORAGE_BUFFER) {
+  for (i = 0u; i < count; i++) {
+    if (entries[i].visibility != GPU_SHADER_STAGE_COMPUTE_BIT
+        || entries[i].binding > (webgpu ? 3u : 2u)) {
       return 0;
     }
-    if (entries[i].binding == 3u) {
-      if (!webgpu ||
-          entries[i].bindingType != GPU_BINDING_SAMPLER ||
-          !entries[i].immutableSampler ||
-          entries[i].arrayCount != 1u) {
+
+    if (entries[i].binding < 2u) {
+      expectedViewType = entries[i].binding == 0u
+                           ? GPU_TEXTURE_VIEW_CUBE
+                           : GPU_TEXTURE_VIEW_CUBE_ARRAY;
+
+      if (entries[i].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+          || entries[i].sampledTexture.viewType != expectedViewType
+          || entries[i].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT
+          || entries[i].sampledTexture.multisampled) {
         return 0;
       }
+    }
+
+    if (entries[i].binding == 2u
+        && entries[i].bindingType != GPU_BINDING_STORAGE_BUFFER) {
+      return 0;
+    }
+
+    if (entries[i].binding == 3u) {
+      if (!webgpu
+          || entries[i].bindingType != GPU_BINDING_SAMPLER
+          || !entries[i].immutableSampler
+          || entries[i].arrayCount != 1u) {
+        return 0;
+      }
+
       foundImmutableSampler = true;
     }
+
     seen |= 1u << entries[i].binding;
   }
-  return seen == (webgpu ? 0xfu : 0x7u) &&
-         foundImmutableSampler == webgpu;
+
+  return seen == (webgpu ? 0xfu : 0x7u)
+         && foundImmutableSampler == webgpu;
 }
 
 int
 gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
-  GPUQueue                     *queue;
-  GPUShaderLibrary             *library;
-  GPUShaderLayout              *shaderLayout;
-  GPUComputePipeline           *pipeline;
-  GPUTexture                   *texture;
-  GPUTextureView               *cubeView;
-  GPUTextureView               *cubeArrayView;
-  GPUBuffer                    *output;
-  GPUBindGroup                 *group;
-  GPUCommandBuffer             *cmdb;
-  GPUComputePassEncoder        *computePass;
-  GPUFence                     *fence;
-  void                         *bytecode;
-  GPUCommandBuffer             *submitBuffers[1];
-  GPUComputePipelineCreateInfo  pipelineInfo    = {0};
-  GPUTextureCreateInfo          textureInfo     = {0};
-  GPUTextureViewCreateInfo      viewInfo        = {0};
-  GPUTextureWriteRegion         writeRegion     = {0};
-  GPUBufferCreateInfo           bufferInfo      = {0};
-  GPUBindGroupEntry             groupEntries[3] = {0};
-  GPUBindGroupCreateInfo        groupInfo       = {0};
-  GPUBufferBarrier              outputBarrier   = {0};
-  GPUBarrierBatch               barrierBatch    = {0};
-  GPUQueueSubmitInfo            submitInfo      = {0};
-  uint8_t                       mip0Pixels[GPU_CUBE_MIP0_BYTES];
-  uint8_t                       mip1Pixels[GPU_CUBE_MIP1_BYTES];
-  float                         result[4];
-  const float                   zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-  uint64_t                      bytecodeSize;
-  bool                          webgpu;
-  int                           ok;
+  GPUQueue                    *queue;
+  GPUShaderLibrary            *library;
+  GPUShaderLayout             *shaderLayout;
+  GPUComputePipeline          *pipeline;
+  GPUTexture                  *texture;
+  GPUTextureView              *cubeView;
+  GPUTextureView              *cubeArrayView;
+  GPUBuffer                   *output;
+  GPUBindGroup                *group;
+  GPUCommandBuffer            *cmdb;
+  GPUComputePassEncoder       *computePass;
+  GPUFence                    *fence;
+  void                        *bytecode;
+  GPUCommandBuffer            *submitBuffers[1];
+  GPUComputePipelineCreateInfo pipelineInfo    = {0};
+  GPUTextureCreateInfo         textureInfo     = {0};
+  GPUTextureViewCreateInfo     viewInfo        = {0};
+  GPUTextureWriteRegion        writeRegion     = {0};
+  GPUBufferCreateInfo          bufferInfo      = {0};
+  GPUBindGroupEntry            groupEntries[3] = {0};
+  GPUBindGroupCreateInfo       groupInfo       = {0};
+  GPUBufferBarrier             outputBarrier   = {0};
+  GPUBarrierBatch              barrierBatch    = {0};
+  GPUQueueSubmitInfo           submitInfo      = {0};
+  uint8_t                      mip0Pixels[GPU_CUBE_MIP0_BYTES];
+  uint8_t                      mip1Pixels[GPU_CUBE_MIP1_BYTES];
+  float                        result[4];
+  const float                  zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  uint64_t                     bytecodeSize;
+  bool                         webgpu;
+  int                          ok;
+  uint32_t                     layer;
 
   if (!device || !bytecodePath) {
     return 0;
@@ -146,6 +176,7 @@ gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
   bytecode      = gpu_test_read_file(bytecodePath, &bytecodeSize);
   webgpu        = device->_api && device->_api->backend == GPU_BACKEND_WEBGPU;
   ok            = queue && bytecode;
+
   if (!ok) {
     fprintf(stderr, "cube texture fixture setup failed\n");
     goto cleanup;
@@ -153,7 +184,8 @@ gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
 
   memset(mip0Pixels, 0, sizeof(mip0Pixels));
   memset(mip1Pixels, 0, sizeof(mip1Pixels));
-  for (uint32_t layer = 0u; layer < GPU_CUBE_LAYER_COUNT; layer++) {
+
+  for (layer = 0u; layer < GPU_CUBE_LAYER_COUNT; layer++) {
     fill_cube_layer(mip0Pixels,
                     GPU_CUBE_BASE_SIZE,
                     layer,
@@ -167,6 +199,7 @@ gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
                     0u,
                     0u);
   }
+
   fill_cube_layer(mip1Pixels, GPU_CUBE_VIEW_SIZE, 0u, 255u, 0u, 0u);
   fill_cube_layer(mip1Pixels, GPU_CUBE_VIEW_SIZE, 2u, 0u, 0u, 255u);
   fill_cube_layer(mip1Pixels, GPU_CUBE_VIEW_SIZE, 8u, 0u, 255u, 0u);
@@ -174,10 +207,10 @@ gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
   if (GPUCreateShaderLibraryFromUSL(device,
                                     bytecode,
                                     bytecodeSize,
-                                    &library) != GPU_OK ||
-      !library ||
-      GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !check_cube_layout(shaderLayout, webgpu)) {
+                                    &library) != GPU_OK
+      || !library
+      || GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK
+      || !check_cube_layout(shaderLayout, webgpu)) {
     fprintf(stderr, "cube texture shader layout creation failed\n");
     ok = 0;
     goto cleanup;
@@ -189,8 +222,9 @@ gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
   pipelineInfo.layout           = shaderLayout->pipelineLayout;
   pipelineInfo.library          = library;
   pipelineInfo.entryPoint       = "cube_view_cs";
-  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
+
+  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK
+      || !pipeline) {
     fprintf(stderr, "cube texture compute pipeline creation failed\n");
     ok = 0;
     goto cleanup;
@@ -208,18 +242,20 @@ gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_DST;
+
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
     fprintf(stderr, "cube texture creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
-  writeRegion.width          = GPU_CUBE_BASE_SIZE;
-  writeRegion.height         = GPU_CUBE_BASE_SIZE;
-  writeRegion.depth          = 1u;
-  writeRegion.layerCount     = GPU_CUBE_LAYER_COUNT;
-  writeRegion.bytesPerRow    = GPU_CUBE_BASE_SIZE * GPU_CUBE_PIXEL_BYTES;
-  writeRegion.rowsPerImage   = GPU_CUBE_BASE_SIZE;
+  writeRegion.width        = GPU_CUBE_BASE_SIZE;
+  writeRegion.height       = GPU_CUBE_BASE_SIZE;
+  writeRegion.depth        = 1u;
+  writeRegion.layerCount   = GPU_CUBE_LAYER_COUNT;
+  writeRegion.bytesPerRow  = GPU_CUBE_BASE_SIZE * GPU_CUBE_PIXEL_BYTES;
+  writeRegion.rowsPerImage = GPU_CUBE_BASE_SIZE;
+
   if (GPUQueueWriteTexture(queue,
                            texture,
                            &writeRegion,
@@ -235,6 +271,7 @@ gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
   writeRegion.mipLevel     = 1u;
   writeRegion.bytesPerRow  = GPU_CUBE_VIEW_SIZE * GPU_CUBE_PIXEL_BYTES;
   writeRegion.rowsPerImage = GPU_CUBE_VIEW_SIZE;
+
   if (GPUQueueWriteTexture(queue,
                            texture,
                            &writeRegion,
@@ -253,8 +290,9 @@ gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
   viewInfo.baseMipLevel     = 1u;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = GPU_CUBE_FACE_COUNT;
-  if (GPUCreateTextureView(texture, &viewInfo, &cubeView) != GPU_OK ||
-      !cubeView) {
+
+  if (GPUCreateTextureView(texture, &viewInfo, &cubeView) != GPU_OK
+      || !cubeView) {
     fprintf(stderr, "cube texture view creation failed\n");
     ok = 0;
     goto cleanup;
@@ -264,8 +302,9 @@ gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
   viewInfo.viewType        = GPU_TEXTURE_VIEW_CUBE_ARRAY;
   viewInfo.baseArrayLayer  = GPU_CUBE_FACE_COUNT;
   viewInfo.arrayLayerCount = GPU_CUBE_FACE_COUNT;
-  if (GPUCreateTextureView(texture, &viewInfo, &cubeArrayView) != GPU_OK ||
-      !cubeArrayView) {
+
+  if (GPUCreateTextureView(texture, &viewInfo, &cubeArrayView) != GPU_OK
+      || !cubeArrayView) {
     fprintf(stderr, "cube array texture view creation failed\n");
     ok = 0;
     goto cleanup;
@@ -278,12 +317,13 @@ gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
   bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE |
                                 GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(device, &bufferInfo, &output) != GPU_OK || !output ||
-      GPUQueueWriteBuffer(queue,
-                          output,
-                          0u,
-                          zero,
-                          sizeof(zero)) != GPU_OK) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &output) != GPU_OK || !output
+      || GPUQueueWriteBuffer(queue,
+                             output,
+                             0u,
+                             zero,
+                             sizeof(zero)) != GPU_OK) {
     fprintf(stderr, "cube texture output buffer creation failed\n");
     ok = 0;
     goto cleanup;
@@ -306,29 +346,31 @@ gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
   groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
   groupInfo.entryCount       = 3u;
   groupInfo.pEntries         = groupEntries;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "cube texture bind group creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "api-cube-texture", &cmdb) != GPU_OK ||
-      !cmdb || !(computePass = GPUBeginComputePass(cmdb,
-                                                   "api-cube-texture"))) {
+  if (GPUAcquireCommandBuffer(queue, "api-cube-texture", &cmdb) != GPU_OK
+      || !cmdb || !(computePass = GPUBeginComputePass(cmdb,
+                                                      "api-cube-texture"))) {
     fprintf(stderr, "cube texture compute pass creation failed\n");
     ok = 0;
     goto cleanup;
   }
+
   GPUBindComputePipeline(computePass, pipeline);
   GPUBindComputeGroup(computePass, 0u, group, 0u, NULL);
   GPUDispatch(computePass, 1u, 1u, 1u);
   GPUEndComputePass(computePass);
   computePass = NULL;
 
-  outputBarrier.buffer     = output;
-  outputBarrier.srcAccess  = GPU_ACCESS_SHADER_WRITE;
-  outputBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
-  outputBarrier.sizeBytes  = sizeof(result);
+  outputBarrier.buffer    = output;
+  outputBarrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
+  outputBarrier.dstAccess = GPU_ACCESS_TRANSFER_READ;
+  outputBarrier.sizeBytes = sizeof(result);
 
   barrierBatch.srcStages          = GPU_STAGE_COMPUTE;
   barrierBatch.dstStages          = GPU_STAGE_TRANSFER;
@@ -348,24 +390,26 @@ gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = submitBuffers;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "cube texture submission failed\n");
     cmdb = NULL;
-    ok = 0;
+    ok   = 0;
     goto cleanup;
   }
+
   cmdb = NULL;
 
   if (GPUQueueReadBuffer(queue,
                          output,
                          0u,
                          result,
-                         sizeof(result)) != GPU_OK ||
-      result[0] < 0.99f || result[0] > 1.01f ||
-      result[1] < 0.99f || result[1] > 1.01f ||
-      result[2] < -0.01f || result[2] > 0.01f ||
-      result[3] < 0.99f || result[3] > 1.01f) {
+                         sizeof(result)) != GPU_OK
+      || result[0] < 0.99f || result[0] > 1.01f
+      || result[1] < 0.99f || result[1] > 1.01f
+      || result[2] < -0.01f || result[2] > 0.01f
+      || result[3] < 0.99f || result[3] > 1.01f) {
     fprintf(stderr,
             "cube texture readback mismatch: %.3f %.3f %.3f %.3f\n",
             result[0],
@@ -382,6 +426,7 @@ cleanup:
   if (computePass) {
     GPUEndComputePass(computePass);
   }
+
   GPUDestroyFence(fence);
   GPUDestroyBindGroup(group);
   GPUDestroyBuffer(output);

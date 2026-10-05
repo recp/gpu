@@ -32,7 +32,7 @@
 #endif
 
 enum {
-  RAY_DISPATCH_REPEATS           = 7,
+  RAY_DISPATCH_REPEATS          = 7,
   RAY_DISPATCH_WARMUP_ITERATIONS = 1000000
 };
 
@@ -42,9 +42,6 @@ typedef enum RayDispatchPath {
   RAY_DISPATCH_PUBLIC,
   RAY_DISPATCH_PATH_COUNT
 } RayDispatchPath;
-
-static GPUApi * volatile rayDispatchApi;
-static volatile uint64_t rayDispatchSink;
 
 #if GPU_BACKEND_METAL_ONLY
 #  define RAY_DISPATCH_BACKEND_MODE "metal-only"
@@ -56,63 +53,78 @@ static volatile uint64_t rayDispatchSink;
 #  define RAY_DISPATCH_BACKEND_MODE "multi"
 #endif
 
+static GPUApi *volatile  rayDispatchApi;
+static volatile uint64_t rayDispatchSink;
+
 static BENCH_NOINLINE void
 ray_dispatch(GPURayTracingPassEncoderEXT *pass,
              GPUShaderTableEXT           *table,
              uint32_t                     width,
              uint32_t                     height,
              uint32_t                     depth) {
-  rayDispatchSink += (uint64_t)(pass != NULL) +
-                     (uint64_t)(table != NULL) +
-                     width + height + depth;
+  rayDispatchSink += (uint64_t)(pass != NULL) + (uint64_t)(table != NULL) + width + height + depth;
 }
 
 static double
-ray_run(RayDispatchPath             path,
+ray_run(RayDispatchPath              path,
         GPURayTracingPassEncoderEXT *pass,
         GPUShaderTableEXT           *table,
         uint64_t                     iterations) {
-  double begin;
-  double end;
+  double   begin;
+  double   end;
+  uint64_t i;
 
   begin = bench_now();
+
   switch (path) {
-    case RAY_DISPATCH_DIRECT:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        ray_dispatch(pass, table, 1u, 1u, 1u);
-      }
-      break;
-    case RAY_DISPATCH_VTABLE:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        rayDispatchApi->rayTracing.dispatch(pass, table, 1u, 1u, 1u);
-      }
-      break;
-    case RAY_DISPATCH_PUBLIC:
-      for (uint64_t i = 0u; i < iterations; i++) {
-        GPUDispatchRaysEXT(pass, table, 1u, 1u, 1u);
-      }
-      break;
-    default:
-      return 0.0;
+  case RAY_DISPATCH_DIRECT:
+    for (i = 0u; i < iterations; i++) {
+      ray_dispatch(pass, table, 1u, 1u, 1u);
+    }
+
+    break;
+
+  case RAY_DISPATCH_VTABLE:
+    for (i = 0u; i < iterations; i++) {
+      rayDispatchApi->rayTracing.dispatch(pass, table, 1u, 1u, 1u);
+    }
+
+    break;
+
+  case RAY_DISPATCH_PUBLIC:
+    for (i = 0u; i < iterations; i++) {
+      GPUDispatchRaysEXT(pass, table, 1u, 1u, 1u);
+    }
+
+    break;
+
+  default:
+    return 0.0;
   }
+
   end = bench_now();
+
   return (end - begin) * 1e9 / (double)iterations;
 }
 
 static bool
 ray_parseIterations(const char *value, uint64_t *outIterations) {
-  unsigned long long parsed;
   char              *end;
+  unsigned long long parsed;
 
   if (!value || !outIterations) {
     return false;
   }
+
   errno  = 0;
   parsed = strtoull(value, &end, 10);
+
   if (errno != 0 || end == value || *end != '\0' || parsed < 10000u) {
     return false;
   }
+
   *outIterations = (uint64_t)parsed;
+
   return true;
 }
 
@@ -123,14 +135,15 @@ main(int argc, char *argv[]) {
   GPUShaderTableEXT           table;
   GPUDevice                   device;
   GPUApi                      api;
-  double                      samples[RAY_DISPATCH_PATH_COUNT]
-                                     [RAY_DISPATCH_REPEATS];
+  double                      samples[RAY_DISPATCH_PATH_COUNT][RAY_DISPATCH_REPEATS];
   double                      median[RAY_DISPATCH_PATH_COUNT];
   uint64_t                    iterations;
+  uint32_t                    path;
+  uint32_t                    repeat;
 
   iterations = 20000000u;
-  if (argc > 2 ||
-      (argc == 2 && !ray_parseIterations(argv[1], &iterations))) {
+
+  if (argc > 2 || (argc == 2 && !ray_parseIterations(argv[1], &iterations))) {
     fprintf(stderr, "usage: %s [iterations >= 10000]\n", argv[0]);
     return EXIT_FAILURE;
   }
@@ -141,7 +154,7 @@ main(int argc, char *argv[]) {
   memset(&table, 0, sizeof(table));
   memset(&pass, 0, sizeof(pass));
 
-  api.rayTracing.dispatch    = ray_dispatch;
+  api.rayTracing.dispatch   = ray_dispatch;
   device._api               = &api;
   device.enabledFeatureMask = 1ull << GPU_FEATURE_RAY_TRACING_PIPELINE;
   pipeline._api             = &api;
@@ -155,23 +168,23 @@ main(int argc, char *argv[]) {
   pass.hasPipeline          = true;
   rayDispatchApi            = &api;
 
-  for (uint32_t path = 0u; path < RAY_DISPATCH_PATH_COUNT; path++) {
+  for (path = 0u; path < RAY_DISPATCH_PATH_COUNT; path++) {
     ray_run((RayDispatchPath)path,
             &pass,
             &table,
             RAY_DISPATCH_WARMUP_ITERATIONS);
   }
 
-  for (uint32_t repeat = 0u; repeat < RAY_DISPATCH_REPEATS; repeat++) {
+  for (repeat = 0u; repeat < RAY_DISPATCH_REPEATS; repeat++) {
     if ((repeat & 1u) == 0u) {
-      for (uint32_t path = 0u; path < RAY_DISPATCH_PATH_COUNT; path++) {
+      for (path = 0u; path < RAY_DISPATCH_PATH_COUNT; path++) {
         samples[path][repeat] = ray_run((RayDispatchPath)path,
                                         &pass,
                                         &table,
                                         iterations);
       }
     } else {
-      for (uint32_t path = RAY_DISPATCH_PATH_COUNT; path-- > 0u;) {
+      for (path = RAY_DISPATCH_PATH_COUNT; path-- > 0u;) {
         samples[path][repeat] = ray_run((RayDispatchPath)path,
                                         &pass,
                                         &table,
@@ -180,7 +193,7 @@ main(int argc, char *argv[]) {
     }
   }
 
-  for (uint32_t path = 0u; path < RAY_DISPATCH_PATH_COUNT; path++) {
+  for (path = 0u; path < RAY_DISPATCH_PATH_COUNT; path++) {
     median[path] = bench_percentile(samples[path],
                                     RAY_DISPATCH_REPEATS,
                                     0.5);
@@ -202,5 +215,6 @@ main(int argc, char *argv[]) {
          median[RAY_DISPATCH_PUBLIC],
          median[RAY_DISPATCH_PUBLIC] - median[RAY_DISPATCH_VTABLE]);
   printf("sink: %" PRIu64 "\n", rayDispatchSink);
+
   return EXIT_SUCCESS;
 }

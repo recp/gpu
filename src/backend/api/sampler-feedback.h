@@ -24,7 +24,7 @@ extern "C" {
 
 typedef struct GPUApiSamplerFeedback {
   void
-  (*getProperties)(const GPUAdapter                 *adapter,
+  (*getProperties)(const GPUAdapter                *adapter,
                    GPUSamplerFeedbackPropertiesEXT *outProperties);
 
   GPUResult

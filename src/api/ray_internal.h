@@ -20,18 +20,18 @@
 #include "../common.h"
 
 struct GPUAccelerationStructureEXT {
-  void                                *_priv;
-  GPUDevice                           *device;
-  uint64_t                             sizeBytes;
-  GPUAccelerationStructureTypeEXT      type;
+  void                           *_priv;
+  GPUDevice                      *device;
+  uint64_t                        sizeBytes;
+  GPUAccelerationStructureTypeEXT type;
 };
 
 struct GPUAccelerationStructurePassEncoderEXT {
-  void              *_priv;
-  GPUApi            *_api;
-  GPUDevice         *device;
-  GPUCommandBuffer  *cmdb;
-  bool               ended;
+  void             *_priv;
+  GPUApi           *_api;
+  GPUDevice        *device;
+  GPUCommandBuffer *cmdb;
+  bool              ended;
 };
 
 struct GPUIntersectionFunctionTableEXT {
@@ -65,20 +65,20 @@ struct GPUShaderTableEXT {
 };
 
 struct GPURayTracingPassEncoderEXT {
-  void                   *_priv;
-  void                   *_pipeline;
-  GPUApi                 *_api;
-  GPUDevice              *device;
-  GPUCommandBuffer       *cmdb;
-  GPUFrameStats          *stats;
-  GPUPipelineLayout      *pipelineLayout;
-  GPUBindGroup           *boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
-  GPUBindGroupLayout     *boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
-  GPUDynamicOffsetShadow  boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
-  uint32_t                boundDynamicOffsetCounts[GPU_ENCODER_MAX_BIND_GROUPS];
-  uint32_t                requiredBindGroupMask;
-  bool                    hasPipeline;
-  bool                    ended;
+  void                  *_priv;
+  void                  *_pipeline;
+  GPUApi                *_api;
+  GPUDevice             *device;
+  GPUCommandBuffer      *cmdb;
+  GPUFrameStats         *stats;
+  GPUPipelineLayout     *pipelineLayout;
+  GPUBindGroup          *boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUBindGroupLayout    *boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUDynamicOffsetShadow boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
+  uint32_t               boundDynamicOffsetCounts[GPU_ENCODER_MAX_BIND_GROUPS];
+  uint32_t               requiredBindGroupMask;
+  bool                   hasPipeline;
+  bool                   ended;
 };
 
 GPU_HIDE
@@ -87,30 +87,28 @@ gpuRetainRayTracingPipeline(GPURayTracingPipelineEXT *pipeline);
 
 GPU_HIDE
 GPUResult
-gpuAttachComputeIntersectionFunctions(
-  GPUDevice                                *device,
-  GPUShaderLibrary                         *library,
-  const GPUIntersectionFunctionPipelineEXT *info,
-  GPUComputePipeline                       *pipeline);
+gpuAttachComputeIntersectionFunctions(GPUDevice                                *device,
+                                      GPUShaderLibrary                         *library,
+                                      const GPUIntersectionFunctionPipelineEXT *info,
+                                      GPUComputePipeline                       *pipeline);
 
 GPU_HIDE
 GPUResult
-gpuAttachRenderIntersectionFunctions(
-  GPUDevice                                *device,
-  GPUShaderLibrary                         *library,
-  const GPUIntersectionFunctionPipelineEXT *info,
-  GPURenderPipeline                        *pipeline);
+gpuAttachRenderIntersectionFunctions(GPUDevice                                *device,
+                                     GPUShaderLibrary                         *library,
+                                     const GPUIntersectionFunctionPipelineEXT *info,
+                                     GPURenderPipeline                        *pipeline);
 
 static inline bool
-gpuRayDispatchFits(uint32_t        width,
-                   uint32_t        height,
-                   uint32_t        depth,
-                   const uint32_t  maxSize[3],
-                   uint64_t        maxCount) {
-  if (width == 0u || height == 0u || depth == 0u || maxCount == 0u ||
-      (maxSize && (width > maxSize[0] ||
-                   height > maxSize[1] ||
-                   depth > maxSize[2]))) {
+gpuRayDispatchFits(uint32_t       width,
+                   uint32_t       height,
+                   uint32_t       depth,
+                   const uint32_t maxSize[3],
+                   uint64_t       maxCount) {
+  if (width == 0u || height == 0u || depth == 0u || maxCount == 0u
+      || (maxSize && (width > maxSize[0]
+                      || height > maxSize[1]
+                      || depth > maxSize[2]))) {
     return false;
   }
 

@@ -40,10 +40,9 @@ gpuSetRenderVertexSampler(GPURenderPassEncoder *pass,
 
 GPU_HIDE
 void
-gpuSetRenderVertexAccelerationStructure(
-  GPURenderPassEncoder        *pass,
-  GPUAccelerationStructureEXT *structure,
-  uint32_t                     index);
+gpuSetRenderVertexAccelerationStructure(GPURenderPassEncoder        *pass,
+                                        GPUAccelerationStructureEXT *structure,
+                                        uint32_t                     index);
 
 GPU_HIDE
 void
@@ -104,9 +103,8 @@ gpuSetRenderFragmentSampler(GPURenderPassEncoder *pass,
 
 GPU_HIDE
 void
-gpuSetRenderFragmentAccelerationStructure(
-  GPURenderPassEncoder        *pass,
-  GPUAccelerationStructureEXT *structure,
-  uint32_t                     index);
+gpuSetRenderFragmentAccelerationStructure(GPURenderPassEncoder        *pass,
+                                          GPUAccelerationStructureEXT *structure,
+                                          uint32_t                     index);
 
 #endif /* gpu_rce_internal_h */

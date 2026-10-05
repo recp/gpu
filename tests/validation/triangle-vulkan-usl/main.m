@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <AppKit/AppKit.h>
 #include <dispatch/dispatch.h>
 #import <QuartzCore/QuartzCore.h>
@@ -13,31 +29,32 @@ typedef struct FragmentUniforms {
 
 @interface TriangleVulkanApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
 @private
-  NSWindow           *_window;
-  NSView             *_view;
-  GPUInstance        *_instance;
-  GPUAdapter         *_adapter;
-  GPUDevice          *_device;
-  GPUQueue           *_queue;
-  GPUSurface         *_surface;
-  GPUSwapchain       *_swapchain;
-  GPUShaderLibrary   *_library;
-  GPUShaderLayout    *_shaderLayout;
-  GPUBuffer          *_uniformBuffer;
-  GPUBindGroup       *_bindGroup;
-  GPURenderPipeline  *_pipeline;
-  NSTimer            *_timer;
-  NSInteger           _exitAfterFrames;
-  NSInteger           _submittedFrames;
-  NSInteger           _completedFrames;
-  NSInteger           _resizeAfterFrames;
-  BOOL                _assertZeroAlloc;
-  BOOL                _statsFailed;
-  BOOL                _terminating;
-  BOOL                _resizeRequested;
-  BOOL                _resizeReady;
-  BOOL                _renderedAfterResize;
+  NSWindow          *_window;
+  NSView            *_view;
+  GPUInstance       *_instance;
+  GPUAdapter        *_adapter;
+  GPUDevice         *_device;
+  GPUQueue          *_queue;
+  GPUSurface        *_surface;
+  GPUSwapchain      *_swapchain;
+  GPUShaderLibrary  *_library;
+  GPUShaderLayout   *_shaderLayout;
+  GPUBuffer         *_uniformBuffer;
+  GPUBindGroup      *_bindGroup;
+  GPURenderPipeline *_pipeline;
+  NSTimer           *_timer;
+  NSInteger          _exitAfterFrames;
+  NSInteger          _submittedFrames;
+  NSInteger          _completedFrames;
+  NSInteger          _resizeAfterFrames;
+  BOOL               _assertZeroAlloc;
+  BOOL               _statsFailed;
+  BOOL               _terminating;
+  BOOL               _resizeRequested;
+  BOOL               _resizeReady;
+  BOOL               _renderedAfterResize;
 }
+
 - (void)frameCompleted;
 - (BOOL)statsFailed;
 @end
@@ -61,39 +78,42 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (BOOL)setupGPU {
-  GPUInstanceCreateInfo instanceInfo = {0};
-  GPUPipelineLayout      *layout;
-  GPUBindGroupLayout     *groupLayout;
+  GPUInstanceCreateInfo          instanceInfo = {0};
+  GPUBufferCreateInfo            bufferInfo   = {0};
+  GPUBindGroupEntry              groupEntry   = {0};
+  GPUBindGroupCreateInfo         groupInfo    = {0};
+  GPUColorTargetState            colorTarget  = {0};
+  GPURenderPipelineCreateInfo    pipelineInfo = {0};
+  FragmentUniforms               uniforms     = {{0.15f, 0.78f, 0.34f, 1.0f}};
+  GPUPipelineLayout             *layout;
+  GPUBindGroupLayout            *groupLayout;
   const GPUBindGroupLayoutEntry *layoutEntries;
-  GPUBufferCreateInfo     bufferInfo = {0};
-  GPUBindGroupEntry       groupEntry = {0};
-  GPUBindGroupCreateInfo  groupInfo = {0};
-  GPUColorTargetState     colorTarget = {0};
-  GPURenderPipelineCreateInfo pipelineInfo = {0};
-  FragmentUniforms        uniforms = {{0.15f, 0.78f, 0.34f, 1.0f}};
-  GPUResult               result;
-  uint32_t adapterCount;
-  uint32_t layoutEntryCount;
+  GPUResult                      result;
+  uint32_t                       adapterCount;
+  uint32_t                       layoutEntryCount;
 
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_VULKAN;
   instanceInfo.enableValidation = true;
+
   if (GPUCreateInstance(&instanceInfo, &_instance) != GPU_OK || !_instance) {
     NSLog(@"GPU: failed to create Vulkan instance");
     return NO;
   }
 
   adapterCount = 1u;
-  result = GPUEnumerateAdapters(_instance, &adapterCount, &_adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !_adapter) {
+  result       = GPUEnumerateAdapters(_instance, &adapterCount, &_adapter);
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !_adapter) {
     NSLog(@"GPU: failed to get Vulkan adapter");
     return NO;
   }
 
   _device = GPUCreateDeviceWithDefaultQueues(_adapter);
   _queue  = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0u);
+
   if (!_device || !_queue) {
     NSLog(@"GPU: failed to create Vulkan device or queue");
     return NO;
@@ -104,6 +124,7 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                                         (__bridge void *)_view,
                                         GPU_SURFACE_APPLE_NSVIEW,
                                         _window.backingScaleFactor ?: 1.0f);
+
   if (!_surface) {
     NSLog(@"GPU: failed to create Vulkan surface");
     return NO;
@@ -113,6 +134,7 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                                          _surface,
                                          (uint32_t)_view.bounds.size.width,
                                          (uint32_t)_view.bounds.size.height);
+
   if (!_swapchain) {
     NSLog(@"GPU: failed to create Vulkan swapchain");
     return NO;
@@ -126,15 +148,16 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     return NO;
   }
 
-  groupLayout = _shaderLayout->bindGroupLayouts[0];
+  groupLayout   = _shaderLayout->bindGroupLayouts[0];
   layoutEntries = GPUGetBindGroupLayoutEntries(groupLayout,
-                                                &layoutEntryCount);
-  if (!layoutEntries || layoutEntryCount != 1u ||
-      layoutEntries[0].binding != 0u ||
-      layoutEntries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER ||
-      layoutEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      layoutEntries[0].arrayCount != 1u ||
-      layoutEntries[0].hasDynamicOffset) {
+                                               &layoutEntryCount);
+
+  if (!layoutEntries || layoutEntryCount != 1u
+      || layoutEntries[0].binding != 0u
+      || layoutEntries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER
+      || layoutEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT
+      || layoutEntries[0].arrayCount != 1u
+      || layoutEntries[0].hasDynamicOffset) {
     NSLog(@"GPU: unexpected Vulkan triangle reflection layout");
     return NO;
   }
@@ -145,13 +168,14 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   bufferInfo.sizeBytes        = sizeof(uniforms);
   bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(_device, &bufferInfo, &_uniformBuffer) != GPU_OK ||
-      !_uniformBuffer ||
-      GPUQueueWriteBuffer(_queue,
-                          _uniformBuffer,
-                          0u,
-                          &uniforms,
-                          sizeof(uniforms)) != GPU_OK) {
+
+  if (GPUCreateBuffer(_device, &bufferInfo, &_uniformBuffer) != GPU_OK
+      || !_uniformBuffer
+      || GPUQueueWriteBuffer(_queue,
+                             _uniformBuffer,
+                             0u,
+                             &uniforms,
+                             sizeof(uniforms)) != GPU_OK) {
     NSLog(@"GPU: failed to create Vulkan triangle uniforms");
     return NO;
   }
@@ -167,8 +191,9 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   groupInfo.layout           = groupLayout;
   groupInfo.entryCount       = 1u;
   groupInfo.pEntries         = &groupEntry;
-  if (GPUCreateBindGroup(_device, &groupInfo, &_bindGroup) != GPU_OK ||
-      !_bindGroup) {
+
+  if (GPUCreateBindGroup(_device, &groupInfo, &_bindGroup) != GPU_OK
+      || !_bindGroup) {
     NSLog(@"GPU: failed to create Vulkan triangle bind group");
     return NO;
   }
@@ -177,22 +202,23 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   colorTarget.format          = GPUGetSwapchainFormat(_swapchain);
   colorTarget.blend.writeMask = GPU_COLOR_WRITE_ALL;
 
-  pipelineInfo.chain.sType        = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  pipelineInfo.chain.structSize   = sizeof(pipelineInfo);
-  pipelineInfo.label              = "triangle-vulkan-usl-pipeline";
-  pipelineInfo.layout             = layout;
-  pipelineInfo.library            = _library;
-  pipelineInfo.vertexEntry        = "tri_vs";
-  pipelineInfo.fragmentEntry      = "tri_fs";
-  pipelineInfo.colorTargetCount   = 1u;
-  pipelineInfo.pColorTargets      = &colorTarget;
-  pipelineInfo.primitiveTopology  = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  pipelineInfo.cullMode           = GPU_CULL_MODE_NONE;
-  pipelineInfo.frontFace          = GPU_FRONT_FACE_CCW;
+  pipelineInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize        = sizeof(pipelineInfo);
+  pipelineInfo.label                   = "triangle-vulkan-usl-pipeline";
+  pipelineInfo.layout                  = layout;
+  pipelineInfo.library                 = _library;
+  pipelineInfo.vertexEntry             = "tri_vs";
+  pipelineInfo.fragmentEntry           = "tri_fs";
+  pipelineInfo.colorTargetCount        = 1u;
+  pipelineInfo.pColorTargets           = &colorTarget;
+  pipelineInfo.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineInfo.cullMode                = GPU_CULL_MODE_NONE;
+  pipelineInfo.frontFace               = GPU_FRONT_FACE_CCW;
   pipelineInfo.multisample.sampleCount = 1u;
   pipelineInfo.multisample.sampleMask  = 0xffffffffu;
-  if (GPUCreateRenderPipeline(_device, &pipelineInfo, &_pipeline) != GPU_OK ||
-      !_pipeline) {
+
+  if (GPUCreateRenderPipeline(_device, &pipelineInfo, &_pipeline) != GPU_OK
+      || !_pipeline) {
     NSLog(@"GPU: failed to create Vulkan render pipeline");
     return NO;
   }
@@ -201,34 +227,38 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (void)renderFrame {
-  GPUFrame                     *frame;
-  GPUCommandBuffer             *cmdb;
-  GPURenderPassEncoder         *pass;
-  GPURenderPassColorAttachment  color = {0};
-  GPURenderPassCreateInfo       passInfo = {0};
-  GPUResult                     result;
+  GPURenderPassColorAttachment color    = {0};
+  GPURenderPassCreateInfo      passInfo = {0};
+  GPUFrame                    *frame;
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassEncoder        *pass;
+  GPUResult                    result;
 
-  if (_terminating ||
-      (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames)) {
+  if (_terminating
+      || (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames)) {
     return;
   }
+
   if (!GPUSampleRecoverSwapchain(_swapchain, _view)) {
     return;
   }
 
   frame = GPUBeginFrame(_swapchain);
+
   if (!frame) {
     (void)GPUSampleRecoverSwapchain(_swapchain, _view);
     return;
   }
 
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(_queue,
                               "triangle-vulkan-frame",
                               &cmdb) != GPU_OK || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
+
   if (_exitAfterFrames > 0) {
     GPUSetCommandBufferCompletionHandler(cmdb,
                                          (__bridge void *)self,
@@ -243,12 +273,13 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   color.clearColor.float32[2] = 0.035f;
   color.clearColor.float32[3] = 1.0f;
 
-  passInfo.chain.sType        = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  passInfo.chain.structSize   = sizeof(passInfo);
-  passInfo.label              = "triangle-vulkan-usl-pass";
+  passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.structSize     = sizeof(passInfo);
+  passInfo.label                = "triangle-vulkan-usl-pass";
   passInfo.colorAttachmentCount = 1u;
-  passInfo.pColorAttachments  = &color;
+  passInfo.pColorAttachments    = &color;
   pass = GPUBeginRenderPass(cmdb, &passInfo);
+
   if (!pass) {
     GPUEndFrame(frame);
     return;
@@ -260,21 +291,26 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUEndRenderPass(pass);
 
   result = GPUFinishFrame(_queue, cmdb, frame);
+
   if (result != GPU_OK) {
     NSLog(@"GPUFinishFrame failed: %d", result);
     return;
   }
+
   _submittedFrames++;
+
   if (_resizeReady) {
     _renderedAfterResize = YES;
   }
-  if (_resizeAfterFrames > 0 && !_resizeRequested &&
-      _submittedFrames >= _resizeAfterFrames) {
+
+  if (_resizeAfterFrames > 0 && !_resizeRequested
+      && _submittedFrames >= _resizeAfterFrames) {
     _resizeRequested = YES;
     dispatch_async(dispatch_get_main_queue(), ^{
       [self->_window setContentSize:NSMakeSize(800.0, 520.0)];
     });
   }
+
   if (!GPUSampleCheckZeroAlloc(_device,
                                (uint32_t)_submittedFrames,
                                _assertZeroAlloc,
@@ -290,13 +326,15 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 - (void)frameCompleted {
   dispatch_async(dispatch_get_main_queue(), ^{
     self->_completedFrames++;
-    if (self->_exitAfterFrames > 0 &&
-        self->_completedFrames >= self->_exitAfterFrames &&
-        !self->_terminating) {
-      if (self->_resizeAfterFrames > 0 &&
-          (!self->_resizeReady || !self->_renderedAfterResize)) {
+
+    if (self->_exitAfterFrames > 0
+        && self->_completedFrames >= self->_exitAfterFrames
+        && !self->_terminating) {
+      if (self->_resizeAfterFrames > 0
+          && (!self->_resizeReady || !self->_renderedAfterResize)) {
         self->_statsFailed = YES;
       }
+
       self->_terminating = YES;
       [self->_timer invalidate];
       self->_timer = nil;
@@ -315,35 +353,43 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     GPUDestroyRenderPipeline(_pipeline);
     _pipeline = NULL;
   }
+
   if (_bindGroup) {
     GPUDestroyBindGroup(_bindGroup);
     _bindGroup = NULL;
   }
+
   if (_uniformBuffer) {
     GPUDestroyBuffer(_uniformBuffer);
     _uniformBuffer = NULL;
   }
+
   if (_shaderLayout) {
     GPUDestroyShaderLayout(_shaderLayout);
     _shaderLayout = NULL;
   }
+
   if (_library) {
     GPUDestroyShaderLibrary(_library);
     _library = NULL;
   }
+
   if (_swapchain) {
     GPUDestroySwapchain(_swapchain);
     _swapchain = NULL;
   }
+
   if (_surface) {
     GPUDestroySurface(_surface);
     _surface = NULL;
   }
+
   if (_device) {
     GPUDestroyDevice(_device);
     _device = NULL;
     _queue  = NULL;
   }
+
   if (_instance) {
     GPUDestroyInstance(_instance);
     _instance = NULL;
@@ -355,25 +401,32 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   const char *resizeAfterFrames;
 
   (void)notification;
+
   if (![self setupWindow] || ![self setupGPU]) {
     [NSApp terminate:nil];
     return;
   }
 
   exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+
   if (exitAfterFrames && exitAfterFrames[0] != '\0') {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
+
     if (_exitAfterFrames < 1) {
       _exitAfterFrames = 1;
     }
   }
+
   resizeAfterFrames = getenv("GPU_SAMPLE_RESIZE_AFTER_FRAMES");
+
   if (resizeAfterFrames && resizeAfterFrames[0] != '\0') {
     _resizeAfterFrames = strtol(resizeAfterFrames, NULL, 10);
+
     if (_resizeAfterFrames < 1) {
       _resizeAfterFrames = 1;
     }
   }
+
   _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
 
   _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
@@ -403,10 +456,11 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 
 - (void)windowDidResize:(NSNotification *)notification {
   GPUResult result;
-  uint32_t width;
-  uint32_t height;
+  uint32_t  width;
+  uint32_t  height;
 
   (void)notification;
+
   if (!_swapchain || _terminating) {
     return;
   }
@@ -416,10 +470,11 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   result = width > 0u && height > 0u
              ? GPUResizeSwapchain(_swapchain, width, height)
              : GPU_ERROR_INVALID_ARGUMENT;
+
   if (result == GPU_OK) {
     if (_resizeRequested) {
-      _resizeReady = GPUGetSwapchainStatus(_swapchain) ==
-                     GPU_SWAPCHAIN_STATUS_READY;
+      _resizeReady = GPUGetSwapchainStatus(_swapchain) == GPU_SWAPCHAIN_STATUS_READY;
+
       if (!_resizeReady) {
         _statsFailed = YES;
         _terminating = YES;
@@ -427,6 +482,7 @@ TriangleVulkanFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
         return;
       }
     }
+
     [self renderFrame];
   } else if (_resizeRequested) {
     _statsFailed = YES;
@@ -442,6 +498,7 @@ main(int argc, const char *argv[]) {
   int result;
 
   result = 0;
+
   @autoreleasepool {
     TriangleVulkanApp *delegate;
 
@@ -454,5 +511,6 @@ main(int argc, const char *argv[]) {
     [NSApp run];
     result = [delegate statsFailed] ? 1 : 0;
   }
+
   return result;
 }

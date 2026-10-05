@@ -19,10 +19,11 @@
 @interface GPUSwapchainObjc: NSObject {
 @public
   GPUSwapchainMetal *swapchainMtl;
-  float              backingScaleFactor;
-  id                 observedObject;
+  float             backingScaleFactor;
+  id                observedObject;
   NSString          *observedKeyPath;
 }
+
 - (void)gpuObserveObject:(id)object keyPath:(NSString *)keyPath;
 - (void)gpuStopObserving;
 @end
@@ -48,30 +49,35 @@
   }
 }
 
-- (void)observeValueForKeyPath: (NSString *)keyPath
-                      ofObject: (id)object
-                      change:   (NSDictionary *)change
-                      context:  (void *)context {
+- (void)observeValueForKeyPath:(NSString *)keyPath
+                    ofObject:(id)object
+                      change:(NSDictionary *)change
+                     context:(void *)context {
+  CGRect newFrame;
+  CGSize drawableSize;
+
   if ([keyPath isEqualToString:@"bounds"]) {
-    CGRect newFrame     = [change[NSKeyValueChangeNewKey] CGRectValue];
-    CGSize drawableSize = CGSizeMake(newFrame.size.width  * backingScaleFactor,
-                                     newFrame.size.height * backingScaleFactor);
+    newFrame     = [change[NSKeyValueChangeNewKey] CGRectValue];
+    drawableSize = CGSizeMake(newFrame.size.width * backingScaleFactor,
+                              newFrame.size.height * backingScaleFactor);
 
     swapchainMtl->layer.frame        = newFrame;
     swapchainMtl->layer.drawableSize = drawableSize;
   }
 }
+
 - (void)dealloc {
   [self gpuStopObserving];
   [super dealloc];
 }
+
 @end
 
 static void
-mt_swapchainAttachToView(GPUSwapchain * __restrict swapchain,
-                         void         * __restrict viewHandle,
-                         bool                      autoResize, 
-                         bool                      replace) {
+mt_swapchainAttachToView(GPUSwapchain *__restrict swapchain,
+                         void         *__restrict viewHandle,
+                         bool                     autoResize,
+                         bool                     replace) {
   GPUSwapchainMetal *swapchainMtl;
   GPUViewHandle     *_viewHandle;
 
@@ -83,7 +89,8 @@ mt_swapchainAttachToView(GPUSwapchain * __restrict swapchain,
   [_viewHandle.layer addSublayer:swapchainMtl->layer];
   swapchainMtl->layer.contentsScale = _viewHandle.contentScaleFactor;
 #elif TARGET_OS_MAC
-  // Ensure the view's layer is a CAMetalLayer for macOS
+  /* ensure the view's layer is a CAMetalLayer for macOS */
+
   if (replace || ![_viewHandle.layer isKindOfClass:[CAMetalLayer class]]) {
     _viewHandle.wantsLayer = YES;
     _viewHandle.layer      = swapchainMtl->layer;
@@ -94,7 +101,8 @@ mt_swapchainAttachToView(GPUSwapchain * __restrict swapchain,
 #  error "Unsupported platform"
 #endif
 
-  // Set the frame for the CAMetalLayer
+  /* set the frame for the CAMetalLayer */
+
   swapchainMtl->layer.frame = _viewHandle.bounds;
 
   if (autoResize) {
@@ -105,16 +113,16 @@ mt_swapchainAttachToView(GPUSwapchain * __restrict swapchain,
 
 GPU_HIDE
 GPUSwapchain*
-mt_createSwapchain(GPUApi          * __restrict api,
-                   GPUDevice       * __restrict device,
-                   GPUQueue        * __restrict cmdQue,
-                   const GPUSwapchainCreateInfo * __restrict info) {
+mt_createSwapchain(GPUApi                       *__restrict api,
+                   GPUDevice                    *__restrict device,
+                   GPUQueue                     *__restrict cmdQue,
+                   const GPUSwapchainCreateInfo *__restrict info) {
+  GPUExtent2D        size;
   GPUDeviceMT       *deviceMT;
   GPUSwapchain      *swapchain;
   GPUSwapchainMetal *swapchainMtl;
   GPUSwapchainObjc  *objc;
   GPUSurface        *surface;
-  GPUExtent2D        size;
   uint32_t           imageCount;
 
   GPU__UNUSED(api);
@@ -129,9 +137,10 @@ mt_createSwapchain(GPUApi          * __restrict api,
   size.height = info->height;
   imageCount  = info->imageCount ? info->imageCount : 3u;
 
-  deviceMT                            = device->_priv;
-  swapchain                           = calloc(1, sizeof(*swapchain));
-  swapchainMtl                        = calloc(1, sizeof(*swapchainMtl));
+  deviceMT     = device->_priv;
+  swapchain    = calloc(1, sizeof(*swapchain));
+  swapchainMtl = calloc(1, sizeof(*swapchainMtl));
+
   swapchainMtl->layer                 = [[CAMetalLayer alloc] init];
   swapchainMtl->layer.bounds          = CGRectMake(0, 0, size.width, size.height);
   swapchainMtl->layer.device          = deviceMT->device;
@@ -139,18 +148,19 @@ mt_createSwapchain(GPUApi          * __restrict api,
   swapchainMtl->layer.opaque          = YES;
   swapchainMtl->layer.contentsScale   = surface->scale;
   swapchainMtl->layer.contentsGravity = kCAGravityResizeAspectFill;
+
   swapchainMtl->layer.maximumDrawableCount = imageCount;
 #if TARGET_OS_OSX
-  swapchainMtl->layer.displaySyncEnabled =
-    info->presentMode != GPU_PRESENT_MODE_IMMEDIATE;
+  swapchainMtl->layer.displaySyncEnabled = info->presentMode != GPU_PRESENT_MODE_IMMEDIATE;
 #endif
-  swapchain->_priv                    = swapchainMtl;
-  swapchain->backingScaleFactor       = surface->scale;
-  swapchainMtl->objc                  = [GPUSwapchainObjc new];
 
-  objc                                = swapchainMtl->objc;
-  objc->swapchainMtl                  = swapchainMtl;
-  objc->backingScaleFactor            = surface->scale;
+  swapchain->_priv              = swapchainMtl;
+  swapchain->backingScaleFactor = surface->scale;
+  swapchainMtl->objc            = [GPUSwapchainObjc new];
+
+  objc                     = swapchainMtl->objc;
+  objc->swapchainMtl       = swapchainMtl;
+  objc->backingScaleFactor = surface->scale;
 
   mt_swapchainAttachToView(swapchain, surface->_priv, true, true);
 
@@ -159,23 +169,24 @@ mt_createSwapchain(GPUApi          * __restrict api,
 
 GPU_HIDE
 GPUResult
-mt_resizeSwapchain(GPUSwapchain * __restrict swapchain,
-                   GPUExtent2D                size) {
-  GPUSwapchainMetal *swapchainMtl;
+mt_resizeSwapchain(GPUSwapchain *__restrict swapchain,
+                   GPUExtent2D              size) {
   CGRect             bounds;
   CGSize             drawableSize;
+  GPUSwapchainMetal *swapchainMtl;
 
   if (!swapchain || !swapchain->_priv || size.width == 0 || size.height == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   swapchainMtl = swapchain->_priv;
+
   if (!swapchainMtl->layer) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   bounds       = CGRectMake(0, 0, size.width, size.height);
-  drawableSize = CGSizeMake(size.width  * swapchain->backingScaleFactor,
+  drawableSize = CGSizeMake(size.width * swapchain->backingScaleFactor,
                             size.height * swapchain->backingScaleFactor);
 
   swapchainMtl->layer.bounds       = bounds;
@@ -186,7 +197,7 @@ mt_resizeSwapchain(GPUSwapchain * __restrict swapchain,
 
 GPU_HIDE
 void
-mt_destroySwapchain(GPUSwapchain * __restrict swapchain) {
+mt_destroySwapchain(GPUSwapchain *__restrict swapchain) {
   GPUSwapchainMetal *swapchainMtl;
 
   if (!swapchain) {
@@ -194,15 +205,18 @@ mt_destroySwapchain(GPUSwapchain * __restrict swapchain) {
   }
 
   swapchainMtl = swapchain->_priv;
+
   if (swapchainMtl) {
     if (swapchainMtl->objc) {
       [(GPUSwapchainObjc *)swapchainMtl->objc gpuStopObserving];
       [(id)swapchainMtl->objc release];
     }
+
     if (swapchainMtl->layer) {
       [swapchainMtl->layer removeFromSuperlayer];
       [swapchainMtl->layer release];
     }
+
     free(swapchainMtl);
   }
 

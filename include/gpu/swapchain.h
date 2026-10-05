@@ -54,34 +54,34 @@ typedef struct GPUSwapchainCreateInfo {
 
 GPU_EXPORT
 GPUResult
-GPUCreateSwapchain(GPUDevice                        * __restrict device,
-                   const GPUSwapchainCreateInfo     * __restrict info,
-                   GPUSwapchain                    ** __restrict outSwapchain);
+GPUCreateSwapchain(GPUDevice                    *__restrict device,
+                   const GPUSwapchainCreateInfo *__restrict info,
+                   GPUSwapchain                **__restrict outSwapchain);
 
 GPU_EXPORT
 GPUSwapchain*
-GPUCreateSwapchainDefault(GPUDevice          * __restrict device,
-                          struct GPUSurface  * __restrict surface,
-                          uint32_t                        width,
-                          uint32_t                        height);
+GPUCreateSwapchainDefault(GPUDevice         *__restrict device,
+                          struct GPUSurface *__restrict surface,
+                          uint32_t                      width,
+                          uint32_t                      height);
 
 GPU_EXPORT
 GPUFormat
-GPUGetSwapchainFormat(GPUSwapchain * __restrict swapchain);
+GPUGetSwapchainFormat(GPUSwapchain *__restrict swapchain);
 
 GPU_EXPORT
 GPUSwapchainStatus
-GPUGetSwapchainStatus(GPUSwapchain * __restrict swapchain);
+GPUGetSwapchainStatus(GPUSwapchain *__restrict swapchain);
 
 GPU_EXPORT
 void
-GPUDestroySwapchain(GPUSwapchain * __restrict swapchain);
+GPUDestroySwapchain(GPUSwapchain *__restrict swapchain);
 
 GPU_EXPORT
 GPUResult
-GPUResizeSwapchain(GPUSwapchain * __restrict swapchain,
-                   uint32_t                  width,
-                   uint32_t                  height);
+GPUResizeSwapchain(GPUSwapchain *__restrict swapchain,
+                   uint32_t                 width,
+                   uint32_t                 height);
 
 #ifdef __cplusplus
 }

@@ -24,7 +24,9 @@ extern "C" {
 #include "cmdqueue.h"
 #include "format.h"
 
-typedef struct GPUDevice GPUDevice;
+typedef struct GPUTexture     GPUTexture;
+typedef struct GPUTextureView GPUTextureView;
+typedef struct GPUDevice      GPUDevice;
 
 typedef uint32_t GPUTextureUsageFlags;
 enum {
@@ -34,6 +36,7 @@ enum {
   GPU_TEXTURE_USAGE_DEPTH_STENCIL = 1u << 3,
   GPU_TEXTURE_USAGE_COPY_SRC      = 1u << 4,
   GPU_TEXTURE_USAGE_COPY_DST      = 1u << 5,
+
   GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT = 1u << 6
 };
 
@@ -50,17 +53,14 @@ typedef enum GPUTextureAspect {
 } GPUTextureAspect;
 
 typedef enum GPUTextureViewType {
-  GPU_TEXTURE_VIEW_1D          = 0,
-  GPU_TEXTURE_VIEW_1D_ARRAY    = 1,
-  GPU_TEXTURE_VIEW_2D          = 2,
-  GPU_TEXTURE_VIEW_2D_ARRAY    = 3,
-  GPU_TEXTURE_VIEW_CUBE        = 4,
-  GPU_TEXTURE_VIEW_CUBE_ARRAY  = 5,
-  GPU_TEXTURE_VIEW_3D          = 6
+  GPU_TEXTURE_VIEW_1D         = 0,
+  GPU_TEXTURE_VIEW_1D_ARRAY   = 1,
+  GPU_TEXTURE_VIEW_2D         = 2,
+  GPU_TEXTURE_VIEW_2D_ARRAY   = 3,
+  GPU_TEXTURE_VIEW_CUBE       = 4,
+  GPU_TEXTURE_VIEW_CUBE_ARRAY = 5,
+  GPU_TEXTURE_VIEW_3D         = 6
 } GPUTextureViewType;
-
-typedef struct GPUTexture     GPUTexture;
-typedef struct GPUTextureView GPUTextureView;
 
 typedef struct GPUTextureCreateInfo {
   GPUChainedStruct     chain;
@@ -87,14 +87,14 @@ typedef struct GPUTextureInfo {
 } GPUTextureInfo;
 
 typedef struct GPUTextureViewCreateInfo {
-  GPUChainedStruct    chain;
-  const char         *label;
-  GPUTextureViewType  viewType;
-  GPUFormat           format;
-  uint32_t            baseMipLevel;
-  uint32_t            mipLevelCount;
-  uint32_t            baseArrayLayer;
-  uint32_t            arrayLayerCount;
+  GPUChainedStruct   chain;
+  const char        *label;
+  GPUTextureViewType viewType;
+  GPUFormat          format;
+  uint32_t           baseMipLevel;
+  uint32_t           mipLevelCount;
+  uint32_t           baseArrayLayer;
+  uint32_t           arrayLayerCount;
 } GPUTextureViewCreateInfo;
 
 typedef struct GPUTextureWriteRegion {
@@ -111,36 +111,36 @@ typedef struct GPUTextureWriteRegion {
 
 GPU_EXPORT
 GPUResult
-GPUCreateTexture(GPUDevice                  * __restrict device,
-                 const GPUTextureCreateInfo * __restrict info,
-                 GPUTexture                ** __restrict outTexture);
+GPUCreateTexture(GPUDevice                  *__restrict device,
+                 const GPUTextureCreateInfo *__restrict info,
+                 GPUTexture                **__restrict outTexture);
 
 GPU_EXPORT
 void
-GPUDestroyTexture(GPUTexture * __restrict texture);
+GPUDestroyTexture(GPUTexture *__restrict texture);
 
 GPU_EXPORT
 GPUResult
-GPUGetTextureInfo(GPUTexture      * __restrict texture,
-                  GPUTextureInfo  * __restrict outInfo);
+GPUGetTextureInfo(GPUTexture     *__restrict texture,
+                  GPUTextureInfo *__restrict outInfo);
 
 GPU_EXPORT
 GPUResult
-GPUCreateTextureView(GPUTexture                      * __restrict texture,
-                     const GPUTextureViewCreateInfo  * __restrict info,
-                     GPUTextureView                 ** __restrict outView);
+GPUCreateTextureView(GPUTexture                     *__restrict texture,
+                     const GPUTextureViewCreateInfo *__restrict info,
+                     GPUTextureView                **__restrict outView);
 
 GPU_EXPORT
 void
-GPUDestroyTextureView(GPUTextureView * __restrict view);
+GPUDestroyTextureView(GPUTextureView *__restrict view);
 
 GPU_EXPORT
 GPUResult
-GPUQueueWriteTexture(GPUQueue                     * __restrict queue,
-                     GPUTexture                   * __restrict texture,
-                     const GPUTextureWriteRegion  * __restrict region,
-                     const void                   * __restrict data,
-                     uint64_t                                  sizeBytes);
+GPUQueueWriteTexture(GPUQueue                    *__restrict queue,
+                     GPUTexture                  *__restrict texture,
+                     const GPUTextureWriteRegion *__restrict region,
+                     const void                  *__restrict data,
+                     uint64_t                                sizeBytes);
 
 #ifdef __cplusplus
 }

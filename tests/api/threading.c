@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 #include "../../src/api/device_internal.h"
 
@@ -61,13 +77,13 @@ gpu_startThreads(GPUThreadGate *start) {
 
 static bool
 gpu_threadingRound(GPUThreadContext *ctx) {
-  GPUBufferCreateInfo         bufferInfo = {0};
-  GPUTextureCreateInfo        textureInfo = {0};
-  GPUTextureViewCreateInfo    viewInfo = {0};
-  GPUSamplerCreateInfo        samplerInfo = {0};
+  GPUBufferCreateInfo         bufferInfo   = {0};
+  GPUTextureCreateInfo        textureInfo  = {0};
+  GPUTextureViewCreateInfo    viewInfo     = {0};
+  GPUSamplerCreateInfo        samplerInfo  = {0};
   GPUPipelineLayoutCreateInfo pipelineInfo = {0};
-  GPUBindGroupCreateInfo      groupInfo = {0};
-  GPUBindGroupEntry           groupEntry = {0};
+  GPUBindGroupCreateInfo      groupInfo    = {0};
+  GPUBindGroupEntry           groupEntry   = {0};
   GPUBindGroupLayout         *layouts[1];
   GPUBindGroup               *localGroup;
   GPUBindGroup               *sharedGroup;
@@ -93,8 +109,9 @@ gpu_threadingRound(GPUThreadContext *ctx) {
   bufferInfo.sizeBytes        = 256u;
   bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(ctx->device, &bufferInfo, &buffer) != GPU_OK ||
-      !buffer) {
+
+  if (GPUCreateBuffer(ctx->device, &bufferInfo, &buffer) != GPU_OK
+      || !buffer) {
     ctx->failure = "buffer";
     goto cleanup;
   }
@@ -111,8 +128,9 @@ gpu_threadingRound(GPUThreadContext *ctx) {
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_DST;
-  if (GPUCreateTexture(ctx->device, &textureInfo, &texture) != GPU_OK ||
-      !texture) {
+
+  if (GPUCreateTexture(ctx->device, &textureInfo, &texture) != GPU_OK
+      || !texture) {
     ctx->failure = "texture";
     goto cleanup;
   }
@@ -124,6 +142,7 @@ gpu_threadingRound(GPUThreadContext *ctx) {
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK || !view) {
     ctx->failure = "texture view";
     goto cleanup;
@@ -132,49 +151,54 @@ gpu_threadingRound(GPUThreadContext *ctx) {
   samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
   samplerInfo.chain.structSize = sizeof(samplerInfo);
   samplerInfo.label            = "thread-sampler";
+
   if (GPUCreateSampler(ctx->device,
                        &samplerInfo,
                        false,
-                       &sampler) != GPU_OK ||
-      !sampler) {
+                       &sampler) != GPU_OK
+      || !sampler) {
     ctx->failure = "sampler";
     goto cleanup;
   }
 
-  layouts[0]                        = ctx->layout;
+  layouts[0] = ctx->layout;
+
   pipelineInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipelineInfo.chain.structSize     = sizeof(pipelineInfo);
   pipelineInfo.label                = "thread-pipeline-layout";
   pipelineInfo.bindGroupLayoutCount = 1u;
   pipelineInfo.ppBindGroupLayouts   = layouts;
+
   if (GPUCreatePipelineLayout(ctx->device,
                               &pipelineInfo,
-                              &pipelineLayout) != GPU_OK ||
-      !pipelineLayout) {
+                              &pipelineLayout) != GPU_OK
+      || !pipelineLayout) {
     ctx->failure = "pipeline layout";
     goto cleanup;
   }
 
-  groupEntry.binding          = 0u;
-  groupEntry.bindingType      = GPU_BINDING_UNIFORM_BUFFER;
-  groupEntry.buffer.buffer    = buffer;
-  groupEntry.buffer.size      = 256u;
-  groupInfo.chain.sType       = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
-  groupInfo.chain.structSize  = sizeof(groupInfo);
-  groupInfo.label             = "thread-local-group";
-  groupInfo.layout            = ctx->layout;
-  groupInfo.entryCount        = 1u;
-  groupInfo.pEntries          = &groupEntry;
-  if (GPUCreateBindGroup(ctx->device, &groupInfo, &localGroup) != GPU_OK ||
-      !localGroup) {
+  groupEntry.binding         = 0u;
+  groupEntry.bindingType     = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntry.buffer.buffer   = buffer;
+  groupEntry.buffer.size     = 256u;
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.label            = "thread-local-group";
+  groupInfo.layout           = ctx->layout;
+  groupInfo.entryCount       = 1u;
+  groupInfo.pEntries         = &groupEntry;
+
+  if (GPUCreateBindGroup(ctx->device, &groupInfo, &localGroup) != GPU_OK
+      || !localGroup) {
     ctx->failure = "local bind group";
     goto cleanup;
   }
 
   groupEntry.buffer.buffer = ctx->sharedBuffer;
   groupInfo.label          = "thread-shared-group";
-  if (GPUCreateBindGroup(ctx->device, &groupInfo, &sharedGroup) != GPU_OK ||
-      !sharedGroup) {
+
+  if (GPUCreateBindGroup(ctx->device, &groupInfo, &sharedGroup) != GPU_OK
+      || !sharedGroup) {
     ctx->failure = "shared bind group";
     goto cleanup;
   }
@@ -197,6 +221,7 @@ gpu_runThreadingTest(GPUThreadContext *ctx) {
   GPUShaderReflection reflection = {0};
   GPUShaderLibrary   *library;
   GPUResult           result;
+  uint32_t            i;
 
   while (!gpu_threadStarted(ctx->start)) {
 #if defined(_WIN32) || defined(WIN32)
@@ -207,10 +232,11 @@ gpu_runThreadingTest(GPUThreadContext *ctx) {
   }
 
   library = NULL;
-  result = GPUCreateShaderLibraryFromUSL(ctx->device,
-                                         ctx->artifactData,
-                                         ctx->artifactSize,
-                                         &library);
+  result  = GPUCreateShaderLibraryFromUSL(ctx->device,
+                                          ctx->artifactData,
+                                          ctx->artifactSize,
+                                          &library);
+
   if (result != GPU_OK || !library) {
     ctx->failure       = "shader library";
     ctx->failureResult = result;
@@ -219,7 +245,9 @@ gpu_runThreadingTest(GPUThreadContext *ctx) {
     ctx->ok = false;
     return;
   }
+
   result = GPUGetShaderReflection(library, &reflection);
+
   if (result != GPU_OK) {
     ctx->failure       = "shader reflection";
     ctx->failureResult = result;
@@ -228,16 +256,20 @@ gpu_runThreadingTest(GPUThreadContext *ctx) {
     ctx->ok = false;
     return;
   }
+
   GPUFreeShaderReflection(&reflection);
 
   ctx->ok = true;
-  for (uint32_t i = 0u; i < GPU_THREADING_TEST_ROUND_COUNT; i++) {
+
+  for (i = 0u; i < GPU_THREADING_TEST_ROUND_COUNT; i++) {
     if (!gpu_threadingRound(ctx)) {
       ctx->ok = false;
       break;
     }
+
     gpuDeviceCacheCounterAdd(&ctx->device->cacheStats.pipelineCompiles, 1u);
   }
+
   GPUDestroyShaderLibrary(library);
 }
 
@@ -248,7 +280,7 @@ gpu_threadingMain(LPVOID context) {
   return 0u;
 }
 #else
-static void *
+static void*
 gpu_threadingMain(void *context) {
   gpu_runThreadingTest(context);
   return NULL;
@@ -260,6 +292,7 @@ gpu_startThread(GPUThreadHandle  *thread,
                 GPUThreadContext *ctx) {
 #if defined(_WIN32) || defined(WIN32)
   *thread = CreateThread(NULL, 0u, gpu_threadingMain, ctx, 0u, NULL);
+
   return *thread != NULL;
 #else
 #  if GPU_THREADING_TEST_ASAN
@@ -267,15 +300,19 @@ gpu_startThread(GPUThreadHandle  *thread,
   int            result;
 
   /* ASan expands USL codegen frames beyond macOS' 512 KiB pthread default. */
+
   if (pthread_attr_init(&attr) != 0) {
     return false;
   }
+
   if (pthread_attr_setstacksize(&attr, 8u * 1024u * 1024u) != 0) {
     pthread_attr_destroy(&attr);
     return false;
   }
+
   result = pthread_create(thread, &attr, gpu_threadingMain, ctx);
   pthread_attr_destroy(&attr);
+
   return result == 0;
 #  else
   return pthread_create(thread, NULL, gpu_threadingMain, ctx) == 0;
@@ -295,9 +332,9 @@ gpu_joinThread(GPUThreadHandle thread) {
 
 int
 gpu_test_threading(GPUDevice *device, const char *artifactPath) {
-  GPUBindGroupLayoutCreateInfo layoutInfo = {0};
+  GPUBindGroupLayoutCreateInfo layoutInfo  = {0};
   GPUBindGroupLayoutEntry      layoutEntry = {0};
-  GPUBufferCreateInfo          bufferInfo = {0};
+  GPUBufferCreateInfo          bufferInfo  = {0};
   GPUThreadContext             contexts[GPU_THREADING_TEST_THREAD_COUNT];
   GPUThreadHandle              threads[GPU_THREADING_TEST_THREAD_COUNT];
   GPUCacheStats                stats;
@@ -308,6 +345,9 @@ gpu_test_threading(GPUDevice *device, const char *artifactPath) {
   uint64_t                     artifactSize;
   uint32_t                     threadCount;
   bool                         ok;
+  uint32_t                     createIndex;
+  uint32_t                     joinIndex;
+  uint32_t                     resultIndex;
 
   layout       = NULL;
   sharedBuffer = NULL;
@@ -317,8 +357,7 @@ gpu_test_threading(GPUDevice *device, const char *artifactPath) {
   threadCount  = 0u;
   ok           = false;
 
-  artifactData = gpu_test_read_file(artifactPath, &artifactSize);
-  if (!artifactData || artifactSize == 0u) {
+  if (!(artifactData = gpu_test_read_file(artifactPath, &artifactSize)) || artifactSize == 0u) {
     goto cleanup;
   }
 
@@ -327,8 +366,9 @@ gpu_test_threading(GPUDevice *device, const char *artifactPath) {
   bufferInfo.label            = "thread-shared-buffer";
   bufferInfo.sizeBytes        = 256u;
   bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM;
-  if (GPUCreateBuffer(device, &bufferInfo, &sharedBuffer) != GPU_OK ||
-      !sharedBuffer) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &sharedBuffer) != GPU_OK
+      || !sharedBuffer) {
     goto cleanup;
   }
 
@@ -341,47 +381,54 @@ gpu_test_threading(GPUDevice *device, const char *artifactPath) {
   layoutInfo.label            = "thread-layout";
   layoutInfo.entryCount       = 1u;
   layoutInfo.pEntries         = &layoutEntry;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK ||
-      !layout) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK
+      || !layout) {
     goto cleanup;
   }
 
   GPUResetStats(device);
-  for (uint32_t i = 0u; i < GPU_THREADING_TEST_THREAD_COUNT; i++) {
-    contexts[i].artifactData = artifactData;
-    contexts[i].failure      = NULL;
-    contexts[i].device       = device;
-    contexts[i].layout       = layout;
-    contexts[i].sharedBuffer = sharedBuffer;
-    contexts[i].start        = &start;
-    contexts[i].artifactSize = artifactSize;
-    contexts[i].failureResult = GPU_OK;
-    contexts[i].ok           = false;
-    if (!gpu_startThread(&threads[i], &contexts[i])) {
+
+  for (createIndex = 0u; createIndex < GPU_THREADING_TEST_THREAD_COUNT; createIndex++) {
+    contexts[createIndex].artifactData  = artifactData;
+    contexts[createIndex].failure       = NULL;
+    contexts[createIndex].device        = device;
+    contexts[createIndex].layout        = layout;
+    contexts[createIndex].sharedBuffer  = sharedBuffer;
+    contexts[createIndex].start         = &start;
+    contexts[createIndex].artifactSize  = artifactSize;
+    contexts[createIndex].failureResult = GPU_OK;
+    contexts[createIndex].ok            = false;
+
+    if (!gpu_startThread(&threads[createIndex], &contexts[createIndex])) {
       break;
     }
+
     threadCount++;
   }
 
   gpu_startThreads(&start);
-  for (uint32_t i = 0u; i < threadCount; i++) {
-    gpu_joinThread(threads[i]);
+
+  for (joinIndex = 0u; joinIndex < threadCount; joinIndex++) {
+    gpu_joinThread(threads[joinIndex]);
   }
 
   ok = threadCount == GPU_THREADING_TEST_THREAD_COUNT;
-  for (uint32_t i = 0u; i < threadCount; i++) {
-    ok = contexts[i].ok && ok;
-    if (!contexts[i].ok && contexts[i].failure) {
+
+  for (resultIndex = 0u; resultIndex < threadCount; resultIndex++) {
+    ok = contexts[resultIndex].ok && ok;
+
+    if (!contexts[resultIndex].ok && contexts[resultIndex].failure) {
       fprintf(stderr,
               "thread %u failed at %s (%d)\n",
-              i,
-              contexts[i].failure,
-              (int)contexts[i].failureResult);
+              resultIndex,
+              contexts[resultIndex].failure,
+              (int)contexts[resultIndex].failureResult);
     }
   }
-  if (GPUGetCacheStats(device, &stats) != GPU_OK ||
-      stats.pipelineCompiles !=
-        GPU_THREADING_TEST_THREAD_COUNT * GPU_THREADING_TEST_ROUND_COUNT) {
+
+  if (GPUGetCacheStats(device, &stats) != GPU_OK
+      || stats.pipelineCompiles != GPU_THREADING_TEST_THREAD_COUNT * GPU_THREADING_TEST_ROUND_COUNT) {
     ok = false;
   }
 

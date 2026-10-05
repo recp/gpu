@@ -23,24 +23,28 @@ bool
 gpuSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   GPUApi *api;
 
-  if (!cmdb || cmdb->_submitted || !frame || !frame->drawable ||
-      gpuCommandBufferDevice(cmdb) != frame->device) {
+  if (!cmdb || cmdb->_submitted || !frame || !frame->drawable
+      || gpuCommandBufferDevice(cmdb) != frame->device) {
     return false;
   }
 
   if (!(api = gpuCommandBufferApi(cmdb)))
     return false;
+
   if (!api->cmdbuf.presentDrawable)
     return false;
 
   if (!api->cmdbuf.presentDrawable(cmdb, frame)) {
     return false;
   }
+
   cmdb->_recordsGPUFrameTime = frame->device->runtimeConfig.enableStats;
+
   if (frame->transientFrameActive) {
     cmdb->_transientFrameIndex  = frame->transientFrameIndex;
     cmdb->_transientFrameTagged = true;
   }
+
   return true;
 }
 

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/linux.h"
 #include "../../common/sample_orbit.h"
 
@@ -7,9 +23,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <wayland-client.h>
-
-extern int
-gpu_linux_sample_start(void);
 
 #ifndef GPU_LINUX_SAMPLE_NAME
 #  define GPU_LINUX_SAMPLE_NAME "GPU + USL Sample"
@@ -31,20 +44,132 @@ typedef struct GPUWaylandHost {
   bool                   running;
 } GPUWaylandHost;
 
+extern int
+gpu_linux_sample_start(void);
+
 static void
-decor_error(struct libdecor *decor,
-            enum libdecor_error error,
-            const char       *message) {
+decor_error(struct libdecor     *decor,
+            enum libdecor_error  error,
+            const char          *message);
+static void
+pointer_enter(void              *data,
+              struct wl_pointer *pointer,
+              uint32_t           serial,
+              struct wl_surface *surface,
+              wl_fixed_t         x,
+              wl_fixed_t         y);
+static void
+pointer_leave(void              *data,
+              struct wl_pointer *pointer,
+              uint32_t           serial,
+              struct wl_surface *surface);
+static void
+pointer_motion(void              *data,
+               struct wl_pointer *pointer,
+               uint32_t           time,
+               wl_fixed_t         x,
+               wl_fixed_t         y);
+static void
+pointer_button(void              *data,
+               struct wl_pointer *pointer,
+               uint32_t           serial,
+               uint32_t           time,
+               uint32_t           button,
+               uint32_t           state);
+static void
+pointer_axis(void              *data,
+             struct wl_pointer *pointer,
+             uint32_t           time,
+             uint32_t           axis,
+             wl_fixed_t         value);
+static void
+pointer_frame(void *data, struct wl_pointer *pointer);
+static void
+pointer_axis_source(void              *data,
+                    struct wl_pointer *pointer,
+                    uint32_t           source);
+static void
+pointer_axis_stop(void              *data,
+                  struct wl_pointer *pointer,
+                  uint32_t           time,
+                  uint32_t           axis);
+static void
+pointer_axis_discrete(void              *data,
+                      struct wl_pointer *pointer,
+                      uint32_t           axis,
+                      int32_t            discrete);
+static void
+seat_capabilities(void           *data,
+                  struct wl_seat *seat,
+                  uint32_t        capabilities);
+static void
+seat_name(void *data, struct wl_seat *seat, const char *name);
+static void
+registry_global(void               *data,
+                struct wl_registry *registry,
+                uint32_t            name,
+                const char         *interface,
+                uint32_t            version);
+static void
+registry_remove(void               *data,
+                struct wl_registry *registry,
+                uint32_t            name);
+static void
+frame_configure(struct libdecor_frame         *frame,
+                struct libdecor_configuration *configuration,
+                void                          *userData);
+static void
+frame_close(struct libdecor_frame *frame, void *userData);
+static void
+frame_commit(struct libdecor_frame *frame, void *userData);
+static void
+frame_dismiss_popup(struct libdecor_frame *frame,
+                    const char            *seatName,
+                    void                  *userData);
+
+static struct libdecor_interface decorInterface = {
+  .error = decor_error
+};
+
+static const struct wl_pointer_listener pointerListener = {
+  .enter         = pointer_enter,
+  .leave         = pointer_leave,
+  .motion        = pointer_motion,
+  .button        = pointer_button,
+  .axis          = pointer_axis,
+  .frame         = pointer_frame,
+  .axis_source   = pointer_axis_source,
+  .axis_stop     = pointer_axis_stop,
+  .axis_discrete = pointer_axis_discrete
+};
+
+static const struct wl_seat_listener seatListener = {
+  .capabilities = seat_capabilities,
+  .name         = seat_name
+};
+
+static const struct wl_registry_listener registryListener = {
+  .global        = registry_global,
+  .global_remove = registry_remove
+};
+
+static struct libdecor_frame_interface frameInterface = {
+  .configure     = frame_configure,
+  .close         = frame_close,
+  .commit        = frame_commit,
+  .dismiss_popup = frame_dismiss_popup
+};
+
+static void
+decor_error(struct libdecor     *decor,
+            enum libdecor_error  error,
+            const char          *message) {
   (void)decor;
   fprintf(stderr,
           "GPU: Wayland decoration error %d: %s\n",
           error,
           message ? message : "unknown error");
 }
-
-static struct libdecor_interface decorInterface = {
-  .error = decor_error
-};
 
 static void
 pointer_enter(void              *data,
@@ -88,6 +213,7 @@ pointer_motion(void              *data,
   host           = data;
   host->pointerX = (float)wl_fixed_to_double(x);
   host->pointerY = (float)wl_fixed_to_double(y);
+
   sample_orbit_pointer_move(host->pointerX, host->pointerY);
 }
 
@@ -104,9 +230,11 @@ pointer_button(void              *data,
   (void)serial;
   (void)time;
   host = data;
+
   if (button != BTN_LEFT) {
     return;
   }
+
   if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
     sample_orbit_pointer_begin(host->pointerX, host->pointerY);
   } else if (state == WL_POINTER_BUTTON_STATE_RELEASED) {
@@ -123,6 +251,7 @@ pointer_axis(void              *data,
   (void)data;
   (void)pointer;
   (void)time;
+
   if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) {
     sample_orbit_zoom((float)-wl_fixed_to_double(value) * 0.04f);
   }
@@ -165,18 +294,6 @@ pointer_axis_discrete(void              *data,
   (void)discrete;
 }
 
-static const struct wl_pointer_listener pointerListener = {
-  .enter         = pointer_enter,
-  .leave         = pointer_leave,
-  .motion        = pointer_motion,
-  .button        = pointer_button,
-  .axis          = pointer_axis,
-  .frame         = pointer_frame,
-  .axis_source   = pointer_axis_source,
-  .axis_stop     = pointer_axis_stop,
-  .axis_discrete = pointer_axis_discrete
-};
-
 static void
 seat_capabilities(void           *data,
                   struct wl_seat *seat,
@@ -184,11 +301,12 @@ seat_capabilities(void           *data,
   GPUWaylandHost *host;
 
   host = data;
+
   if ((capabilities & WL_SEAT_CAPABILITY_POINTER) != 0u && !host->pointer) {
     host->pointer = wl_seat_get_pointer(seat);
     wl_pointer_add_listener(host->pointer, &pointerListener, host);
-  } else if ((capabilities & WL_SEAT_CAPABILITY_POINTER) == 0u &&
-             host->pointer) {
+  } else if ((capabilities & WL_SEAT_CAPABILITY_POINTER) == 0u
+             && host->pointer) {
     wl_pointer_destroy(host->pointer);
     host->pointer = NULL;
   }
@@ -201,11 +319,6 @@ seat_name(void *data, struct wl_seat *seat, const char *name) {
   (void)name;
 }
 
-static const struct wl_seat_listener seatListener = {
-  .capabilities = seat_capabilities,
-  .name         = seat_name
-};
-
 static void
 registry_global(void               *data,
                 struct wl_registry *registry,
@@ -215,6 +328,7 @@ registry_global(void               *data,
   GPUWaylandHost *host;
 
   host = data;
+
   if (strcmp(interface, wl_compositor_interface.name) == 0) {
     host->compositor = wl_registry_bind(registry,
                                         name,
@@ -238,18 +352,13 @@ registry_remove(void               *data,
   (void)name;
 }
 
-static const struct wl_registry_listener registryListener = {
-  .global        = registry_global,
-  .global_remove = registry_remove
-};
-
 static void
 frame_configure(struct libdecor_frame         *frame,
                 struct libdecor_configuration *configuration,
                 void                          *userData) {
-  GPUWaylandHost *host;
+  GPUWaylandHost        *host;
   struct libdecor_state *state;
-  int width, height;
+  int                    width, height;
 
   host   = userData;
   width  = (int)(host->window.width ? host->window.width : 1120u);
@@ -263,7 +372,7 @@ frame_configure(struct libdecor_frame         *frame,
   libdecor_state_free(state);
   host->window.width  = (uint32_t)width;
   host->window.height = (uint32_t)height;
-  host->configured = true;
+  host->configured    = true;
 }
 
 static void
@@ -293,36 +402,36 @@ frame_dismiss_popup(struct libdecor_frame *frame,
   (void)userData;
 }
 
-static struct libdecor_frame_interface frameInterface = {
-  .configure     = frame_configure,
-  .close         = frame_close,
-  .commit        = frame_commit,
-  .dismiss_popup = frame_dismiss_popup
-};
-
 static void
 destroy_host(GPUWaylandHost *host) {
   if (host->pointer) {
     wl_pointer_destroy(host->pointer);
   }
+
   if (host->seat) {
     wl_seat_destroy(host->seat);
   }
+
   if (host->frame) {
     libdecor_frame_unref(host->frame);
   }
+
   if (host->surface) {
     wl_surface_destroy(host->surface);
   }
+
   if (host->decor) {
     libdecor_unref(host->decor);
   }
+
   if (host->compositor) {
     wl_compositor_destroy(host->compositor);
   }
+
   if (host->registry) {
     wl_registry_destroy(host->registry);
   }
+
   if (host->display) {
     wl_display_disconnect(host->display);
   }
@@ -330,13 +439,13 @@ destroy_host(GPUWaylandHost *host) {
 
 int
 main(void) {
-  GPUWaylandHost host;
+  GPUWaylandHost  host;
   GPULinuxSample *sample;
   int             result;
 
   memset(&host, 0, sizeof(host));
-  host.display = wl_display_connect(NULL);
-  if (!host.display) {
+
+  if (!(host.display = wl_display_connect(NULL))) {
     fprintf(stderr, "GPU: failed to connect to the Wayland compositor\n");
     return 1;
   }
@@ -344,6 +453,7 @@ main(void) {
   host.registry = wl_display_get_registry(host.display);
   wl_registry_add_listener(host.registry, &registryListener, &host);
   wl_display_roundtrip(host.display);
+
   if (!host.compositor) {
     destroy_host(&host);
     return 1;
@@ -351,23 +461,27 @@ main(void) {
 
   host.decor   = libdecor_new(host.display, &decorInterface);
   host.surface = wl_compositor_create_surface(host.compositor);
+
   if (!host.decor || !host.surface) {
     destroy_host(&host);
     return 1;
   }
-  host.frame = libdecor_decorate(host.decor,
-                                 host.surface,
-                                 &frameInterface,
-                                 &host);
-  if (!host.frame) {
+
+  if (!(host.frame = libdecor_decorate(host.decor,
+                                       host.surface,
+                                       &frameInterface,
+                                       &host))) {
     destroy_host(&host);
     return 1;
   }
+
   libdecor_frame_set_title(host.frame, GPU_LINUX_SAMPLE_NAME);
   libdecor_frame_set_app_id(host.frame, "gpu.samples");
   libdecor_frame_map(host.frame);
+
   while (!host.configured && libdecor_dispatch(host.decor, -1) >= 0) {
   }
+
   if (!host.configured) {
     destroy_host(&host);
     return 1;
@@ -381,16 +495,17 @@ main(void) {
   host.window.system  = GPU_LINUX_WINDOW_WAYLAND;
   host.running        = true;
 
-  sample = GPUSampleLinuxCreate(&host.window,
-                                GPU_LINUX_SAMPLE_NAME,
-                                gpu_linux_sample_start);
-  if (!sample || GPUSampleLinuxFailed(sample)) {
+  if (!(sample = GPUSampleLinuxCreate(&host.window,
+                                      GPU_LINUX_SAMPLE_NAME,
+                                      gpu_linux_sample_start))
+      || GPUSampleLinuxFailed(sample)) {
     fprintf(stderr, "%s\n", GPUSampleLinuxStatus(sample));
     destroy_host(&host);
     return 1;
   }
 
   result = 0;
+
   while (host.running) {
     if (!GPUSampleLinuxRender(sample)) {
       if (GPUSampleLinuxFailed(sample)) {
@@ -399,6 +514,7 @@ main(void) {
       }
       break;
     }
+
     if (libdecor_dispatch(host.decor, 0) < 0) {
       fprintf(stderr, "GPU: Wayland event dispatch failed\n");
       result = 1;

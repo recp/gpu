@@ -34,50 +34,34 @@ enum {
   GPU_ENCODER_MAX_BIND_GROUPS = 4u
 };
 
-typedef bool (*GPUBindRenderGroupFn)(
-  struct GPURenderPassEncoder *pass,
-  struct GPUPipelineLayout    *pipelineLayout,
-  uint32_t                     groupIndex,
-  struct GPUBindGroup         *group,
-  uint32_t                     dynamicOffsetCount,
-  const uint32_t              *dynamicOffsets
-);
+typedef bool (*GPUBindRenderGroupFn)(struct GPURenderPassEncoder *pass,
+                                     struct GPUPipelineLayout    *pipelineLayout,
+                                     uint32_t                     groupIndex,
+                                     struct GPUBindGroup         *group,
+                                     uint32_t                     dynamicOffsetCount,
+                                     const uint32_t              *dynamicOffsets);
 
-/* Covers the portable v1 dynamic-buffer limits without heap storage. */
+/* covers the portable v1 dynamic-buffer limits without heap storage. */
 enum {
   GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY = 12u
 };
 
-typedef uint32_t GPUDynamicOffsetShadow[
-  GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY
-];
+typedef uint32_t GPUDynamicOffsetShadow[GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY];
 
 typedef struct GPUApiDescriptor {
-  GPUResult
-  (*createBindGroupLayout)(struct GPUDevice          *device,
-                           struct GPUBindGroupLayout *layout);
+  GPUResult (*createBindGroupLayout)(struct GPUDevice *device, struct GPUBindGroupLayout *layout);
 
-  void
-  (*destroyBindGroupLayout)(struct GPUBindGroupLayout *layout);
+  void (*destroyBindGroupLayout)(struct GPUBindGroupLayout *layout);
 
-  GPUResult
-  (*createPipelineLayout)(struct GPUDevice         *device,
-                          struct GPUPipelineLayout *layout);
+  GPUResult (*createPipelineLayout)(struct GPUDevice *device, struct GPUPipelineLayout *layout);
 
-  void
-  (*destroyPipelineLayout)(struct GPUPipelineLayout *layout);
+  void (*destroyPipelineLayout)(struct GPUPipelineLayout *layout);
 
-  GPUResult
-  (*createBindGroup)(struct GPUDevice    *device,
-                     struct GPUBindGroup *group);
+  GPUResult (*createBindGroup)(struct GPUDevice *device, struct GPUBindGroup *group);
 
-  bool
-  (*updateBindGroup)(struct GPUBindGroup            *group,
-                     uint32_t                        entryCount,
-                     const struct GPUBindGroupEntry *entries);
+  bool (*updateBindGroup)(struct GPUBindGroup *group, uint32_t entryCount, const struct GPUBindGroupEntry *entries);
 
-  void
-  (*destroyBindGroup)(struct GPUBindGroup *group);
+  void (*destroyBindGroup)(struct GPUBindGroup *group);
 
   GPUBindRenderGroupFn bindRenderGroup;
 

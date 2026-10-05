@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "asset_io.h"
 
 #include <emscripten/emscripten.h>
@@ -17,75 +33,6 @@ typedef struct SampleImageRequest {
   SampleImageCallback callback;
   void               *userData;
 } SampleImageRequest;
-
-static void
-sample_fetch_success(emscripten_fetch_t *fetch) {
-  SampleFetchRequest *request;
-  void               *bytes;
-  uint64_t            byteCount;
-
-  request   = fetch->userData;
-  byteCount = fetch->numBytes > 0 ? (uint64_t)fetch->numBytes : 0u;
-  bytes     = byteCount > 0u ? malloc((size_t)byteCount) : NULL;
-  if (bytes) {
-    memcpy(bytes, fetch->data, (size_t)byteCount);
-  }
-  emscripten_fetch_close(fetch);
-
-  if (!bytes) {
-    request->callback(NULL,
-                      0u,
-                      "sample: failed to retain downloaded bytes",
-                      request->userData);
-  } else {
-    request->callback(bytes, byteCount, NULL, request->userData);
-  }
-  free(request);
-}
-
-static void
-sample_fetch_error(emscripten_fetch_t *fetch) {
-  SampleFetchRequest *request;
-
-  request = fetch->userData;
-  emscripten_fetch_close(fetch);
-  request->callback(NULL,
-                    0u,
-                    "sample: download failed",
-                    request->userData);
-  free(request);
-}
-
-int
-sample_fetch_url(const char         *url,
-                 SampleFetchCallback callback,
-                 void               *userData) {
-  emscripten_fetch_attr_t attributes;
-  SampleFetchRequest     *request;
-
-  if (!url || !callback) {
-    return 0;
-  }
-
-  request = malloc(sizeof(*request));
-  if (!request) {
-    return 0;
-  }
-  request->callback = callback;
-  request->userData = userData;
-
-  emscripten_fetch_attr_init(&attributes);
-  strcpy(attributes.requestMethod, "GET");
-  attributes.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
-  attributes.onsuccess  = sample_fetch_success;
-  attributes.onerror    = sample_fetch_error;
-  attributes.userData   = request;
-  if (!emscripten_fetch(&attributes, url)) {
-    free(request);
-    return 0;
-  }
-  return 1;
-}
 
 EM_JS(void,
       sample_decode_image_js,
@@ -143,6 +90,80 @@ EM_JS(void,
   });
 });
 
+static void
+sample_fetch_success(emscripten_fetch_t *fetch) {
+  SampleFetchRequest *request;
+  void              *bytes;
+  uint64_t           byteCount;
+
+  request   = fetch->userData;
+  byteCount = fetch->numBytes > 0 ? (uint64_t)fetch->numBytes : 0u;
+  bytes     = byteCount > 0u ? malloc((size_t)byteCount) : NULL;
+
+  if (bytes) {
+    memcpy(bytes, fetch->data, (size_t)byteCount);
+  }
+
+  emscripten_fetch_close(fetch);
+
+  if (!bytes) {
+    request->callback(NULL,
+                      0u,
+                      "sample: failed to retain downloaded bytes",
+                      request->userData);
+  } else {
+    request->callback(bytes, byteCount, NULL, request->userData);
+  }
+
+  free(request);
+}
+
+static void
+sample_fetch_error(emscripten_fetch_t *fetch) {
+  SampleFetchRequest *request;
+
+  request = fetch->userData;
+  emscripten_fetch_close(fetch);
+  request->callback(NULL,
+                    0u,
+                    "sample: download failed",
+                    request->userData);
+  free(request);
+}
+
+int
+sample_fetch_url(const char         *url,
+                 SampleFetchCallback callback,
+                 void               *userData) {
+  emscripten_fetch_attr_t attributes;
+  SampleFetchRequest    *request;
+
+  if (!url || !callback) {
+    return 0;
+  }
+
+  if (!(request = malloc(sizeof(*request)))) {
+    return 0;
+  }
+
+  request->callback = callback;
+  request->userData = userData;
+
+  emscripten_fetch_attr_init(&attributes);
+  strcpy(attributes.requestMethod, "GET");
+  attributes.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
+  attributes.onsuccess  = sample_fetch_success;
+  attributes.onerror    = sample_fetch_error;
+  attributes.userData   = request;
+
+  if (!emscripten_fetch(&attributes, url)) {
+    free(request);
+    return 0;
+  }
+
+  return 1;
+}
+
 EMSCRIPTEN_KEEPALIVE
 void
 sample_image_ready(uintptr_t requestValue,
@@ -152,6 +173,7 @@ sample_image_ready(uintptr_t requestValue,
   SampleImageRequest *request;
 
   request = (SampleImageRequest *)requestValue;
+
   if (!request) {
     free(pixels);
     return;
@@ -160,9 +182,7 @@ sample_image_ready(uintptr_t requestValue,
   request->callback(pixels,
                     width,
                     height,
-                    pixels && width > 0u && height > 0u
-                      ? NULL
-                      : "sample: image decode failed",
+                    pixels && width > 0u && height > 0u ? NULL : "sample: image decode failed",
                     request->userData);
   free(request);
 }
@@ -178,15 +198,17 @@ sample_decode_image(const void         *bytes,
     return 0;
   }
 
-  request = malloc(sizeof(*request));
-  if (!request) {
+  if (!(request = malloc(sizeof(*request)))) {
     return 0;
   }
+
   request->callback = callback;
   request->userData = userData;
+
   sample_decode_image_js((uintptr_t)request,
-                         bytes,
-                         (uint32_t)byteCount);
+                        bytes,
+                        (uint32_t)byteCount);
+
   return 1;
 }
 
@@ -199,5 +221,6 @@ sample_temporary_path(const char *name, char *path, size_t capacity) {
   }
 
   length = snprintf(path, capacity, "/tmp/%s", name);
+
   return length > 0 && (size_t)length < capacity;
 }

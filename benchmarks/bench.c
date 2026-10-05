@@ -44,22 +44,23 @@ bench_compare(const void *left, const void *right) {
 
   a = *(const double *)left;
   b = *(const double *)right;
+
   return (a > b) - (a < b);
 }
 
-const char *
+const char*
 bench_backendName(GPUBackend backend) {
   switch (backend) {
-    case GPU_BACKEND_METAL:
-      return "metal";
-    case GPU_BACKEND_VULKAN:
-      return "vulkan";
-    case GPU_BACKEND_DX12:
-      return "dx12";
-    case GPU_BACKEND_WEBGPU:
-      return "webgpu";
-    default:
-      return "default";
+  case GPU_BACKEND_METAL:
+    return "metal";
+  case GPU_BACKEND_VULKAN:
+    return "vulkan";
+  case GPU_BACKEND_DX12:
+    return "dx12";
+  case GPU_BACKEND_WEBGPU:
+    return "webgpu";
+  default:
+    return "default";
   }
 }
 
@@ -68,6 +69,7 @@ bench_parseBackend(const char *value, GPUBackend *outBackend) {
   if (!value || !outBackend) {
     return false;
   }
+
   if (strcmp(value, "default") == 0) {
     *outBackend = GPU_BACKEND_DEFAULT;
   } else if (strcmp(value, "metal") == 0) {
@@ -81,24 +83,28 @@ bench_parseBackend(const char *value, GPUBackend *outBackend) {
   } else {
     return false;
   }
+
   return true;
 }
 
 bool
 bench_parseU32(const char *value, uint32_t minimum, uint32_t *outValue) {
-  unsigned long parsed;
   char         *end;
+  unsigned long parsed;
 
   if (!value || !outValue) {
     return false;
   }
+
   errno  = 0;
   parsed = strtoul(value, &end, 10);
-  if (errno != 0 || end == value || *end != '\0' ||
-      parsed < minimum || parsed > UINT32_MAX) {
+
+  if (errno != 0 || end == value || *end != '\0' || parsed < minimum || parsed > UINT32_MAX) {
     return false;
   }
+
   *outValue = (uint32_t)parsed;
+
   return true;
 }
 
@@ -110,6 +116,7 @@ bench_now(void) {
 
   QueryPerformanceCounter(&counter);
   QueryPerformanceFrequency(&frequency);
+
   return (double)counter.QuadPart / (double)frequency.QuadPart;
 #else
   struct timespec time;
@@ -119,6 +126,7 @@ bench_now(void) {
 #  else
   clock_gettime(CLOCK_MONOTONIC, &time);
 #  endif
+
   return (double)time.tv_sec + (double)time.tv_nsec * 1e-9;
 #endif
 }
@@ -133,96 +141,110 @@ bench_percentile(double *values, size_t count, double percentile) {
 
   qsort(values, count, sizeof(*values), bench_compare);
   index = (size_t)(percentile * (double)(count - 1u) + 0.5);
+
   return values[index];
 }
 
 bool
 bench_processMemory(BenchProcessMemory *outMemory) {
+#if defined(_WIN32) || defined(WIN32)
+  PROCESS_MEMORY_COUNTERS counters;
+#elif defined(__APPLE__)
+  mach_task_basic_info_data_t info;
+  struct rusage               usage;
+  mach_msg_type_number_t      count;
+#elif defined(__linux__)
+  struct rusage usage;
+  FILE         *statm;
+  unsigned long totalPages;
+  long          residentPages;
+  long          pageSize;
+#endif
+
   if (!outMemory) {
     return false;
   }
-  memset(outMemory, 0, sizeof(*outMemory));
-#if defined(_WIN32) || defined(WIN32)
-  PROCESS_MEMORY_COUNTERS counters;
 
+  memset(outMemory, 0, sizeof(*outMemory));
+
+#if defined(_WIN32) || defined(WIN32)
   memset(&counters, 0, sizeof(counters));
   counters.cb = sizeof(counters);
+
   if (!K32GetProcessMemoryInfo(GetCurrentProcess(),
                                &counters,
                                sizeof(counters))) {
     return false;
   }
+
   outMemory->residentBytes     = (uint64_t)counters.WorkingSetSize;
   outMemory->peakResidentBytes = (uint64_t)counters.PeakWorkingSetSize;
+
   return true;
 #elif defined(__APPLE__)
-  mach_task_basic_info_data_t info;
-  mach_msg_type_number_t      count;
-  struct rusage               usage;
-
   count = MACH_TASK_BASIC_INFO_COUNT;
+
   if (task_info(mach_task_self(),
                 MACH_TASK_BASIC_INFO,
                 (task_info_t)&info,
-                &count) != KERN_SUCCESS ||
-      getrusage(RUSAGE_SELF, &usage) != 0) {
+                &count) != KERN_SUCCESS
+      || getrusage(RUSAGE_SELF, &usage) != 0) {
     return false;
   }
+
   outMemory->residentBytes     = (uint64_t)info.resident_size;
   outMemory->peakResidentBytes = (uint64_t)usage.ru_maxrss;
+
   return true;
 #elif defined(__linux__)
-  struct rusage usage;
-  unsigned long totalPages;
-  long          residentPages;
-  long          pageSize;
-  FILE         *statm;
-
-  statm = fopen("/proc/self/statm", "r");
-  if (!statm || fscanf(statm, "%lu %ld", &totalPages, &residentPages) != 2) {
+  if (!(statm = fopen("/proc/self/statm", "r"))
+      || fscanf(statm, "%lu %ld", &totalPages, &residentPages) != 2) {
     if (statm) {
       fclose(statm);
     }
     return false;
   }
+
   fclose(statm);
   pageSize = sysconf(_SC_PAGESIZE);
-  if (residentPages < 0 || pageSize <= 0 ||
-      getrusage(RUSAGE_SELF, &usage) != 0) {
+
+  if (residentPages < 0 || pageSize <= 0 || getrusage(RUSAGE_SELF, &usage) != 0) {
     return false;
   }
-  outMemory->residentBytes = (uint64_t)residentPages * (uint64_t)pageSize;
+
+  outMemory->residentBytes     = (uint64_t)residentPages * (uint64_t)pageSize;
   outMemory->peakResidentBytes = (uint64_t)usage.ru_maxrss * 1024u;
+
   return true;
 #else
   return false;
 #endif
 }
 
-void *
+void*
 bench_read(const char *path, uint64_t *outSize) {
   unsigned char *bytes;
-  long           length;
   FILE          *file;
+  long           length;
 
   if (!path || !outSize) {
     return NULL;
   }
 
   *outSize = 0u;
-  file     = fopen(path, "rb");
-  if (!file) {
+
+  if (!(file = fopen(path, "rb"))) {
     return NULL;
   }
-  if (fseek(file, 0, SEEK_END) != 0 ||
-      (length = ftell(file)) <= 0 ||
-      fseek(file, 0, SEEK_SET) != 0) {
+
+  if (fseek(file, 0, SEEK_END) != 0
+      || (length = ftell(file)) <= 0
+      || fseek(file, 0, SEEK_SET) != 0) {
     fclose(file);
     return NULL;
   }
 
-  bytes = malloc((size_t)length);
-  if (!bytes || fread(bytes, 1u, (size_t)length, file) != (size_t)length) {
+  if (!(bytes = malloc((size_t)length)) || fread(bytes, 1u, (size_t)length, file) != (size_t)length) {
     free(bytes);
     fclose(file);
     return NULL;
@@ -230,5 +252,6 @@ bench_read(const char *path, uint64_t *outSize) {
 
   fclose(file);
   *outSize = (uint64_t)length;
+
   return bytes;
 }

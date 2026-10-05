@@ -26,6 +26,35 @@
 #  include <sched.h>
 #endif
 
+typedef struct GPUAdapterRequestContext {
+  GPUInstance              *instance;
+  GPUAdapterRequestCallback callback;
+  void                     *userData;
+  uint64_t                  requiredFeatureMask;
+  GPUWorkload               workload;
+} GPUAdapterRequestContext;
+
+typedef struct GPUDeviceRequestContext {
+  GPUAdapter              *adapter;
+  GPUDeviceRequestCallback callback;
+  void                    *userData;
+  uint64_t                 enabledFeatureMask;
+} GPUDeviceRequestContext;
+
+static const GPUFeature gpu_defaultFeatures[] = {
+  GPU_FEATURE_COMPUTE,
+  GPU_FEATURE_INDIRECT_DRAW,
+  GPU_FEATURE_MULTI_DRAW
+};
+
+static const GPUExecutionFlags gpu_workloadFlags[] = {
+  [GPU_WORKLOAD_DEFAULT]  = 0u,
+  [GPU_WORKLOAD_GRAPHICS] = GPU_EXECUTION_GRAPHICS_BIT,
+  [GPU_WORKLOAD_COMPUTE]  = GPU_EXECUTION_COMPUTE_BIT,
+  [GPU_WORKLOAD_HYBRID]   = GPU_EXECUTION_GRAPHICS_BIT |
+                            GPU_EXECUTION_COMPUTE_BIT
+};
+
 static const char*
 gpu_backendName(GPUBackend backend) {
   switch (backend) {
@@ -46,15 +75,18 @@ gpu_backendName(GPUBackend backend) {
 
 static bool
 gpu_validQueueCreateInfos(const GPUQueueCreateInfo queCI[],
-                          uint32_t                        nQueCI) {
+                          uint32_t                 nQueCI) {
+  uint32_t i;
+
   if (!queCI) {
     return nQueCI == 0;
   }
+
   if (nQueCI == 0) {
     return false;
   }
 
-  for (uint32_t i = 0; i < nQueCI; i++) {
+  for (i = 0; i < nQueCI; i++) {
     if (queCI[i].flags == 0 || queCI[i].count == 0) {
       return false;
     }
@@ -65,9 +97,9 @@ gpu_validQueueCreateInfos(const GPUQueueCreateInfo queCI[],
 
 static bool
 gpu_validQueueRequestType(GPUQueueFlagBits type) {
-  return type == GPU_QUEUE_GRAPHICS ||
-         type == GPU_QUEUE_COMPUTE ||
-         type == GPU_QUEUE_TRANSFER;
+  return type == GPU_QUEUE_GRAPHICS
+         || type == GPU_QUEUE_COMPUTE
+         || type == GPU_QUEUE_TRANSFER;
 }
 
 static bool
@@ -77,9 +109,9 @@ gpu_validFeatureSet(const GPUFeatureSet *set) {
 
 static bool
 gpu_validValidationMode(GPUValidationMode mode) {
-  return mode == GPU_VALIDATION_OFF ||
-         mode == GPU_VALIDATION_BASIC ||
-         mode == GPU_VALIDATION_FULL;
+  return mode == GPU_VALIDATION_OFF
+         || mode == GPU_VALIDATION_BASIC
+         || mode == GPU_VALIDATION_FULL;
 }
 
 static bool
@@ -92,6 +124,7 @@ gpu_reportDeviceLostOnce(GPUDevice *device) {
   uint32_t expected;
 
   expected = 0u;
+
   return __atomic_compare_exchange_n(&device->deviceLostReported,
                                      &expected,
                                      1u,
@@ -103,23 +136,23 @@ gpu_reportDeviceLostOnce(GPUDevice *device) {
 
 static bool
 gpu_knownFeature(GPUFeature feature) {
-  return feature >= GPU_FEATURE_COMPUTE &&
-         feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
+  return feature >= GPU_FEATURE_COMPUTE
+         && feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
 }
 
 static bool
 gpu_validPowerPreference(GPUPowerPreference preference) {
-  return preference == GPU_POWER_PREFERENCE_DEFAULT ||
-         preference == GPU_POWER_PREFERENCE_LOW_POWER ||
-         preference == GPU_POWER_PREFERENCE_HIGH_PERFORMANCE;
+  return preference == GPU_POWER_PREFERENCE_DEFAULT
+         || preference == GPU_POWER_PREFERENCE_LOW_POWER
+         || preference == GPU_POWER_PREFERENCE_HIGH_PERFORMANCE;
 }
 
 static bool
 gpu_validWorkload(GPUWorkload workload) {
-  return workload == GPU_WORKLOAD_DEFAULT ||
-         workload == GPU_WORKLOAD_GRAPHICS ||
-         workload == GPU_WORKLOAD_COMPUTE ||
-         workload == GPU_WORKLOAD_HYBRID;
+  return workload == GPU_WORKLOAD_DEFAULT
+         || workload == GPU_WORKLOAD_GRAPHICS
+         || workload == GPU_WORKLOAD_COMPUTE
+         || workload == GPU_WORKLOAD_HYBRID;
 }
 
 static uint64_t
@@ -129,12 +162,14 @@ gpu_featureBit(GPUFeature feature) {
 
 static GPUResult
 gpu_adapterRequestMask(const GPUAdapterRequestOptions *options,
-                       GPUPowerPreference              *outPreference,
-                       GPUWorkload                     *outWorkload,
-                       uint64_t                        *outRequiredMask) {
+                       GPUPowerPreference             *outPreference,
+                       GPUWorkload                    *outWorkload,
+                       uint64_t                       *outRequiredMask) {
+  uint64_t           mask;
   GPUPowerPreference preference;
   GPUWorkload        workload;
-  uint64_t           mask;
+  uint32_t           i;
+  GPUFeature         feature;
 
   if (!outPreference || !outWorkload || !outRequiredMask) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -143,34 +178,37 @@ gpu_adapterRequestMask(const GPUAdapterRequestOptions *options,
   preference = GPU_POWER_PREFERENCE_DEFAULT;
   workload   = GPU_WORKLOAD_DEFAULT;
   mask       = 0u;
+
   if (options) {
-    if ((options->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
-         options->chain.sType != GPU_STRUCTURE_TYPE_ADAPTER_REQUEST_OPTIONS) ||
-        (options->chain.structSize != 0u &&
-         options->chain.structSize < sizeof(*options)) ||
-        !gpu_validPowerPreference(options->powerPreference) ||
-        !gpu_validWorkload(options->workload) ||
-        (options->requiredFeatureCount > 0u &&
-         !options->pRequiredFeatures)) {
+    if ((options->chain.sType != GPU_STRUCTURE_TYPE_NONE
+         && options->chain.sType != GPU_STRUCTURE_TYPE_ADAPTER_REQUEST_OPTIONS)
+        || (options->chain.structSize != 0u
+            && options->chain.structSize < sizeof(*options))
+        || !gpu_validPowerPreference(options->powerPreference)
+        || !gpu_validWorkload(options->workload)
+        || (options->requiredFeatureCount > 0u
+            && !options->pRequiredFeatures)) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
 
     preference = options->powerPreference;
     workload   = options->workload;
-    for (uint32_t i = 0u; i < options->requiredFeatureCount; i++) {
-      GPUFeature feature;
 
+    for (i = 0u; i < options->requiredFeatureCount; i++) {
       feature = options->pRequiredFeatures[i];
+
       if (!gpu_knownFeature(feature)) {
         return GPU_ERROR_INVALID_ARGUMENT;
       }
+
       mask |= gpu_featureBit(feature);
     }
   }
 
-  *outPreference  = preference;
-  *outWorkload    = workload;
+  *outPreference   = preference;
+  *outWorkload     = workload;
   *outRequiredMask = mask;
+
   return GPU_OK;
 }
 
@@ -184,21 +222,21 @@ gpu_builtinSupportedFeature(const GPUApi *api, GPUFeature feature) {
 
   switch (feature) {
     case GPU_FEATURE_COMPUTE:
-      hasComputePipeline = api->compute.createPipeline ||
-                           (api->compute.newComputePipeline &&
-                            api->compute.setFunction &&
-                            api->compute.newComputeState);
-      return hasComputePipeline &&
-             api->compute.computeCommandEncoder &&
-             api->compute.setComputePipelineState &&
-             api->compute.dispatch &&
-             api->compute.endEncoding;
+      hasComputePipeline = api->compute.createPipeline
+                           || (api->compute.newComputePipeline
+                               && api->compute.setFunction
+                               && api->compute.newComputeState);
+      return hasComputePipeline
+             && api->compute.computeCommandEncoder
+             && api->compute.setComputePipelineState
+             && api->compute.dispatch
+             && api->compute.endEncoding;
     case GPU_FEATURE_INDIRECT_DRAW:
-      return api->rce.drawPrimitivesIndirect &&
-             api->rce.drawIndexedPrimsIndirect;
+      return api->rce.drawPrimitivesIndirect
+             && api->rce.drawIndexedPrimsIndirect;
     case GPU_FEATURE_MULTI_DRAW:
-      return api->rce.multiDrawPrimitivesIndirect &&
-             api->rce.multiDrawIndexedPrimsIndirect;
+      return api->rce.multiDrawPrimitivesIndirect
+             && api->rce.multiDrawIndexedPrimsIndirect;
     default:
       return false;
   }
@@ -211,6 +249,7 @@ gpu_adapterSupportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
   if (!gpu_knownFeature(feature)) {
     return false;
   }
+
   if ((api = gpuAdapterApi(adapter)) && api->device.supportsFeature) {
     return api->device.supportsFeature(adapter, feature);
   }
@@ -220,32 +259,37 @@ gpu_adapterSupportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
 
 static bool
 gpu_adapterSupportsMask(const GPUAdapter *adapter, uint64_t requiredMask) {
-  for (GPUFeature feature = GPU_FEATURE_COMPUTE;
+  uint64_t   bit;
+  GPUFeature feature;
+
+  for (feature = GPU_FEATURE_COMPUTE;
        feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
        feature = (GPUFeature)(feature + 1)) {
-    uint64_t bit;
-
     bit = gpu_featureBit(feature);
-    if ((requiredMask & bit) != 0u &&
-        !gpu_adapterSupportsFeature(adapter, feature)) {
+
+    if ((requiredMask & bit) != 0u
+        && !gpu_adapterSupportsFeature(adapter, feature)) {
       return false;
     }
   }
+
   return true;
 }
 
 static uint64_t
 gpu_collectEnabledFeatures(const GPUAdapter *adapter, const GPUFeatureSet *set) {
   uint64_t mask;
+  uint32_t i;
 
   mask = 0;
+
   if (!set || !gpu_validFeatureSet(set)) {
     return 0;
   }
 
-  for (uint32_t i = 0; i < set->featureCount; i++) {
-    if (gpu_knownFeature(set->pFeatures[i]) &&
-        gpu_adapterSupportsFeature(adapter, set->pFeatures[i])) {
+  for (i = 0; i < set->featureCount; i++) {
+    if (gpu_knownFeature(set->pFeatures[i])
+        && gpu_adapterSupportsFeature(adapter, set->pFeatures[i])) {
       mask |= gpu_featureBit(set->pFeatures[i]);
     }
   }
@@ -255,24 +299,21 @@ gpu_collectEnabledFeatures(const GPUAdapter *adapter, const GPUFeatureSet *set) 
 
 static uint64_t
 gpu_defaultEnabledFeatureMask(const GPUAdapter *adapter) {
-  static const GPUFeature defaultFeatures[] = {
-    GPU_FEATURE_COMPUTE,
-    GPU_FEATURE_INDIRECT_DRAW,
-    GPU_FEATURE_MULTI_DRAW
-  };
-  GPUApi *api;
+  GPUApi  *api;
   uint64_t mask;
+  uint32_t i;
+  bool     supported;
 
   api  = gpuAdapterApi(adapter);
   mask = 0;
-  for (uint32_t i = 0; i < GPU_ARRAY_LEN(defaultFeatures); i++) {
-    bool supported;
 
+  for (i = 0; i < GPU_ARRAY_LEN(gpu_defaultFeatures); i++) {
     supported = adapter ?
-      gpu_adapterSupportsFeature(adapter, defaultFeatures[i]) :
-      gpu_builtinSupportedFeature(api, defaultFeatures[i]);
+      gpu_adapterSupportsFeature(adapter, gpu_defaultFeatures[i]) :
+      gpu_builtinSupportedFeature(api, gpu_defaultFeatures[i]);
+
     if (supported) {
-      mask |= gpu_featureBit(defaultFeatures[i]);
+      mask |= gpu_featureBit(gpu_defaultFeatures[i]);
     }
   }
 
@@ -280,7 +321,7 @@ gpu_defaultEnabledFeatureMask(const GPUAdapter *adapter) {
 }
 
 static uint64_t
-gpu_enabledFeatureMaskForCreateInfo(const GPUAdapter *adapter,
+gpu_enabledFeatureMaskForCreateInfo(const GPUAdapter          *adapter,
                                     const GPUDeviceCreateInfo *info) {
   uint64_t mask;
 
@@ -290,47 +331,53 @@ gpu_enabledFeatureMaskForCreateInfo(const GPUAdapter *adapter,
 
   mask = gpu_collectEnabledFeatures(adapter, &info->required);
   mask |= gpu_collectEnabledFeatures(adapter, &info->optional);
+
   if ((mask & gpu_featureBit(GPU_FEATURE_BINDLESS)) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_DESCRIPTOR_INDEXING);
   }
+
   if ((mask & gpu_featureBit(GPU_FEATURE_SUBGROUP_MATRIX)) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_SUBGROUPS);
   }
+
   if ((mask & gpu_featureBit(GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_RAY_QUERY);
   }
-  if ((mask &
-       gpu_featureBit(GPU_FEATURE_INTERSECTION_FUNCTION_TABLE)) != 0u) {
+
+  if ((mask & gpu_featureBit(GPU_FEATURE_INTERSECTION_FUNCTION_TABLE)) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_RAY_QUERY);
   }
+
   if ((mask & (gpu_featureBit(GPU_FEATURE_INDIRECT_MEMORY_COPY) |
-               gpu_featureBit(
-                 GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
-               ))) != 0u) {
+               gpu_featureBit(GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY))) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_BUFFER_DEVICE_ADDRESS);
   }
+
   if ((mask & gpu_featureBit(GPU_FEATURE_EXECUTION_GRAPH)) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_BUFFER_DEVICE_ADDRESS);
   }
-  if ((mask & gpu_featureBit(GPU_FEATURE_SPARSE_TEXTURES)) != 0u &&
-      GPUIsFeatureSupported(
-        (GPUAdapter *)adapter,
-        GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT
-      )) {
+
+  if ((mask & gpu_featureBit(GPU_FEATURE_SPARSE_TEXTURES)) != 0u
+      && GPUIsFeatureSupported((GPUAdapter *)adapter,
+                               GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT)) {
     mask |= gpu_featureBit(GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT);
   }
+
   if ((mask & gpu_featureBit(GPU_FEATURE_SPARSE_BUFFERS)) != 0u) {
     mask |= gpu_featureBit(GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT);
   }
+
   return mask;
 }
 
 static uint64_t
 gpu_supportedFeatureMask(const GPUAdapter *adapter) {
-  uint64_t mask;
+  uint64_t   mask;
+  GPUFeature feature;
 
   mask = 0;
-  for (GPUFeature feature = GPU_FEATURE_COMPUTE;
+
+  for (feature = GPU_FEATURE_COMPUTE;
        feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
        feature = (GPUFeature)(feature + 1)) {
     if (gpu_adapterSupportsFeature(adapter, feature)) {
@@ -346,12 +393,14 @@ gpu_fillFeatureSet(uint64_t       mask,
                    GPUFeature    *storage,
                    uint32_t       capacity,
                    GPUFeatureSet *outSet) {
-  uint32_t count;
+  uint32_t   count;
+  GPUFeature feature;
 
   count = 0u;
-  for (GPUFeature feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE &&
-         count < capacity;
+
+  for (feature = GPU_FEATURE_COMPUTE;
+       feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE
+         && count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & gpu_featureBit(feature)) {
       storage[count++] = feature;
@@ -364,19 +413,17 @@ gpu_fillFeatureSet(uint64_t       mask,
 
 static void
 gpu_ensureAdapterFeatureSet(GPUAdapter *adapter) {
+  uint64_t mask;
+
   if (!adapter || gpuAdapterFeatureStateLoad(adapter) == 2u) {
     return;
   }
 
   if (gpuAdapterFeatureStateBegin(adapter)) {
-    uint64_t mask;
-
     mask = gpu_supportedFeatureMask(adapter);
     gpu_fillFeatureSet(mask,
                        adapter->supportedFeatureStorage,
-                       (uint32_t)GPU_ARRAY_LEN(
-                         adapter->supportedFeatureStorage
-                       ),
+                       (uint32_t)GPU_ARRAY_LEN(adapter->supportedFeatureStorage),
                        &adapter->supportedFeatures);
     gpuAdapterFeatureStateComplete(adapter);
     return;
@@ -392,17 +439,20 @@ gpu_ensureAdapterFeatureSet(GPUAdapter *adapter) {
 }
 
 static GPUResult
-gpu_validateFeatureSet(const GPUAdapter *adapter,
+gpu_validateFeatureSet(const GPUAdapter    *adapter,
                        const GPUFeatureSet *set,
-                       bool required) {
+                       bool                 required) {
+  uint32_t i;
+
   if (!gpu_validFeatureSet(set)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  for (uint32_t i = 0; i < set->featureCount; i++) {
+  for (i = 0; i < set->featureCount; i++) {
     if (!gpu_knownFeature(set->pFeatures[i])) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
+
     if (required && !gpu_adapterSupportsFeature(adapter, set->pFeatures[i])) {
       return GPU_ERROR_UNSUPPORTED;
     }
@@ -415,19 +465,18 @@ static void
 gpu_fillDefaultLimits(GPULimits *limits) {
   memset(limits, 0, sizeof(*limits));
 
-  limits->maxBindGroups                     = GPU_ENCODER_MAX_BIND_GROUPS;
-  limits->maxBindingsPerGroup               = 64u;
-  limits->maxDynamicUniformBuffers          = 8u;
-  limits->maxDynamicStorageBuffers          = 4u;
-  limits->minUniformBufferOffsetAlignment   = 256u;
-  limits->minStorageBufferOffsetAlignment   = 256u;
-  limits->maxColorAttachments               =
-    GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS;
-  limits->maxComputeWorkgroupSizeX          = 1024u;
-  limits->maxComputeWorkgroupSizeY          = 1024u;
-  limits->maxComputeWorkgroupSizeZ          = 64u;
-  limits->maxPushConstantSizeBytes           = 256u;
-  limits->maxSamplerAnisotropy               = 1u;
+  limits->maxBindGroups                   = GPU_ENCODER_MAX_BIND_GROUPS;
+  limits->maxBindingsPerGroup             = 64u;
+  limits->maxDynamicUniformBuffers        = 8u;
+  limits->maxDynamicStorageBuffers        = 4u;
+  limits->minUniformBufferOffsetAlignment = 256u;
+  limits->minStorageBufferOffsetAlignment = 256u;
+  limits->maxColorAttachments             = GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS;
+  limits->maxComputeWorkgroupSizeX        = 1024u;
+  limits->maxComputeWorkgroupSizeY        = 1024u;
+  limits->maxComputeWorkgroupSizeZ        = 64u;
+  limits->maxPushConstantSizeBytes        = 256u;
+  limits->maxSamplerAnisotropy            = 1u;
 }
 
 static void
@@ -435,8 +484,7 @@ gpu_fillAdapterLimits(const GPUAdapter *adapter, GPULimits *limits) {
   GPUApi *api;
 
   gpu_fillDefaultLimits(limits);
-  api = gpuAdapterApi(adapter);
-  if (api && api->device.getLimits) {
+  if ((api = gpuAdapterApi(adapter)) && api->device.getLimits) {
     api->device.getLimits(adapter, limits);
   }
 }
@@ -448,6 +496,7 @@ gpu_u64MulOverflow(uint64_t a, uint64_t b, uint64_t *out) {
   }
 
   *out = a * b;
+
   return false;
 }
 
@@ -458,6 +507,7 @@ gpu_u64AddOverflow(uint64_t a, uint64_t b, uint64_t *out) {
   }
 
   *out = a + b;
+
   return false;
 }
 
@@ -476,11 +526,13 @@ gpu_alignUp(uint64_t value, uint64_t alignment, uint64_t *out) {
   }
 
   mask = alignment - 1u;
+
   if (gpu_u64AddOverflow(value, mask, &biased)) {
     return false;
   }
 
   *out = biased & ~mask;
+
   return true;
 }
 
@@ -511,6 +563,7 @@ gpu_bufferContents(GPUBuffer *buffer) {
   if (!buffer) {
     return NULL;
   }
+
   if (!(api = gpuDeviceApi(buffer->device)) || !api->buf.contents) {
     return NULL;
   }
@@ -521,18 +574,21 @@ gpu_bufferContents(GPUBuffer *buffer) {
 static void
 gpu_destroyTransientChunks(GPUDevice *device) {
   GPUTransientChunk *chunk;
+  GPUTransientChunk *next;
 
   if (!device) {
     return;
   }
 
   chunk = device->transientChunks;
+
   while (chunk) {
-    GPUTransientChunk *next = chunk->next;
+    next = chunk->next;
 
     if (chunk->cpuPtrOwned) {
       free(chunk->cpuPtr);
     }
+
     GPUDestroyBuffer(chunk->buffer);
     free(chunk);
     chunk = next;
@@ -543,19 +599,22 @@ gpu_destroyTransientChunks(GPUDevice *device) {
 
 static void
 gpu_destroyTransientFrameFences(GPUDevice *device) {
+  GPUFence *fence;
+  uint32_t  i;
+
   if (!device || !device->transientFrameFences) {
     return;
   }
 
-  for (uint32_t i = 0u; i < device->transientConfig.framesInFlight; i++) {
-    GPUFence *fence;
-
+  for (i = 0u; i < device->transientConfig.framesInFlight; i++) {
     fence = device->transientFrameFences[i];
+
     if (fence) {
       (void)GPUWaitFence(fence, UINT64_MAX);
       GPUDestroyFence(fence);
     }
   }
+
   free(device->transientFrameFences);
   device->transientFrameFences = NULL;
 }
@@ -568,37 +627,42 @@ gpu_destroyTransientAllocator(GPUDevice *device) {
 
   gpu_destroyTransientFrameFences(device);
   gpu_destroyTransientChunks(device);
+
   if (device->transientCpuPtrOwned) {
     free(device->transientCpuPtr);
   }
+
   GPUDestroyBuffer(device->transientBuffer);
-  device->transientBuffer         = NULL;
-  device->transientCpuPtr         = NULL;
-  device->transientFrameOffset    = 0u;
-  device->transientFrameStride    = 0u;
-  device->transientBufferUsage    = 0u;
-  device->transientFrameIndex     = 0u;
-  device->transientConfigured     = false;
-  device->transientFrameBegun     = false;
-  device->transientCpuPtrOwned    = false;
+  device->transientBuffer      = NULL;
+  device->transientCpuPtr      = NULL;
+  device->transientFrameOffset = 0u;
+  device->transientFrameStride = 0u;
+  device->transientBufferUsage = 0u;
+  device->transientFrameIndex  = 0u;
+  device->transientConfigured  = false;
+  device->transientFrameBegun  = false;
+  device->transientCpuPtrOwned = false;
   memset(&device->transientConfig, 0, sizeof(device->transientConfig));
   memset(&device->allocatorStats, 0, sizeof(device->allocatorStats));
 }
 
 static GPUResult
-gpu_createTransientFrameFences(GPUDevice *device,
-                               uint32_t framesInFlight,
+gpu_createTransientFrameFences(GPUDevice  *device,
+                               uint32_t    framesInFlight,
                                GPUFence ***outFences) {
   GPUFenceCreateInfo info;
   GPUFence         **fences;
+  uint32_t           i;
+  GPUResult          result;
+  uint32_t           j;
 
   if (!device || framesInFlight == 0u || !outFences) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outFences = NULL;
 
-  fences = calloc(framesInFlight, sizeof(*fences));
-  if (!fences) {
+  if (!(fences = calloc(framesInFlight, sizeof(*fences)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
@@ -607,40 +671,43 @@ gpu_createTransientFrameFences(GPUDevice *device,
   info.chain.structSize = sizeof(info);
   info.label            = "transient-frame";
   info.signaled         = true;
-  for (uint32_t i = 0u; i < framesInFlight; i++) {
-    GPUResult result;
 
+  for (i = 0u; i < framesInFlight; i++) {
     result = GPUCreateFence(device, &info, &fences[i]);
+
     if (result != GPU_OK) {
-      for (uint32_t j = 0u; j < i; j++) {
+      for (j = 0u; j < i; j++) {
         GPUDestroyFence(fences[j]);
       }
+
       free(fences);
       return result;
     }
   }
 
   *outFences = fences;
+
   return GPU_OK;
 }
 
 static GPUResult
-gpu_createTransientBuffer(GPUDevice *device,
+gpu_createTransientBuffer(GPUDevice          *device,
                           GPUBufferUsageFlags usage,
-                          uint64_t sizeBytes,
-                          GPUBuffer **outBuffer,
-                          void **outCpuPtr,
-                          bool *outCpuPtrOwned) {
-  GPUBuffer           *buffer;
-  GPUApi              *api;
-  void                *cpuPtr;
-  GPUBufferCreateInfo  info = {0};
-  GPUResult            result;
+                          uint64_t            sizeBytes,
+                          GPUBuffer         **outBuffer,
+                          void              **outCpuPtr,
+                          bool               *outCpuPtrOwned) {
+  GPUBufferCreateInfo info = {0};
+  GPUBuffer          *buffer;
+  GPUApi             *api;
+  void               *cpuPtr;
+  GPUResult           result;
 
-  if (!device || !outBuffer || !outCpuPtr || !outCpuPtrOwned ||
-      sizeBytes == 0u || sizeBytes > SIZE_MAX) {
+  if (!device || !outBuffer || !outCpuPtr || !outCpuPtrOwned
+      || sizeBytes == 0u || sizeBytes > SIZE_MAX) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (!(api = gpuDeviceApi(device)) || !api->buf.create) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -653,21 +720,22 @@ gpu_createTransientBuffer(GPUDevice *device,
 
   buffer = NULL;
   result = GPUCreateBuffer(device, &info, &buffer);
+
   if (result != GPU_OK) {
     return result;
   }
 
-  cpuPtr = api->buf.contents ? gpu_bufferContents(buffer) : NULL;
-  if (!cpuPtr) {
+  if (!(cpuPtr = api->buf.contents ? gpu_bufferContents(buffer) : NULL)) {
     if (!api->buf.write) {
       GPUDestroyBuffer(buffer);
       return GPU_ERROR_UNSUPPORTED;
     }
-    cpuPtr = calloc(1u, (size_t)sizeBytes);
-    if (!cpuPtr) {
+
+    if (!(cpuPtr = calloc(1u, (size_t)sizeBytes))) {
       GPUDestroyBuffer(buffer);
       return GPU_ERROR_OUT_OF_MEMORY;
     }
+
     *outCpuPtrOwned = true;
   } else {
     *outCpuPtrOwned = false;
@@ -675,6 +743,7 @@ gpu_createTransientBuffer(GPUDevice *device,
 
   *outBuffer = buffer;
   *outCpuPtr = cpuPtr;
+
   return GPU_OK;
 }
 
@@ -683,12 +752,14 @@ gpu_validRuntimeConfig(const GPURuntimeConfig *config) {
   if (!config) {
     return false;
   }
-  if (config->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
-      config->chain.sType != GPU_STRUCTURE_TYPE_RUNTIME_CONFIG) {
+
+  if (config->chain.sType != GPU_STRUCTURE_TYPE_NONE
+      && config->chain.sType != GPU_STRUCTURE_TYPE_RUNTIME_CONFIG) {
     return false;
   }
-  if (config->chain.structSize != 0 &&
-      config->chain.structSize < sizeof(*config)) {
+
+  if (config->chain.structSize != 0
+      && config->chain.structSize < sizeof(*config)) {
     return false;
   }
 
@@ -697,38 +768,42 @@ gpu_validRuntimeConfig(const GPURuntimeConfig *config) {
 
 static bool
 gpu_validTransientAllocatorConfig(const GPUTransientAllocatorConfig *config,
-                                  uint64_t *outCapacityBytes) {
+                                  uint64_t                          *outCapacityBytes) {
   uint64_t frameStride;
 
   if (!config || !outCapacityBytes) {
     return false;
   }
-  if (config->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
-      config->chain.sType != GPU_STRUCTURE_TYPE_TRANSIENT_ALLOCATOR_CONFIG) {
+
+  if (config->chain.sType != GPU_STRUCTURE_TYPE_NONE
+      && config->chain.sType != GPU_STRUCTURE_TYPE_TRANSIENT_ALLOCATOR_CONFIG) {
     return false;
   }
-  if (config->chain.structSize != 0 &&
-      config->chain.structSize < sizeof(*config)) {
+
+  if (config->chain.structSize != 0
+      && config->chain.structSize < sizeof(*config)) {
     return false;
   }
+
   if (config->ringBytesPerFrame == 0u || config->framesInFlight == 0u) {
     return false;
   }
+
   if (config->allowChunkFallback && config->chunkBytes == 0u) {
     return false;
   }
 
-  return gpu_alignUp(config->ringBytesPerFrame, 4u, &frameStride) &&
-         !gpu_u64MulOverflow(frameStride,
-                             config->framesInFlight,
-                             outCapacityBytes);
+  return gpu_alignUp(config->ringBytesPerFrame, 4u, &frameStride)
+         && !gpu_u64MulOverflow(frameStride,
+                                config->framesInFlight,
+                                outCapacityBytes);
 }
 
 static GPUResult
-gpu_allocateTransientChunk(GPUDevice *device,
-                           GPUBufferUsageFlags usage,
-                           uint64_t sizeBytes,
-                           uint64_t alignment,
+gpu_allocateTransientChunk(GPUDevice               *device,
+                           GPUBufferUsageFlags      usage,
+                           uint64_t                 sizeBytes,
+                           uint64_t                 alignment,
                            GPUTransientBufferSlice *outSlice) {
   GPUTransientChunk *chunk;
   GPUBuffer         *buffer;
@@ -745,11 +820,11 @@ gpu_allocateTransientChunk(GPUDevice *device,
   }
 
   for (chunk = device->transientChunks; chunk; chunk = chunk->next) {
-    if (chunk->frameIndex != device->transientFrameIndex ||
-        (usage & ~chunk->usage) != 0u ||
-        !gpu_alignUp(chunk->offset, alignment, &alignedOffset) ||
-        gpu_u64AddOverflow(alignedOffset, sizeBytes, &endOffset) ||
-        endOffset > chunk->sizeBytes) {
+    if (chunk->frameIndex != device->transientFrameIndex
+        || (usage & ~chunk->usage) != 0u
+        || !gpu_alignUp(chunk->offset, alignment, &alignedOffset)
+        || gpu_u64AddOverflow(alignedOffset, sizeBytes, &endOffset)
+        || endOffset > chunk->sizeBytes) {
       continue;
     }
 
@@ -765,51 +840,55 @@ gpu_allocateTransientChunk(GPUDevice *device,
   if (!gpu_alignUp(sizeBytes, alignment, &endOffset)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   chunkBytes = device->transientConfig.chunkBytes;
+
   if (chunkBytes < endOffset) {
     chunkBytes = endOffset;
   }
+
   if (!gpu_alignUp(chunkBytes, 4u, &chunkBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  chunk = calloc(1, sizeof(*chunk));
-  if (!chunk) {
+  if (!(chunk = calloc(1, sizeof(*chunk)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  buffer = NULL;
-  cpuPtr = NULL;
+  buffer      = NULL;
+  cpuPtr      = NULL;
   cpuPtrOwned = false;
-  result = gpu_createTransientBuffer(device,
-                                     usage,
-                                     chunkBytes,
-                                     &buffer,
-                                     &cpuPtr,
-                                     &cpuPtrOwned);
+  result      = gpu_createTransientBuffer(device,
+                                          usage,
+                                          chunkBytes,
+                                          &buffer,
+                                          &cpuPtr,
+                                          &cpuPtrOwned);
+
   if (result != GPU_OK) {
     free(chunk);
     return result;
   }
 
-  chunk->buffer     = buffer;
-  chunk->cpuPtr     = cpuPtr;
-  chunk->next       = device->transientChunks;
-  chunk->sizeBytes  = chunkBytes;
-  chunk->offset     = sizeBytes;
-  chunk->usage      = usage;
-  chunk->frameIndex = device->transientFrameIndex;
-  chunk->cpuPtrOwned = cpuPtrOwned;
-  device->transientChunks  = chunk;
+  chunk->buffer           = buffer;
+  chunk->cpuPtr           = cpuPtr;
+  chunk->next             = device->transientChunks;
+  chunk->sizeBytes        = chunkBytes;
+  chunk->offset           = sizeBytes;
+  chunk->usage            = usage;
+  chunk->frameIndex       = device->transientFrameIndex;
+  chunk->cpuPtrOwned      = cpuPtrOwned;
+  device->transientChunks = chunk;
 
   device->allocatorStats.uploadStallCount++;
   device->currentFrameStats.hotPathAllocCount++;
   device->currentFrameStats.hotPathAllocBytes += chunkBytes;
 
-  outSlice->buffer = buffer;
-  outSlice->offset = 0;
+  outSlice->buffer    = buffer;
+  outSlice->offset    = 0;
   outSlice->sizeBytes = sizeBytes;
-  outSlice->cpuPtr = cpuPtr;
+  outSlice->cpuPtr    = cpuPtr;
+
   return GPU_OK;
 }
 
@@ -829,12 +908,12 @@ gpu_formatIsDepthStencil(GPUFormat format) {
 
 static bool
 gpu_formatIsCompressed(GPUFormat format) {
-  return (format >= GPU_FORMAT_BC1_RGBA_UNORM &&
-          format <= GPU_FORMAT_BC7_RGBA_UNORM_SRGB) ||
-         (format >= GPU_FORMAT_EAC_R11_UNORM &&
-          format <= GPU_FORMAT_ETC2_RGB8A1_UNORM_SRGB) ||
-         (format >= GPU_FORMAT_ASTC_4X4_UNORM &&
-          format <= GPU_FORMAT_ASTC_12X12_UNORM_SRGB);
+  return (format >= GPU_FORMAT_BC1_RGBA_UNORM
+          && format <= GPU_FORMAT_BC7_RGBA_UNORM_SRGB)
+         || (format >= GPU_FORMAT_EAC_R11_UNORM
+             && format <= GPU_FORMAT_ETC2_RGB8A1_UNORM_SRGB)
+         || (format >= GPU_FORMAT_ASTC_4X4_UNORM
+             && format <= GPU_FORMAT_ASTC_12X12_UNORM_SRGB);
 }
 
 static bool
@@ -844,56 +923,61 @@ gpu_formatIsInteger(GPUFormat format) {
 
 static bool
 gpu_formatIsKnownColor(GPUFormat format) {
-  return format > GPU_FORMAT_UNDEFINED && format < GPU_FORMAT_COUNT &&
-         !gpu_formatIsDepthStencil(format) &&
-         !gpu_formatIsCompressed(format);
+  return format > GPU_FORMAT_UNDEFINED && format < GPU_FORMAT_COUNT
+         && !gpu_formatIsDepthStencil(format)
+         && !gpu_formatIsCompressed(format);
 }
 
 static GPUResult
-gpu_buildQueueCreateInfos(const GPUDeviceCreateInfo  *info,
-                          GPUQueueCreateInfo  *stackInfos,
-                          uint32_t                    stackInfoCount,
-                          GPUQueueCreateInfo **outInfos,
-                          uint32_t                   *outInfoCount) {
+gpu_buildQueueCreateInfos(const GPUDeviceCreateInfo *info,
+                          GPUQueueCreateInfo        *stackInfos,
+                          uint32_t                   stackInfoCount,
+                          GPUQueueCreateInfo       **outInfos,
+                          uint32_t                  *outInfoCount) {
   const GPUDeviceQueueCreateInfo *queueInfo;
-  GPUQueueCreateInfo *infos;
-  uint32_t requestCount;
+  GPUQueueCreateInfo             *infos;
+  uint32_t                        requestCount;
+  uint32_t                        i;
 
-  *outInfos = NULL;
+  *outInfos     = NULL;
   *outInfoCount = 0;
 
   if (!info) {
     return GPU_OK;
   }
-  if (info->queues.chain.sType != GPU_STRUCTURE_TYPE_NONE &&
-      info->queues.chain.sType != GPU_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if (info->queues.chain.structSize != 0 &&
-      info->queues.chain.structSize < sizeof(info->queues)) {
+
+  if (info->queues.chain.sType != GPU_STRUCTURE_TYPE_NONE
+      && info->queues.chain.sType != GPU_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  queueInfo = &info->queues;
+  if (info->queues.chain.structSize != 0
+      && info->queues.chain.structSize < sizeof(info->queues)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  queueInfo    = &info->queues;
   requestCount = queueInfo->requestCount;
+
   if (requestCount == 0) {
     return queueInfo->pRequests ? GPU_ERROR_INVALID_ARGUMENT : GPU_OK;
   }
+
   if (!queueInfo->pRequests) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   infos = stackInfos;
+
   if (requestCount > stackInfoCount) {
-    infos = calloc(requestCount, sizeof(*infos));
-    if (!infos) {
+    if (!(infos = calloc(requestCount, sizeof(*infos)))) {
       return GPU_ERROR_OUT_OF_MEMORY;
     }
   }
 
-  for (uint32_t i = 0; i < requestCount; i++) {
-    if (!gpu_validQueueRequestType(queueInfo->pRequests[i].type) ||
-        queueInfo->pRequests[i].count == 0) {
+  for (i = 0; i < requestCount; i++) {
+    if (!gpu_validQueueRequestType(queueInfo->pRequests[i].type)
+        || queueInfo->pRequests[i].count == 0) {
       if (infos != stackInfos) {
         free(infos);
       }
@@ -904,8 +988,9 @@ gpu_buildQueueCreateInfos(const GPUDeviceCreateInfo  *info,
     infos[i].count = queueInfo->pRequests[i].count;
   }
 
-  *outInfos = infos;
+  *outInfos     = infos;
   *outInfoCount = requestCount;
+
   return GPU_OK;
 }
 
@@ -919,21 +1004,23 @@ gpu_getInstanceAdapters(GPUInstance *inst) {
   if (inst->_adaptersEnumerated) {
     return inst->_adapters;
   }
+
   if (!(api = gpuInstanceApi(inst)) || !api->device.getAvailableAdapters) {
     return NULL;
   }
 
-  adapters = api->device.getAvailableAdapters(inst, UINT32_MAX);
-  if (!adapters) {
+  if (!(adapters = api->device.getAvailableAdapters(inst, UINT32_MAX))) {
     return NULL;
   }
 
   inst->_adapters = adapters;
-  count = 0u;
+  count           = 0u;
+
   for (item = inst->_adapters; item; item = item->next) {
     item->inst = inst;
     count++;
   }
+
   inst->_adapterCount       = count;
   inst->_adaptersEnumerated = true;
 
@@ -941,7 +1028,7 @@ gpu_getInstanceAdapters(GPUInstance *inst) {
 }
 
 static uint32_t
-gpu_adapterPreferenceRank(const GPUAdapter *adapter,
+gpu_adapterPreferenceRank(const GPUAdapter  *adapter,
                           GPUPowerPreference preference) {
   GPUAdapterProperties properties;
 
@@ -972,20 +1059,13 @@ gpu_adapterPreferenceRank(const GPUAdapter *adapter,
     case GPU_ADAPTER_TYPE_SOFTWARE:
       return 3u;
   }
+
   return 3u;
 }
 
 static GPUExecutionFlags
 gpu_workloadExecutionFlags(GPUWorkload workload) {
-  static const GPUExecutionFlags flags[] = {
-    [GPU_WORKLOAD_DEFAULT]  = 0u,
-    [GPU_WORKLOAD_GRAPHICS] = GPU_EXECUTION_GRAPHICS_BIT,
-    [GPU_WORKLOAD_COMPUTE]  = GPU_EXECUTION_COMPUTE_BIT,
-    [GPU_WORKLOAD_HYBRID]   = GPU_EXECUTION_GRAPHICS_BIT |
-                              GPU_EXECUTION_COMPUTE_BIT
-  };
-
-  return flags[workload];
+  return gpu_workloadFlags[workload];
 }
 
 static bool
@@ -995,16 +1075,19 @@ gpu_adapterSupportsWorkload(const GPUAdapter *adapter,
   GPUExecutionFlags    required;
 
   required = gpu_workloadExecutionFlags(workload);
+
   if (required == 0u) {
     return true;
   }
+
   if (GPUGetAdapterProperties(adapter, &properties) != GPU_OK) {
     return false;
   }
+
   return (properties.executionFlags & required) == required;
 }
 
-static GPUAdapter *
+static GPUAdapter*
 gpu_selectRequestedAdapter(GPUInstance       *inst,
                            GPUPowerPreference preference,
                            GPUWorkload        workload,
@@ -1013,85 +1096,88 @@ gpu_selectRequestedAdapter(GPUInstance       *inst,
   GPUAdapter *preferred;
   GPUAdapter *best;
   GPUApi     *api;
+  GPUAdapter *adapter;
   uint32_t    bestRank;
+  uint32_t    rank;
 
-  if (!(api = gpuInstanceApi(inst)) ||
-      !(adapters = gpu_getInstanceAdapters(inst))) {
+  if (!(api = gpuInstanceApi(inst))
+      || !(adapters = gpu_getInstanceAdapters(inst))) {
     return NULL;
   }
 
   preferred = adapters;
+
   if (api->device.selectAdapter) {
     preferred = api->device.selectAdapter(inst, adapters, preference);
   }
-  if (preferred &&
-      gpu_adapterSupportsWorkload(preferred, workload) &&
-      gpu_adapterSupportsMask(preferred, requiredFeatureMask)) {
+
+  if (preferred
+      && gpu_adapterSupportsWorkload(preferred, workload)
+      && gpu_adapterSupportsMask(preferred, requiredFeatureMask)) {
     return preferred;
   }
 
   best     = NULL;
   bestRank = UINT32_MAX;
-  for (GPUAdapter *adapter = adapters; adapter; adapter = adapter->next) {
-    uint32_t rank;
 
-    if (adapter == preferred ||
-        !gpu_adapterSupportsWorkload(adapter, workload) ||
-        !gpu_adapterSupportsMask(adapter, requiredFeatureMask)) {
+  for (adapter = adapters; adapter; adapter = adapter->next) {
+    if (adapter == preferred
+        || !gpu_adapterSupportsWorkload(adapter, workload)
+        || !gpu_adapterSupportsMask(adapter, requiredFeatureMask)) {
       continue;
     }
+
     if (preference == GPU_POWER_PREFERENCE_DEFAULT) {
       return adapter;
     }
 
     rank = gpu_adapterPreferenceRank(adapter, preference);
+
     if (rank < bestRank) {
       best     = adapter;
       bestRank = rank;
     }
   }
+
   return best;
 }
 
-typedef struct GPUAdapterRequestContext {
-  GPUInstance               *instance;
-  GPUAdapterRequestCallback  callback;
-  void                      *userData;
-  uint64_t                   requiredFeatureMask;
-  GPUWorkload                workload;
-} GPUAdapterRequestContext;
-
 static void
-gpu_completeAdapterRequest(GPUResult  result,
+gpu_completeAdapterRequest(GPUResult   result,
                            GPUAdapter *adapter,
                            void       *userData) {
   GPUAdapterRequestContext *request;
   GPUInstance              *instance;
+  GPUApi                   *api;
 
   request  = userData;
   instance = request->instance;
+
   if (result == GPU_OK && adapter) {
     adapter->inst = instance;
   }
-  if (result == GPU_OK && adapter &&
-      (!gpu_adapterSupportsWorkload(adapter, request->workload) ||
-       !gpu_adapterSupportsMask(adapter, request->requiredFeatureMask))) {
-    GPUApi *api;
 
+  if (result == GPU_OK && adapter
+      && (!gpu_adapterSupportsWorkload(adapter, request->workload)
+          || !gpu_adapterSupportsMask(adapter, request->requiredFeatureMask))) {
     api = gpuInstanceApi(instance);
+
     if (api && api->device.destroyAdapter) {
       api->device.destroyAdapter(adapter);
     }
+
     adapter = NULL;
     result  = GPU_ERROR_UNSUPPORTED;
   }
+
   if (result == GPU_OK && adapter) {
-    adapter->next                  = instance->_adapters;
-    instance->_adapters            = adapter;
+    adapter->next       = instance->_adapters;
+    instance->_adapters = adapter;
     instance->_adapterCount++;
-    instance->_adaptersEnumerated  = true;
+    instance->_adaptersEnumerated = true;
   } else {
     adapter = NULL;
+
     if (result == GPU_OK) {
       result = GPU_ERROR_BACKEND_FAILURE;
     }
@@ -1101,455 +1187,82 @@ gpu_completeAdapterRequest(GPUResult  result,
   free(request);
 }
 
-GPU_EXPORT
-GPUResult
-GPUEnumerateAdapters(GPUInstance *inst,
-                     uint32_t    *inoutAdapterCount,
-                     GPUAdapter **outAdapters) {
-  GPUAdapter *deviceList;
-  GPUAdapter *item;
-  uint32_t capacity;
-  uint32_t count;
-  uint32_t i;
-
-  if (!inst || !inoutAdapterCount) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  capacity = *inoutAdapterCount;
-  deviceList = gpu_getInstanceAdapters(inst);
-  count = inst->_adapterCount;
-  i = 0u;
-
-  if (outAdapters) {
-    for (item = deviceList; item && i < capacity; item = item->next) {
-      outAdapters[i++] = item;
-    }
-  }
-
-  *inoutAdapterCount = count;
-  if (outAdapters && capacity < count) {
-    return GPU_ERROR_INSUFFICIENT_CAPACITY;
-  }
-
-  return GPU_OK;
-}
-
-GPU_EXPORT
-GPUResult
-GPURequestAdapter(GPUInstance                    *inst,
-                  const GPUAdapterRequestOptions *options,
-                  GPUAdapterRequestCallback       callback,
-                  void                           *userData) {
-  GPUAdapterRequestContext *request;
-  GPUAdapter               *adapter;
-  GPUApi                   *api;
-  GPUResult                 result;
-  GPUPowerPreference        preference;
-  GPUWorkload               workload;
-  uint64_t                  requiredFeatureMask;
-
-  if (!inst || !callback || !(api = gpuInstanceApi(inst))) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  result = gpu_adapterRequestMask(options,
-                                  &preference,
-                                  &workload,
-                                  &requiredFeatureMask);
-  if (result != GPU_OK) {
-    return result;
-  }
-
-  if (inst->_adapters) {
-    adapter = gpu_selectRequestedAdapter(inst,
-                                         preference,
-                                         workload,
-                                         requiredFeatureMask);
-    result = adapter ? GPU_OK : GPU_ERROR_UNSUPPORTED;
-    callback(result, adapter, userData);
-    return result;
-  }
-
-  if (!api->device.requestAdapter) {
-    adapter = gpu_selectRequestedAdapter(inst,
-                                         preference,
-                                         workload,
-                                         requiredFeatureMask);
-    result  = adapter ? GPU_OK : GPU_ERROR_UNSUPPORTED;
-    callback(result, adapter, userData);
-    return result;
-  }
-
-  request = calloc(1, sizeof(*request));
-  if (!request) {
-    return GPU_ERROR_OUT_OF_MEMORY;
-  }
-  request->instance            = inst;
-  request->callback            = callback;
-  request->userData            = userData;
-  request->requiredFeatureMask = requiredFeatureMask;
-  request->workload            = workload;
-
-  result = api->device.requestAdapter(inst,
-                                      preference,
-                                      gpu_completeAdapterRequest,
-                                      request);
-  if (result != GPU_OK) {
-    free(request);
-  }
-  return result;
-}
-
-GPU_EXPORT
-GPUResult
-GPUGetAdapterProperties(const GPUAdapter     *adapter,
-                        GPUAdapterProperties *outProps) {
-  GPUApi *api;
-  GPUBackend backend;
-
-  if (!adapter || !outProps) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  memset(outProps, 0, sizeof(*outProps));
-  api = gpuAdapterApi(adapter);
-  if (api && api->device.getAdapterProperties) {
-    return api->device.getAdapterProperties(adapter, outProps);
-  }
-
-  backend = api ? api->backend : GPU_BACKEND_DEFAULT;
-
-  outProps->backend        = backend;
-  outProps->type           = GPU_ADAPTER_TYPE_UNKNOWN;
-  outProps->name           = gpu_backendName(backend);
-  if (adapter->supportsSwapchain) {
-    outProps->executionFlags |= GPU_EXECUTION_GRAPHICS_BIT;
-  }
-  if (api && api->device.supportsFeature &&
-      api->device.supportsFeature(adapter, GPU_FEATURE_COMPUTE)) {
-    outProps->executionFlags |= GPU_EXECUTION_COMPUTE_BIT;
-  }
-
-  return GPU_OK;
-}
-
-GPU_EXPORT
-GPUResult
-GPUGetAdapterIdentity(const GPUAdapter   *adapter,
-                      GPUAdapterIdentity *outIdentity) {
-  GPUAdapterIdentityFlags knownFlags;
-  GPUApi                 *api;
-  GPUResult               result;
-
-  if (!adapter || !outIdentity) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  memset(outIdentity, 0, sizeof(*outIdentity));
-  api = gpuAdapterApi(adapter);
-  if (!api || !api->device.getAdapterIdentity) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
-
-  result = api->device.getAdapterIdentity(adapter, outIdentity);
-  if (result != GPU_OK) {
-    memset(outIdentity, 0, sizeof(*outIdentity));
-    return result;
-  }
-
-  knownFlags = GPU_ADAPTER_IDENTITY_UUID_BIT |
-               GPU_ADAPTER_IDENTITY_LUID_BIT |
-               GPU_ADAPTER_IDENTITY_REGISTRY_ID_BIT;
-  outIdentity->validFlags &= knownFlags;
-  if (outIdentity->validFlags == 0u) {
-    memset(outIdentity, 0, sizeof(*outIdentity));
-    return GPU_ERROR_UNSUPPORTED;
-  }
-  return GPU_OK;
-}
-
-GPU_EXPORT
-GPUResult
-GPUAdaptersSharePhysicalDevice(const GPUAdapter *first,
-                               const GPUAdapter *second,
-                               bool             *outSameDevice) {
-  GPUAdapterIdentity firstIdentity, secondIdentity;
-  GPUAdapterIdentityFlags commonFlags;
+static GPUResult
+gpu_finalizeDevice(GPUAdapter *adapter,
+                   GPUDevice  *device,
+                   uint64_t    enabledFeatureMask) {
+  GPUApi   *api;
   GPUResult result;
 
-  if (!first || !second || !outSameDevice) {
-    return GPU_ERROR_INVALID_ARGUMENT;
+  if (!(api = gpuAdapterApi(adapter)) || !device) {
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  *outSameDevice = false;
-  if (first == second) {
-    *outSameDevice = true;
-    return GPU_OK;
+  device->inst    = adapter->inst;
+  device->adapter = adapter;
+  device->_api    = api;
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u
+      && GPUGetVRSCapabilitiesEXT(adapter, &device->vrsCapabilities) != GPU_OK) {
+    api->device.destroyDevice(device);
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  result = GPUGetAdapterIdentity(first, &firstIdentity);
+  result = gpuInitPipelineCacheDevice(device);
+
   if (result != GPU_OK) {
-    return result;
-  }
-  result = GPUGetAdapterIdentity(second, &secondIdentity);
-  if (result != GPU_OK) {
-    return result;
-  }
-
-  commonFlags = firstIdentity.validFlags & secondIdentity.validFlags;
-  if (commonFlags == 0u) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
-  if ((commonFlags & GPU_ADAPTER_IDENTITY_UUID_BIT) != 0u &&
-      memcmp(firstIdentity.deviceUUID,
-             secondIdentity.deviceUUID,
-             sizeof(firstIdentity.deviceUUID)) != 0) {
-    return GPU_OK;
-  }
-  if ((commonFlags & GPU_ADAPTER_IDENTITY_REGISTRY_ID_BIT) != 0u &&
-      firstIdentity.registryID != secondIdentity.registryID) {
-    return GPU_OK;
-  }
-  if ((commonFlags & GPU_ADAPTER_IDENTITY_LUID_BIT) != 0u) {
-    if (firstIdentity.luid != secondIdentity.luid) {
-      return GPU_OK;
-    }
-    if (firstIdentity.luidNodeMask != 0u &&
-        secondIdentity.luidNodeMask != 0u &&
-        (firstIdentity.luidNodeMask & secondIdentity.luidNodeMask) == 0u) {
-      return GPU_OK;
-    }
-  }
-
-  *outSameDevice = true;
-  return GPU_OK;
-}
-
-GPU_EXPORT
-GPUResult
-GPUGetAdapterCapabilities(const GPUAdapter       *adapter,
-                          GPUAdapterCapabilities *outCaps) {
-  if (!adapter || !outCaps) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  memset(outCaps, 0, sizeof(*outCaps));
-  gpu_ensureAdapterFeatureSet((GPUAdapter *)adapter);
-  outCaps->supported = adapter->supportedFeatures;
-  gpu_fillAdapterLimits(adapter, &outCaps->limits);
-
-  return GPU_OK;
-}
-
-GPU_EXPORT
-GPUResult
-GPUGetDeviceCapabilities(const GPUDevice       *device,
-                         GPUDeviceCapabilities *outCaps) {
-  if (!device || !outCaps) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  memset(outCaps, 0, sizeof(*outCaps));
-  outCaps->enabled = device->enabledFeatures;
-  gpu_fillAdapterLimits(device->adapter, &outCaps->limits);
-
-  return GPU_OK;
-}
-
-GPU_EXPORT
-GPUResult
-GPUGetFormatCapabilities(const GPUAdapter      *adapter,
-                         GPUFormat              format,
-                         GPUFormatCapabilities *outCaps) {
-  const GPUSampleCountFlags knownSampleCounts =
-    GPU_SAMPLE_COUNT_1_BIT |
-    GPU_SAMPLE_COUNT_2_BIT |
-    GPU_SAMPLE_COUNT_4_BIT |
-    GPU_SAMPLE_COUNT_8_BIT;
-  GPUApi *api;
-  bool color;
-  bool integerFormat;
-
-  if (!adapter || !outCaps ||
-      format <= GPU_FORMAT_UNDEFINED || format >= GPU_FORMAT_COUNT) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  memset(outCaps, 0, sizeof(*outCaps));
-  if (gpu_formatIsDepthStencil(format)) {
-    outCaps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
-    outCaps->depthStencil          = true;
-  } else {
-    color = gpu_formatIsKnownColor(format);
-    if (color) {
-      integerFormat = gpu_formatIsInteger(format);
-      outCaps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
-      outCaps->sampled               = true;
-      outCaps->filterable            = !integerFormat;
-      outCaps->storage               = !integerFormat;
-      outCaps->colorAttachment       = true;
-      outCaps->blendable             = !integerFormat;
-    }
-  }
-
-  api = gpuAdapterApi(adapter);
-  if (api && api->device.getFormatCapabilities) {
-    api->device.getFormatCapabilities(adapter, format, outCaps);
-  }
-  if (outCaps->colorAttachment || outCaps->depthStencil) {
-    outCaps->supportedSampleCounts &= knownSampleCounts;
-    outCaps->supportedSampleCounts |= GPU_SAMPLE_COUNT_1_BIT;
-  } else {
-    outCaps->supportedSampleCounts = 0u;
-  }
-
-  return GPU_OK;
-}
-
-GPU_EXPORT
-GPUResult
-GPUGetCacheStats(GPUDevice *device, GPUCacheStats *outStats) {
-  if (!device || !outStats) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  gpuDeviceGetCacheStats(device, outStats);
-  return GPU_OK;
-}
-
-GPU_EXPORT
-GPUResult
-GPUConfigureRuntime(GPUDevice *device, const GPURuntimeConfig *config) {
-  if (!device || !gpu_validRuntimeConfig(config)) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  device->runtimeConfig = *config;
-  return GPU_OK;
-}
-
-GPU_EXPORT
-GPUResult
-GPUConfigureTransientAllocator(GPUDevice *device,
-                               const GPUTransientAllocatorConfig *config) {
-  GPUBuffer           *buffer;
-  GPUFence           **frameFences;
-  void                *cpuPtr;
-  uint64_t             capacityBytes;
-  GPUBufferUsageFlags  usage;
-  GPUResult            result;
-  bool                 cpuPtrOwned;
-
-  if (!device || !gpu_validTransientAllocatorConfig(config, &capacityBytes)) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  buffer      = NULL;
-  frameFences = NULL;
-  cpuPtr      = NULL;
-  cpuPtrOwned = false;
-  usage       = gpu_knownTransientBufferUsageMask();
-  result = gpu_createTransientBuffer(device,
-                                     usage,
-                                     capacityBytes,
-                                     &buffer,
-                                     &cpuPtr,
-                                     &cpuPtrOwned);
-  if (result != GPU_OK) {
-    usage  = gpu_transientUploadUsageMask();
-    result = gpu_createTransientBuffer(device,
-                                       usage,
-                                       capacityBytes,
-                                       &buffer,
-                                       &cpuPtr,
-                                       &cpuPtrOwned);
-  }
-  if (result != GPU_OK) {
-    return result;
-  }
-  result = gpu_createTransientFrameFences(device,
-                                          config->framesInFlight,
-                                          &frameFences);
-  if (result != GPU_OK) {
-    if (cpuPtrOwned) {
-      free(cpuPtr);
-    }
-    GPUDestroyBuffer(buffer);
+    api->device.destroyDevice(device);
     return result;
   }
 
-  gpu_destroyTransientAllocator(device);
-  device->transientBuffer           = buffer;
-  device->transientFrameFences      = frameFences;
-  device->transientCpuPtr           = cpuPtr;
-  device->transientBufferUsage      = usage;
-  device->transientConfig           = *config;
-  device->transientConfigured       = true;
-  device->transientCpuPtrOwned      = cpuPtrOwned;
-  device->transientFrameIndex       = 0u;
-  device->transientFrameStride      =
-    capacityBytes / config->framesInFlight;
-  device->allocatorStats.ringCapacityBytes = capacityBytes;
+  result = gpuInitBindGroupCacheDevice(device);
+
+  if (result != GPU_OK) {
+    gpuDestroyPipelineCacheDevice(device);
+    api->device.destroyDevice(device);
+    return result;
+  }
+
+  result = gpuInitBlitDevice(device);
+
+  if (result != GPU_OK) {
+    gpuDestroyBindGroupCacheDevice(device);
+    gpuDestroyPipelineCacheDevice(device);
+    api->device.destroyDevice(device);
+    return result;
+  }
+
+  device->enabledFeatureMask = enabledFeatureMask;
+  gpu_fillFeatureSet(device->enabledFeatureMask,
+                     device->enabledFeatureStorage,
+                     (uint32_t)GPU_ARRAY_LEN(device->enabledFeatureStorage),
+                     &device->enabledFeatures);
+
   return GPU_OK;
 }
 
-GPU_EXPORT
-GPUResult
-GPUAllocateTransientBuffer(GPUDevice *device,
-                           GPUBufferUsageFlags usage,
-                           uint64_t sizeBytes,
-                           uint64_t alignment,
-                           GPUTransientBufferSlice *outSlice) {
-  uint64_t alignedOffset;
-  uint64_t endOffset;
-  uint64_t frameBaseOffset;
+static void
+gpu_completeDeviceRequest(GPUResult  result,
+                          GPUDevice *device,
+                          void      *userData) {
+  GPUDeviceRequestContext *request;
 
-  if (!outSlice) {
-    return GPU_ERROR_INVALID_ARGUMENT;
+  request = userData;
+
+  if (result == GPU_OK && device) {
+    result = gpu_finalizeDevice(request->adapter,
+                                device,
+                                request->enabledFeatureMask);
+  } else if (result == GPU_OK) {
+    result = GPU_ERROR_BACKEND_FAILURE;
   }
 
-  if (!device ||
-      !device->transientConfigured ||
-      usage == 0u ||
-      sizeBytes == 0u ||
-      alignment == 0u) {
-    memset(outSlice, 0, sizeof(*outSlice));
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if (!device->transientBuffer ||
-      (usage & ~device->transientBufferUsage) != 0u) {
-    memset(outSlice, 0, sizeof(*outSlice));
-    return GPU_ERROR_UNSUPPORTED;
+  if (result != GPU_OK) {
+    device = NULL;
   }
 
-  if (!gpu_alignUp(device->transientFrameOffset, alignment, &alignedOffset) ||
-      gpu_u64AddOverflow(alignedOffset, sizeBytes, &endOffset)) {
-    memset(outSlice, 0, sizeof(*outSlice));
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  if (endOffset > device->transientConfig.ringBytesPerFrame) {
-    memset(outSlice, 0, sizeof(*outSlice));
-    return gpu_allocateTransientChunk(device,
-                                      usage,
-                                      sizeBytes,
-                                      alignment,
-                                      outSlice);
-  }
-
-  frameBaseOffset = (uint64_t)device->transientFrameIndex *
-                    device->transientFrameStride;
-  outSlice->buffer = device->transientBuffer;
-  outSlice->offset = frameBaseOffset + alignedOffset;
-  outSlice->sizeBytes = sizeBytes;
-  outSlice->cpuPtr = (uint8_t *)device->transientCpuPtr + outSlice->offset;
-
-  device->transientFrameOffset = endOffset;
-  if (endOffset > device->allocatorStats.ringHighWaterBytes) {
-    device->allocatorStats.ringHighWaterBytes = endOffset;
-  }
-
-  return GPU_OK;
+  request->callback(result, device, request->userData);
+  free(request);
 }
 
 GPU_HIDE
@@ -1557,123 +1270,63 @@ GPUResult
 gpuDeviceFlushTransientUploads(GPUQueue *queue, uint32_t frameIndex) {
   GPUTransientChunk *chunk;
   GPUDevice         *device;
-  GPUResult          result;
   uint64_t           baseOffset;
   uint64_t           flushBytes;
+  GPUResult          result;
 
-  device = gpuCommandQueueDevice(queue);
-  if (!device) {
+  if (!(device = gpuCommandQueueDevice(queue))) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (!device->transientConfigured) {
     return GPU_OK;
   }
+
   if (frameIndex >= device->transientConfig.framesInFlight) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (device->transientCpuPtrOwned &&
-      device->transientFrameOffset != 0u) {
-    if (frameIndex != device->transientFrameIndex ||
-        !gpu_alignUp(device->transientFrameOffset, 4u, &flushBytes)) {
+  if (device->transientCpuPtrOwned
+      && device->transientFrameOffset != 0u) {
+    if (frameIndex != device->transientFrameIndex
+        || !gpu_alignUp(device->transientFrameOffset, 4u, &flushBytes)) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
+
     baseOffset = (uint64_t)frameIndex * device->transientFrameStride;
-    result = GPUQueueWriteBuffer(queue,
-                                 device->transientBuffer,
-                                 baseOffset,
-                                 (const uint8_t *)device->transientCpuPtr +
-                                   baseOffset,
-                                 flushBytes);
+    result     = GPUQueueWriteBuffer(queue,
+                                     device->transientBuffer,
+                                     baseOffset,
+                                     (const uint8_t *)device->transientCpuPtr + baseOffset,
+                                     flushBytes);
+
     if (result != GPU_OK) {
       return result;
     }
   }
 
   for (chunk = device->transientChunks; chunk; chunk = chunk->next) {
-    if (!chunk->cpuPtrOwned || chunk->frameIndex != frameIndex ||
-        chunk->offset == 0u) {
+    if (!chunk->cpuPtrOwned || chunk->frameIndex != frameIndex
+        || chunk->offset == 0u) {
       continue;
     }
+
     if (!gpu_alignUp(chunk->offset, 4u, &flushBytes)) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
+
     result = GPUQueueWriteBuffer(queue,
                                  chunk->buffer,
                                  0u,
                                  chunk->cpuPtr,
                                  flushBytes);
+
     if (result != GPU_OK) {
       return result;
     }
   }
+
   return GPU_OK;
-}
-
-GPU_EXPORT
-GPUResult
-GPUGetLastFrameStats(GPUDevice *device, GPUFrameStats *outStats) {
-  uint64_t gpuFrameTimeBits;
-
-  if (!device || !outStats) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  *outStats = device->lastFrameStats;
-  if (device->runtimeConfig.enableStats) {
-#if defined(_WIN32) || defined(WIN32)
-    gpuFrameTimeBits = (uint64_t)InterlockedCompareExchange64(
-      (volatile LONG64 *)&device->_completedGPUFrameTimeBits,
-      0,
-      0
-    );
-#else
-    gpuFrameTimeBits = __atomic_load_n(&device->_completedGPUFrameTimeBits,
-                                       __ATOMIC_ACQUIRE);
-#endif
-    memcpy(&outStats->gpuFrameMs,
-           &gpuFrameTimeBits,
-           sizeof(outStats->gpuFrameMs));
-  }
-  return GPU_OK;
-}
-
-GPU_EXPORT
-GPUResult
-GPUGetAllocatorStats(GPUDevice *device, GPUAllocatorStats *outStats) {
-  if (!device || !outStats) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  *outStats = device->allocatorStats;
-  outStats->ringUsedBytes = device->transientFrameOffset;
-  return GPU_OK;
-}
-
-GPU_EXPORT
-void
-GPUResetStats(GPUDevice *device) {
-  if (!device) {
-    return;
-  }
-
-  gpuDeviceResetCacheStats(device);
-  memset(&device->currentFrameStats, 0, sizeof(device->currentFrameStats));
-  memset(&device->lastFrameStats, 0, sizeof(device->lastFrameStats));
-#if defined(_WIN32) || defined(WIN32)
-  InterlockedExchange64(
-    (volatile LONG64 *)&device->_completedGPUFrameTimeBits,
-    0
-  );
-#else
-  __atomic_store_n(&device->_completedGPUFrameTimeBits,
-                   0u,
-                   __ATOMIC_RELEASE);
-#endif
-  device->allocatorStats.ringUsedBytes = device->transientFrameOffset;
-  device->allocatorStats.ringHighWaterBytes = device->transientFrameOffset;
-  device->allocatorStats.ringWrapCount = 0;
-  device->allocatorStats.uploadStallCount = 0;
 }
 
 GPU_HIDE
@@ -1734,17 +1387,15 @@ void
 gpuDeviceRecordGPUFrameTime(GPUDevice *device, double milliseconds) {
   uint64_t bits;
 
-  if (!device || !device->runtimeConfig.enableStats ||
-      !(milliseconds > 0.0)) {
+  if (!device || !device->runtimeConfig.enableStats
+      || !(milliseconds > 0.0)) {
     return;
   }
 
   memcpy(&bits, &milliseconds, sizeof(bits));
 #if defined(_WIN32) || defined(WIN32)
-  InterlockedExchange64(
-    (volatile LONG64 *)&device->_completedGPUFrameTimeBits,
-    (LONG64)bits
-  );
+  InterlockedExchange64((volatile LONG64 *)&device->_completedGPUFrameTimeBits,
+                        (LONG64)bits);
 #else
   __atomic_store_n(&device->_completedGPUFrameTimeBits,
                    bits,
@@ -1754,29 +1405,31 @@ gpuDeviceRecordGPUFrameTime(GPUDevice *device, double milliseconds) {
 
 GPU_HIDE
 void
-gpuDeviceReportError(GPUDevice           *device,
-                     GPUDeviceErrorType    type,
-                     GPUDeviceLostReason  lostReason,
-                     GPUResult            result,
-                     const char          *message) {
-  GPUDeviceErrorCallback callback;
+gpuDeviceReportError(GPUDevice          *device,
+                     GPUDeviceErrorType  type,
+                     GPUDeviceLostReason lostReason,
+                     GPUResult           result,
+                     const char         *message) {
   GPUDeviceErrorInfo     info;
+  GPUDeviceErrorCallback callback;
 
-  if (!device || type < GPU_DEVICE_ERROR_VALIDATION ||
-      type > GPU_DEVICE_ERROR_LOST) {
+  if (!device || type < GPU_DEVICE_ERROR_VALIDATION
+      || type > GPU_DEVICE_ERROR_LOST) {
     return;
   }
+
   if (type == GPU_DEVICE_ERROR_LOST && !gpu_reportDeviceLostOnce(device)) {
     return;
   }
 
-  callback = device->errorCallback;
+  callback        = device->errorCallback;
   info.message    = message;
   info.result     = result;
   info.type       = type;
   info.lostReason = type == GPU_DEVICE_ERROR_LOST
                       ? lostReason
                       : GPU_DEVICE_LOST_REASON_UNKNOWN;
+
   if (callback) {
     callback(device, &info, device->errorUserData);
     return;
@@ -1788,9 +1441,7 @@ gpuDeviceReportError(GPUDevice           *device,
   }
 
   fprintf(stderr,
-          type == GPU_DEVICE_ERROR_VALIDATION
-            ? "GPU validation: %s\n"
-            : "GPU device error: %s\n",
+          type == GPU_DEVICE_ERROR_VALIDATION ? "GPU validation: %s\n" : "GPU device error: %s\n",
           message ? message : "unknown error");
 #endif
 }
@@ -1799,8 +1450,8 @@ gpuDeviceReportError(GPUDevice           *device,
 GPU_HIDE
 void
 gpuDeviceRecordValidationError(GPUDevice *device, const char *message) {
-  if (!device ||
-      device->runtimeConfig.validationMode == GPU_VALIDATION_OFF) {
+  if (!device
+      || device->runtimeConfig.validationMode == GPU_VALIDATION_OFF) {
     return;
   }
 
@@ -1814,15 +1465,562 @@ gpuDeviceRecordValidationError(GPUDevice *device, const char *message) {
 
 GPU_EXPORT
 GPUResult
-GPUSetDeviceErrorCallback(GPUDevice              *device,
-                          GPUDeviceErrorCallback  callback,
-                          void                   *userData) {
+GPUEnumerateAdapters(GPUInstance *inst,
+                     uint32_t    *inoutAdapterCount,
+                     GPUAdapter **outAdapters) {
+  GPUAdapter *deviceList;
+  GPUAdapter *item;
+  uint32_t    capacity;
+  uint32_t    count;
+  uint32_t    i;
+
+  if (!inst || !inoutAdapterCount) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  capacity   = *inoutAdapterCount;
+  deviceList = gpu_getInstanceAdapters(inst);
+  count      = inst->_adapterCount;
+  i          = 0u;
+
+  if (outAdapters) {
+    for (item = deviceList; item && i < capacity; item = item->next) {
+      outAdapters[i++] = item;
+    }
+  }
+
+  *inoutAdapterCount = count;
+
+  if (outAdapters && capacity < count) {
+    return GPU_ERROR_INSUFFICIENT_CAPACITY;
+  }
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPURequestAdapter(GPUInstance                    *inst,
+                  const GPUAdapterRequestOptions *options,
+                  GPUAdapterRequestCallback       callback,
+                  void                           *userData) {
+  GPUAdapterRequestContext *request;
+  GPUAdapter               *adapter;
+  GPUApi                   *api;
+  uint64_t                  requiredFeatureMask;
+  GPUResult                 result;
+  GPUPowerPreference        preference;
+  GPUWorkload               workload;
+
+  if (!inst || !callback || !(api = gpuInstanceApi(inst))) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = gpu_adapterRequestMask(options,
+                                  &preference,
+                                  &workload,
+                                  &requiredFeatureMask);
+
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  if (inst->_adapters) {
+    adapter = gpu_selectRequestedAdapter(inst,
+                                         preference,
+                                         workload,
+                                         requiredFeatureMask);
+    result = adapter ? GPU_OK : GPU_ERROR_UNSUPPORTED;
+    callback(result, adapter, userData);
+    return result;
+  }
+
+  if (!api->device.requestAdapter) {
+    adapter = gpu_selectRequestedAdapter(inst,
+                                         preference,
+                                         workload,
+                                         requiredFeatureMask);
+    result  = adapter ? GPU_OK : GPU_ERROR_UNSUPPORTED;
+    callback(result, adapter, userData);
+    return result;
+  }
+
+  if (!(request = calloc(1, sizeof(*request)))) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  request->instance            = inst;
+  request->callback            = callback;
+  request->userData            = userData;
+  request->requiredFeatureMask = requiredFeatureMask;
+  request->workload            = workload;
+
+  result = api->device.requestAdapter(inst,
+                                      preference,
+                                      gpu_completeAdapterRequest,
+                                      request);
+
+  if (result != GPU_OK) {
+    free(request);
+  }
+
+  return result;
+}
+
+GPU_EXPORT
+GPUResult
+GPUGetAdapterProperties(const GPUAdapter     *adapter,
+                        GPUAdapterProperties *outProps) {
+  GPUApi    *api;
+  GPUBackend backend;
+
+  if (!adapter || !outProps) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(outProps, 0, sizeof(*outProps));
+  if ((api = gpuAdapterApi(adapter)) && api->device.getAdapterProperties) {
+    return api->device.getAdapterProperties(adapter, outProps);
+  }
+
+  backend = api ? api->backend : GPU_BACKEND_DEFAULT;
+
+  outProps->backend = backend;
+  outProps->type    = GPU_ADAPTER_TYPE_UNKNOWN;
+  outProps->name    = gpu_backendName(backend);
+
+  if (adapter->supportsSwapchain) {
+    outProps->executionFlags |= GPU_EXECUTION_GRAPHICS_BIT;
+  }
+
+  if (api && api->device.supportsFeature
+      && api->device.supportsFeature(adapter, GPU_FEATURE_COMPUTE)) {
+    outProps->executionFlags |= GPU_EXECUTION_COMPUTE_BIT;
+  }
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUGetAdapterIdentity(const GPUAdapter   *adapter,
+                      GPUAdapterIdentity *outIdentity) {
+  GPUApi                 *api;
+  GPUAdapterIdentityFlags knownFlags;
+  GPUResult               result;
+
+  if (!adapter || !outIdentity) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(outIdentity, 0, sizeof(*outIdentity));
+  if (!(api = gpuAdapterApi(adapter)) || !api->device.getAdapterIdentity) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  result = api->device.getAdapterIdentity(adapter, outIdentity);
+
+  if (result != GPU_OK) {
+    memset(outIdentity, 0, sizeof(*outIdentity));
+    return result;
+  }
+
+  knownFlags = GPU_ADAPTER_IDENTITY_UUID_BIT |
+               GPU_ADAPTER_IDENTITY_LUID_BIT |
+               GPU_ADAPTER_IDENTITY_REGISTRY_ID_BIT;
+  outIdentity->validFlags &= knownFlags;
+
+  if (outIdentity->validFlags == 0u) {
+    memset(outIdentity, 0, sizeof(*outIdentity));
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUAdaptersSharePhysicalDevice(const GPUAdapter *first,
+                               const GPUAdapter *second,
+                               bool             *outSameDevice) {
+  GPUAdapterIdentity      firstIdentity, secondIdentity;
+  GPUAdapterIdentityFlags commonFlags;
+  GPUResult               result;
+
+  if (!first || !second || !outSameDevice) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outSameDevice = false;
+
+  if (first == second) {
+    *outSameDevice = true;
+    return GPU_OK;
+  }
+
+  result = GPUGetAdapterIdentity(first, &firstIdentity);
+
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  result = GPUGetAdapterIdentity(second, &secondIdentity);
+
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  commonFlags = firstIdentity.validFlags & secondIdentity.validFlags;
+
+  if (commonFlags == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  if ((commonFlags & GPU_ADAPTER_IDENTITY_UUID_BIT) != 0u
+      && memcmp(firstIdentity.deviceUUID,
+                secondIdentity.deviceUUID,
+                sizeof(firstIdentity.deviceUUID)) != 0) {
+    return GPU_OK;
+  }
+
+  if ((commonFlags & GPU_ADAPTER_IDENTITY_REGISTRY_ID_BIT) != 0u
+      && firstIdentity.registryID != secondIdentity.registryID) {
+    return GPU_OK;
+  }
+
+  if ((commonFlags & GPU_ADAPTER_IDENTITY_LUID_BIT) != 0u) {
+    if (firstIdentity.luid != secondIdentity.luid) {
+      return GPU_OK;
+    }
+
+    if (firstIdentity.luidNodeMask != 0u
+        && secondIdentity.luidNodeMask != 0u
+        && (firstIdentity.luidNodeMask & secondIdentity.luidNodeMask) == 0u) {
+      return GPU_OK;
+    }
+  }
+
+  *outSameDevice = true;
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUGetAdapterCapabilities(const GPUAdapter       *adapter,
+                          GPUAdapterCapabilities *outCaps) {
+  if (!adapter || !outCaps) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(outCaps, 0, sizeof(*outCaps));
+  gpu_ensureAdapterFeatureSet((GPUAdapter *)adapter);
+  outCaps->supported = adapter->supportedFeatures;
+  gpu_fillAdapterLimits(adapter, &outCaps->limits);
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUGetDeviceCapabilities(const GPUDevice       *device,
+                         GPUDeviceCapabilities *outCaps) {
+  if (!device || !outCaps) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(outCaps, 0, sizeof(*outCaps));
+  outCaps->enabled = device->enabledFeatures;
+  gpu_fillAdapterLimits(device->adapter, &outCaps->limits);
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUGetFormatCapabilities(const GPUAdapter      *adapter,
+                         GPUFormat              format,
+                         GPUFormatCapabilities *outCaps) {
+  GPUApi                   *api;
+  const GPUSampleCountFlags knownSampleCounts = GPU_SAMPLE_COUNT_1_BIT |
+                                                GPU_SAMPLE_COUNT_2_BIT |
+                                                GPU_SAMPLE_COUNT_4_BIT |
+                                                GPU_SAMPLE_COUNT_8_BIT;
+  bool                      color;
+  bool                      integerFormat;
+
+  if (!adapter || !outCaps
+      || format <= GPU_FORMAT_UNDEFINED || format >= GPU_FORMAT_COUNT) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  memset(outCaps, 0, sizeof(*outCaps));
+
+  if (gpu_formatIsDepthStencil(format)) {
+    outCaps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
+    outCaps->depthStencil          = true;
+  } else {
+    color = gpu_formatIsKnownColor(format);
+
+    if (color) {
+      integerFormat = gpu_formatIsInteger(format);
+
+      outCaps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
+      outCaps->sampled               = true;
+      outCaps->filterable            = !integerFormat;
+      outCaps->storage               = !integerFormat;
+      outCaps->colorAttachment       = true;
+      outCaps->blendable             = !integerFormat;
+    }
+  }
+
+  if ((api = gpuAdapterApi(adapter)) && api->device.getFormatCapabilities) {
+    api->device.getFormatCapabilities(adapter, format, outCaps);
+  }
+
+  if (outCaps->colorAttachment || outCaps->depthStencil) {
+    outCaps->supportedSampleCounts &= knownSampleCounts;
+    outCaps->supportedSampleCounts |= GPU_SAMPLE_COUNT_1_BIT;
+  } else {
+    outCaps->supportedSampleCounts = 0u;
+  }
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUGetCacheStats(GPUDevice *device, GPUCacheStats *outStats) {
+  if (!device || !outStats) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  gpuDeviceGetCacheStats(device, outStats);
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUConfigureRuntime(GPUDevice *device, const GPURuntimeConfig *config) {
+  if (!device || !gpu_validRuntimeConfig(config)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  device->runtimeConfig = *config;
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUConfigureTransientAllocator(GPUDevice                         *device,
+                               const GPUTransientAllocatorConfig *config) {
+  GPUBuffer          *buffer;
+  GPUFence          **frameFences;
+  void               *cpuPtr;
+  uint64_t            capacityBytes;
+  GPUBufferUsageFlags usage;
+  GPUResult           result;
+  bool                cpuPtrOwned;
+
+  if (!device || !gpu_validTransientAllocatorConfig(config, &capacityBytes)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  buffer      = NULL;
+  frameFences = NULL;
+  cpuPtr      = NULL;
+  cpuPtrOwned = false;
+  usage       = gpu_knownTransientBufferUsageMask();
+  result      = gpu_createTransientBuffer(device,
+                                          usage,
+                                          capacityBytes,
+                                          &buffer,
+                                          &cpuPtr,
+                                          &cpuPtrOwned);
+
+  if (result != GPU_OK) {
+    usage  = gpu_transientUploadUsageMask();
+    result = gpu_createTransientBuffer(device,
+                                       usage,
+                                       capacityBytes,
+                                       &buffer,
+                                       &cpuPtr,
+                                       &cpuPtrOwned);
+  }
+
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  result = gpu_createTransientFrameFences(device,
+                                          config->framesInFlight,
+                                          &frameFences);
+
+  if (result != GPU_OK) {
+    if (cpuPtrOwned) {
+      free(cpuPtr);
+    }
+
+    GPUDestroyBuffer(buffer);
+    return result;
+  }
+
+  gpu_destroyTransientAllocator(device);
+  device->transientBuffer      = buffer;
+  device->transientFrameFences = frameFences;
+  device->transientCpuPtr      = cpuPtr;
+  device->transientBufferUsage = usage;
+  device->transientConfig      = *config;
+  device->transientConfigured  = true;
+  device->transientCpuPtrOwned = cpuPtrOwned;
+  device->transientFrameIndex  = 0u;
+  device->transientFrameStride = capacityBytes / config->framesInFlight;
+
+  device->allocatorStats.ringCapacityBytes = capacityBytes;
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUAllocateTransientBuffer(GPUDevice               *device,
+                           GPUBufferUsageFlags      usage,
+                           uint64_t                 sizeBytes,
+                           uint64_t                 alignment,
+                           GPUTransientBufferSlice *outSlice) {
+  uint64_t alignedOffset;
+  uint64_t endOffset;
+  uint64_t frameBaseOffset;
+
+  if (!outSlice) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!device
+      || !device->transientConfigured
+      || usage == 0u
+      || sizeBytes == 0u
+      || alignment == 0u) {
+    memset(outSlice, 0, sizeof(*outSlice));
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!device->transientBuffer
+      || (usage & ~device->transientBufferUsage) != 0u) {
+    memset(outSlice, 0, sizeof(*outSlice));
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  if (!gpu_alignUp(device->transientFrameOffset, alignment, &alignedOffset)
+      || gpu_u64AddOverflow(alignedOffset, sizeBytes, &endOffset)) {
+    memset(outSlice, 0, sizeof(*outSlice));
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (endOffset > device->transientConfig.ringBytesPerFrame) {
+    memset(outSlice, 0, sizeof(*outSlice));
+    return gpu_allocateTransientChunk(device,
+                                      usage,
+                                      sizeBytes,
+                                      alignment,
+                                      outSlice);
+  }
+
+  frameBaseOffset = (uint64_t)device->transientFrameIndex *
+                    device->transientFrameStride;
+  outSlice->buffer    = device->transientBuffer;
+  outSlice->offset    = frameBaseOffset + alignedOffset;
+  outSlice->sizeBytes = sizeBytes;
+  outSlice->cpuPtr    = (uint8_t *)device->transientCpuPtr + outSlice->offset;
+
+  device->transientFrameOffset = endOffset;
+
+  if (endOffset > device->allocatorStats.ringHighWaterBytes) {
+    device->allocatorStats.ringHighWaterBytes = endOffset;
+  }
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUGetLastFrameStats(GPUDevice *device, GPUFrameStats *outStats) {
+  uint64_t gpuFrameTimeBits;
+
+  if (!device || !outStats) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outStats = device->lastFrameStats;
+
+  if (device->runtimeConfig.enableStats) {
+#if defined(_WIN32) || defined(WIN32)
+    gpuFrameTimeBits = (uint64_t)InterlockedCompareExchange64((volatile LONG64 *)&device->_completedGPUFrameTimeBits,
+                                                              0,
+                                                              0);
+#else
+    gpuFrameTimeBits = __atomic_load_n(&device->_completedGPUFrameTimeBits,
+                                       __ATOMIC_ACQUIRE);
+#endif
+    memcpy(&outStats->gpuFrameMs,
+           &gpuFrameTimeBits,
+           sizeof(outStats->gpuFrameMs));
+  }
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUGetAllocatorStats(GPUDevice *device, GPUAllocatorStats *outStats) {
+  if (!device || !outStats) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outStats               = device->allocatorStats;
+  outStats->ringUsedBytes = device->transientFrameOffset;
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+void
+GPUResetStats(GPUDevice *device) {
+  if (!device) {
+    return;
+  }
+
+  gpuDeviceResetCacheStats(device);
+  memset(&device->currentFrameStats, 0, sizeof(device->currentFrameStats));
+  memset(&device->lastFrameStats, 0, sizeof(device->lastFrameStats));
+#if defined(_WIN32) || defined(WIN32)
+  InterlockedExchange64((volatile LONG64 *)&device->_completedGPUFrameTimeBits,
+                        0);
+#else
+  __atomic_store_n(&device->_completedGPUFrameTimeBits,
+                   0u,
+                   __ATOMIC_RELEASE);
+#endif
+  device->allocatorStats.ringUsedBytes      = device->transientFrameOffset;
+  device->allocatorStats.ringHighWaterBytes = device->transientFrameOffset;
+  device->allocatorStats.ringWrapCount      = 0;
+  device->allocatorStats.uploadStallCount   = 0;
+}
+
+GPU_EXPORT
+GPUResult
+GPUSetDeviceErrorCallback(GPUDevice             *device,
+                          GPUDeviceErrorCallback callback,
+                          void                  *userData) {
   if (!device) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   device->errorUserData = callback ? userData : NULL;
   device->errorCallback = callback;
+
   return GPU_OK;
 }
 
@@ -1851,8 +2049,7 @@ GPUProc
 GPUGetProcAddr(GPUDevice *device, const char *name) {
   GPUApi *api;
 
-  api = gpuDeviceApi(device);
-  if (!api || !name || name[0] == '\0') {
+  if (!(api = gpuDeviceApi(device)) || !name || name[0] == '\0') {
     return NULL;
   }
 
@@ -1860,209 +2057,262 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
     if (strcmp(name, "GPUCreateDeviceInteropEXT") == 0) {
       return (GPUProc)GPUCreateDeviceInteropEXT;
     }
+
     if (strcmp(name, "GPUDestroyDeviceInteropEXT") == 0) {
       return (GPUProc)GPUDestroyDeviceInteropEXT;
     }
   }
-  if (api->multigpu.getBufferRequirements &&
-      strcmp(name, "GPUGetSharedBufferMemoryRequirementsEXT") == 0) {
+
+  if (api->multigpu.getBufferRequirements
+      && strcmp(name, "GPUGetSharedBufferMemoryRequirementsEXT") == 0) {
     return (GPUProc)GPUGetSharedBufferMemoryRequirementsEXT;
   }
-  if (api->multigpu.createBuffer &&
-      strcmp(name, "GPUCreateSharedBufferEXT") == 0) {
+
+  if (api->multigpu.createBuffer
+      && strcmp(name, "GPUCreateSharedBufferEXT") == 0) {
     return (GPUProc)GPUCreateSharedBufferEXT;
   }
-  if (api->multigpu.getTextureRequirements &&
-      strcmp(name, "GPUGetSharedTextureMemoryRequirementsEXT") == 0) {
+
+  if (api->multigpu.getTextureRequirements
+      && strcmp(name, "GPUGetSharedTextureMemoryRequirementsEXT") == 0) {
     return (GPUProc)GPUGetSharedTextureMemoryRequirementsEXT;
   }
-  if (api->multigpu.createTexture &&
-      strcmp(name, "GPUCreateSharedTextureEXT") == 0) {
+
+  if (api->multigpu.createTexture
+      && strcmp(name, "GPUCreateSharedTextureEXT") == 0) {
     return (GPUProc)GPUCreateSharedTextureEXT;
   }
-  if (api->multigpu.createSemaphore &&
-      strcmp(name, "GPUCreateSharedSemaphoreEXT") == 0) {
+
+  if (api->multigpu.createSemaphore
+      && strcmp(name, "GPUCreateSharedSemaphoreEXT") == 0) {
     return (GPUProc)GPUCreateSharedSemaphoreEXT;
   }
-  if (api->multigpu.encodeRelease &&
-      strcmp(name, "GPUEncodeSharedReleaseEXT") == 0) {
+
+  if (api->multigpu.encodeRelease
+      && strcmp(name, "GPUEncodeSharedReleaseEXT") == 0) {
     return (GPUProc)GPUEncodeSharedReleaseEXT;
   }
-  if (api->multigpu.encodeAcquire &&
-      strcmp(name, "GPUEncodeSharedAcquireEXT") == 0) {
+
+  if (api->multigpu.encodeAcquire
+      && strcmp(name, "GPUEncodeSharedAcquireEXT") == 0) {
     return (GPUProc)GPUEncodeSharedAcquireEXT;
   }
 
-  if (GPUIsFeatureEnabled(device, GPU_FEATURE_BINDLESS) &&
-      strcmp(name, "GPUUpdateBindGroupEXT") == 0) {
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_BINDLESS)
+      && strcmp(name, "GPUUpdateBindGroupEXT") == 0) {
     return (GPUProc)GPUUpdateBindGroupEXT;
   }
-  if (GPUIsFeatureEnabled(device, GPU_FEATURE_MESH_SHADER) &&
-      strcmp(name, "GPUDrawMeshEXT") == 0) {
+
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_MESH_SHADER)
+      && strcmp(name, "GPUDrawMeshEXT") == 0) {
     return (GPUProc)GPUDrawMeshEXT;
   }
-  if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX) &&
-      strcmp(name, "GPUGetSubgroupMatrixPropertiesEXT") == 0) {
+
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUP_MATRIX)
+      && strcmp(name, "GPUGetSubgroupMatrixPropertiesEXT") == 0) {
     return (GPUProc)GPUGetSubgroupMatrixPropertiesEXT;
   }
-  if (GPUIsFeatureEnabled(device, GPU_FEATURE_BUFFER_DEVICE_ADDRESS) &&
-      strcmp(name, "GPUGetBufferDeviceAddressEXT") == 0) {
+
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_BUFFER_DEVICE_ADDRESS)
+      && strcmp(name, "GPUGetBufferDeviceAddressEXT") == 0) {
     return (GPUProc)GPUGetBufferDeviceAddressEXT;
   }
-  if (GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_MEMORY_COPY) &&
-      strcmp(name, "GPUCopyMemoryIndirectEXT") == 0) {
+
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_MEMORY_COPY)
+      && strcmp(name, "GPUCopyMemoryIndirectEXT") == 0) {
     return (GPUProc)GPUCopyMemoryIndirectEXT;
   }
-  if (GPUIsFeatureEnabled(
-        device,
-        GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
-      ) &&
-      strcmp(name, "GPUCopyMemoryToTextureIndirectEXT") == 0) {
+
+  if (GPUIsFeatureEnabled(device,
+                          GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY)
+      && strcmp(name, "GPUCopyMemoryToTextureIndirectEXT") == 0) {
     return (GPUProc)GPUCopyMemoryToTextureIndirectEXT;
   }
+
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_VARIABLE_RATE_SHADING)) {
     if (strcmp(name, "GPUGetVRSCapabilitiesEXT") == 0) {
       return (GPUProc)GPUGetVRSCapabilitiesEXT;
     }
+
     if (strcmp(name, "GPUCreateRasterizationRateMapEXT") == 0) {
       return (GPUProc)GPUCreateRasterizationRateMapEXT;
     }
+
     if (strcmp(name, "GPUDestroyRasterizationRateMapEXT") == 0) {
       return (GPUProc)GPUDestroyRasterizationRateMapEXT;
     }
+
     if (strcmp(name, "GPUGetRasterizationRateMapPhysicalSizeEXT") == 0) {
       return (GPUProc)GPUGetRasterizationRateMapPhysicalSizeEXT;
     }
+
     if (strcmp(name, "GPUMapRasterizationRateScreenToPhysicalEXT") == 0) {
       return (GPUProc)GPUMapRasterizationRateScreenToPhysicalEXT;
     }
+
     if (strcmp(name, "GPUMapRasterizationRatePhysicalToScreenEXT") == 0) {
       return (GPUProc)GPUMapRasterizationRatePhysicalToScreenEXT;
     }
+
     if (strcmp(name, "GPUGetRasterizationRateMapParameterInfoEXT") == 0) {
       return (GPUProc)GPUGetRasterizationRateMapParameterInfoEXT;
     }
+
     if (strcmp(name, "GPUCopyRasterizationRateMapParametersEXT") == 0) {
       return (GPUProc)GPUCopyRasterizationRateMapParametersEXT;
     }
+
     if (strcmp(name, "GPUSetFragmentShadingRateEXT") == 0) {
       return (GPUProc)GPUSetFragmentShadingRateEXT;
     }
   }
+
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY)) {
     if (strcmp(name, "GPUGetAccelerationStructureSizesEXT") == 0) {
       return (GPUProc)GPUGetAccelerationStructureSizesEXT;
     }
+
     if (strcmp(name, "GPUCreateAccelerationStructureEXT") == 0) {
       return (GPUProc)GPUCreateAccelerationStructureEXT;
     }
+
     if (strcmp(name, "GPUDestroyAccelerationStructureEXT") == 0) {
       return (GPUProc)GPUDestroyAccelerationStructureEXT;
     }
+
     if (strcmp(name, "GPUBeginAccelerationStructurePassEXT") == 0) {
       return (GPUProc)GPUBeginAccelerationStructurePassEXT;
     }
+
     if (strcmp(name, "GPUBuildAccelerationStructureEXT") == 0) {
       return (GPUProc)GPUBuildAccelerationStructureEXT;
     }
+
     if (strcmp(name, "GPUEndAccelerationStructurePassEXT") == 0) {
       return (GPUProc)GPUEndAccelerationStructurePassEXT;
     }
   }
-  if (GPUIsFeatureEnabled(
-        device,
-        GPU_FEATURE_INTERSECTION_FUNCTION_TABLE
-      )) {
+
+  if (GPUIsFeatureEnabled(device,
+                          GPU_FEATURE_INTERSECTION_FUNCTION_TABLE)) {
     if (strcmp(name, "GPUCreateIntersectionFunctionTableEXT") == 0) {
       return (GPUProc)GPUCreateIntersectionFunctionTableEXT;
     }
+
     if (strcmp(name, "GPUDestroyIntersectionFunctionTableEXT") == 0) {
       return (GPUProc)GPUDestroyIntersectionFunctionTableEXT;
     }
+
     if (strcmp(name, "GPUSetIntersectionFunctionTableBufferEXT") == 0) {
       return (GPUProc)GPUSetIntersectionFunctionTableBufferEXT;
     }
+
     if (strcmp(name, "GPUBindComputeIntersectionFunctionTableEXT") == 0) {
       return (GPUProc)GPUBindComputeIntersectionFunctionTableEXT;
     }
+
     if (strcmp(name, "GPUBindRenderIntersectionFunctionTableEXT") == 0) {
       return (GPUProc)GPUBindRenderIntersectionFunctionTableEXT;
     }
   }
+
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_TRACING_PIPELINE)) {
     if (strcmp(name, "GPUCreateRayTracingPipelineEXT") == 0) {
       return (GPUProc)GPUCreateRayTracingPipelineEXT;
     }
+
     if (strcmp(name, "GPUDestroyRayTracingPipelineEXT") == 0) {
       return (GPUProc)GPUDestroyRayTracingPipelineEXT;
     }
+
     if (strcmp(name, "GPUCreateShaderTableEXT") == 0) {
       return (GPUProc)GPUCreateShaderTableEXT;
     }
+
     if (strcmp(name, "GPUDestroyShaderTableEXT") == 0) {
       return (GPUProc)GPUDestroyShaderTableEXT;
     }
+
     if (strcmp(name, "GPUBeginRayTracingPassEXT") == 0) {
       return (GPUProc)GPUBeginRayTracingPassEXT;
     }
+
     if (strcmp(name, "GPUBindRayTracingPipelineEXT") == 0) {
       return (GPUProc)GPUBindRayTracingPipelineEXT;
     }
+
     if (strcmp(name, "GPUBindRayTracingGroupEXT") == 0) {
       return (GPUProc)GPUBindRayTracingGroupEXT;
     }
+
     if (strcmp(name, "GPUDispatchRaysEXT") == 0) {
       return (GPUProc)GPUDispatchRaysEXT;
     }
+
     if (strcmp(name, "GPUEndRayTracingPassEXT") == 0) {
       return (GPUProc)GPUEndRayTracingPassEXT;
     }
   }
+
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_EXECUTION_GRAPH)) {
     if (strcmp(name, "GPUCreateExecutionGraphEXT") == 0) {
       return (GPUProc)GPUCreateExecutionGraphEXT;
     }
+
     if (strcmp(name, "GPUDestroyExecutionGraphEXT") == 0) {
       return (GPUProc)GPUDestroyExecutionGraphEXT;
     }
+
     if (strcmp(name, "GPUGetExecutionGraphMemoryRequirementsEXT") == 0) {
       return (GPUProc)GPUGetExecutionGraphMemoryRequirementsEXT;
     }
+
     if (strcmp(name, "GPUCreateExecutionGraphInstanceEXT") == 0) {
       return (GPUProc)GPUCreateExecutionGraphInstanceEXT;
     }
+
     if (strcmp(name, "GPUDestroyExecutionGraphInstanceEXT") == 0) {
       return (GPUProc)GPUDestroyExecutionGraphInstanceEXT;
     }
+
     if (strcmp(name, "GPUGetExecutionGraphEntryEXT") == 0) {
       return (GPUProc)GPUGetExecutionGraphEntryEXT;
     }
+
     if (strcmp(name, "GPUBindExecutionGraphEXT") == 0) {
       return (GPUProc)GPUBindExecutionGraphEXT;
     }
+
     if (strcmp(name, "GPUDispatchExecutionGraphEXT") == 0) {
       return (GPUProc)GPUDispatchExecutionGraphEXT;
     }
+
     if (strcmp(name, "GPUDispatchExecutionGraphBufferEXT") == 0) {
       return (GPUProc)GPUDispatchExecutionGraphBufferEXT;
     }
   }
+
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_SAMPLER_FEEDBACK)) {
     if (strcmp(name, "GPUCreateSamplerFeedbackMapEXT") == 0) {
       return (GPUProc)GPUCreateSamplerFeedbackMapEXT;
     }
+
     if (strcmp(name, "GPUDestroySamplerFeedbackMapEXT") == 0) {
       return (GPUProc)GPUDestroySamplerFeedbackMapEXT;
     }
+
     if (strcmp(name, "GPUGetSamplerFeedbackDecodeInfoEXT") == 0) {
       return (GPUProc)GPUGetSamplerFeedbackDecodeInfoEXT;
     }
+
     if (strcmp(name, "GPUClearSamplerFeedbackEXT") == 0) {
       return (GPUProc)GPUClearSamplerFeedbackEXT;
     }
+
     if (strcmp(name, "GPUDecodeSamplerFeedbackEXT") == 0) {
       return (GPUProc)GPUDecodeSamplerFeedbackEXT;
     }
+
     if (strcmp(name, "GPUEncodeSamplerFeedbackEXT") == 0) {
       return (GPUProc)GPUEncodeSamplerFeedbackEXT;
     }
@@ -2072,7 +2322,7 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
 }
 
 GPU_EXPORT
-GPUAdapter *
+GPUAdapter*
 GPUGetAutoSelectedAdapter(GPUInstance *inst) {
   return gpu_selectRequestedAdapter(inst,
                                     GPU_POWER_PREFERENCE_DEFAULT,
@@ -2080,66 +2330,18 @@ GPUGetAutoSelectedAdapter(GPUInstance *inst) {
                                     0u);
 }
 
-static GPUResult
-gpu_finalizeDevice(GPUAdapter *adapter,
-                   GPUDevice  *device,
-                   uint64_t    enabledFeatureMask) {
-  GPUApi    *api;
-  GPUResult  result;
-
-  api = gpuAdapterApi(adapter);
-  if (!api || !device) {
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-
-  device->inst    = adapter->inst;
-  device->adapter = adapter;
-  device->_api    = api;
-  if ((enabledFeatureMask &
-       (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u &&
-      GPUGetVRSCapabilitiesEXT(adapter, &device->vrsCapabilities) != GPU_OK) {
-    api->device.destroyDevice(device);
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-  result = gpuInitPipelineCacheDevice(device);
-  if (result != GPU_OK) {
-    api->device.destroyDevice(device);
-    return result;
-  }
-  result = gpuInitBindGroupCacheDevice(device);
-  if (result != GPU_OK) {
-    gpuDestroyPipelineCacheDevice(device);
-    api->device.destroyDevice(device);
-    return result;
-  }
-  result = gpuInitBlitDevice(device);
-  if (result != GPU_OK) {
-    gpuDestroyBindGroupCacheDevice(device);
-    gpuDestroyPipelineCacheDevice(device);
-    api->device.destroyDevice(device);
-    return result;
-  }
-
-  device->enabledFeatureMask = enabledFeatureMask;
-  gpu_fillFeatureSet(device->enabledFeatureMask,
-                     device->enabledFeatureStorage,
-                     (uint32_t)GPU_ARRAY_LEN(device->enabledFeatureStorage),
-                     &device->enabledFeatures);
-  return GPU_OK;
-}
-
 GPU_EXPORT
 GPUResult
 GPUCreateDevice(GPUAdapter                *adapter,
                 const GPUDeviceCreateInfo *info,
                 GPUDevice                **outDevice) {
-  GPUQueueCreateInfo stackQueueInfos[8];
+  GPUQueueCreateInfo  stackQueueInfos[8];
   GPUQueueCreateInfo *queueInfos;
-  uint64_t enabledFeatureMask;
-  uint32_t queueInfoCount;
-  GPUResult result;
-  GPUResult featureResult;
-  GPUApi *api;
+  GPUApi             *api;
+  uint64_t            enabledFeatureMask;
+  uint32_t            queueInfoCount;
+  GPUResult           result;
+  GPUResult           featureResult;
 
   if (!outDevice) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -2150,40 +2352,50 @@ GPUCreateDevice(GPUAdapter                *adapter,
   if (!adapter) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (info) {
-    if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
-        info->chain.sType != GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO) {
+    if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE
+        && info->chain.sType != GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
+
     if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
+
     featureResult = gpu_validateFeatureSet(adapter, &info->required, true);
+
     if (featureResult != GPU_OK) {
       return featureResult;
     }
+
     featureResult = gpu_validateFeatureSet(adapter, &info->optional, false);
+
     if (featureResult != GPU_OK) {
       return featureResult;
     }
   }
+
   enabledFeatureMask = gpu_enabledFeatureMaskForCreateInfo(adapter, info);
   queueInfos         = NULL;
   queueInfoCount     = 0;
-  result = gpu_buildQueueCreateInfos(info,
-                                     stackQueueInfos,
-                                     (uint32_t)GPU_ARRAY_LEN(stackQueueInfos),
-                                     &queueInfos,
-                                     &queueInfoCount);
+  result             = gpu_buildQueueCreateInfos(info,
+                                                 stackQueueInfos,
+                                                 (uint32_t)GPU_ARRAY_LEN(stackQueueInfos),
+                                                 &queueInfos,
+                                                 &queueInfoCount);
+
   if (result != GPU_OK) {
     return result;
   }
+
   if (!gpu_validQueueCreateInfos(queueInfos, queueInfoCount)) {
     if (queueInfos != stackQueueInfos) {
       free(queueInfos);
     }
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (!(api = gpuAdapterApi(adapter)) || !api->device.createDevice) {
     if (queueInfos != stackQueueInfos) {
       free(queueInfos);
@@ -2195,62 +2407,38 @@ GPUCreateDevice(GPUAdapter                *adapter,
                                         queueInfos,
                                         queueInfoCount,
                                         enabledFeatureMask);
+
   if (queueInfos != stackQueueInfos) {
     free(queueInfos);
   }
+
   if (!*outDevice) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   result = gpu_finalizeDevice(adapter, *outDevice, enabledFeatureMask);
+
   if (result != GPU_OK) {
     *outDevice = NULL;
   }
+
   return result;
-}
-
-typedef struct GPUDeviceRequestContext {
-  GPUAdapter              *adapter;
-  GPUDeviceRequestCallback callback;
-  void                    *userData;
-  uint64_t                 enabledFeatureMask;
-} GPUDeviceRequestContext;
-
-static void
-gpu_completeDeviceRequest(GPUResult result,
-                          GPUDevice *device,
-                          void      *userData) {
-  GPUDeviceRequestContext *request;
-
-  request = userData;
-  if (result == GPU_OK && device) {
-    result = gpu_finalizeDevice(request->adapter,
-                                device,
-                                request->enabledFeatureMask);
-  } else if (result == GPU_OK) {
-    result = GPU_ERROR_BACKEND_FAILURE;
-  }
-  if (result != GPU_OK) {
-    device = NULL;
-  }
-
-  request->callback(result, device, request->userData);
-  free(request);
 }
 
 GPU_EXPORT
 GPUResult
-GPURequestDevice(GPUAdapter               *adapter,
+GPURequestDevice(GPUAdapter                *adapter,
                  const GPUDeviceCreateInfo *info,
-                 GPUDeviceRequestCallback  callback,
-                 void                     *userData) {
-  GPUQueueCreateInfo      stackQueueInfos[8];
-  GPUQueueCreateInfo     *queueInfos;
+                 GPUDeviceRequestCallback   callback,
+                 void                      *userData) {
+  GPUQueueCreateInfo       stackQueueInfos[8];
+  GPUQueueCreateInfo      *queueInfos;
   GPUDeviceRequestContext *request;
-  GPUDevice              *device;
-  GPUApi                 *api;
-  GPUResult               result;
-  uint64_t                enabledFeatureMask;
-  uint32_t                queueInfoCount;
+  GPUDevice               *device;
+  GPUApi                  *api;
+  uint64_t                 enabledFeatureMask;
+  GPUResult                result;
+  uint32_t                 queueInfoCount;
 
   if (!adapter || !callback || !(api = gpuAdapterApi(adapter))) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -2264,17 +2452,21 @@ GPURequestDevice(GPUAdapter               *adapter,
   }
 
   if (info) {
-    if ((info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
-         info->chain.sType != GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO) ||
-        (info->chain.structSize != 0u &&
-         info->chain.structSize < sizeof(*info))) {
+    if ((info->chain.sType != GPU_STRUCTURE_TYPE_NONE
+         && info->chain.sType != GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO)
+        || (info->chain.structSize != 0u
+            && info->chain.structSize < sizeof(*info))) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
+
     result = gpu_validateFeatureSet(adapter, &info->required, true);
+
     if (result != GPU_OK) {
       return result;
     }
+
     result = gpu_validateFeatureSet(adapter, &info->optional, false);
+
     if (result != GPU_OK) {
       return result;
     }
@@ -2283,14 +2475,16 @@ GPURequestDevice(GPUAdapter               *adapter,
   enabledFeatureMask = gpu_enabledFeatureMaskForCreateInfo(adapter, info);
   queueInfos         = NULL;
   queueInfoCount     = 0u;
-  result = gpu_buildQueueCreateInfos(info,
-                                     stackQueueInfos,
-                                     (uint32_t)GPU_ARRAY_LEN(stackQueueInfos),
-                                     &queueInfos,
-                                     &queueInfoCount);
+  result             = gpu_buildQueueCreateInfos(info,
+                                                 stackQueueInfos,
+                                                 (uint32_t)GPU_ARRAY_LEN(stackQueueInfos),
+                                                 &queueInfos,
+                                                 &queueInfoCount);
+
   if (result != GPU_OK) {
     return result;
   }
+
   if (!gpu_validQueueCreateInfos(queueInfos, queueInfoCount)) {
     if (queueInfos != stackQueueInfos) {
       free(queueInfos);
@@ -2298,13 +2492,13 @@ GPURequestDevice(GPUAdapter               *adapter,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  request = calloc(1, sizeof(*request));
-  if (!request) {
+  if (!(request = calloc(1, sizeof(*request)))) {
     if (queueInfos != stackQueueInfos) {
       free(queueInfos);
     }
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+
   request->adapter            = adapter;
   request->callback           = callback;
   request->userData           = userData;
@@ -2316,17 +2510,20 @@ GPURequestDevice(GPUAdapter               *adapter,
                                      enabledFeatureMask,
                                      gpu_completeDeviceRequest,
                                      request);
+
   if (queueInfos != stackQueueInfos) {
     free(queueInfos);
   }
+
   if (result != GPU_OK) {
     free(request);
   }
+
   return result;
 }
 
 GPU_EXPORT
-GPUDevice *
+GPUDevice*
 GPUCreateDeviceWithDefaultQueues(GPUAdapter *adapter) {
   GPUDevice *device;
 
@@ -2339,7 +2536,7 @@ GPUCreateDeviceWithDefaultQueues(GPUAdapter *adapter) {
 
 GPU_EXPORT
 GPUQueueFlagBits
-GPUGetAvailableQueueBits(GPUDevice * __restrict device) {
+GPUGetAvailableQueueBits(GPUDevice *__restrict device) {
   if (!device) {
     return 0;
   }
@@ -2349,7 +2546,7 @@ GPUGetAvailableQueueBits(GPUDevice * __restrict device) {
 
 GPU_EXPORT
 void
-GPUDestroyDevice(GPUDevice * __restrict device) {
+GPUDestroyDevice(GPUDevice *__restrict device) {
   GPUApi *api;
 
   if (!device) {
@@ -2363,10 +2560,12 @@ GPUDestroyDevice(GPUDevice * __restrict device) {
   if (api->device.waitIdle) {
     (void)api->device.waitIdle(device);
   }
+
   gpu_destroyTransientAllocator(device);
   gpuDestroyBlitDevice(device);
   gpuDestroyBindGroupCacheDevice(device);
   gpuDestroyPipelineCacheDevice(device);
+
   if (api->device.destroyDevice) {
     api->device.destroyDevice(device);
   }

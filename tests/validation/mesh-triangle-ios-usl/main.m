@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <QuartzCore/QuartzCore.h>
 #import <UIKit/UIKit.h>
 
@@ -10,22 +26,6 @@ typedef struct TaskParams {
   float    offset[4];
   float    tint[4];
 } TaskParams;
-
-static GPUAdapter *
-SelectAdapter(GPUInstance *instance) {
-  GPUAdapter *adapter;
-  uint32_t    count;
-  GPUResult   result;
-
-  adapter = NULL;
-  count   = 1u;
-  result  = GPUEnumerateAdapters(instance, &count, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
-    return NULL;
-  }
-  return adapter;
-}
 
 @interface MeshTriangleViewController : UIViewController {
 @private
@@ -44,8 +44,32 @@ SelectAdapter(GPUInstance *instance) {
   uint32_t           _width;
   uint32_t           _height;
 }
+
 - (void)setRenderingPaused:(BOOL)paused;
 @end
+
+@interface MeshTriangleAppDelegate : UIResponder <UIApplicationDelegate>
+@property(nonatomic, strong) UIWindow                   *window;
+@property(nonatomic, strong) MeshTriangleViewController *controller;
+@end
+
+static GPUAdapter*
+SelectAdapter(GPUInstance *instance) {
+  GPUAdapter *adapter;
+  uint32_t    count;
+  GPUResult   result;
+
+  adapter = NULL;
+  count   = 1u;
+  result  = GPUEnumerateAdapters(instance, &count, &adapter);
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !adapter) {
+    return NULL;
+  }
+
+  return adapter;
+}
 
 @implementation MeshTriangleViewController
 
@@ -59,14 +83,15 @@ SelectAdapter(GPUInstance *instance) {
   }
 
   _adapter = SelectAdapter(_instance);
-  if (!_adapter ||
-      !GPUIsFeatureSupported(_adapter, GPU_FEATURE_MESH_SHADER)) {
+
+  if (!_adapter
+      || !GPUIsFeatureSupported(_adapter, GPU_FEATURE_MESH_SHADER)) {
     NSLog(@"GPU: mesh shaders are not supported");
     return NO;
   }
 
   requiredFeature = GPU_FEATURE_MESH_SHADER;
-  deviceInfo = (GPUDeviceCreateInfo){
+  deviceInfo      = (GPUDeviceCreateInfo){
     .chain = {
       .sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .structSize = sizeof(GPUDeviceCreateInfo)
@@ -77,18 +102,21 @@ SelectAdapter(GPUInstance *instance) {
       .pFeatures    = &requiredFeature
     }
   };
-  if (GPUCreateDevice(_adapter, &deviceInfo, &_device) != GPU_OK ||
-      !_device ||
-      !GPUIsFeatureEnabled(_device, GPU_FEATURE_MESH_SHADER)) {
+
+  if (GPUCreateDevice(_adapter, &deviceInfo, &_device) != GPU_OK
+      || !_device
+      || !GPUIsFeatureEnabled(_device, GPU_FEATURE_MESH_SHADER)) {
     NSLog(@"GPU: failed to create mesh device");
     return NO;
   }
 
   _queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0u);
+
   if (!_queue) {
     NSLog(@"GPU: failed to get graphics queue");
     return NO;
   }
+
   return YES;
 }
 
@@ -98,6 +126,7 @@ SelectAdapter(GPUInstance *instance) {
                                         (__bridge void *)self.view,
                                         GPU_SURFACE_APPLE_UIVIEW,
                                         UIScreen.mainScreen.scale);
+
   if (!_surface) {
     NSLog(@"GPU: failed to create UIKit surface");
     return NO;
@@ -109,10 +138,12 @@ SelectAdapter(GPUInstance *instance) {
                                          _surface,
                                          _width,
                                          _height);
+
   if (!_swapchain) {
     NSLog(@"GPU: failed to create swapchain");
     return NO;
   }
+
   return YES;
 }
 
@@ -121,40 +152,45 @@ SelectAdapter(GPUInstance *instance) {
   NSURL                         *artifactURL;
   NSData                        *artifact;
   uint32_t                       entryCount;
+  uint32_t                       i;
   BOOL                           sawTaskUniform;
 
   artifactURL = [NSBundle.mainBundle URLForResource:@"mesh_triangle"
                                       withExtension:@"us"];
-  artifact = artifactURL ? [NSData dataWithContentsOfURL:artifactURL] : nil;
-  if (!artifact ||
-      GPUCreateShaderLibraryFromUSL(_device,
-                                    artifact.bytes,
-                                    (uint64_t)artifact.length,
-                                    &_library) != GPU_OK ||
-      GPUCreateShaderLayout(_device, _library, &_shaderLayout) != GPU_OK ||
-      !_shaderLayout || _shaderLayout->bindGroupLayoutCount != 1u ||
-      !_shaderLayout->bindGroupLayouts ||
-      !_shaderLayout->bindGroupLayouts[0]) {
+  artifact    = artifactURL ? [NSData dataWithContentsOfURL:artifactURL] : nil;
+
+  if (!artifact
+      || GPUCreateShaderLibraryFromUSL(_device,
+                                       artifact.bytes,
+                                       (uint64_t)artifact.length,
+                                       &_library) != GPU_OK
+      || GPUCreateShaderLayout(_device, _library, &_shaderLayout) != GPU_OK
+      || !_shaderLayout || _shaderLayout->bindGroupLayoutCount != 1u
+      || !_shaderLayout->bindGroupLayouts
+      || !_shaderLayout->bindGroupLayouts[0]) {
     NSLog(@"GPU: failed to load mesh_triangle.us or its reflection");
     return NO;
   }
 
   entryCount     = 0u;
   sawTaskUniform = NO;
-  entries = GPUGetBindGroupLayoutEntries(_shaderLayout->bindGroupLayouts[0],
-                                         &entryCount);
-  for (uint32_t i = 0u; entries && i < entryCount; i++) {
-    if (entries[i].binding == 0u &&
-        entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
-        entries[i].visibility == GPU_SHADER_STAGE_TASK_BIT) {
+  entries        = GPUGetBindGroupLayoutEntries(_shaderLayout->bindGroupLayouts[0],
+                                                &entryCount);
+
+  for (i = 0u; entries && i < entryCount; i++) {
+    if (entries[i].binding == 0u
+        && entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER
+        && entries[i].visibility == GPU_SHADER_STAGE_TASK_BIT) {
       sawTaskUniform = YES;
       break;
     }
   }
+
   if (!sawTaskUniform) {
     NSLog(@"GPU: task uniform reflection mismatch");
     return NO;
   }
+
   return YES;
 }
 
@@ -163,14 +199,14 @@ SelectAdapter(GPUInstance *instance) {
   GPUMeshPipelineEXT          meshInfo;
   GPURenderPipelineCreateInfo pipelineInfo;
 
-  colorTarget = (GPUColorTargetState){
+  colorTarget  = (GPUColorTargetState){
     .format = GPUGetSwapchainFormat(_swapchain),
     .blend = {
       .enabled   = false,
       .writeMask = GPU_COLOR_WRITE_ALL
     }
   };
-  meshInfo = (GPUMeshPipelineEXT){
+  meshInfo     = (GPUMeshPipelineEXT){
     .chain = {
       .sType      = GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT,
       .structSize = sizeof(GPUMeshPipelineEXT)
@@ -199,16 +235,18 @@ SelectAdapter(GPUInstance *instance) {
       .sampleMask  = UINT32_MAX
     }
   };
-  if (GPUCreateRenderPipeline(_device, &pipelineInfo, &_pipeline) != GPU_OK ||
-      !_pipeline) {
+
+  if (GPUCreateRenderPipeline(_device, &pipelineInfo, &_pipeline) != GPU_OK
+      || !_pipeline) {
     NSLog(@"GPU: failed to create mesh pipeline");
     return NO;
   }
+
   return YES;
 }
 
 - (BOOL)createTaskGroup {
-  const TaskParams taskParams = {
+  const TaskParams       taskParams = {
     .meshGroups = {1u, 1u, 1u, 0u},
     .offset     = {0.12f, 0.0f, 0.0f, 0.0f},
     .tint       = {1.0f, 0.75f, 0.5f, 1.0f}
@@ -226,18 +264,19 @@ SelectAdapter(GPUInstance *instance) {
     .sizeBytes = sizeof(taskParams),
     .usage     = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST
   };
-  if (GPUCreateBuffer(_device, &bufferInfo, &_taskBuffer) != GPU_OK ||
-      !_taskBuffer ||
-      GPUQueueWriteBuffer(_queue,
-                          _taskBuffer,
-                          0u,
-                          &taskParams,
-                          sizeof(taskParams)) != GPU_OK) {
+
+  if (GPUCreateBuffer(_device, &bufferInfo, &_taskBuffer) != GPU_OK
+      || !_taskBuffer
+      || GPUQueueWriteBuffer(_queue,
+                             _taskBuffer,
+                             0u,
+                             &taskParams,
+                             sizeof(taskParams)) != GPU_OK) {
     NSLog(@"GPU: failed to create task uniform buffer");
     return NO;
   }
 
-  entry = (GPUBindGroupEntry){
+  entry     = (GPUBindGroupEntry){
     .binding     = 0u,
     .bindingType = GPU_BINDING_UNIFORM_BUFFER,
     .buffer = {
@@ -255,24 +294,27 @@ SelectAdapter(GPUInstance *instance) {
     .entryCount = 1u,
     .pEntries   = &entry
   };
-  if (GPUCreateBindGroup(_device, &groupInfo, &_taskGroup) != GPU_OK ||
-      !_taskGroup) {
+
+  if (GPUCreateBindGroup(_device, &groupInfo, &_taskGroup) != GPU_OK
+      || !_taskGroup) {
     NSLog(@"GPU: failed to create task bind group");
     return NO;
   }
+
   return YES;
 }
 
 - (BOOL)createGPU {
-  if (![self createDevice] ||
-      ![self createSurface] ||
-      ![self createShaderLayout] ||
-      ![self createPipeline] ||
-      ![self createTaskGroup]) {
+  if (![self createDevice]
+      || ![self createSurface]
+      || ![self createShaderLayout]
+      || ![self createPipeline]
+      || ![self createTaskGroup]) {
     return NO;
   }
 
   NSLog(@"GPU: iOS mesh/task shader sample ready");
+
   return YES;
 }
 
@@ -285,16 +327,17 @@ SelectAdapter(GPUInstance *instance) {
 
   frame = GPUBeginFrame(_swapchain);
   cmdb  = NULL;
-  if (!frame ||
-      GPUAcquireCommandBuffer(_queue,
-                              "mesh-triangle-ios-frame",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+
+  if (!frame
+      || GPUAcquireCommandBuffer(_queue,
+                                 "mesh-triangle-ios-frame",
+                                 &cmdb) != GPU_OK
+      || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
 
-  color = (GPURenderPassColorAttachment){
+  color    = (GPURenderPassColorAttachment){
     .view    = GPUFrameGetTargetView(frame),
     .loadOp  = GPU_LOAD_OP_CLEAR,
     .storeOp = GPU_STORE_OP_STORE,
@@ -305,7 +348,8 @@ SelectAdapter(GPUInstance *instance) {
     .colorAttachmentCount = 1u,
     .pColorAttachments    = &color
   };
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
+  pass     = GPUBeginRenderPass(cmdb, &passInfo);
+
   if (!pass) {
     GPUEndFrame(frame);
     return;
@@ -330,11 +374,11 @@ SelectAdapter(GPUInstance *instance) {
     return;
   }
 
-  _displayLink = [CADisplayLink displayLinkWithTarget:self
+  _displayLink                         = [CADisplayLink displayLinkWithTarget:self
                                               selector:@selector(drawFrame)];
   _displayLink.preferredFrameRateRange = CAFrameRateRangeMake(30.0f,
-                                                               120.0f,
-                                                               60.0f);
+                                                              120.0f,
+                                                              60.0f);
   [_displayLink addToRunLoop:NSRunLoop.mainRunLoop
                      forMode:NSRunLoopCommonModes];
 }
@@ -346,9 +390,10 @@ SelectAdapter(GPUInstance *instance) {
   [super viewDidLayoutSubviews];
   width  = (uint32_t)self.view.bounds.size.width;
   height = (uint32_t)self.view.bounds.size.height;
-  if (_swapchain && width > 0u && height > 0u &&
-      (width != _width || height != _height) &&
-      GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
+
+  if (_swapchain && width > 0u && height > 0u
+      && (width != _width || height != _height)
+      && GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
     _width  = width;
     _height = height;
   }
@@ -373,11 +418,6 @@ SelectAdapter(GPUInstance *instance) {
 
 @end
 
-@interface MeshTriangleAppDelegate : UIResponder <UIApplicationDelegate>
-@property(nonatomic, strong) UIWindow                    *window;
-@property(nonatomic, strong) MeshTriangleViewController *controller;
-@end
-
 @implementation MeshTriangleAppDelegate
 
 - (BOOL)application:(UIApplication *)application
@@ -385,8 +425,8 @@ SelectAdapter(GPUInstance *instance) {
   (void)application;
   (void)launchOptions;
 
-  self.controller = [MeshTriangleViewController new];
-  self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
+  self.controller                = [MeshTriangleViewController new];
+  self.window                    = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.rootViewController = self.controller;
   [self.window makeKeyAndVisible];
   return YES;

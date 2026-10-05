@@ -18,13 +18,8 @@
 #include "../../../api/buffer_internal.h"
 #include "../../../api/query_internal.h"
 
-typedef struct GPUQuerySetVk {
-  VkDevice    device;
-  VkQueryPool pool;
-} GPUQuerySetVk;
-
-#define VK__ASSERT_PIPESTAT(GPU_BIT, VK_BIT)                                  \
-  _Static_assert((uint32_t)(GPU_BIT) == (uint32_t)(VK_BIT),                   \
+#define VK__ASSERT_PIPESTAT(GPU_BIT, VK_BIT)               \
+  _Static_assert((uint32_t)(GPU_BIT) == (uint32_t)(VK_BIT), \
                  #GPU_BIT " must match Vulkan")
 
 VK__ASSERT_PIPESTAT(GPU_PIPESTAT_INPUT_ASSEMBLY_VERTICES,
@@ -43,18 +38,19 @@ VK__ASSERT_PIPESTAT(GPU_PIPESTAT_CLIPPING_PRIMITIVES,
                     VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT);
 VK__ASSERT_PIPESTAT(GPU_PIPESTAT_FRAGMENT_SHADER_INVOCATIONS,
                     VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT);
-VK__ASSERT_PIPESTAT(
-  GPU_PIPESTAT_TESS_CONTROL_SHADER_PATCHES,
-  VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_CONTROL_SHADER_PATCHES_BIT
-);
-VK__ASSERT_PIPESTAT(
-  GPU_PIPESTAT_TESS_EVALUATION_SHADER_INVOCATIONS,
-  VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_EVALUATION_SHADER_INVOCATIONS_BIT
-);
+VK__ASSERT_PIPESTAT(GPU_PIPESTAT_TESS_CONTROL_SHADER_PATCHES,
+                   VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_CONTROL_SHADER_PATCHES_BIT);
+VK__ASSERT_PIPESTAT(GPU_PIPESTAT_TESS_EVALUATION_SHADER_INVOCATIONS,
+                   VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_EVALUATION_SHADER_INVOCATIONS_BIT);
 VK__ASSERT_PIPESTAT(GPU_PIPESTAT_COMPUTE_SHADER_INVOCATIONS,
                     VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT);
 
 #undef VK__ASSERT_PIPESTAT
+
+typedef struct GPUQuerySetVk {
+  VkDevice    device;
+  VkQueryPool pool;
+} GPUQuerySetVk;
 
 static VkQueryPipelineStatisticFlags
 vk_pipelineStatisticFlags(void) {
@@ -63,28 +59,29 @@ vk_pipelineStatisticFlags(void) {
 
 GPU_HIDE
 GPUResult
-vk_createQuerySet(GPUDevice                  *device,
+vk_createQuerySet(GPUDevice                   *device,
                   const GPUQuerySetCreateInfo *info,
-                  GPUQuerySet                *set) {
+                  GPUQuerySet                 *set) {
+  VkQueryPoolCreateInfo queryInfo = {0};
   GPUDeviceVk          *deviceVk;
   GPUQuerySetVk        *native;
-  VkQueryPoolCreateInfo queryInfo = {0};
 
   deviceVk = device ? device->_priv : NULL;
-  if (!deviceVk || !deviceVk->device || !info || !set ||
-      (info->type != GPU_QUERY_TIMESTAMP &&
-       info->type != GPU_QUERY_OCCLUSION &&
-       info->type != GPU_QUERY_PIPELINE_STATISTICS)) {
+
+  if (!deviceVk || !deviceVk->device || !info || !set
+      || (info->type != GPU_QUERY_TIMESTAMP
+          && info->type != GPU_QUERY_OCCLUSION
+          && info->type != GPU_QUERY_PIPELINE_STATISTICS)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  native = calloc(1, sizeof(*native));
-  if (!native) {
+  if (!(native = calloc(1, sizeof(*native)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
   queryInfo.sType      = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
   queryInfo.queryCount = info->count;
+
   if (info->type == GPU_QUERY_PIPELINE_STATISTICS) {
     queryInfo.queryType          = VK_QUERY_TYPE_PIPELINE_STATISTICS;
     queryInfo.pipelineStatistics = vk_pipelineStatisticFlags();
@@ -93,6 +90,7 @@ vk_createQuerySet(GPUDevice                  *device,
   } else {
     queryInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
   }
+
   if (vkCreateQueryPool(deviceVk->device,
                         &queryInfo,
                         NULL,
@@ -102,7 +100,8 @@ vk_createQuerySet(GPUDevice                  *device,
   }
 
   native->device = deviceVk->device;
-  set->_priv      = native;
+  set->_priv     = native;
+
   return GPU_OK;
 }
 
@@ -114,6 +113,7 @@ vk_resetQuerySet(GPUCommandBuffer *cmdb, GPUQuerySet *set) {
 
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
+
   if (!command || !command->command || !native || !native->pool) {
     return;
   }
@@ -131,6 +131,7 @@ vk_beginOcclusionQuery(GPURenderPassEncoder *pass,
 
   encoder = pass ? pass->_priv : NULL;
   native  = set ? set->_priv : NULL;
+
   if (!encoder || !encoder->command || !native || !native->pool) {
     return;
   }
@@ -148,6 +149,7 @@ vk_endOcclusionQuery(GPURenderPassEncoder *pass,
 
   encoder = pass ? pass->_priv : NULL;
   native  = set ? set->_priv : NULL;
+
   if (!encoder || !encoder->command || !native || !native->pool) {
     return;
   }
@@ -165,6 +167,7 @@ vk_beginPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
 
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
+
   if (!command || !command->command || !native || !native->pool) {
     return;
   }
@@ -183,6 +186,7 @@ vk_endPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
 
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
+
   if (!command || !command->command || !native || !native->pool) {
     return;
   }
@@ -196,6 +200,7 @@ vk_destroyQuerySet(GPUQuerySet *set) {
   GPUQuerySetVk *native;
 
   native = set ? set->_priv : NULL;
+
   if (!native) {
     return;
   }
@@ -203,6 +208,7 @@ vk_destroyQuerySet(GPUQuerySet *set) {
   if (native->device && native->pool) {
     vkDestroyQueryPool(native->device, native->pool, NULL);
   }
+
   free(native);
   set->_priv = NULL;
 }
@@ -213,20 +219,20 @@ vk_writeTimestamp(GPUCommandBuffer *cmdb,
                   GPUQuerySet      *set,
                   uint32_t          queryIndex,
                   bool              beginningOfPass) {
-  GPUCommandBufferVk *command;
-  GPUQuerySetVk      *native;
+  GPUCommandBufferVk     *command;
+  GPUQuerySetVk          *native;
   VkPipelineStageFlagBits stage;
 
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
-  if (!command || !command->command || !command->owner ||
-      command->owner->timestampValidBits == 0u ||
-      !native || !native->pool) {
+
+  if (!command || !command->command || !command->owner
+      || command->owner->timestampValidBits == 0u
+      || !native || !native->pool) {
     return;
   }
 
-  stage = beginningOfPass ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
-                          : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+  stage = beginningOfPass ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
   vkCmdResetQueryPool(command->command, native->pool, queryIndex, 1u);
   vkCmdWriteTimestamp(command->command,
                       stage,
@@ -250,15 +256,18 @@ vk_resolveQuerySet(GPUCommandBuffer *cmdb,
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
   buffer  = dstBuffer ? dstBuffer->_priv : NULL;
-  if (!command || !command->command || !command->owner ||
-      !native || !native->pool ||
-      !buffer || !buffer->buffer) {
+
+  if (!command || !command->command || !command->owner
+      || !native || !native->pool
+      || !buffer || !buffer->buffer) {
     return;
   }
+
   if (set->type == GPU_QUERY_TIMESTAMP) {
     if (command->owner->timestampValidBits == 0u) {
       return;
     }
+
     resultStride = sizeof(uint64_t);
   } else if (set->type == GPU_QUERY_OCCLUSION) {
     resultStride = sizeof(uint64_t);
@@ -275,19 +284,18 @@ vk_resolveQuerySet(GPUCommandBuffer *cmdb,
                             buffer->buffer,
                             dstOffset,
                             resultStride,
-                            VK_QUERY_RESULT_64_BIT |
-                            VK_QUERY_RESULT_WAIT_BIT);
+                            VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
 }
 
 GPU_HIDE
 void
 vk_initQuery(GPUApiCommandBuffer *api) {
-  api->createQuerySet                  = vk_createQuerySet;
-  api->destroyQuerySet                 = vk_destroyQuerySet;
-  api->writeTimestamp                  = vk_writeTimestamp;
-  api->beginOcclusionQuery             = vk_beginOcclusionQuery;
-  api->endOcclusionQuery               = vk_endOcclusionQuery;
-  api->beginPipelineStatisticsQuery    = vk_beginPipelineStatisticsQuery;
-  api->endPipelineStatisticsQuery      = vk_endPipelineStatisticsQuery;
-  api->resolveQuerySet                 = vk_resolveQuerySet;
+  api->createQuerySet               = vk_createQuerySet;
+  api->destroyQuerySet              = vk_destroyQuerySet;
+  api->writeTimestamp               = vk_writeTimestamp;
+  api->beginOcclusionQuery          = vk_beginOcclusionQuery;
+  api->endOcclusionQuery            = vk_endOcclusionQuery;
+  api->beginPipelineStatisticsQuery = vk_beginPipelineStatisticsQuery;
+  api->endPipelineStatisticsQuery   = vk_endPipelineStatisticsQuery;
+  api->resolveQuerySet              = vk_resolveQuerySet;
 }

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <gpu/gpu.h>
 
 #include <stddef.h>
@@ -9,15 +25,31 @@ typedef struct VulkanTextureVertex {
   float uv[2];
 } VulkanTextureVertex;
 
+static const VulkanTextureVertex kTextureVertices[] = {
+  {{-1.0f, -1.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+  {{ 1.0f, -1.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+  {{-1.0f,  1.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+  {{-1.0f,  1.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+  {{ 1.0f, -1.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+  {{ 1.0f,  1.0f, 0.0f, 1.0f}, {1.0f, 0.0f}}
+};
+
+static const uint8_t kCheckerPixels[] = {
+  255u,   0u,   0u, 255u,   0u, 255u,   0u, 255u,
+    0u,   0u, 255u, 255u, 255u, 255u, 255u, 255u
+};
+
+static const float kTint[] = {0.9f, 0.95f, 1.0f, 1.0f};
+
 static int
 pixel_matches(const uint8_t pixel[4],
               uint8_t       red,
               uint8_t       green,
               uint8_t       blue) {
-  return abs((int)pixel[0] - red) <= 3 &&
-         abs((int)pixel[1] - green) <= 3 &&
-         abs((int)pixel[2] - blue) <= 3 &&
-         pixel[3] >= 250u;
+  return abs((int)pixel[0] - red) <= 3
+         && abs((int)pixel[1] - green) <= 3
+         && abs((int)pixel[2] - blue) <= 3
+         && pixel[3] >= 250u;
 }
 
 static const GPUBindGroupLayoutEntry*
@@ -26,13 +58,16 @@ find_layout_entry(GPUBindGroupLayout *layout,
                   GPUBindingType      type) {
   const GPUBindGroupLayoutEntry *entries;
   uint32_t                       count;
+  uint32_t                       i;
 
   entries = GPUGetBindGroupLayoutEntries(layout, &count);
-  for (uint32_t i = 0u; entries && i < count; i++) {
+
+  for (i = 0u; entries && i < count; i++) {
     if (entries[i].binding == binding && entries[i].bindingType == type) {
       return &entries[i];
     }
   }
+
   return NULL;
 }
 
@@ -40,78 +75,66 @@ int
 gpu_test_vulkan_texture(GPUDevice  *device,
                         const void *artifact,
                         uint64_t    artifactSize) {
-  static const VulkanTextureVertex kVertices[] = {
-    {{-1.0f, -1.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{ 1.0f, -1.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-1.0f,  1.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
-    {{-1.0f,  1.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
-    {{ 1.0f, -1.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{ 1.0f,  1.0f, 0.0f, 1.0f}, {1.0f, 0.0f}}
-  };
-  static const uint8_t kCheckerPixels[] = {
-    255u,   0u,   0u, 255u,   0u, 255u,   0u, 255u,
-      0u,   0u, 255u, 255u, 255u, 255u, 255u, 255u
-  };
-  static const float kTint[] = {0.9f, 0.95f, 1.0f, 1.0f};
-  const uint32_t width  = 4u;
-  const uint32_t height = 4u;
-  GPUQueue                        *queue;
-  GPUShaderLibrary                *library        = NULL;
-  GPUShaderLayout                 *shaderLayout   = NULL;
-  GPURenderPipeline               *pipeline       = NULL;
-  GPUBuffer                       *vertexBuffer   = NULL;
-  GPUBuffer                       *uniformBuffer  = NULL;
-  GPUBuffer                       *readbackBuffer = NULL;
-  GPUTexture                      *sampleTexture  = NULL;
-  GPUTexture                      *target         = NULL;
-  GPUTextureView                  *sampleView     = NULL;
-  GPUTextureView                  *targetView     = NULL;
-  GPUBindGroup                    *fragmentGroup  = NULL;
-  GPUCommandBuffer                *cmdb           = NULL;
-  GPUCommandBuffer                *buffers[1];
-  GPURenderPassEncoder            *renderPass     = NULL;
-  GPUTransferPassEncoder              *copyPass       = NULL;
-  GPUFence                        *fence          = NULL;
-  GPUVertexAttribute               attributes[2]  = {{0}};
-  GPUVertexBufferLayout            vertexLayout   = {0};
-  GPUColorTargetState              colorTarget    = {0};
-  GPURenderPipelineCreateInfo      pipelineInfo   = {0};
-  GPUBufferCreateInfo              bufferInfo     = {0};
-  GPUTextureCreateInfo             textureInfo    = {0};
-  GPUTextureViewCreateInfo         viewInfo       = {0};
-  GPUTextureWriteRegion            writeRegion    = {0};
-  GPUBindGroupEntry                fragmentEntries[2] = {0};
-  GPUBindGroupCreateInfo           groupInfo      = {0};
-  GPURenderPassColorAttachment     color          = {0};
-  GPURenderPassCreateInfo          passInfo       = {0};
-  GPUViewport                      viewport       = {0};
-  GPUScissorRect                   scissor        = {0};
-  GPUBufferBinding                 vertexBinding  = {0};
-  GPUTextureBarrier                textureBarrier = {0};
-  GPUBarrierBatch                  barrierBatch   = {0};
-  GPUBufferTextureCopyRegion       copyRegion     = {0};
-  GPUQueueSubmitInfo               submitInfo     = {0};
-  uint8_t                          pixels[4u * 4u * 4u] = {0};
-  const GPUBindGroupLayoutEntry   *textureEntry;
-  const GPUBindGroupLayoutEntry   *uniformEntry;
-  size_t                           bottomLeftOffset;
-  size_t                           bottomRightOffset;
-  size_t                           topLeftOffset;
-  size_t                           topRightOffset;
-  int                              ok = 0;
+  const uint32_t                 width  = 4u;
+  const uint32_t                 height = 4u;
+  GPUQueue                      *queue;
+  GPUShaderLibrary              *library        = NULL;
+  GPUShaderLayout               *shaderLayout   = NULL;
+  GPURenderPipeline             *pipeline       = NULL;
+  GPUBuffer                     *vertexBuffer   = NULL;
+  GPUBuffer                     *uniformBuffer  = NULL;
+  GPUBuffer                     *readbackBuffer = NULL;
+  GPUTexture                    *sampleTexture  = NULL;
+  GPUTexture                    *target         = NULL;
+  GPUTextureView                *sampleView     = NULL;
+  GPUTextureView                *targetView     = NULL;
+  GPUBindGroup                  *fragmentGroup  = NULL;
+  GPUCommandBuffer              *cmdb           = NULL;
+  GPUCommandBuffer              *buffers[1];
+  GPURenderPassEncoder          *renderPass     = NULL;
+  GPUTransferPassEncoder        *copyPass       = NULL;
+  GPUFence                      *fence          = NULL;
+  GPUVertexAttribute             attributes[2]        = {{0}};
+  GPUVertexBufferLayout          vertexLayout         = {0};
+  GPUColorTargetState            colorTarget          = {0};
+  GPURenderPipelineCreateInfo    pipelineInfo         = {0};
+  GPUBufferCreateInfo            bufferInfo           = {0};
+  GPUTextureCreateInfo           textureInfo          = {0};
+  GPUTextureViewCreateInfo       viewInfo             = {0};
+  GPUTextureWriteRegion          writeRegion          = {0};
+  GPUBindGroupEntry              fragmentEntries[2]   = {0};
+  GPUBindGroupCreateInfo         groupInfo            = {0};
+  GPURenderPassColorAttachment   color                = {0};
+  GPURenderPassCreateInfo        passInfo             = {0};
+  GPUViewport                    viewport             = {0};
+  GPUScissorRect                 scissor              = {0};
+  GPUBufferBinding               vertexBinding        = {0};
+  GPUTextureBarrier              textureBarrier       = {0};
+  GPUBarrierBatch                barrierBatch         = {0};
+  GPUBufferTextureCopyRegion     copyRegion           = {0};
+  GPUQueueSubmitInfo             submitInfo           = {0};
+  uint8_t                        pixels[4u * 4u * 4u] = {0};
+  const GPUBindGroupLayoutEntry *textureEntry;
+  const GPUBindGroupLayoutEntry *uniformEntry;
+  size_t                         bottomLeftOffset;
+  size_t                         bottomRightOffset;
+  size_t                         topLeftOffset;
+  size_t                         topRightOffset;
+  int                            ok     = 0;
 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
-  if (!queue ||
-      GPUCreateShaderLibraryFromUSL(device,
-                                    artifact,
-                                    artifactSize,
-                                    &library) != GPU_OK ||
-      !library ||
-      GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !shaderLayout || shaderLayout->bindGroupLayoutCount != 1u ||
-      !shaderLayout->bindGroupLayouts ||
-      !shaderLayout->bindGroupLayouts[0] ||
-      !shaderLayout->pipelineLayout) {
+
+  if (!queue
+      || GPUCreateShaderLibraryFromUSL(device,
+                                       artifact,
+                                       artifactSize,
+                                       &library) != GPU_OK
+      || !library
+      || GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK
+      || !shaderLayout || shaderLayout->bindGroupLayoutCount != 1u
+      || !shaderLayout->bindGroupLayouts
+      || !shaderLayout->bindGroupLayouts[0]
+      || !shaderLayout->pipelineLayout) {
     fprintf(stderr, "failed to create Vulkan texture shader layout\n");
     goto cleanup;
   }
@@ -122,42 +145,44 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   uniformEntry = find_layout_entry(shaderLayout->bindGroupLayouts[0],
                                    1u,
                                    GPU_BINDING_UNIFORM_BUFFER);
-  if (!textureEntry || !uniformEntry ||
-      textureEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      uniformEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
+
+  if (!textureEntry || !uniformEntry
+      || textureEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT
+      || uniformEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
     fprintf(stderr, "Vulkan texture reflection layout mismatch\n");
     goto cleanup;
   }
 
-  attributes[0].shaderLocation = 0u;
-  attributes[0].format         = GPU_VERTEX_FORMAT_FLOAT32X4;
-  attributes[0].offset         = offsetof(VulkanTextureVertex, position);
-  attributes[1].shaderLocation = 1u;
-  attributes[1].format         = GPU_VERTEX_FORMAT_FLOAT32X2;
-  attributes[1].offset         = offsetof(VulkanTextureVertex, uv);
-  vertexLayout.strideBytes     = sizeof(VulkanTextureVertex);
-  vertexLayout.stepMode        = GPU_VERTEX_STEP_MODE_VERTEX;
-  vertexLayout.attributeCount  = 2u;
-  vertexLayout.pAttributes     = attributes;
-  colorTarget.format            = GPU_FORMAT_RGBA8_UNORM;
-  colorTarget.blend.writeMask   = GPU_COLOR_WRITE_ALL;
-  pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
-  pipelineInfo.label            = "vulkan-usl-texture";
-  pipelineInfo.layout           = shaderLayout->pipelineLayout;
-  pipelineInfo.library          = library;
-  pipelineInfo.vertexEntry      = "quad_vs";
-  pipelineInfo.fragmentEntry    = "quad_fs";
+  attributes[0].shaderLocation          = 0u;
+  attributes[0].format                  = GPU_VERTEX_FORMAT_FLOAT32X4;
+  attributes[0].offset                  = offsetof(VulkanTextureVertex, position);
+  attributes[1].shaderLocation          = 1u;
+  attributes[1].format                  = GPU_VERTEX_FORMAT_FLOAT32X2;
+  attributes[1].offset                  = offsetof(VulkanTextureVertex, uv);
+  vertexLayout.strideBytes              = sizeof(VulkanTextureVertex);
+  vertexLayout.stepMode                 = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.attributeCount           = 2u;
+  vertexLayout.pAttributes              = attributes;
+  colorTarget.format                    = GPU_FORMAT_RGBA8_UNORM;
+  colorTarget.blend.writeMask           = GPU_COLOR_WRITE_ALL;
+  pipelineInfo.chain.sType              = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize         = sizeof(pipelineInfo);
+  pipelineInfo.label                    = "vulkan-usl-texture";
+  pipelineInfo.layout                   = shaderLayout->pipelineLayout;
+  pipelineInfo.library                  = library;
+  pipelineInfo.vertexEntry              = "quad_vs";
+  pipelineInfo.fragmentEntry            = "quad_fs";
   pipelineInfo.vertex.bufferLayoutCount = 1u;
-  pipelineInfo.vertex.pBufferLayouts     = &vertexLayout;
-  pipelineInfo.colorTargetCount          = 1u;
-  pipelineInfo.pColorTargets             = &colorTarget;
-  pipelineInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  pipelineInfo.cullMode          = GPU_CULL_MODE_BACK;
-  pipelineInfo.frontFace         = GPU_FRONT_FACE_CCW;
-  pipelineInfo.multisample.sampleCount = 1u;
-  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
+  pipelineInfo.vertex.pBufferLayouts    = &vertexLayout;
+  pipelineInfo.colorTargetCount         = 1u;
+  pipelineInfo.pColorTargets            = &colorTarget;
+  pipelineInfo.primitiveTopology        = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineInfo.cullMode                 = GPU_CULL_MODE_BACK;
+  pipelineInfo.frontFace                = GPU_FRONT_FACE_CCW;
+  pipelineInfo.multisample.sampleCount  = 1u;
+
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK
+      || !pipeline) {
     fprintf(stderr, "failed to create Vulkan texture pipeline\n");
     goto cleanup;
   }
@@ -165,16 +190,17 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "vulkan-usl-texture-vertices";
-  bufferInfo.sizeBytes        = sizeof(kVertices);
+  bufferInfo.sizeBytes        = sizeof(kTextureVertices);
   bufferInfo.usage            = GPU_BUFFER_USAGE_VERTEX |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(device, &bufferInfo, &vertexBuffer) != GPU_OK ||
-      !vertexBuffer ||
-      GPUQueueWriteBuffer(queue,
-                          vertexBuffer,
-                          0u,
-                          kVertices,
-                          sizeof(kVertices)) != GPU_OK) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &vertexBuffer) != GPU_OK
+      || !vertexBuffer
+      || GPUQueueWriteBuffer(queue,
+                             vertexBuffer,
+                             0u,
+                             kTextureVertices,
+                             sizeof(kTextureVertices)) != GPU_OK) {
     fprintf(stderr, "failed to create Vulkan texture vertex buffer\n");
     goto cleanup;
   }
@@ -182,13 +208,14 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   bufferInfo.label     = "vulkan-usl-texture-uniforms";
   bufferInfo.sizeBytes = sizeof(kTint);
   bufferInfo.usage     = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
-  if (GPUCreateBuffer(device, &bufferInfo, &uniformBuffer) != GPU_OK ||
-      !uniformBuffer ||
-      GPUQueueWriteBuffer(queue,
-                          uniformBuffer,
-                          0u,
-                          kTint,
-                          sizeof(kTint)) != GPU_OK) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &uniformBuffer) != GPU_OK
+      || !uniformBuffer
+      || GPUQueueWriteBuffer(queue,
+                             uniformBuffer,
+                             0u,
+                             kTint,
+                             sizeof(kTint)) != GPU_OK) {
     fprintf(stderr, "failed to create Vulkan texture uniform buffer\n");
     goto cleanup;
   }
@@ -196,8 +223,9 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   bufferInfo.label     = "vulkan-usl-texture-readback";
   bufferInfo.sizeBytes = sizeof(pixels);
   bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_DST | GPU_BUFFER_USAGE_COPY_SRC;
-  if (GPUCreateBuffer(device, &bufferInfo, &readbackBuffer) != GPU_OK ||
-      !readbackBuffer) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &readbackBuffer) != GPU_OK
+      || !readbackBuffer) {
     fprintf(stderr, "failed to create Vulkan texture readback buffer\n");
     goto cleanup;
   }
@@ -214,8 +242,9 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_DST;
-  if (GPUCreateTexture(device, &textureInfo, &sampleTexture) != GPU_OK ||
-      !sampleTexture) {
+
+  if (GPUCreateTexture(device, &textureInfo, &sampleTexture) != GPU_OK
+      || !sampleTexture) {
     fprintf(stderr, "failed to create Vulkan sampled texture\n");
     goto cleanup;
   }
@@ -226,6 +255,7 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   writeRegion.layerCount   = 1u;
   writeRegion.bytesPerRow  = 2u * 4u;
   writeRegion.rowsPerImage = 2u;
+
   if (GPUQueueWriteTexture(queue,
                            sampleTexture,
                            &writeRegion,
@@ -242,8 +272,9 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
-  if (GPUCreateTextureView(sampleTexture, &viewInfo, &sampleView) != GPU_OK ||
-      !sampleView) {
+
+  if (GPUCreateTextureView(sampleTexture, &viewInfo, &sampleView) != GPU_OK
+      || !sampleView) {
     fprintf(stderr, "failed to create Vulkan sampled view\n");
     goto cleanup;
   }
@@ -255,49 +286,55 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   fragmentEntries[1].bindingType   = GPU_BINDING_UNIFORM_BUFFER;
   fragmentEntries[1].buffer.buffer = uniformBuffer;
   fragmentEntries[1].buffer.size   = sizeof(kTint);
-  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
-  groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label            = "vulkan-usl-texture-group0";
-  groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
-  groupInfo.entryCount       = 2u;
-  groupInfo.pEntries         = fragmentEntries;
-  if (GPUCreateBindGroup(device, &groupInfo, &fragmentGroup) != GPU_OK ||
-      !fragmentGroup) {
+  groupInfo.chain.sType            = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize       = sizeof(groupInfo);
+  groupInfo.label                  = "vulkan-usl-texture-group0";
+  groupInfo.layout                 = shaderLayout->bindGroupLayouts[0];
+  groupInfo.entryCount             = 2u;
+  groupInfo.pEntries               = fragmentEntries;
+
+  if (GPUCreateBindGroup(device, &groupInfo, &fragmentGroup) != GPU_OK
+      || !fragmentGroup) {
     fprintf(stderr, "failed to create Vulkan texture group 0\n");
     goto cleanup;
   }
 
-  textureInfo.label         = "vulkan-usl-texture-target";
-  textureInfo.width         = width;
-  textureInfo.height        = height;
-  textureInfo.usage         = GPU_TEXTURE_USAGE_COLOR_TARGET |
-                              GPU_TEXTURE_USAGE_COPY_SRC;
+  textureInfo.label  = "vulkan-usl-texture-target";
+  textureInfo.width  = width;
+  textureInfo.height = height;
+  textureInfo.usage  = GPU_TEXTURE_USAGE_COLOR_TARGET |
+                       GPU_TEXTURE_USAGE_COPY_SRC;
+
   if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target) {
     fprintf(stderr, "failed to create Vulkan texture target\n");
     goto cleanup;
   }
+
   viewInfo.label = "vulkan-usl-texture-target-view";
-  if (GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK ||
-      !targetView) {
+
+  if (GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK
+      || !targetView) {
     fprintf(stderr, "failed to create Vulkan texture target view\n");
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "vulkan-usl-texture", &cmdb) != GPU_OK ||
-      !cmdb) {
+  if (GPUAcquireCommandBuffer(queue, "vulkan-usl-texture", &cmdb) != GPU_OK
+      || !cmdb) {
     fprintf(stderr, "failed to acquire Vulkan texture command buffer\n");
     goto cleanup;
   }
-  color.view                  = targetView;
-  color.loadOp                = GPU_LOAD_OP_CLEAR;
-  color.storeOp               = GPU_STORE_OP_STORE;
-  color.clearColor.float32[3] = 1.0f;
+
+  color.view                    = targetView;
+  color.loadOp                  = GPU_LOAD_OP_CLEAR;
+  color.storeOp                 = GPU_STORE_OP_STORE;
+  color.clearColor.float32[3]   = 1.0f;
   passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize     = sizeof(passInfo);
   passInfo.label                = "vulkan-usl-texture";
   passInfo.colorAttachmentCount = 1u;
   passInfo.pColorAttachments    = &color;
-  renderPass = GPUBeginRenderPass(cmdb, &passInfo);
+  renderPass                    = GPUBeginRenderPass(cmdb, &passInfo);
+
   if (!renderPass) {
     fprintf(stderr, "failed to begin Vulkan texture render pass\n");
     goto cleanup;
@@ -310,21 +347,21 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   viewport.width    = (float)width;
   viewport.height   = (float)height;
   viewport.maxDepth = 1.0f;
-  scissor.x      = -2;
-  scissor.y      = -3;
-  scissor.width  = width + 2u;
-  scissor.height = height + 3u;
+  scissor.x         = -2;
+  scissor.y         = -3;
+  scissor.width     = width + 2u;
+  scissor.height    = height + 3u;
   GPUSetViewport(renderPass, &viewport);
   GPUSetScissor(renderPass, &scissor);
   GPUDraw(renderPass, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(renderPass);
   renderPass = NULL;
 
-  textureBarrier.texture    = target;
-  textureBarrier.srcAccess  = GPU_ACCESS_COLOR_WRITE;
-  textureBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
-  textureBarrier.mipCount   = 1u;
-  textureBarrier.layerCount = 1u;
+  textureBarrier.texture           = target;
+  textureBarrier.srcAccess         = GPU_ACCESS_COLOR_WRITE;
+  textureBarrier.dstAccess         = GPU_ACCESS_TRANSFER_READ;
+  textureBarrier.mipCount          = 1u;
+  textureBarrier.layerCount        = 1u;
   barrierBatch.srcStages           = GPU_STAGE_FRAGMENT;
   barrierBatch.dstStages           = GPU_STAGE_TRANSFER;
   barrierBatch.textureBarrierCount = 1u;
@@ -332,10 +369,12 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
   copyPass = GPUBeginTransferPass(cmdb, "vulkan-usl-texture-readback");
+
   if (!copyPass) {
     fprintf(stderr, "failed to begin Vulkan texture copy pass\n");
     goto cleanup;
   }
+
   copyRegion.bytesPerRow        = width * 4u;
   copyRegion.rowsPerImage       = height;
   copyRegion.texture.width      = width;
@@ -350,18 +389,21 @@ gpu_test_vulkan_texture(GPUDevice  *device,
     fprintf(stderr, "failed to create Vulkan texture fence\n");
     goto cleanup;
   }
-  buffers[0]                       = cmdb;
-  submitInfo.chain.sType           = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
-  submitInfo.chain.structSize      = sizeof(submitInfo);
-  submitInfo.commandBufferCount    = 1u;
-  submitInfo.ppCommandBuffers      = buffers;
-  submitInfo.fence                 = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  buffers[0]                    = cmdb;
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = buffers;
+  submitInfo.fence              = fence;
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "Vulkan texture submit failed\n");
     cmdb = NULL;
     goto cleanup;
   }
+
   cmdb = NULL;
 
   if (GPUQueueReadBuffer(queue,
@@ -377,10 +419,11 @@ gpu_test_vulkan_texture(GPUDevice  *device,
   topRightOffset    = ((size_t)width - 1u) * 4u;
   bottomLeftOffset  = ((size_t)height - 1u) * width * 4u;
   bottomRightOffset = ((size_t)width * height - 1u) * 4u;
-  if (!pixel_matches(&pixels[topLeftOffset], 230u, 0u, 0u) ||
-      !pixel_matches(&pixels[topRightOffset], 0u, 242u, 0u) ||
-      !pixel_matches(&pixels[bottomLeftOffset], 0u, 0u, 255u) ||
-      !pixel_matches(&pixels[bottomRightOffset], 230u, 242u, 255u)) {
+
+  if (!pixel_matches(&pixels[topLeftOffset], 230u, 0u, 0u)
+      || !pixel_matches(&pixels[topRightOffset], 0u, 242u, 0u)
+      || !pixel_matches(&pixels[bottomLeftOffset], 0u, 0u, 255u)
+      || !pixel_matches(&pixels[bottomRightOffset], 230u, 242u, 255u)) {
     fprintf(stderr,
             "Vulkan texture orientation mismatch: "
             "tl=%u,%u,%u tr=%u,%u,%u bl=%u,%u,%u br=%u,%u,%u\n",
@@ -405,9 +448,11 @@ cleanup:
   if (copyPass) {
     GPUEndTransferPass(copyPass);
   }
+
   if (renderPass) {
     GPUEndRenderPass(renderPass);
   }
+
   GPUDestroyFence(fence);
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(target);

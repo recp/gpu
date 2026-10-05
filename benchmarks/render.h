@@ -26,58 +26,58 @@
 #include <stdint.h>
 
 typedef struct BenchRenderConfig {
-  const char *artifactPath;
+  const char   *artifactPath;
   GPUFeatureSet required;
-  GPUBackend  backend;
-  uint32_t    drawCount;
-  uint32_t    warmupFrames;
-  uint32_t    measuredFrames;
-  uint32_t    repeats;
-  bool        enableStats;
+  GPUBackend    backend;
+  uint32_t      drawCount;
+  uint32_t      warmupFrames;
+  uint32_t      measuredFrames;
+  uint32_t      repeats;
+  bool          enableStats;
 } BenchRenderConfig;
 
 typedef struct BenchRender {
-  GPUInstance          *instance;
-  GPUAdapter           *adapter;
-  GPUDevice            *device;
-  GPUQueue             *queue;
-  GPUShaderLibrary     *library;
-  GPUPipelineLayout    *pipelineLayout;
-  GPUBuffer            *vertexBuffer;
-  GPUTexture           *target;
-  GPUTextureView       *targetView;
-  GPUFence             *fence;
-  GPUAdapterProperties  adapterProperties;
-  BenchProcessMemory    baselineMemory;
-  bool                  requiredUnsupported;
+  GPUInstance         *instance;
+  GPUAdapter          *adapter;
+  GPUDevice           *device;
+  GPUQueue            *queue;
+  GPUShaderLibrary    *library;
+  GPUPipelineLayout   *pipelineLayout;
+  GPUBuffer           *vertexBuffer;
+  GPUTexture          *target;
+  GPUTextureView      *targetView;
+  GPUFence            *fence;
+  GPUAdapterProperties adapterProperties;
+  BenchProcessMemory   baselineMemory;
+  bool                 requiredUnsupported;
 } BenchRender;
 
 typedef struct BenchPipelineInfo {
-  const char   *label;
-  const char   *vertexEntry;
-  const char   *fragmentEntry;
-  GPUFrontFace  frontFace;
-  bool          vertexInput;
-  bool          blendEnabled;
+  const char  *label;
+  const char  *vertexEntry;
+  const char  *fragmentEntry;
+  GPUFrontFace frontFace;
+  bool         vertexInput;
+  bool         blendEnabled;
 } BenchPipelineInfo;
 
 typedef struct BenchSceneMetrics {
-  double   *samples;
-  double   *repeatMedians;
-  double   *gpuSamples;
-  double   *gpuRepeatMedians;
-  uint64_t  requestedStateCalls;
-  uint64_t  emittedStateCalls;
-  uint64_t  requestedBindCalls;
-  uint64_t  emittedBindCalls;
-  uint64_t  drawCalls;
-  uint64_t  maxAllocCount;
-  uint64_t  maxAllocBytes;
-  uint64_t  maxFreeCount;
-  uint64_t  maxFreeBytes;
-  size_t    sampleCount;
-  size_t    gpuSampleCount;
-  size_t    gpuRepeatCount;
+  double  *samples;
+  double  *repeatMedians;
+  double  *gpuSamples;
+  double  *gpuRepeatMedians;
+  uint64_t requestedStateCalls;
+  uint64_t emittedStateCalls;
+  uint64_t requestedBindCalls;
+  uint64_t emittedBindCalls;
+  uint64_t drawCalls;
+  uint64_t maxAllocCount;
+  uint64_t maxAllocBytes;
+  uint64_t maxFreeCount;
+  uint64_t maxFreeBytes;
+  size_t   sampleCount;
+  size_t   gpuSampleCount;
+  size_t   gpuRepeatCount;
 } BenchSceneMetrics;
 
 typedef bool (*BenchRenderEncodeFn)(GPURenderPassEncoder *pass,
@@ -96,7 +96,7 @@ bench_renderInit(BenchRender             *bench,
 bool
 bench_renderPipeline(BenchRender             *bench,
                      const BenchPipelineInfo *info,
-                     GPURenderPipeline       **outPipeline);
+                     GPURenderPipeline      **outPipeline);
 
 bool
 bench_renderRun(BenchRender             *bench,

@@ -1,7 +1,31 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 #include "../../src/backend/api/gpudef.h"
 #include "../../src/api/device_internal.h"
 #include "../../src/api/texture_internal.h"
+
+#define CHECK_BUFFER(x)                                            \
+  do {                                                             \
+    if (!(x)) {                                                    \
+      fprintf(stderr, "buffer layout line %d failed\n", __LINE__); \
+      goto cleanup;                                                \
+    }                                                              \
+  } while (0)
 
 typedef struct GPUDescriptorHookCounts {
   uint32_t createLayout;
@@ -16,29 +40,50 @@ typedef struct GPUDescriptorHookCounts {
 
 static GPUDescriptorHookCounts descriptorHookCounts;
 
+static const GPUFormat storageFormats[] = {
+  GPU_FORMAT_RGBA8_UNORM,
+  GPU_FORMAT_R32_FLOAT,
+  GPU_FORMAT_RGBA16_FLOAT,
+  GPU_FORMAT_RGBA32_FLOAT
+};
+
+static const GPUBindingType bufferTypes[] = {
+  GPU_BINDING_READ_ONLY_STORAGE_BUFFER, GPU_BINDING_STORAGE_BUFFER
+};
+
+static const uint64_t invalidRanges[][2] = {
+  {0u, 4u}, {0u, 10u}, {0u, 16u}, {2u, 8u}, {8u, 8u},
+  {UINT64_MAX - 3u, 8u}
+};
+
 static bool
 bindgroup_test_selected(const char *name) {
   const char *filter;
   size_t      nameLength;
 
   filter = getenv("GPU_BINDGROUP_TEST");
+
   if (!filter || !filter[0]) {
     return true;
   }
 
   nameLength = strlen(name);
+
   while (*filter) {
     const char *end;
     size_t      length;
 
     end    = strchr(filter, ',');
     length = end ? (size_t)(end - filter) : strlen(filter);
+
     if (length == nameLength && memcmp(filter, name, length) == 0) {
       return true;
     }
+
     if (!end) {
       break;
     }
+
     filter = end + 1;
   }
 
@@ -50,7 +95,9 @@ test_createBindGroupLayout(GPUDevice *device, GPUBindGroupLayout *layout) {
   if (!device || !layout) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   descriptorHookCounts.createLayout++;
+
   return GPU_OK;
 }
 
@@ -66,7 +113,9 @@ test_createPipelineLayout(GPUDevice *device, GPUPipelineLayout *layout) {
   if (!device || !layout) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   descriptorHookCounts.createPipeline++;
+
   return GPU_OK;
 }
 
@@ -82,7 +131,9 @@ test_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   if (!device || !group) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   descriptorHookCounts.createGroup++;
+
   return GPU_OK;
 }
 
@@ -100,11 +151,13 @@ test_bindRenderGroup(GPURenderPassEncoder *pass,
                      GPUBindGroup         *group,
                      uint32_t              dynamicOffsetCount,
                      const uint32_t       *dynamicOffsets) {
-  if (!pass || !pipelineLayout || !group || groupIndex != 0u ||
-      (dynamicOffsetCount > 0u && !dynamicOffsets)) {
+  if (!pass || !pipelineLayout || !group || groupIndex != 0u
+      || (dynamicOffsetCount > 0u && !dynamicOffsets)) {
     return false;
   }
+
   descriptorHookCounts.bindRender++;
+
   return true;
 }
 
@@ -115,72 +168,78 @@ test_bindComputeGroup(GPUComputePassEncoder *pass,
                       GPUBindGroup          *group,
                       uint32_t               dynamicOffsetCount,
                       const uint32_t        *dynamicOffsets) {
-  if (!pass || !pipelineLayout || !group || groupIndex != 0u ||
-      (dynamicOffsetCount > 0u && !dynamicOffsets)) {
+  if (!pass || !pipelineLayout || !group || groupIndex != 0u
+      || (dynamicOffsetCount > 0u && !dynamicOffsets)) {
     return false;
   }
+
   descriptorHookCounts.bindCompute++;
+
   return true;
 }
 
 static int
 check_backend_descriptor_hooks(GPUDevice *device) {
-  GPUApiDescriptor hooks = {0};
-  GPUApiDescriptor saved;
-  GPUBindGroupLayoutCreateInfo layoutInfo = {0};
-  GPUPipelineLayoutCreateInfo pipelineInfo = {0};
-  GPUBindGroupCreateInfo groupInfo = {0};
-  GPUBindGroupLayout *layouts[1];
-  GPUBindGroupLayout *layout = NULL;
-  GPUPipelineLayout *pipelineLayout = NULL;
-  GPUBindGroup *group = NULL;
-  GPURenderPassEncoder renderPass = {0};
-  GPUComputePassEncoder computePass = {0};
-  GPUApi *api;
-  int ok;
+  GPUApiDescriptor             hooks = {0};
+  GPUApiDescriptor             saved;
+  GPUBindGroupLayoutCreateInfo layoutInfo   = {0};
+  GPUPipelineLayoutCreateInfo  pipelineInfo = {0};
+  GPUBindGroupCreateInfo       groupInfo    = {0};
+  GPUBindGroupLayout          *layouts[1];
+  GPURenderPassEncoder         renderPass     = {0};
+  GPUComputePassEncoder        computePass    = {0};
+  GPUBindGroupLayout          *layout         = NULL;
+  GPUPipelineLayout           *pipelineLayout = NULL;
+  GPUBindGroup                *group          = NULL;
+  GPUApi                      *api;
+  int                          ok;
 
   api = gpuDeviceApi(device);
+
   if (!api) {
     return 0;
   }
 
-  hooks.createBindGroupLayout = test_createBindGroupLayout;
+  hooks.createBindGroupLayout  = test_createBindGroupLayout;
   hooks.destroyBindGroupLayout = test_destroyBindGroupLayout;
-  hooks.createPipelineLayout = test_createPipelineLayout;
-  hooks.destroyPipelineLayout = test_destroyPipelineLayout;
-  hooks.createBindGroup = test_createBindGroup;
-  hooks.destroyBindGroup = test_destroyBindGroup;
-  hooks.bindRenderGroup = test_bindRenderGroup;
-  hooks.bindComputeGroup = test_bindComputeGroup;
+  hooks.createPipelineLayout   = test_createPipelineLayout;
+  hooks.destroyPipelineLayout  = test_destroyPipelineLayout;
+  hooks.createBindGroup        = test_createBindGroup;
+  hooks.destroyBindGroup       = test_destroyBindGroup;
+  hooks.bindRenderGroup        = test_bindRenderGroup;
+  hooks.bindComputeGroup       = test_bindComputeGroup;
 
-  saved = api->descriptor;
+  saved           = api->descriptor;
   api->descriptor = hooks;
   memset(&descriptorHookCounts, 0, sizeof(descriptorHookCounts));
 
-  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layoutInfo.chain.structSize = sizeof(layoutInfo);
+
   if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
     goto cleanup;
   }
 
-  layouts[0] = layout;
-  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  layouts[0]                        = layout;
+  pipelineInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize     = sizeof(pipelineInfo);
   pipelineInfo.bindGroupLayoutCount = 1u;
-  pipelineInfo.ppBindGroupLayouts = layouts;
-  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK ||
-      !pipelineLayout) {
+  pipelineInfo.ppBindGroupLayouts   = layouts;
+
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK
+      || !pipelineLayout) {
     goto cleanup;
   }
 
-  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.layout = layout;
+  groupInfo.layout           = layout;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     goto cleanup;
   }
 
-  renderPass._pipelineLayout = pipelineLayout;
+  renderPass._pipelineLayout  = pipelineLayout;
   computePass._pipelineLayout = pipelineLayout;
   GPUBindRenderGroup(&renderPass, 0u, group, 0u, NULL);
   GPUBindComputeGroup(&computePass, 0u, group, 0u, NULL);
@@ -191,17 +250,19 @@ cleanup:
   GPUDestroyBindGroupLayout(layout);
   api->descriptor = saved;
 
-  ok = descriptorHookCounts.createLayout == 1u &&
-       descriptorHookCounts.destroyLayout == 1u &&
-       descriptorHookCounts.createPipeline == 1u &&
-       descriptorHookCounts.destroyPipeline == 1u &&
-       descriptorHookCounts.createGroup == 1u &&
-       descriptorHookCounts.destroyGroup == 1u &&
-       descriptorHookCounts.bindRender == 1u &&
-       descriptorHookCounts.bindCompute == 1u;
+  ok = descriptorHookCounts.createLayout == 1u
+       && descriptorHookCounts.destroyLayout == 1u
+       && descriptorHookCounts.createPipeline == 1u
+       && descriptorHookCounts.destroyPipeline == 1u
+       && descriptorHookCounts.createGroup == 1u
+       && descriptorHookCounts.destroyGroup == 1u
+       && descriptorHookCounts.bindRender == 1u
+       && descriptorHookCounts.bindCompute == 1u;
+
   if (!ok) {
     fprintf(stderr, "backend descriptor hooks were not routed consistently\n");
   }
+
   return ok;
 }
 
@@ -213,130 +274,137 @@ valid_sampler_desc(void) {
   desc.minFilter = GPU_FILTER_LINEAR;
   desc.magFilter = GPU_FILTER_LINEAR;
   desc.mipFilter = GPU_MIP_FILTER_LINEAR;
-  desc.addressU = GPU_ADDRESS_MODE_REPEAT;
-  desc.addressV = GPU_ADDRESS_MODE_REPEAT;
-  desc.addressW = GPU_ADDRESS_MODE_REPEAT;
+  desc.addressU  = GPU_ADDRESS_MODE_REPEAT;
+  desc.addressV  = GPU_ADDRESS_MODE_REPEAT;
+  desc.addressW  = GPU_ADDRESS_MODE_REPEAT;
+
   return desc;
 }
 
 static GPUFormat
 sampled_storage_format(GPUDevice            *device,
                        GPUTextureSampleType *outSampleType) {
-  static const GPUFormat candidates[] = {
-    GPU_FORMAT_RGBA8_UNORM,
-    GPU_FORMAT_R32_FLOAT,
-    GPU_FORMAT_RGBA16_FLOAT,
-    GPU_FORMAT_RGBA32_FLOAT
-  };
   GPUFormatCapabilities capabilities;
+  uint32_t              i;
 
   if (!device || !device->adapter || !outSampleType) {
     return GPU_FORMAT_UNDEFINED;
   }
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(candidates); i++) {
+
+  for (i = 0u; i < GPU_ARRAY_LEN(storageFormats); i++) {
     if (GPUGetFormatCapabilities(device->adapter,
-                                 candidates[i],
-                                 &capabilities) == GPU_OK &&
-        capabilities.sampled && capabilities.storage) {
+                                 storageFormats[i],
+                                 &capabilities) == GPU_OK
+        && capabilities.sampled && capabilities.storage) {
       *outSampleType = capabilities.filterable
                          ? GPU_TEXTURE_SAMPLE_TYPE_FLOAT
                          : GPU_TEXTURE_SAMPLE_TYPE_UNFILTERABLE_FLOAT;
-      return candidates[i];
+      return storageFormats[i];
     }
   }
+
   return GPU_FORMAT_UNDEFINED;
 }
 
 static int
-check_pipeline_layout_bind_validation(GPUDevice *device,
+check_pipeline_layout_bind_validation(GPUDevice                          *device,
                                       const GPUBindGroupLayoutCreateInfo *layoutInfo,
-                                      GPUBindGroupLayout *layout,
-                                      GPUPipelineLayout *pipelineLayout) {
-  GPUApiDescriptor saved;
-  GPUApi *api;
-  GPUBindGroupCreateInfo groupInfo = {0};
-  GPUBindGroupLayoutCreateInfo secondLayoutInfo = {0};
-  GPUPipelineLayoutCreateInfo otherPipelineInfo = {0};
-  GPUPipelineLayoutCreateInfo twoGroupPipelineInfo = {0};
-  GPUBindGroupLayoutEntry secondEntry = {0};
-  GPUBindGroupLayout *otherLayout = NULL;
-  GPUBindGroupLayout *otherLayouts[1];
-  GPUBindGroupLayout *twoGroupLayouts[2];
-  GPUPipelineLayout *otherPipelineLayout = NULL;
-  GPUPipelineLayout *twoGroupPipelineLayout = NULL;
-  GPUBindGroup *group = NULL;
-  GPUBindGroup *secondGroup = NULL;
-  GPURenderPassEncoder renderPass = {0};
-  GPUComputePassEncoder computePass = {0};
-  uint32_t dynamicOffset = 0u;
+                                      GPUBindGroupLayout                 *layout,
+                                      GPUPipelineLayout                  *pipelineLayout) {
+  GPUApiDescriptor             saved;
+  GPUBindGroupCreateInfo       groupInfo            = {0};
+  GPUBindGroupLayoutCreateInfo secondLayoutInfo     = {0};
+  GPUPipelineLayoutCreateInfo  otherPipelineInfo    = {0};
+  GPUPipelineLayoutCreateInfo  twoGroupPipelineInfo = {0};
+  GPUBindGroupLayoutEntry      secondEntry          = {0};
+  GPUBindGroupLayout          *otherLayouts[1];
+  GPUBindGroupLayout          *twoGroupLayouts[2];
+  GPURenderPassEncoder         renderPass  = {0};
+  GPUComputePassEncoder        computePass = {0};
+  GPUApi                      *api;
+  GPUBindGroupLayout          *otherLayout            = NULL;
+  GPUPipelineLayout           *otherPipelineLayout    = NULL;
+  GPUPipelineLayout           *twoGroupPipelineLayout = NULL;
+  GPUBindGroup                *group                  = NULL;
+  GPUBindGroup                *secondGroup            = NULL;
+  uint32_t                     dynamicOffset          = 0u;
 
   api = gpuDeviceApi(device);
+
   if (!api) {
     return 0;
   }
+
   saved = api->descriptor;
   api->descriptor.bindRenderGroup  = NULL;
   api->descriptor.bindComputeGroup = NULL;
 
   secondLayoutInfo = *layoutInfo;
+
   if (!layoutInfo || layoutInfo->entryCount != 1u || !layoutInfo->pEntries) {
     fprintf(stderr, "bind compatibility setup needs one layout entry\n");
     goto fail;
   }
+
   secondEntry = layoutInfo->pEntries[0];
   secondEntry.binding++;
   secondLayoutInfo.pEntries = &secondEntry;
 
-  if (GPUCreateBindGroupLayout(device, &secondLayoutInfo, &otherLayout) != GPU_OK ||
-      !otherLayout) {
+  if (GPUCreateBindGroupLayout(device, &secondLayoutInfo, &otherLayout) != GPU_OK
+      || !otherLayout) {
     fprintf(stderr, "bind compatibility setup failed to create second layout\n");
     goto fail;
   }
 
-  otherLayouts[0] = otherLayout;
-  otherPipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  otherPipelineInfo.chain.structSize = sizeof(otherPipelineInfo);
+  otherLayouts[0]                        = otherLayout;
+  otherPipelineInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  otherPipelineInfo.chain.structSize     = sizeof(otherPipelineInfo);
   otherPipelineInfo.bindGroupLayoutCount = 1u;
-  otherPipelineInfo.ppBindGroupLayouts = otherLayouts;
+  otherPipelineInfo.ppBindGroupLayouts   = otherLayouts;
+
   if (GPUCreatePipelineLayout(device,
                               &otherPipelineInfo,
-                              &otherPipelineLayout) != GPU_OK ||
-      !otherPipelineLayout) {
+                              &otherPipelineLayout) != GPU_OK
+      || !otherPipelineLayout) {
     fprintf(stderr, "bind compatibility setup failed to create second pipeline layout\n");
     goto fail;
   }
 
-  twoGroupLayouts[0] = layout;
-  twoGroupLayouts[1] = otherLayout;
-  twoGroupPipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  twoGroupPipelineInfo.chain.structSize = sizeof(twoGroupPipelineInfo);
+  twoGroupLayouts[0]                        = layout;
+  twoGroupLayouts[1]                        = otherLayout;
+  twoGroupPipelineInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  twoGroupPipelineInfo.chain.structSize     = sizeof(twoGroupPipelineInfo);
   twoGroupPipelineInfo.bindGroupLayoutCount = 2u;
-  twoGroupPipelineInfo.ppBindGroupLayouts = twoGroupLayouts;
+  twoGroupPipelineInfo.ppBindGroupLayouts   = twoGroupLayouts;
+
   if (GPUCreatePipelineLayout(device,
                               &twoGroupPipelineInfo,
-                              &twoGroupPipelineLayout) != GPU_OK ||
-      !twoGroupPipelineLayout) {
+                              &twoGroupPipelineLayout) != GPU_OK
+      || !twoGroupPipelineLayout) {
     fprintf(stderr, "bind compatibility setup failed to create two-group layout\n");
     goto fail;
   }
 
-  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.layout = layout;
+  groupInfo.layout           = layout;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "bind compatibility setup failed to create group\n");
     goto fail;
   }
 
   groupInfo.layout = otherLayout;
-  if (GPUCreateBindGroup(device, &groupInfo, &secondGroup) != GPU_OK ||
-      !secondGroup) {
+
+  if (GPUCreateBindGroup(device, &groupInfo, &secondGroup) != GPU_OK
+      || !secondGroup) {
     fprintf(stderr, "bind compatibility setup failed to create second group\n");
     goto fail;
   }
 
   renderPass._pipelineLayout = otherPipelineLayout;
   GPUBindRenderGroup(&renderPass, 0u, group, 0u, NULL);
+
   if (renderPass._boundGroupLayouts[0]) {
     fprintf(stderr, "render bind accepted group from wrong pipeline layout\n");
     goto fail;
@@ -344,11 +412,14 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
 
   renderPass._pipelineLayout = pipelineLayout;
   GPUBindRenderGroup(&renderPass, 0u, group, 1u, &dynamicOffset);
+
   if (renderPass._boundGroupLayouts[0]) {
     fprintf(stderr, "render bind accepted wrong dynamic offset count\n");
     goto fail;
   }
+
   GPUBindRenderGroup(&renderPass, 0u, group, 0u, NULL);
+
   if (renderPass._boundGroupLayouts[0] != layout) {
     fprintf(stderr, "render bind rejected compatible pipeline layout\n");
     goto fail;
@@ -357,20 +428,24 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
   memset(&renderPass, 0, sizeof(renderPass));
   renderPass._pipelineLayout = twoGroupPipelineLayout;
   GPUBindRenderGroup(&renderPass, 1u, group, 0u, NULL);
+
   if (renderPass._boundGroupLayouts[1]) {
     fprintf(stderr, "render bind accepted group 1 with wrong layout\n");
     goto fail;
   }
+
   GPUBindRenderGroup(&renderPass, 0u, group, 0u, NULL);
   GPUBindRenderGroup(&renderPass, 1u, secondGroup, 0u, NULL);
-  if (renderPass._boundGroupLayouts[0] != layout ||
-      renderPass._boundGroupLayouts[1] != otherLayout) {
+
+  if (renderPass._boundGroupLayouts[0] != layout
+      || renderPass._boundGroupLayouts[1] != otherLayout) {
     fprintf(stderr, "render bind rejected compatible multi-group layout\n");
     goto fail;
   }
 
   computePass._pipelineLayout = otherPipelineLayout;
   GPUBindComputeGroup(&computePass, 0u, group, 0u, NULL);
+
   if (computePass._boundGroupLayouts[0]) {
     fprintf(stderr, "compute bind accepted group from wrong pipeline layout\n");
     goto fail;
@@ -378,6 +453,7 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
 
   computePass._pipelineLayout = pipelineLayout;
   GPUBindComputeGroup(&computePass, 0u, group, 0u, NULL);
+
   if (computePass._boundGroupLayouts[0] != layout) {
     fprintf(stderr, "compute bind rejected compatible pipeline layout\n");
     goto fail;
@@ -386,14 +462,17 @@ check_pipeline_layout_bind_validation(GPUDevice *device,
   memset(&computePass, 0, sizeof(computePass));
   computePass._pipelineLayout = twoGroupPipelineLayout;
   GPUBindComputeGroup(&computePass, 1u, group, 0u, NULL);
+
   if (computePass._boundGroupLayouts[1]) {
     fprintf(stderr, "compute bind accepted group 1 with wrong layout\n");
     goto fail;
   }
+
   GPUBindComputeGroup(&computePass, 0u, group, 0u, NULL);
   GPUBindComputeGroup(&computePass, 1u, secondGroup, 0u, NULL);
-  if (computePass._boundGroupLayouts[0] != layout ||
-      computePass._boundGroupLayouts[1] != otherLayout) {
+
+  if (computePass._boundGroupLayouts[0] != layout
+      || computePass._boundGroupLayouts[1] != otherLayout) {
     fprintf(stderr, "compute bind rejected compatible multi-group layout\n");
     goto fail;
   }
@@ -418,105 +497,105 @@ fail:
 
 static int
 check_buffer_layout_validation(GPUDevice *device) {
-  static const GPUBindingType types[] = {
-    GPU_BINDING_READ_ONLY_STORAGE_BUFFER, GPU_BINDING_STORAGE_BUFFER
-  };
-  static const uint64_t invalidRanges[][2] = {
-    {0u, 4u}, {0u, 10u}, {0u, 16u}, {2u, 8u}, {8u, 8u},
-    {UINT64_MAX - 3u, 8u}
-  };
-  const GPUBindGroupLayoutEntry *copy;
-  GPUBindGroupLayout           *layouts[2] = {0};
-  GPUBindGroup                *groups[2] = {0};
-  GPUBindGroup                *duplicate = NULL;
-  GPUBuffer                   *buffer = NULL;
-  GPUBindGroupLayoutEntry       entry = {0};
-  GPUBindGroupEntry             binding = {0};
+  GPUBindGroupLayout            *layouts[2] = {0};
+  GPUBindGroup                  *groups[2]  = {0};
+  GPUBindGroupLayoutEntry        entry      = {0};
+  GPUBindGroupEntry              binding    = {0};
   GPUBindGroupLayoutCreateInfo   layoutInfo = {0};
-  GPUBindGroupCreateInfo         groupInfo = {0};
-  GPUBufferCreateInfo           bufferInfo = {0};
-  uint32_t                      entryCount;
-  int                           ok = 0;
-
-#define CHECK_BUFFER(x) do { if (!(x)) { \
-  fprintf(stderr, "buffer layout line %d failed\n", __LINE__); \
-  goto cleanup; \
-} } while (0)
+  GPUBindGroupCreateInfo         groupInfo  = {0};
+  GPUBufferCreateInfo            bufferInfo = {0};
+  const GPUBindGroupLayoutEntry *copy;
+  GPUBindGroup                  *duplicate = NULL;
+  GPUBuffer                     *buffer    = NULL;
+  uint32_t                       entryCount;
+  int                            ok = 0;
+  uint32_t                       typeIndex;
+  uint32_t                       rawIndex;
+  uint32_t                       j;
+  uint32_t                       releaseIndex;
+  uint32_t                       cleanupIndex;
 
   layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layoutInfo.chain.structSize = sizeof(layoutInfo);
   layoutInfo.entryCount       = 1u;
   layoutInfo.pEntries         = &entry;
-  entry.visibility           = GPU_SHADER_STAGE_COMPUTE_BIT;
-  entry.bindingType          = GPU_BINDING_UNIFORM_BUFFER;
-  entry.buffer.byteAddress   = true;
-  CHECK_BUFFER(GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[0]) ==
-                 GPU_ERROR_INVALID_ARGUMENT && !layouts[0]);
+  entry.visibility            = GPU_SHADER_STAGE_COMPUTE_BIT;
+  entry.bindingType           = GPU_BINDING_UNIFORM_BUFFER;
+  entry.buffer.byteAddress    = true;
+  CHECK_BUFFER(GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[0]) == GPU_ERROR_INVALID_ARGUMENT
+               && !layouts[0]);
 
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.sizeBytes        = 12u;
   bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE;
   CHECK_BUFFER(GPUCreateBuffer(device, &bufferInfo, &buffer) == GPU_OK);
-  groupInfo.chain.sType       = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
-  groupInfo.chain.structSize  = sizeof(groupInfo);
-  groupInfo.entryCount        = 1u;
-  groupInfo.pEntries          = &binding;
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.entryCount       = 1u;
+  groupInfo.pEntries         = &binding;
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(types); i++) {
-    entry.bindingType   = types[i];
-    binding.bindingType = types[i];
+  for (typeIndex = 0u; typeIndex < GPU_ARRAY_LEN(bufferTypes); typeIndex++) {
+    entry.bindingType   = bufferTypes[typeIndex];
+    binding.bindingType = bufferTypes[typeIndex];
 
-    /* Zero-initialized storage layouts keep the existing raw contract. */
+    /* zero-initialized storage layouts keep the existing raw contract. */
+
     entry.buffer = (GPUBufferBindingLayout){0};
     CHECK_BUFFER(GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[0]) == GPU_OK);
     copy = GPUGetBindGroupLayoutEntries(layouts[0], &entryCount);
-    CHECK_BUFFER(copy && entryCount == 1u && copy[0].buffer.byteAddress &&
-                 copy[0].buffer.strideBytes == 0u);
+    CHECK_BUFFER(copy && entryCount == 1u && copy[0].buffer.byteAddress && copy[0].buffer.strideBytes == 0u);
     GPUDestroyBindGroupLayout(layouts[0]);
     layouts[0] = NULL;
 
-    for (uint32_t raw = 0u; raw < 2u; raw++) {
+    for (rawIndex = 0u; rawIndex < 2u; rawIndex++) {
       entry.buffer.minBindingSize = 8u;
       entry.buffer.strideBytes    = 4u;
-      entry.buffer.byteAddress    = raw != 0u;
-      CHECK_BUFFER(GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[raw]) == GPU_OK);
-      copy = GPUGetBindGroupLayoutEntries(layouts[raw], &entryCount);
-      CHECK_BUFFER(copy && entryCount == 1u &&
-                   copy[0].buffer.minBindingSize == 8u &&
-                   copy[0].buffer.strideBytes == 4u &&
-                   copy[0].buffer.byteAddress == (raw != 0u));
-      groupInfo.layout      = layouts[raw];
+      entry.buffer.byteAddress    = rawIndex != 0u;
+      CHECK_BUFFER(GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[rawIndex]) == GPU_OK);
+      copy = GPUGetBindGroupLayoutEntries(layouts[rawIndex], &entryCount);
+      CHECK_BUFFER(copy && entryCount == 1u
+                   && copy[0].buffer.minBindingSize == 8u
+                   && copy[0].buffer.strideBytes == 4u
+                   && copy[0].buffer.byteAddress == (rawIndex != 0u));
+      groupInfo.layout      = layouts[rawIndex];
       binding.buffer.buffer = buffer;
       binding.buffer.offset = 0u;
       binding.buffer.size   = 12u;
-      CHECK_BUFFER(GPUCreateBindGroup(device, &groupInfo, &groups[raw]) == GPU_OK);
-      CHECK_BUFFER(GPUCreateBindGroup(device, &groupInfo, &duplicate) == GPU_OK &&
-                   duplicate == groups[raw]);
+      CHECK_BUFFER(GPUCreateBindGroup(device, &groupInfo, &groups[rawIndex]) == GPU_OK);
+      CHECK_BUFFER(GPUCreateBindGroup(device, &groupInfo, &duplicate) == GPU_OK
+                   && duplicate == groups[rawIndex]);
       GPUDestroyBindGroup(duplicate);
       duplicate = NULL;
-      for (uint32_t j = 0u; j < GPU_ARRAY_LEN(invalidRanges); j++) {
+
+      for (j = 0u; j < GPU_ARRAY_LEN(invalidRanges); j++) {
         binding.buffer.offset = invalidRanges[j][0];
         binding.buffer.size   = invalidRanges[j][1];
-        CHECK_BUFFER(GPUCreateBindGroup(device, &groupInfo, &duplicate) ==
-                       GPU_ERROR_INVALID_ARGUMENT && !duplicate);
+        CHECK_BUFFER(GPUCreateBindGroup(device, &groupInfo, &duplicate) == GPU_ERROR_INVALID_ARGUMENT
+                     && !duplicate);
       }
     }
+
     CHECK_BUFFER(groups[0] != groups[1]);
-    for (uint32_t raw = 0u; raw < 2u; raw++) {
-      GPUDestroyBindGroup(groups[raw]);
-      GPUDestroyBindGroupLayout(layouts[raw]);
-      groups[raw]  = NULL;
-      layouts[raw] = NULL;
+
+    for (releaseIndex = 0u; releaseIndex < 2u; releaseIndex++) {
+      GPUDestroyBindGroup(groups[releaseIndex]);
+      GPUDestroyBindGroupLayout(layouts[releaseIndex]);
+      groups[releaseIndex]  = NULL;
+      layouts[releaseIndex] = NULL;
     }
   }
+
   ok = 1;
+
 cleanup:
   GPUDestroyBindGroup(duplicate);
-  for (uint32_t i = 0u; i < 2u; i++) {
-    GPUDestroyBindGroup(groups[i]);
-    GPUDestroyBindGroupLayout(layouts[i]);
+
+  for (cleanupIndex = 0u; cleanupIndex < 2u; cleanupIndex++) {
+    GPUDestroyBindGroup(groups[cleanupIndex]);
+    GPUDestroyBindGroupLayout(layouts[cleanupIndex]);
   }
+
   GPUDestroyBuffer(buffer);
   return ok;
 #undef CHECK_BUFFER
@@ -524,82 +603,87 @@ cleanup:
 
 static int
 check_bind_group_layout_validation(GPUDevice *device) {
-  unsigned char fakeSamplerStorage;
-  GPUBindGroupLayoutEntry entry;
-  GPUBindGroupLayoutEntry duplicateEntries[2];
+  unsigned char                fakeSamplerStorage;
+
+  GPUBindGroupLayoutEntry      entry;
+  GPUBindGroupLayoutEntry      duplicateEntries[2];
   GPUBindGroupLayoutCreateInfo layoutInfo;
-  GPUBindGroupLayout *layout;
-  GPUBindGroupEntry runtimeSamplerEntry;
-  GPUBindGroupEntry bufferEntry;
-  GPUBindGroupEntry textureEntry;
-  GPUBindGroupEntry textureGroupEntries[2];
-  GPUBindGroupCreateInfo groupInfo;
-  GPUBufferCreateInfo bufferInfo;
-  GPUTextureCreateInfo textureInfo;
-  GPUTextureViewCreateInfo viewInfo;
-  GPUBindGroup *group;
-  GPUBuffer *uniformBuffer;
-  GPUBuffer *storageOnlyBuffer;
-  GPUTexture storageTexture;
-  GPUTextureView storageView;
-  GPUTexture *sampledTexture;
-  GPUTexture *dualUseTexture;
-  GPUTextureView *sampledView;
-  GPUTextureView *dualUseView;
-  GPUTextureSampleType dualUseSampleType;
-  GPUFormat dualUseFormat;
-  GPUBindGroupLayoutEntry textureLayoutEntries[2];
-  GPUBindGroupLayout *dualTextureLayout;
-  GPUPipelineLayoutCreateInfo pipelineInfo;
-  GPUBindGroupLayout *layouts[1];
-  GPUBindGroupLayout *tooManyLayouts[GPU_ENCODER_MAX_BIND_GROUPS + 1u];
-  GPUPipelineLayout *pipelineLayout;
+  GPUBindGroupEntry            runtimeSamplerEntry;
+  GPUBindGroupEntry            bufferEntry;
+  GPUBindGroupEntry            textureEntry;
+  GPUBindGroupEntry            textureGroupEntries[2];
+  GPUBindGroupCreateInfo       groupInfo;
+  GPUBufferCreateInfo          bufferInfo;
+  GPUTextureCreateInfo         textureInfo;
+  GPUTextureViewCreateInfo     viewInfo;
+  GPUTexture                   storageTexture;
+  GPUTextureView               storageView;
+  GPUBindGroupLayoutEntry      textureLayoutEntries[2];
+  GPUPipelineLayoutCreateInfo  pipelineInfo;
+  GPUBindGroupLayout          *layouts[1];
+  GPUBindGroupLayout          *tooManyLayouts[GPU_ENCODER_MAX_BIND_GROUPS + 1u];
+  GPUBindGroupLayout          *layout;
+  GPUBindGroup                *group;
+  GPUBuffer                   *uniformBuffer;
+  GPUBuffer                   *storageOnlyBuffer;
+  GPUTexture                  *sampledTexture;
+  GPUTexture                  *dualUseTexture;
+  GPUTextureView              *sampledView;
+  GPUTextureView              *dualUseView;
+  GPUBindGroupLayout          *dualTextureLayout;
+  GPUPipelineLayout           *pipelineLayout;
+  GPUTextureSampleType         dualUseSampleType;
+  GPUFormat                    dualUseFormat;
+  uint32_t                     i;
 
   memset(&entry, 0, sizeof(entry));
-  entry.binding = 0u;
-  entry.bindingType = GPU_BINDING_SAMPLER;
-  entry.visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
-  entry.arrayCount = 1u;
-  entry.immutableSampler = true;
+  entry.binding              = 0u;
+  entry.bindingType          = GPU_BINDING_SAMPLER;
+  entry.visibility           = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  entry.arrayCount           = 1u;
+  entry.immutableSampler     = true;
   entry.immutableSamplerDesc = valid_sampler_desc();
 
   memset(&layoutInfo, 0, sizeof(layoutInfo));
-  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layoutInfo.chain.structSize = sizeof(layoutInfo);
-  layoutInfo.label = "immutable-sampler-layout";
-  layoutInfo.entryCount = 1u;
-  layoutInfo.pEntries = &entry;
+  layoutInfo.label            = "immutable-sampler-layout";
+  layoutInfo.entryCount       = 1u;
+  layoutInfo.pEntries         = &entry;
 
-  if (GPUCreateBindGroupLayout(device, NULL, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
-      GPUCreateBindGroupLayout(device, &layoutInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+  if (GPUCreateBindGroupLayout(device, NULL, &layout) != GPU_ERROR_INVALID_ARGUMENT
+      || GPUCreateBindGroupLayout(device, &layoutInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "bind group layout accepted null input\n");
     return 0;
   }
 
-  layout = (GPUBindGroupLayout *)(uintptr_t)1u;
+  layout                 = (GPUBindGroupLayout *)(uintptr_t)1u;
   layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
-      layout != NULL) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT
+      || layout != NULL) {
     fprintf(stderr, "bind group layout accepted wrong sType\n");
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
 
-  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
-  layout = (GPUBindGroupLayout *)(uintptr_t)1u;
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layout                      = (GPUBindGroupLayout *)(uintptr_t)1u;
   layoutInfo.chain.structSize = (uint32_t)(sizeof(layoutInfo) - 1u);
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
-      layout != NULL) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT
+      || layout != NULL) {
     fprintf(stderr, "bind group layout accepted short structSize\n");
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
 
   layoutInfo.chain.structSize = sizeof(layoutInfo);
-  entry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
-  layout = (GPUBindGroupLayout *)(uintptr_t)1u;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
-      layout != NULL) {
+  entry.bindingType           = GPU_BINDING_UNIFORM_BUFFER;
+  layout                      = (GPUBindGroupLayout *)(uintptr_t)1u;
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT
+      || layout != NULL) {
     fprintf(stderr, "bind group layout accepted immutable non-sampler\n");
     GPUDestroyBindGroupLayout(layout);
     return 0;
@@ -608,19 +692,20 @@ check_bind_group_layout_validation(GPUDevice *device) {
   entry.bindingType = GPU_BINDING_SAMPLER;
   entry.immutableSamplerDesc.mipFilter = (GPUMipFilter)99;
   layout = (GPUBindGroupLayout *)(uintptr_t)1u;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
-      layout != NULL) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT
+      || layout != NULL) {
     fprintf(stderr, "bind group layout accepted invalid immutable sampler desc\n");
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
 
   entry.immutableSamplerDesc = valid_sampler_desc();
-  entry.sampler.type = GPU_SAMPLER_BINDING_COMPARISON;
-  layout = (GPUBindGroupLayout *)(uintptr_t)1u;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) !=
-        GPU_ERROR_INVALID_ARGUMENT ||
-      layout != NULL) {
+  entry.sampler.type         = GPU_SAMPLER_BINDING_COMPARISON;
+  layout                     = (GPUBindGroupLayout *)(uintptr_t)1u;
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT
+      || layout != NULL) {
     fprintf(stderr, "bind group layout accepted normal sampler as comparison\n");
     GPUDestroyBindGroupLayout(layout);
     return 0;
@@ -629,19 +714,22 @@ check_bind_group_layout_validation(GPUDevice *device) {
   entry.immutableSamplerDesc.compare       = GPU_COMPARE_LESS_EQUAL;
   entry.immutableSamplerDesc.compareEnable = true;
   layout = NULL;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK ||
-      !layout) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK
+      || !layout) {
     fprintf(stderr, "bind group layout rejected valid comparison sampler\n");
     return 0;
   }
+
   GPUDestroyBindGroupLayout(layout);
 
-  entry.sampler.type = GPU_SAMPLER_BINDING_FILTERING;
+  entry.sampler.type         = GPU_SAMPLER_BINDING_FILTERING;
   entry.immutableSamplerDesc = valid_sampler_desc();
-  entry.hasDynamicOffset = true;
-  layout = (GPUBindGroupLayout *)(uintptr_t)1u;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
-      layout != NULL) {
+  entry.hasDynamicOffset     = true;
+  layout                     = (GPUBindGroupLayout *)(uintptr_t)1u;
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT
+      || layout != NULL) {
     fprintf(stderr, "bind group layout accepted dynamic offset on sampler\n");
     GPUDestroyBindGroupLayout(layout);
     return 0;
@@ -660,38 +748,42 @@ check_bind_group_layout_validation(GPUDevice *device) {
   layoutInfo.entryCount = 2u;
   layoutInfo.pEntries = duplicateEntries;
   layout = (GPUBindGroupLayout *)(uintptr_t)1u;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT ||
-      layout != NULL) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT
+      || layout != NULL) {
     fprintf(stderr, "bind group layout accepted duplicate logical binding\n");
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
 
   entry.hasDynamicOffset = true;
-  layoutInfo.entryCount = 1u;
-  layoutInfo.pEntries = &entry;
-  layout = NULL;
+  layoutInfo.entryCount  = 1u;
+  layoutInfo.pEntries    = &entry;
+  layout                 = NULL;
+
   if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
     fprintf(stderr, "bind group layout rejected valid dynamic buffer entry\n");
     return 0;
   }
 
   memset(&bufferInfo, 0, sizeof(bufferInfo));
-  bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.sizeBytes = 32u;
-  bufferInfo.usage = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
-  uniformBuffer = NULL;
+  bufferInfo.sizeBytes        = 32u;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+  uniformBuffer               = NULL;
+
   if (GPUCreateBuffer(device, &bufferInfo, &uniformBuffer) != GPU_OK || !uniformBuffer) {
     fprintf(stderr, "bind group buffer setup failed\n");
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
 
-  bufferInfo.usage = GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage  = GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_DST;
   storageOnlyBuffer = NULL;
-  if (GPUCreateBuffer(device, &bufferInfo, &storageOnlyBuffer) != GPU_OK ||
-      !storageOnlyBuffer) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &storageOnlyBuffer) != GPU_OK
+      || !storageOnlyBuffer) {
     fprintf(stderr, "bind group storage buffer setup failed\n");
     GPUDestroyBuffer(uniformBuffer);
     GPUDestroyBindGroupLayout(layout);
@@ -699,21 +791,22 @@ check_bind_group_layout_validation(GPUDevice *device) {
   }
 
   memset(&bufferEntry, 0, sizeof(bufferEntry));
-  bufferEntry.binding = 0u;
-  bufferEntry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  bufferEntry.binding       = 0u;
+  bufferEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
   bufferEntry.buffer.buffer = uniformBuffer;
   bufferEntry.buffer.offset = 0u;
-  bufferEntry.buffer.size = 16u;
+  bufferEntry.buffer.size   = 16u;
 
   memset(&groupInfo, 0, sizeof(groupInfo));
-  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label = "uniform-buffer-group";
-  groupInfo.layout = layout;
-  groupInfo.entryCount = 1u;
-  groupInfo.pEntries = &bufferEntry;
-  if (GPUCreateBindGroup(device, NULL, &group) != GPU_ERROR_INVALID_ARGUMENT ||
-      GPUCreateBindGroup(device, &groupInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+  groupInfo.label            = "uniform-buffer-group";
+  groupInfo.layout           = layout;
+  groupInfo.entryCount       = 1u;
+  groupInfo.pEntries         = &bufferEntry;
+
+  if (GPUCreateBindGroup(device, NULL, &group) != GPU_ERROR_INVALID_ARGUMENT
+      || GPUCreateBindGroup(device, &groupInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "bind group accepted null input\n");
     GPUDestroyBuffer(storageOnlyBuffer);
     GPUDestroyBuffer(uniformBuffer);
@@ -721,10 +814,11 @@ check_bind_group_layout_validation(GPUDevice *device) {
     return 0;
   }
 
-  group = (GPUBindGroup *)(uintptr_t)1u;
+  group                 = (GPUBindGroup *)(uintptr_t)1u;
   groupInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
-  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||
-      group != NULL) {
+
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT
+      || group != NULL) {
     fprintf(stderr, "bind group accepted wrong sType\n");
     GPUDestroyBindGroup(group);
     GPUDestroyBuffer(storageOnlyBuffer);
@@ -734,7 +828,8 @@ check_bind_group_layout_validation(GPUDevice *device) {
   }
 
   groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
-  group = NULL;
+  group                 = NULL;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "bind group rejected valid uniform buffer binding\n");
     GPUDestroyBuffer(storageOnlyBuffer);
@@ -746,10 +841,10 @@ check_bind_group_layout_validation(GPUDevice *device) {
   GPUDestroyBindGroup(group);
 
   bufferEntry.bindingType = GPU_BINDING_STORAGE_BUFFER;
-  group = (GPUBindGroup *)(uintptr_t)1u;
-  if (GPUCreateBindGroup(device, &groupInfo, &group) !=
-        GPU_ERROR_INVALID_ARGUMENT ||
-      group != NULL) {
+  group                   = (GPUBindGroup *)(uintptr_t)1u;
+
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT
+      || group != NULL) {
     fprintf(stderr, "bind group accepted a mismatched resource tag\n");
     GPUDestroyBindGroup(group);
     GPUDestroyBuffer(storageOnlyBuffer);
@@ -758,11 +853,12 @@ check_bind_group_layout_validation(GPUDevice *device) {
     return 0;
   }
 
-  bufferEntry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
+  bufferEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
   bufferEntry.buffer.offset = 24u;
-  group = (GPUBindGroup *)(uintptr_t)1u;
-  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||
-      group != NULL) {
+  group                     = (GPUBindGroup *)(uintptr_t)1u;
+
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT
+      || group != NULL) {
     fprintf(stderr, "bind group accepted out-of-range buffer binding\n");
     GPUDestroyBindGroup(group);
     GPUDestroyBuffer(storageOnlyBuffer);
@@ -773,9 +869,10 @@ check_bind_group_layout_validation(GPUDevice *device) {
 
   bufferEntry.buffer.offset = 0u;
   bufferEntry.buffer.buffer = storageOnlyBuffer;
-  group = (GPUBindGroup *)(uintptr_t)1u;
-  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||
-      group != NULL) {
+  group                     = (GPUBindGroup *)(uintptr_t)1u;
+
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT
+      || group != NULL) {
     fprintf(stderr, "bind group accepted buffer without required usage\n");
     GPUDestroyBindGroup(group);
     GPUDestroyBuffer(storageOnlyBuffer);
@@ -794,6 +891,7 @@ check_bind_group_layout_validation(GPUDevice *device) {
   entry.sampledTexture.sampleType = GPU_TEXTURE_SAMPLE_TYPE_FLOAT;
   entry.sampledTexture.multisampled = false;
   layout = NULL;
+
   if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
     fprintf(stderr, "bind group layout rejected valid sampled texture entry\n");
     return 0;
@@ -821,17 +919,18 @@ check_bind_group_layout_validation(GPUDevice *device) {
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED;
   memset(&viewInfo, 0, sizeof(viewInfo));
-  viewInfo.chain.sType         = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
-  viewInfo.chain.structSize    = sizeof(viewInfo);
-  viewInfo.label               = "bind-group-texture-view";
-  viewInfo.viewType            = GPU_TEXTURE_VIEW_2D;
-  viewInfo.format              = GPU_FORMAT_RGBA8_UNORM;
-  viewInfo.mipLevelCount       = 1u;
-  viewInfo.arrayLayerCount     = 1u;
-  if (GPUCreateTexture(device, &textureInfo, &sampledTexture) != GPU_OK ||
-      !sampledTexture ||
-      GPUCreateTextureView(sampledTexture, &viewInfo, &sampledView) != GPU_OK ||
-      !sampledView) {
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.label            = "bind-group-texture-view";
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.arrayLayerCount  = 1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &sampledTexture) != GPU_OK
+      || !sampledTexture
+      || GPUCreateTextureView(sampledTexture, &viewInfo, &sampledView) != GPU_OK
+      || !sampledView) {
     fprintf(stderr, "sampled texture setup failed\n");
     GPUDestroyTextureView(sampledView);
     GPUDestroyTexture(sampledTexture);
@@ -840,6 +939,7 @@ check_bind_group_layout_validation(GPUDevice *device) {
   }
 
   dualUseFormat = sampled_storage_format(device, &dualUseSampleType);
+
   if (dualUseFormat == GPU_FORMAT_UNDEFINED) {
     fprintf(stderr, "no sampled/storage texture format is supported\n");
     GPUDestroyTextureView(sampledView);
@@ -847,13 +947,15 @@ check_bind_group_layout_validation(GPUDevice *device) {
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
+
   textureInfo.format = dualUseFormat;
   textureInfo.usage  = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_STORAGE;
   viewInfo.format    = dualUseFormat;
-  if (GPUCreateTexture(device, &textureInfo, &dualUseTexture) != GPU_OK ||
-      !dualUseTexture ||
-      GPUCreateTextureView(dualUseTexture, &viewInfo, &dualUseView) != GPU_OK ||
-      !dualUseView) {
+
+  if (GPUCreateTexture(device, &textureInfo, &dualUseTexture) != GPU_OK
+      || !dualUseTexture
+      || GPUCreateTextureView(dualUseTexture, &viewInfo, &dualUseView) != GPU_OK
+      || !dualUseView) {
     fprintf(stderr, "sampled/storage texture setup failed\n");
     GPUDestroyTextureView(dualUseView);
     GPUDestroyTexture(dualUseTexture);
@@ -869,14 +971,15 @@ check_bind_group_layout_validation(GPUDevice *device) {
   textureEntry.textureView = sampledView;
 
   memset(&groupInfo, 0, sizeof(groupInfo));
-  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label = "sampled-texture-group";
-  groupInfo.layout = layout;
-  groupInfo.entryCount = 1u;
-  groupInfo.pEntries = &textureEntry;
+  groupInfo.label            = "sampled-texture-group";
+  groupInfo.layout           = layout;
+  groupInfo.entryCount       = 1u;
+  groupInfo.pEntries         = &textureEntry;
 
   group = NULL;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "bind group rejected valid sampled texture view\n");
     GPUDestroyTextureView(dualUseView);
@@ -886,12 +989,14 @@ check_bind_group_layout_validation(GPUDevice *device) {
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
+
   GPUDestroyBindGroup(group);
 
   textureEntry.textureView = &storageView;
-  group = (GPUBindGroup *)(uintptr_t)1u;
-  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||
-      group != NULL) {
+  group                    = (GPUBindGroup *)(uintptr_t)1u;
+
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT
+      || group != NULL) {
     fprintf(stderr, "bind group accepted texture view without sampled usage\n");
     GPUDestroyBindGroup(group);
     GPUDestroyTextureView(dualUseView);
@@ -901,6 +1006,7 @@ check_bind_group_layout_validation(GPUDevice *device) {
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
+
   GPUDestroyBindGroupLayout(layout);
 
   textureLayoutEntries[0] = entry;
@@ -911,14 +1017,14 @@ check_bind_group_layout_validation(GPUDevice *device) {
   textureLayoutEntries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
   textureLayoutEntries[1].storageTexture.viewType = GPU_TEXTURE_VIEW_2D;
   textureLayoutEntries[1].storageTexture.format = dualUseFormat;
-  textureLayoutEntries[1].storageTexture.access =
-    GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY;
+  textureLayoutEntries[1].storageTexture.access = GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY;
   textureLayoutEntries[1].visibility = GPU_SHADER_STAGE_COMPUTE_BIT;
   layoutInfo.entryCount = 2u;
   layoutInfo.pEntries = textureLayoutEntries;
   dualTextureLayout = NULL;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &dualTextureLayout) != GPU_OK ||
-      !dualTextureLayout) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &dualTextureLayout) != GPU_OK
+      || !dualTextureLayout) {
     fprintf(stderr, "bind group layout rejected sampled/storage texture pair\n");
     GPUDestroyTextureView(dualUseView);
     GPUDestroyTexture(dualUseTexture);
@@ -929,15 +1035,16 @@ check_bind_group_layout_validation(GPUDevice *device) {
 
   textureEntry.textureView = dualUseView;
   memset(&groupInfo, 0, sizeof(groupInfo));
-  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label = "incomplete-texture-group";
-  groupInfo.layout = dualTextureLayout;
-  groupInfo.entryCount = 1u;
-  groupInfo.pEntries = &textureEntry;
-  group = (GPUBindGroup *)(uintptr_t)1u;
-  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||
-      group != NULL) {
+  groupInfo.label            = "incomplete-texture-group";
+  groupInfo.layout           = dualTextureLayout;
+  groupInfo.entryCount       = 1u;
+  groupInfo.pEntries         = &textureEntry;
+  group                      = (GPUBindGroup *)(uintptr_t)1u;
+
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT
+      || group != NULL) {
     fprintf(stderr, "bind group accepted missing storage texture binding\n");
     GPUDestroyBindGroup(group);
     GPUDestroyBindGroupLayout(dualTextureLayout);
@@ -959,6 +1066,7 @@ check_bind_group_layout_validation(GPUDevice *device) {
   groupInfo.entryCount = 2u;
   groupInfo.pEntries = textureGroupEntries;
   group = NULL;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "bind group rejected explicit sampled/storage texture bindings\n");
     GPUDestroyBindGroupLayout(dualTextureLayout);
@@ -968,6 +1076,7 @@ check_bind_group_layout_validation(GPUDevice *device) {
     GPUDestroyTexture(sampledTexture);
     return 0;
   }
+
   GPUDestroyBindGroup(group);
   GPUDestroyBindGroupLayout(dualTextureLayout);
   GPUDestroyTextureView(dualUseView);
@@ -975,31 +1084,34 @@ check_bind_group_layout_validation(GPUDevice *device) {
   GPUDestroyTextureView(sampledView);
   GPUDestroyTexture(sampledTexture);
 
-  layoutInfo.entryCount = 1u;
-  layoutInfo.pEntries = &entry;
-  entry.bindingType = GPU_BINDING_SAMPLER;
-  entry.sampler.type = GPU_SAMPLER_BINDING_FILTERING;
-  entry.hasDynamicOffset = false;
-  entry.immutableSampler = true;
+  layoutInfo.entryCount      = 1u;
+  layoutInfo.pEntries        = &entry;
+  entry.bindingType          = GPU_BINDING_SAMPLER;
+  entry.sampler.type         = GPU_SAMPLER_BINDING_FILTERING;
+  entry.hasDynamicOffset     = false;
+  entry.immutableSampler     = true;
   entry.immutableSamplerDesc = valid_sampler_desc();
-  layout = NULL;
+  layout                     = NULL;
+
   if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
     fprintf(stderr, "bind group layout rejected valid immutable sampler\n");
     return 0;
   }
 
   memset(&groupInfo, 0, sizeof(groupInfo));
-  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label = "immutable-sampler-group";
-  groupInfo.layout = layout;
+  groupInfo.label            = "immutable-sampler-group";
+  groupInfo.layout           = layout;
 
   group = NULL;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "bind group rejected omitted immutable sampler binding\n");
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
+
   GPUDestroyBindGroup(group);
 
   memset(&runtimeSamplerEntry, 0, sizeof(runtimeSamplerEntry));
@@ -1009,8 +1121,9 @@ check_bind_group_layout_validation(GPUDevice *device) {
   groupInfo.entryCount = 1u;
   groupInfo.pEntries = &runtimeSamplerEntry;
   group = (GPUBindGroup *)(uintptr_t)1u;
-  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT ||
-      group != NULL) {
+
+  if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_ERROR_INVALID_ARGUMENT
+      || group != NULL) {
     fprintf(stderr, "bind group accepted runtime immutable sampler binding\n");
     GPUDestroyBindGroup(group);
     GPUDestroyBindGroupLayout(layout);
@@ -1019,34 +1132,36 @@ check_bind_group_layout_validation(GPUDevice *device) {
 
   layouts[0] = layout;
   memset(&pipelineInfo, 0, sizeof(pipelineInfo));
-  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineInfo.chain.structSize = (uint32_t)(sizeof(pipelineInfo) - 1u);
+  pipelineInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize     = (uint32_t)(sizeof(pipelineInfo) - 1u);
   pipelineInfo.bindGroupLayoutCount = 1u;
-  pipelineInfo.ppBindGroupLayouts = layouts;
-  if (GPUCreatePipelineLayout(device, NULL, &pipelineLayout) != GPU_ERROR_INVALID_ARGUMENT ||
-      GPUCreatePipelineLayout(device, &pipelineInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
+  pipelineInfo.ppBindGroupLayouts   = layouts;
+
+  if (GPUCreatePipelineLayout(device, NULL, &pipelineLayout) != GPU_ERROR_INVALID_ARGUMENT
+      || GPUCreatePipelineLayout(device, &pipelineInfo, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "pipeline layout accepted null input\n");
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
 
-  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
-  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  pipelineLayout                = (GPUPipelineLayout *)(uintptr_t)1u;
+  pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   pipelineInfo.chain.structSize = sizeof(pipelineInfo);
-  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) !=
-      GPU_ERROR_INVALID_ARGUMENT ||
-      pipelineLayout != NULL) {
+
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_ERROR_INVALID_ARGUMENT
+      || pipelineLayout != NULL) {
     fprintf(stderr, "pipeline layout accepted wrong sType\n");
     GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
 
-  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipelineInfo.chain.structSize = (uint32_t)(sizeof(pipelineInfo) - 1u);
-  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
-  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_ERROR_INVALID_ARGUMENT ||
-      pipelineLayout != NULL) {
+  pipelineLayout                = (GPUPipelineLayout *)(uintptr_t)1u;
+
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_ERROR_INVALID_ARGUMENT
+      || pipelineLayout != NULL) {
     fprintf(stderr, "pipeline layout accepted short structSize\n");
     GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyBindGroupLayout(layout);
@@ -1054,13 +1169,15 @@ check_bind_group_layout_validation(GPUDevice *device) {
   }
 
   pipelineInfo.chain.structSize = sizeof(pipelineInfo);
-  pipelineLayout = NULL;
-  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK ||
-      !pipelineLayout) {
+  pipelineLayout                = NULL;
+
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK
+      || !pipelineLayout) {
     fprintf(stderr, "pipeline layout rejected valid bind group layout\n");
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
+
   if (!check_pipeline_layout_bind_validation(device,
                                              &layoutInfo,
                                              layout,
@@ -1072,43 +1189,44 @@ check_bind_group_layout_validation(GPUDevice *device) {
 
   GPUDestroyPipelineLayout(pipelineLayout);
 
-  layouts[0] = NULL;
+  layouts[0]                         = NULL;
   pipelineInfo.pushConstantSizeBytes = 0u;
-  pipelineInfo.pushConstantStages = 0u;
-  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
-  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) !=
-      GPU_ERROR_INVALID_ARGUMENT ||
-      pipelineLayout != NULL) {
+  pipelineInfo.pushConstantStages    = 0u;
+  pipelineLayout                     = (GPUPipelineLayout *)(uintptr_t)1u;
+
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_ERROR_INVALID_ARGUMENT
+      || pipelineLayout != NULL) {
     fprintf(stderr, "pipeline layout accepted null bind group layout\n");
     GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(tooManyLayouts); i++) {
+  for (i = 0u; i < GPU_ARRAY_LEN(tooManyLayouts); i++) {
     tooManyLayouts[i] = layout;
   }
+
   pipelineInfo.bindGroupLayoutCount = (uint32_t)GPU_ARRAY_LEN(tooManyLayouts);
-  pipelineInfo.ppBindGroupLayouts = tooManyLayouts;
-  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
-  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) !=
-      GPU_ERROR_INVALID_ARGUMENT ||
-      pipelineLayout != NULL) {
+  pipelineInfo.ppBindGroupLayouts   = tooManyLayouts;
+  pipelineLayout                    = (GPUPipelineLayout *)(uintptr_t)1u;
+
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_ERROR_INVALID_ARGUMENT
+      || pipelineLayout != NULL) {
     fprintf(stderr, "pipeline layout accepted too many bind group layouts\n");
     GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyBindGroupLayout(layout);
     return 0;
   }
 
-  layouts[0] = layout;
-  pipelineInfo.bindGroupLayoutCount = 1u;
-  pipelineInfo.ppBindGroupLayouts = layouts;
+  layouts[0]                         = layout;
+  pipelineInfo.bindGroupLayoutCount  = 1u;
+  pipelineInfo.ppBindGroupLayouts    = layouts;
   pipelineInfo.pushConstantSizeBytes = 16u;
-  pipelineInfo.pushConstantStages = 0u;
-  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
-  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) !=
-      GPU_ERROR_INVALID_ARGUMENT ||
-      pipelineLayout != NULL) {
+  pipelineInfo.pushConstantStages    = 0u;
+  pipelineLayout                     = (GPUPipelineLayout *)(uintptr_t)1u;
+
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_ERROR_INVALID_ARGUMENT
+      || pipelineLayout != NULL) {
     fprintf(stderr, "pipeline layout accepted push constants without stages\n");
     GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyBindGroupLayout(layout);
@@ -1116,11 +1234,11 @@ check_bind_group_layout_validation(GPUDevice *device) {
   }
 
   pipelineInfo.pushConstantSizeBytes = 4097u;
-  pipelineInfo.pushConstantStages = GPU_SHADER_STAGE_VERTEX_BIT;
-  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
-  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) !=
-      GPU_ERROR_INVALID_ARGUMENT ||
-      pipelineLayout != NULL) {
+  pipelineInfo.pushConstantStages    = GPU_SHADER_STAGE_VERTEX_BIT;
+  pipelineLayout                     = (GPUPipelineLayout *)(uintptr_t)1u;
+
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_ERROR_INVALID_ARGUMENT
+      || pipelineLayout != NULL) {
     fprintf(stderr, "pipeline layout accepted oversized push constants\n");
     GPUDestroyPipelineLayout(pipelineLayout);
     GPUDestroyBindGroupLayout(layout);
@@ -1128,10 +1246,11 @@ check_bind_group_layout_validation(GPUDevice *device) {
   }
 
   pipelineInfo.pushConstantSizeBytes = 16u;
-  pipelineInfo.pushConstantStages = GPU_SHADER_STAGE_VERTEX_BIT;
-  pipelineLayout = NULL;
-  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK ||
-      !pipelineLayout) {
+  pipelineInfo.pushConstantStages    = GPU_SHADER_STAGE_VERTEX_BIT;
+  pipelineLayout                     = NULL;
+
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK
+      || !pipelineLayout) {
     fprintf(stderr, "pipeline layout rejected valid push constants\n");
     GPUDestroyBindGroupLayout(layout);
     return 0;
@@ -1144,37 +1263,40 @@ check_bind_group_layout_validation(GPUDevice *device) {
 
 static int
 check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
-  GPUApiDescriptor saved;
-  GPUApi *api;
-  GPUApi fallback = {0};
-  GPUFrameStats warmStats = {0};
-  GPUBindGroupLayoutEntry entry = {0};
-  GPUBindGroupLayoutCreateInfo layoutInfo = {0};
-  GPUBindGroupLayout *layout = NULL;
-  GPUPipelineLayoutCreateInfo pipelineInfo = {0};
-  GPUBindGroupLayout *layouts[1];
-  GPUPipelineLayout *pipelineLayout = NULL;
-  GPUBufferCreateInfo bufferInfo = {0};
-  GPUBuffer *buffer = NULL;
-  GPUBindGroupEntry groupEntry = {0};
-  GPUBindGroupCreateInfo groupInfo = {0};
-  GPUBindGroup *group = NULL;
-  GPURenderPassEncoder renderPass = {0};
-  GPUComputePassEncoder computePass = {0};
-  uint32_t stride          = type == GPU_BINDING_UNIFORM_BUFFER ? 0u : 12u;
-  uint32_t validOffset     = stride ? 252u : 256u;
-  uint32_t changedOffset   = 0u;
-  uint32_t invalidOffset   = 497u;
-  uint32_t unalignedOffset = 256u;
+  GPUApiDescriptor             saved;
+  GPUApi                      *api;
+  GPUApi                       fallback     = {0};
+  GPUFrameStats                warmStats    = {0};
+  GPUBindGroupLayoutEntry      entry        = {0};
+  GPUBindGroupLayoutCreateInfo layoutInfo   = {0};
+  GPUBindGroupLayout          *layout       = NULL;
+  GPUPipelineLayoutCreateInfo  pipelineInfo = {0};
+  GPUBindGroupLayout          *layouts[1];
+  GPUPipelineLayout           *pipelineLayout  = NULL;
+  GPUBufferCreateInfo          bufferInfo      = {0};
+  GPUBuffer                   *buffer          = NULL;
+  GPUBindGroupEntry            groupEntry      = {0};
+  GPUBindGroupCreateInfo       groupInfo       = {0};
+  GPUBindGroup                *group           = NULL;
+  GPURenderPassEncoder         renderPass      = {0};
+  GPUComputePassEncoder        computePass     = {0};
+  uint32_t                     stride          = type == GPU_BINDING_UNIFORM_BUFFER ? 0u : 12u;
+  uint32_t                     validOffset     = stride ? 252u : 256u;
+  uint32_t                     changedOffset   = 0u;
+  uint32_t                     invalidOffset   = 497u;
+  uint32_t                     unalignedOffset = 256u;
 #if GPU_BUILD_WITH_VALIDATION
-  uint32_t extraOffsets[2] = {256u, 0u};
+  uint32_t                     extraOffsets[2] = {256u, 0u};
 #endif
-  int      ok = 0;
+  int                          ok              = 0;
+  uint32_t                     i;
 
   api = gpuDeviceApi(device);
+
   if (!api) {
     return 0;
   }
+
   saved = api->descriptor;
   api->descriptor.bindRenderGroup  = test_bindRenderGroup;
   api->descriptor.bindComputeGroup = test_bindComputeGroup;
@@ -1190,49 +1312,53 @@ check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
   entry.hasDynamicOffset   = true;
   entry.buffer.strideBytes = stride;
 
-  layoutInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layoutInfo.chain.structSize = sizeof(layoutInfo);
-  layoutInfo.label = "dynamic-offset-layout";
-  layoutInfo.entryCount = 1u;
-  layoutInfo.pEntries = &entry;
+  layoutInfo.label            = "dynamic-offset-layout";
+  layoutInfo.entryCount       = 1u;
+  layoutInfo.pEntries         = &entry;
+
   if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
     fprintf(stderr, "dynamic offset layout setup failed\n");
     goto cleanup;
   }
 
-  layouts[0] = layout;
-  pipelineInfo.chain.sType = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  layouts[0]                        = layout;
+  pipelineInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize     = sizeof(pipelineInfo);
   pipelineInfo.bindGroupLayoutCount = 1u;
-  pipelineInfo.ppBindGroupLayouts = layouts;
-  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK ||
-      !pipelineLayout) {
+  pipelineInfo.ppBindGroupLayouts   = layouts;
+
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK
+      || !pipelineLayout) {
     fprintf(stderr, "dynamic offset pipeline layout setup failed\n");
     goto cleanup;
   }
 
-  bufferInfo.chain.sType = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
-  bufferInfo.sizeBytes = 512u;
-  bufferInfo.usage = (stride ? GPU_BUFFER_USAGE_STORAGE : GPU_BUFFER_USAGE_UNIFORM) |
-                    GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.sizeBytes        = 512u;
+  bufferInfo.usage            = (stride ? GPU_BUFFER_USAGE_STORAGE : GPU_BUFFER_USAGE_UNIFORM) |
+                                GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     fprintf(stderr, "dynamic offset buffer setup failed\n");
     goto cleanup;
   }
 
-  groupEntry.binding = 0u;
-  groupEntry.bindingType = type;
+  groupEntry.binding       = 0u;
+  groupEntry.bindingType   = type;
   groupEntry.buffer.buffer = buffer;
   groupEntry.buffer.offset = 0u;
-  groupEntry.buffer.size = stride ? 24u : 16u;
+  groupEntry.buffer.size   = stride ? 24u : 16u;
 
-  groupInfo.chain.sType = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.label = "dynamic-offset-group";
-  groupInfo.layout = layout;
-  groupInfo.entryCount = 1u;
-  groupInfo.pEntries = &groupEntry;
+  groupInfo.label            = "dynamic-offset-group";
+  groupInfo.layout           = layout;
+  groupInfo.entryCount       = 1u;
+  groupInfo.pEntries         = &groupEntry;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "dynamic offset group setup failed\n");
     goto cleanup;
@@ -1244,7 +1370,10 @@ check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
   GPUBindRenderGroup(&renderPass, 0u, group, 0u, NULL);
   GPUBindRenderGroup(&renderPass, 0u, group, 2u, extraOffsets);
   GPUBindRenderGroup(&renderPass, 0u, group, 1u, &invalidOffset);
-  if (stride) GPUBindRenderGroup(&renderPass, 0u, group, 1u, &unalignedOffset);
+
+  if (stride)
+    GPUBindRenderGroup(&renderPass, 0u, group, 1u, &unalignedOffset);
+
   if (renderPass._boundGroupLayouts[0]) {
     fprintf(stderr, "render bind accepted invalid dynamic offset\n");
     goto cleanup;
@@ -1252,15 +1381,18 @@ check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
 #endif
 
   GPUBindRenderGroup(&renderPass, 0u, group, 1u, &validOffset);
+
   if (renderPass._boundGroupLayouts[0] != layout) {
     fprintf(stderr, "render bind rejected valid dynamic offset\n");
     goto cleanup;
   }
+
   GPUBindRenderGroup(&renderPass, 0u, group, 1u, &validOffset);
   GPUBindRenderGroup(&renderPass, 0u, group, 1u, &changedOffset);
-  if (descriptorHookCounts.bindRender != 2u ||
-      renderPass._boundDynamicOffsetCounts[0] != 1u ||
-      renderPass._boundDynamicOffsets[0][0] != changedOffset) {
+
+  if (descriptorHookCounts.bindRender != 2u
+      || renderPass._boundDynamicOffsetCounts[0] != 1u
+      || renderPass._boundDynamicOffsets[0][0] != changedOffset) {
     fprintf(stderr, "render dynamic offset shadowing failed\n");
     goto cleanup;
   }
@@ -1271,7 +1403,10 @@ check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
   GPUBindComputeGroup(&computePass, 0u, group, 0u, NULL);
   GPUBindComputeGroup(&computePass, 0u, group, 2u, extraOffsets);
   GPUBindComputeGroup(&computePass, 0u, group, 1u, &invalidOffset);
-  if (stride) GPUBindComputeGroup(&computePass, 0u, group, 1u, &unalignedOffset);
+
+  if (stride)
+    GPUBindComputeGroup(&computePass, 0u, group, 1u, &unalignedOffset);
+
   if (computePass._boundGroupLayouts[0]) {
     fprintf(stderr, "compute bind accepted invalid dynamic offset\n");
     goto cleanup;
@@ -1279,22 +1414,26 @@ check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
 #endif
 
   GPUBindComputeGroup(&computePass, 0u, group, 1u, &validOffset);
+
   if (computePass._boundGroupLayouts[0] != layout) {
     fprintf(stderr, "compute bind rejected valid dynamic offset\n");
     goto cleanup;
   }
+
   GPUBindComputeGroup(&computePass, 0u, group, 1u, &validOffset);
   GPUBindComputeGroup(&computePass, 0u, group, 1u, &changedOffset);
-  if (descriptorHookCounts.bindCompute != 2u ||
-      computePass._boundDynamicOffsetCounts[0] != 1u ||
-      computePass._boundDynamicOffsets[0][0] != changedOffset) {
+
+  if (descriptorHookCounts.bindCompute != 2u
+      || computePass._boundDynamicOffsetCounts[0] != 1u
+      || computePass._boundDynamicOffsets[0][0] != changedOffset) {
     fprintf(stderr, "compute dynamic offset shadowing failed\n");
     goto cleanup;
   }
 
-  /* The generic binding visitor is also used without native group hooks. */
-  renderPass  = (GPURenderPassEncoder){0};
-  computePass = (GPUComputePassEncoder){0};
+  /* the generic binding visitor is also used without native group hooks. */
+
+  renderPass                  = (GPURenderPassEncoder){0};
+  computePass                 = (GPUComputePassEncoder){0};
   renderPass._api             = &fallback;
   renderPass._pipelineLayout  = pipelineLayout;
   computePass._api            = &fallback;
@@ -1302,32 +1441,39 @@ check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
   computePass._pipelineLayout = pipelineLayout;
   GPUBindRenderGroup(&renderPass, 0u, group, 1u, &invalidOffset);
   GPUBindComputeGroup(&computePass, 0u, group, 1u, &invalidOffset);
+
   if (stride) {
     GPUBindRenderGroup(&renderPass, 0u, group, 1u, &unalignedOffset);
     GPUBindComputeGroup(&computePass, 0u, group, 1u, &unalignedOffset);
   }
+
   if (renderPass._boundGroupLayouts[0] || computePass._boundGroupLayouts[0]) {
     fprintf(stderr, "binding visitor accepted invalid dynamic offset\n");
     goto cleanup;
   }
+
   GPUBindRenderGroup(&renderPass, 0u, group, 1u, &validOffset);
   GPUBindComputeGroup(&computePass, 0u, group, 1u, &validOffset);
-  if (renderPass._boundGroupLayouts[0] != layout ||
-      computePass._boundGroupLayouts[0] != layout) {
+
+  if (renderPass._boundGroupLayouts[0] != layout
+      || computePass._boundGroupLayouts[0] != layout) {
     fprintf(stderr, "binding visitor rejected valid dynamic offset\n");
     goto cleanup;
   }
+
   renderPass._stats  = &warmStats;
   computePass._stats = &warmStats;
-  for (uint32_t i = 0u; i < 1024u; i++) {
+
+  for (i = 0u; i < 1024u; i++) {
     uint32_t offset = i & 1u ? validOffset : changedOffset;
 
     GPUBindRenderGroup(&renderPass, 0u, group, 1u, &offset);
     GPUBindComputeGroup(&computePass, 0u, group, 1u, &offset);
   }
-  if (warmStats.hotPathAllocCount || warmStats.hotPathFreeCount ||
-      renderPass._boundDynamicOffsets[0][0] != validOffset ||
-      computePass._boundDynamicOffsets[0][0] != validOffset) {
+
+  if (warmStats.hotPathAllocCount || warmStats.hotPathFreeCount
+      || renderPass._boundDynamicOffsets[0][0] != validOffset
+      || computePass._boundDynamicOffsets[0][0] != validOffset) {
     fprintf(stderr, "dynamic binding visitor warm path failed\n");
     goto cleanup;
   }
@@ -1345,17 +1491,17 @@ cleanup:
 
 static int
 check_bind_group_cache(GPUDevice *device) {
-  GPUBindGroupLayout          *layout;
-  GPUBindGroup                *first;
-  GPUBindGroup                *second;
-  GPUBindGroup                *third;
-  GPUBuffer                   *buffer;
   GPUBindGroupLayoutEntry      entry      = {0};
   GPUBindGroupLayoutCreateInfo layoutInfo = {0};
   GPUBindGroupEntry            groupEntry = {0};
   GPUBindGroupCreateInfo       groupInfo  = {0};
   GPUBufferCreateInfo          bufferInfo = {0};
   GPUCacheStats                stats;
+  GPUBindGroupLayout          *layout;
+  GPUBindGroup                *first;
+  GPUBindGroup                *second;
+  GPUBindGroup                *third;
+  GPUBuffer                   *buffer;
   int                          ok;
 
   layout = NULL;
@@ -1365,16 +1511,17 @@ check_bind_group_cache(GPUDevice *device) {
   buffer = NULL;
   ok     = 0;
 
-  entry.binding     = 0u;
-  entry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
-  entry.visibility  = GPU_SHADER_STAGE_FRAGMENT_BIT;
-  entry.arrayCount  = 1u;
+  entry.binding               = 0u;
+  entry.bindingType           = GPU_BINDING_UNIFORM_BUFFER;
+  entry.visibility            = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  entry.arrayCount            = 1u;
   layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   layoutInfo.chain.structSize = sizeof(layoutInfo);
   layoutInfo.entryCount       = 1u;
   layoutInfo.pEntries         = &entry;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK ||
-      !layout) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK
+      || !layout) {
     fprintf(stderr, "bind group cache layout setup failed\n");
     goto cleanup;
   }
@@ -1382,41 +1529,44 @@ check_bind_group_cache(GPUDevice *device) {
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.sizeBytes        = 64u;
-  bufferInfo.usage = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     fprintf(stderr, "bind group cache buffer setup failed\n");
     goto cleanup;
   }
 
-  groupEntry.binding       = 0u;
-  groupEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
-  groupEntry.buffer.buffer = buffer;
-  groupEntry.buffer.size   = 64u;
+  groupEntry.binding         = 0u;
+  groupEntry.bindingType     = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntry.buffer.buffer   = buffer;
+  groupEntry.buffer.size     = 64u;
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.layout            = layout;
-  groupInfo.entryCount        = 1u;
-  groupInfo.pEntries          = &groupEntry;
+  groupInfo.layout           = layout;
+  groupInfo.entryCount       = 1u;
+  groupInfo.pEntries         = &groupEntry;
 
   GPUResetStats(device);
-  if (GPUCreateBindGroup(device, &groupInfo, &first) != GPU_OK || !first ||
-      GPUCreateBindGroup(device, &groupInfo, &second) != GPU_OK ||
-      second != first ||
-      GPUGetCacheStats(device, &stats) != GPU_OK ||
-      stats.bindGroupHits != 1u ||
-      stats.bindGroupMisses != 1u ||
-      stats.bindGroupCollisions != 0u) {
+
+  if (GPUCreateBindGroup(device, &groupInfo, &first) != GPU_OK || !first
+      || GPUCreateBindGroup(device, &groupInfo, &second) != GPU_OK
+      || second != first
+      || GPUGetCacheStats(device, &stats) != GPU_OK
+      || stats.bindGroupHits != 1u
+      || stats.bindGroupMisses != 1u
+      || stats.bindGroupCollisions != 0u) {
     fprintf(stderr, "bind group cache did not reuse an identical group\n");
     goto cleanup;
   }
 
   GPUDestroyBindGroup(second);
   second = NULL;
-  if (GPUCreateBindGroup(device, &groupInfo, &second) != GPU_OK ||
-      second != first ||
-      GPUGetCacheStats(device, &stats) != GPU_OK ||
-      stats.bindGroupHits != 2u ||
-      stats.bindGroupMisses != 1u) {
+
+  if (GPUCreateBindGroup(device, &groupInfo, &second) != GPU_OK
+      || second != first
+      || GPUGetCacheStats(device, &stats) != GPU_OK
+      || stats.bindGroupHits != 2u
+      || stats.bindGroupMisses != 1u) {
     fprintf(stderr, "bind group cache did not retain a shared group\n");
     goto cleanup;
   }
@@ -1425,10 +1575,11 @@ check_bind_group_cache(GPUDevice *device) {
   second = NULL;
   GPUDestroyBindGroup(first);
   first = NULL;
-  if (GPUCreateBindGroup(device, &groupInfo, &third) != GPU_OK || !third ||
-      GPUGetCacheStats(device, &stats) != GPU_OK ||
-      stats.bindGroupHits != 2u ||
-      stats.bindGroupMisses != 2u) {
+
+  if (GPUCreateBindGroup(device, &groupInfo, &third) != GPU_OK || !third
+      || GPUGetCacheStats(device, &stats) != GPU_OK
+      || stats.bindGroupHits != 2u
+      || stats.bindGroupMisses != 2u) {
     fprintf(stderr, "bind group cache retained a released group\n");
     goto cleanup;
   }
@@ -1446,29 +1597,33 @@ cleanup:
 
 static int
 check_binding_arrays(GPUDevice *device) {
-  GPUBindGroupLayoutEntry       layoutEntries[2] = {0};
-  GPUBindGroupLayoutCreateInfo  layoutInfo = {0};
-  GPUBindGroupLayout           *layout = NULL;
-  GPUBindGroupLayout           *layouts[1];
-  GPUPipelineLayoutCreateInfo   pipelineInfo = {0};
-  GPUPipelineLayout            *pipelineLayout = NULL;
-  GPUBufferCreateInfo           bufferInfo = {0};
-  GPUBuffer                    *buffer = NULL;
-  GPUSamplerCreateInfo          samplerInfo = {0};
-  GPUSampler                   *samplers[2] = {0};
-  GPUBindGroupEntry             groupEntries[4] = {0};
-  GPUBindGroupCreateInfo        groupInfo = {0};
-  GPUBindGroup                 *group = NULL;
-  GPUBindGroup                 *invalidGroup = NULL;
-  GPURenderPassEncoder          renderPass = {0};
-  GPUApiDescriptor              savedDescriptor;
-  GPUApi                       *api;
-  uint32_t                      validOffsets[2] = {0u, 256u};
-  uint32_t                      invalidOffsets[2] = {0u, 1024u};
-  bool                          descriptorSaved = false;
-  int                           ok = 0;
+  GPUBindGroupLayoutEntry      layoutEntries[2] = {0};
+  GPUBindGroupLayoutCreateInfo layoutInfo       = {0};
+  GPUBindGroupLayout          *layouts[1];
+  GPUPipelineLayoutCreateInfo  pipelineInfo    = {0};
+  GPUBufferCreateInfo          bufferInfo      = {0};
+  GPUSamplerCreateInfo         samplerInfo     = {0};
+  GPUSampler                  *samplers[2]     = {0};
+  GPUBindGroupEntry            groupEntries[4] = {0};
+  GPUBindGroupCreateInfo       groupInfo       = {0};
+  GPURenderPassEncoder         renderPass      = {0};
+  GPUApiDescriptor             savedDescriptor;
+  uint32_t                     validOffsets[2]   = {0u, 256u};
+  uint32_t                     invalidOffsets[2] = {0u, 1024u};
+  GPUBindGroupLayout          *layout            = NULL;
+  GPUPipelineLayout           *pipelineLayout    = NULL;
+  GPUBuffer                   *buffer            = NULL;
+  GPUBindGroup                *group             = NULL;
+  GPUBindGroup                *invalidGroup      = NULL;
+  GPUApi                      *api;
+  int                          ok = 0;
+  uint32_t                     samplerIndex;
+  uint32_t                     entryIndex;
+  uint32_t                     releaseIndex;
+  bool                         descriptorSaved = false;
 
   api = gpuDeviceApi(device);
+
   if (!api) {
     return 0;
   }
@@ -1491,8 +1646,9 @@ check_binding_arrays(GPUDevice *device) {
   layoutInfo.label            = "binding-array-layout";
   layoutInfo.entryCount       = (uint32_t)GPU_ARRAY_LEN(layoutEntries);
   layoutInfo.pEntries         = layoutEntries;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK ||
-      !layout) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK
+      || !layout) {
     fprintf(stderr, "binding array layout setup failed\n");
     goto cleanup;
   }
@@ -1502,10 +1658,11 @@ check_binding_arrays(GPUDevice *device) {
   pipelineInfo.chain.structSize     = sizeof(pipelineInfo);
   pipelineInfo.bindGroupLayoutCount = 1u;
   pipelineInfo.ppBindGroupLayouts   = layouts;
+
   if (GPUCreatePipelineLayout(device,
                               &pipelineInfo,
-                              &pipelineLayout) != GPU_OK ||
-      !pipelineLayout) {
+                              &pipelineLayout) != GPU_OK
+      || !pipelineLayout) {
     fprintf(stderr, "binding array pipeline layout setup failed\n");
     goto cleanup;
   }
@@ -1516,6 +1673,7 @@ check_binding_arrays(GPUDevice *device) {
   bufferInfo.sizeBytes        = 1024u;
   bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
                                 GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
     fprintf(stderr, "binding array buffer setup failed\n");
     goto cleanup;
@@ -1524,28 +1682,29 @@ check_binding_arrays(GPUDevice *device) {
   samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
   samplerInfo.chain.structSize = sizeof(samplerInfo);
   samplerInfo.desc             = valid_sampler_desc();
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(samplers); i++) {
+
+  for (samplerIndex = 0u; samplerIndex < GPU_ARRAY_LEN(samplers); samplerIndex++) {
     if (GPUCreateSampler(device,
                          &samplerInfo,
                          false,
-                         &samplers[i]) != GPU_OK ||
-        !samplers[i]) {
+                         &samplers[samplerIndex]) != GPU_OK
+        || !samplers[samplerIndex]) {
       fprintf(stderr, "binding array sampler setup failed\n");
       goto cleanup;
     }
   }
 
-  for (uint32_t i = 0u; i < 2u; i++) {
-    groupEntries[i].binding       = 3u;
-    groupEntries[i].arrayIndex    = i;
-    groupEntries[i].bindingType   = GPU_BINDING_UNIFORM_BUFFER;
-    groupEntries[i].buffer.buffer = buffer;
-    groupEntries[i].buffer.offset = 0u;
-    groupEntries[i].buffer.size   = 256u;
-    groupEntries[2u + i].binding     = 7u;
-    groupEntries[2u + i].arrayIndex  = i;
-    groupEntries[2u + i].bindingType = GPU_BINDING_SAMPLER;
-    groupEntries[2u + i].sampler     = samplers[i];
+  for (entryIndex = 0u; entryIndex < 2u; entryIndex++) {
+    groupEntries[entryIndex].binding          = 3u;
+    groupEntries[entryIndex].arrayIndex       = entryIndex;
+    groupEntries[entryIndex].bindingType      = GPU_BINDING_UNIFORM_BUFFER;
+    groupEntries[entryIndex].buffer.buffer    = buffer;
+    groupEntries[entryIndex].buffer.offset    = 0u;
+    groupEntries[entryIndex].buffer.size      = 256u;
+    groupEntries[2u + entryIndex].binding     = 7u;
+    groupEntries[2u + entryIndex].arrayIndex  = entryIndex;
+    groupEntries[2u + entryIndex].bindingType = GPU_BINDING_SAMPLER;
+    groupEntries[2u + entryIndex].sampler     = samplers[entryIndex];
   }
 
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
@@ -1554,51 +1713,58 @@ check_binding_arrays(GPUDevice *device) {
   groupInfo.layout           = layout;
   groupInfo.entryCount       = (uint32_t)GPU_ARRAY_LEN(groupEntries);
   groupInfo.pEntries         = groupEntries;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "binding array group setup failed\n");
     goto cleanup;
   }
 
   groupInfo.entryCount = 3u;
+
   if (GPUCreateBindGroup(device,
                          &groupInfo,
-                         &invalidGroup) != GPU_ERROR_INVALID_ARGUMENT ||
-      invalidGroup) {
+                         &invalidGroup) != GPU_ERROR_INVALID_ARGUMENT
+      || invalidGroup) {
     fprintf(stderr, "binding array accepted a missing element\n");
     goto cleanup;
   }
 
-  groupInfo.entryCount         = (uint32_t)GPU_ARRAY_LEN(groupEntries);
-  groupEntries[1].arrayIndex   = 0u;
+  groupInfo.entryCount       = (uint32_t)GPU_ARRAY_LEN(groupEntries);
+  groupEntries[1].arrayIndex = 0u;
+
   if (GPUCreateBindGroup(device,
                          &groupInfo,
-                         &invalidGroup) != GPU_ERROR_INVALID_ARGUMENT ||
-      invalidGroup) {
+                         &invalidGroup) != GPU_ERROR_INVALID_ARGUMENT
+      || invalidGroup) {
     fprintf(stderr, "binding array accepted a duplicate element\n");
     goto cleanup;
   }
 
   groupEntries[1].arrayIndex = 2u;
+
   if (GPUCreateBindGroup(device,
                          &groupInfo,
-                         &invalidGroup) != GPU_ERROR_INVALID_ARGUMENT ||
-      invalidGroup) {
+                         &invalidGroup) != GPU_ERROR_INVALID_ARGUMENT
+      || invalidGroup) {
     fprintf(stderr, "binding array accepted an out-of-range element\n");
     goto cleanup;
   }
 
-  groupEntries[1].arrayIndex = 1u;
-  savedDescriptor            = api->descriptor;
-  descriptorSaved            = true;
+  groupEntries[1].arrayIndex      = 1u;
+  savedDescriptor                 = api->descriptor;
+  descriptorSaved                 = true;
   api->descriptor.bindRenderGroup = NULL;
-  renderPass._pipelineLayout       = pipelineLayout;
+  renderPass._pipelineLayout      = pipelineLayout;
   GPUBindRenderGroup(&renderPass, 0u, group, 1u, validOffsets);
   GPUBindRenderGroup(&renderPass, 0u, group, 2u, invalidOffsets);
+
   if (renderPass._boundGroupLayouts[0]) {
     fprintf(stderr, "binding array accepted invalid dynamic offsets\n");
     goto cleanup;
   }
+
   GPUBindRenderGroup(&renderPass, 0u, group, 2u, validOffsets);
+
   if (renderPass._boundGroupLayouts[0] != layout) {
     fprintf(stderr, "binding array rejected valid dynamic offsets\n");
     goto cleanup;
@@ -1607,14 +1773,18 @@ check_binding_arrays(GPUDevice *device) {
   ok = 1;
 
 cleanup:
+
   if (descriptorSaved) {
     api->descriptor = savedDescriptor;
   }
+
   GPUDestroyBindGroup(invalidGroup);
   GPUDestroyBindGroup(group);
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(samplers); i++) {
-    GPUDestroySampler(samplers[i]);
+
+  for (releaseIndex = 0u; releaseIndex < GPU_ARRAY_LEN(samplers); releaseIndex++) {
+    GPUDestroySampler(samplers[releaseIndex]);
   }
+
   GPUDestroyBuffer(buffer);
   GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyBindGroupLayout(layout);
@@ -1624,24 +1794,29 @@ cleanup:
 static int
 check_metal_pipeline_binding_limits(GPUDevice *device) {
   GPUBindGroupLayoutEntry      entries[30];
-  GPUBindGroupLayoutCreateInfo layoutInfo = {0};
+  GPUBindGroupLayoutCreateInfo layoutInfo   = {0};
   GPUPipelineLayoutCreateInfo  pipelineInfo = {0};
-  GPUBindGroupLayout          *layouts[3] = {0};
+  GPUBindGroupLayout          *layouts[3]   = {0};
   GPUPipelineLayout           *pipelineLayout;
   GPUApi                      *api;
   int                          ok;
+  uint32_t                     bufferIndex;
+  uint32_t                     samplerIndex;
+  uint32_t                     fragmentIndex;
 
   api = gpuDeviceApi(device);
+
   if (!api || api->backend != GPU_BACKEND_METAL) {
     return 1;
   }
 
   memset(entries, 0, sizeof(entries));
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(entries); i++) {
-    entries[i].binding     = i;
-    entries[i].bindingType = GPU_BINDING_UNIFORM_BUFFER;
-    entries[i].visibility  = GPU_SHADER_STAGE_FRAGMENT_BIT;
-    entries[i].arrayCount  = 1u;
+
+  for (bufferIndex = 0u; bufferIndex < GPU_ARRAY_LEN(entries); bufferIndex++) {
+    entries[bufferIndex].binding     = bufferIndex;
+    entries[bufferIndex].bindingType = GPU_BINDING_UNIFORM_BUFFER;
+    entries[bufferIndex].visibility  = GPU_SHADER_STAGE_FRAGMENT_BIT;
+    entries[bufferIndex].arrayCount  = 1u;
   }
 
   layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
@@ -1649,43 +1824,47 @@ check_metal_pipeline_binding_limits(GPUDevice *device) {
   layoutInfo.label            = "metal-buffer-limit";
   layoutInfo.entryCount       = (uint32_t)GPU_ARRAY_LEN(entries);
   layoutInfo.pEntries         = entries;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[0]) != GPU_OK ||
-      !layouts[0]) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[0]) != GPU_OK
+      || !layouts[0]) {
     fprintf(stderr, "Metal rejected its usable bind group buffer slots\n");
     return 0;
   }
 
-  pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  pipelineInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize     = sizeof(pipelineInfo);
   pipelineInfo.bindGroupLayoutCount = 1u;
   pipelineInfo.ppBindGroupLayouts   = layouts;
-  pipelineLayout = NULL;
-  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK ||
-      !pipelineLayout) {
+  pipelineLayout                    = NULL;
+
+  if (GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) != GPU_OK
+      || !pipelineLayout) {
     fprintf(stderr, "Metal rejected a pipeline using its available buffer slots\n");
     GPUDestroyBindGroupLayout(layouts[0]);
     return 0;
   }
+
   GPUDestroyPipelineLayout(pipelineLayout);
 
-  entries[0].binding     = 30u;
-  entries[0].visibility  = GPU_SHADER_STAGE_FRAGMENT_BIT;
-  layoutInfo.entryCount  = 1u;
-  layoutInfo.label       = "metal-buffer-overflow";
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[1]) != GPU_OK ||
-      !layouts[1]) {
+  entries[0].binding    = 30u;
+  entries[0].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  layoutInfo.entryCount = 1u;
+  layoutInfo.label      = "metal-buffer-overflow";
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[1]) != GPU_OK
+      || !layouts[1]) {
     fprintf(stderr, "Metal buffer overflow layout setup failed\n");
     GPUDestroyBindGroupLayout(layouts[0]);
     return 0;
   }
 
   pipelineInfo.bindGroupLayoutCount = 2u;
-  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
-  ok = GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) ==
-         GPU_ERROR_UNSUPPORTED &&
-       pipelineLayout == NULL;
+  pipelineLayout                    = (GPUPipelineLayout *)(uintptr_t)1u;
+  ok = GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) == GPU_ERROR_UNSUPPORTED
+       && pipelineLayout == NULL;
   GPUDestroyBindGroupLayout(layouts[1]);
   GPUDestroyBindGroupLayout(layouts[0]);
+
   if (!ok) {
     fprintf(stderr, "Metal pipeline accepted a bind group buffer at reserved slot 30\n");
     GPUDestroyPipelineLayout(pipelineLayout);
@@ -1693,37 +1872,43 @@ check_metal_pipeline_binding_limits(GPUDevice *device) {
   }
 
   memset(entries, 0, sizeof(entries));
-  for (uint32_t i = 0u; i < 16u; i++) {
-    entries[i].binding     = i;
-    entries[i].bindingType = GPU_BINDING_SAMPLER;
-    entries[i].visibility  = GPU_SHADER_STAGE_VERTEX_BIT;
-    entries[i].arrayCount  = 1u;
+
+  for (samplerIndex = 0u; samplerIndex < 16u; samplerIndex++) {
+    entries[samplerIndex].binding     = samplerIndex;
+    entries[samplerIndex].bindingType = GPU_BINDING_SAMPLER;
+    entries[samplerIndex].visibility  = GPU_SHADER_STAGE_VERTEX_BIT;
+    entries[samplerIndex].arrayCount  = 1u;
   }
-  layoutInfo.label       = "metal-vertex-samplers";
-  layoutInfo.entryCount  = 16u;
-  layoutInfo.pEntries    = entries;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[0]) != GPU_OK ||
-      !layouts[0]) {
+
+  layoutInfo.label      = "metal-vertex-samplers";
+  layoutInfo.entryCount = 16u;
+  layoutInfo.pEntries   = entries;
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[0]) != GPU_OK
+      || !layouts[0]) {
     fprintf(stderr, "Metal vertex sampler layout setup failed\n");
     return 0;
   }
 
-  for (uint32_t i = 0u; i < 16u; i++) {
-    entries[i].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  for (fragmentIndex = 0u; fragmentIndex < 16u; fragmentIndex++) {
+    entries[fragmentIndex].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
   }
+
   layoutInfo.label = "metal-fragment-samplers";
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[1]) != GPU_OK ||
-      !layouts[1]) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[1]) != GPU_OK
+      || !layouts[1]) {
     fprintf(stderr, "Metal fragment sampler layout setup failed\n");
     GPUDestroyBindGroupLayout(layouts[0]);
     return 0;
   }
 
   pipelineInfo.bindGroupLayoutCount = 2u;
-  pipelineLayout = NULL;
-  ok = GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) == GPU_OK &&
-       pipelineLayout != NULL;
+  pipelineLayout                    = NULL;
+  ok = GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) == GPU_OK
+       && pipelineLayout != NULL;
   GPUDestroyPipelineLayout(pipelineLayout);
+
   if (!ok) {
     fprintf(stderr, "Metal did not reuse sampler slots across disjoint stages\n");
     GPUDestroyBindGroupLayout(layouts[1]);
@@ -1735,8 +1920,9 @@ check_metal_pipeline_binding_limits(GPUDevice *device) {
   entries[0].visibility = GPU_SHADER_STAGE_FRAGMENT_BIT;
   layoutInfo.label      = "metal-sampler-overflow";
   layoutInfo.entryCount = 1u;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[2]) != GPU_OK ||
-      !layouts[2]) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layouts[2]) != GPU_OK
+      || !layouts[2]) {
     fprintf(stderr, "Metal sampler overflow layout setup failed\n");
     GPUDestroyBindGroupLayout(layouts[1]);
     GPUDestroyBindGroupLayout(layouts[0]);
@@ -1744,13 +1930,13 @@ check_metal_pipeline_binding_limits(GPUDevice *device) {
   }
 
   pipelineInfo.bindGroupLayoutCount = 3u;
-  pipelineLayout = (GPUPipelineLayout *)(uintptr_t)1u;
-  ok = GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) ==
-         GPU_ERROR_UNSUPPORTED &&
-       pipelineLayout == NULL;
+  pipelineLayout                    = (GPUPipelineLayout *)(uintptr_t)1u;
+  ok = GPUCreatePipelineLayout(device, &pipelineInfo, &pipelineLayout) == GPU_ERROR_UNSUPPORTED
+       && pipelineLayout == NULL;
   GPUDestroyBindGroupLayout(layouts[2]);
   GPUDestroyBindGroupLayout(layouts[1]);
   GPUDestroyBindGroupLayout(layouts[0]);
+
   if (!ok) {
     fprintf(stderr, "Metal pipeline accepted more than 16 fragment samplers\n");
     GPUDestroyPipelineLayout(pipelineLayout);
@@ -1762,124 +1948,132 @@ check_metal_pipeline_binding_limits(GPUDevice *device) {
 
 int
 gpu_test_bindgroup(GPUDevice *device) {
-  return (!bindgroup_test_selected("hooks") ||
-          check_backend_descriptor_hooks(device)) &&
-         (!bindgroup_test_selected("layout") ||
-          check_bind_group_layout_validation(device)) &&
-         (!bindgroup_test_selected("buffer-layout") ||
-          check_buffer_layout_validation(device)) &&
-         (!bindgroup_test_selected("dynamic") ||
-          (check_dynamic_offset_bind_validation(device, GPU_BINDING_UNIFORM_BUFFER) &&
-           check_dynamic_offset_bind_validation(device, GPU_BINDING_READ_ONLY_STORAGE_BUFFER) &&
-           check_dynamic_offset_bind_validation(device, GPU_BINDING_STORAGE_BUFFER))) &&
-         (!bindgroup_test_selected("arrays") ||
-          check_binding_arrays(device)) &&
-         (!bindgroup_test_selected("cache") ||
-          check_bind_group_cache(device)) &&
-         (!bindgroup_test_selected("metal-limits") ||
-          check_metal_pipeline_binding_limits(device));
+  return (!bindgroup_test_selected("hooks")
+          || check_backend_descriptor_hooks(device))
+         && (!bindgroup_test_selected("layout")
+             || check_bind_group_layout_validation(device))
+         && (!bindgroup_test_selected("buffer-layout")
+             || check_buffer_layout_validation(device))
+         && (!bindgroup_test_selected("dynamic")
+             || (check_dynamic_offset_bind_validation(device, GPU_BINDING_UNIFORM_BUFFER)
+                 && check_dynamic_offset_bind_validation(device, GPU_BINDING_READ_ONLY_STORAGE_BUFFER)
+                 && check_dynamic_offset_bind_validation(device, GPU_BINDING_STORAGE_BUFFER)))
+         && (!bindgroup_test_selected("arrays")
+             || check_binding_arrays(device))
+         && (!bindgroup_test_selected("cache")
+             || check_bind_group_cache(device))
+         && (!bindgroup_test_selected("metal-limits")
+             || check_metal_pipeline_binding_limits(device));
 }
 
 int
 gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
-  GPUFeature                      feature       = GPU_FEATURE_BINDLESS;
-  GPUDeviceCreateInfo             deviceInfo    = {0};
-  GPUBindlessLayoutEXT            bindlessInfo  = {0};
-  GPUBindGroupLayoutEntry         layoutEntry   = {0};
-  GPUBindGroupLayoutCreateInfo    layoutInfo    = {0};
-  GPUBindGroupCreateInfo          groupInfo     = {0};
-  GPUBindGroupEntry               updateEntry   = {0};
-  GPUBindGroupEntry               duplicateEntries[2] = {0};
-  GPUTextureCreateInfo            textureInfo   = {0};
-  GPUTextureViewCreateInfo        viewInfo      = {0};
-  GPUDevice                      *disabled      = NULL;
-  GPUDevice                      *device        = NULL;
-  GPUBindGroupLayout             *layout        = NULL;
-  GPUBindGroupLayout             *bufferLayout  = NULL;
-  GPUBindGroupLayout             *regularLayout = NULL;
-  GPUPipelineLayout              *bufferPipeline = NULL;
-  GPUBindGroup                   *groups[2]      = {NULL, NULL};
-  GPUBindGroup                   *bufferGroup    = NULL;
-  GPUBindGroup                   *regularGroup   = NULL;
-  GPUTexture                     *texture       = NULL;
-  GPUTextureView                 *view          = NULL;
-  GPUBindGroupEntry               regularEntries[2] = {0};
-  GPUBindGroupLayout             *pipelineGroups[1] = {NULL};
-  GPUPipelineLayoutCreateInfo     pipelineInfo = {0};
-  GPURenderPassEncoder            renderPass = {0};
-  GPUApiDescriptor                savedDescriptor;
-  GPUApi                         *api;
-  int                             ok            = 0;
+  GPUFeature                   feature = GPU_FEATURE_BINDLESS;
+
+  GPUDeviceCreateInfo          deviceInfo          = {0};
+  GPUBindlessLayoutEXT         bindlessInfo        = {0};
+  GPUBindGroupLayoutEntry      layoutEntry         = {0};
+  GPUBindGroupLayoutCreateInfo layoutInfo          = {0};
+  GPUBindGroupCreateInfo       groupInfo           = {0};
+  GPUBindGroupEntry            updateEntry         = {0};
+  GPUBindGroupEntry            duplicateEntries[2] = {0};
+  GPUTextureCreateInfo         textureInfo         = {0};
+  GPUTextureViewCreateInfo     viewInfo            = {0};
+  GPUBindGroup                *groups[2]           = {NULL, NULL};
+  GPUBindGroupEntry            regularEntries[2]   = {0};
+  GPUBindGroupLayout          *pipelineGroups[1]   = {NULL};
+  GPUPipelineLayoutCreateInfo  pipelineInfo        = {0};
+  GPURenderPassEncoder         renderPass          = {0};
+  GPUApiDescriptor             savedDescriptor;
+  GPUDevice                   *disabled       = NULL;
+  GPUDevice                   *device         = NULL;
+  GPUBindGroupLayout          *layout         = NULL;
+  GPUBindGroupLayout          *bufferLayout   = NULL;
+  GPUBindGroupLayout          *regularLayout  = NULL;
+  GPUPipelineLayout           *bufferPipeline = NULL;
+  GPUBindGroup                *bufferGroup    = NULL;
+  GPUBindGroup                *regularGroup   = NULL;
+  GPUTexture                  *texture        = NULL;
+  GPUTextureView              *view           = NULL;
+  GPUApi                      *api;
+  int                          ok = 0;
+  uint32_t                     i;
 
   if (!adapter || !GPUIsFeatureSupported(adapter, feature)) {
     if (adapter) {
       puts("bindless execution skipped: unsupported adapter");
     }
+
     return adapter != NULL;
   }
 
   deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize = sizeof(deviceInfo);
-  if (gpu_test_create_device(adapter, &deviceInfo, &disabled) != GPU_OK ||
-      !disabled || GPUGetProcAddr(disabled, "GPUUpdateBindGroupEXT")) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &disabled) != GPU_OK
+      || !disabled || GPUGetProcAddr(disabled, "GPUUpdateBindGroupEXT")) {
     fprintf(stderr, "bindless extension was enabled by default\n");
     goto cleanup;
   }
 
-  bindlessInfo.chain.sType      = GPU_STRUCTURE_TYPE_BINDLESS_LAYOUT_EXT;
-  bindlessInfo.chain.structSize = sizeof(bindlessInfo);
-  layoutEntry.binding           = 0u;
-  layoutEntry.bindingType       = GPU_BINDING_SAMPLED_TEXTURE;
-  layoutEntry.sampledTexture.viewType = GPU_TEXTURE_VIEW_2D;
+  bindlessInfo.chain.sType              = GPU_STRUCTURE_TYPE_BINDLESS_LAYOUT_EXT;
+  bindlessInfo.chain.structSize         = sizeof(bindlessInfo);
+  layoutEntry.binding                   = 0u;
+  layoutEntry.bindingType               = GPU_BINDING_SAMPLED_TEXTURE;
+  layoutEntry.sampledTexture.viewType   = GPU_TEXTURE_VIEW_2D;
   layoutEntry.sampledTexture.sampleType = GPU_TEXTURE_SAMPLE_TYPE_FLOAT;
-  layoutEntry.visibility        = GPU_SHADER_STAGE_COMPUTE_BIT;
-  layoutEntry.arrayCount        = 2u;
-  layoutInfo.chain.sType        = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
-  layoutInfo.chain.structSize   = sizeof(layoutInfo);
-  layoutInfo.chain.pNext        = &bindlessInfo;
-  layoutInfo.label              = "api-bindless-layout";
-  layoutInfo.entryCount         = 1u;
-  layoutInfo.pEntries           = &layoutEntry;
-  if (GPUCreateBindGroupLayout(disabled, &layoutInfo, &layout) !=
-        GPU_ERROR_UNSUPPORTED ||
-      layout) {
+  layoutEntry.visibility                = GPU_SHADER_STAGE_COMPUTE_BIT;
+  layoutEntry.arrayCount                = 2u;
+  layoutInfo.chain.sType                = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize           = sizeof(layoutInfo);
+  layoutInfo.chain.pNext                = &bindlessInfo;
+  layoutInfo.label                      = "api-bindless-layout";
+  layoutInfo.entryCount                 = 1u;
+  layoutInfo.pEntries                   = &layoutEntry;
+
+  if (GPUCreateBindGroupLayout(disabled, &layoutInfo, &layout) != GPU_ERROR_UNSUPPORTED
+      || layout) {
     fprintf(stderr, "bindless layout was accepted without feature enablement\n");
     goto cleanup;
   }
+
   GPUDestroyDevice(disabled);
   disabled = NULL;
 
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &feature;
-  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device ||
-      !GPUIsFeatureEnabled(device, GPU_FEATURE_BINDLESS) ||
-      !GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING) ||
-      !GPUGetProcAddr(device, "GPUUpdateBindGroupEXT")) {
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device
+      || !GPUIsFeatureEnabled(device, GPU_FEATURE_BINDLESS)
+      || !GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING)
+      || !GPUGetProcAddr(device, "GPUUpdateBindGroupEXT")) {
     fprintf(stderr, "bindless feature enablement failed\n");
     goto cleanup;
   }
 
   layoutEntry.arrayCount = 1u;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) !=
-        GPU_ERROR_INVALID_ARGUMENT ||
-      layout) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT
+      || layout) {
     fprintf(stderr, "bindless layout accepted without a resource array\n");
     goto cleanup;
   }
+
   layoutEntry.bindingType      = GPU_BINDING_UNIFORM_BUFFER;
   layoutEntry.arrayCount       = 2u;
   layoutEntry.hasDynamicOffset = true;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) !=
-        GPU_ERROR_INVALID_ARGUMENT ||
-      layout) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_ERROR_INVALID_ARGUMENT
+      || layout) {
     fprintf(stderr, "bindless layout accepted a dynamic offset\n");
     goto cleanup;
   }
+
   layoutEntry.bindingType      = GPU_BINDING_SAMPLED_TEXTURE;
   layoutEntry.hasDynamicOffset = false;
 
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK ||
-      !layout) {
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK
+      || !layout) {
     fprintf(stderr, "bindless layout creation failed\n");
     goto cleanup;
   }
@@ -1888,10 +2082,11 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "api-bindless-group";
   groupInfo.layout           = layout;
-  if (GPUCreateBindGroup(device, &groupInfo, &groups[0]) != GPU_OK ||
-      !groups[0] ||
-      GPUCreateBindGroup(device, &groupInfo, &groups[1]) != GPU_OK ||
-      !groups[1] || groups[0] == groups[1]) {
+
+  if (GPUCreateBindGroup(device, &groupInfo, &groups[0]) != GPU_OK
+      || !groups[0]
+      || GPUCreateBindGroup(device, &groupInfo, &groups[1]) != GPU_OK
+      || !groups[1] || groups[0] == groups[1]) {
     fprintf(stderr, "bindless sparse group creation or cache bypass failed\n");
     goto cleanup;
   }
@@ -1907,6 +2102,7 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED;
+
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
     fprintf(stderr, "bindless texture creation failed\n");
     goto cleanup;
@@ -1919,28 +2115,33 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK || !view) {
     fprintf(stderr, "bindless texture view creation failed\n");
     goto cleanup;
   }
 
   layoutInfo.chain.pNext = NULL;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &regularLayout) != GPU_OK ||
-      !regularLayout) {
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &regularLayout) != GPU_OK
+      || !regularLayout) {
     fprintf(stderr, "regular comparison layout creation failed\n");
     goto cleanup;
   }
-  for (uint32_t i = 0u; i < 2u; i++) {
+
+  for (i = 0u; i < 2u; i++) {
     regularEntries[i].binding     = 0u;
     regularEntries[i].arrayIndex  = i;
     regularEntries[i].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
     regularEntries[i].textureView = view;
   }
+
   groupInfo.layout     = regularLayout;
   groupInfo.entryCount = 2u;
   groupInfo.pEntries   = regularEntries;
-  if (GPUCreateBindGroup(device, &groupInfo, &regularGroup) != GPU_OK ||
-      !regularGroup) {
+
+  if (GPUCreateBindGroup(device, &groupInfo, &regularGroup) != GPU_OK
+      || !regularGroup) {
     fprintf(stderr, "regular comparison group creation failed\n");
     goto cleanup;
   }
@@ -1949,6 +2150,7 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
   updateEntry.arrayIndex  = 1u;
   updateEntry.bindingType = GPU_BINDING_SAMPLED_TEXTURE;
   updateEntry.textureView = view;
+
   if (GPUUpdateBindGroupEXT(groups[0], 1u, &updateEntry) != GPU_OK) {
     fprintf(stderr, "bindless group update failed\n");
     goto cleanup;
@@ -1956,72 +2158,82 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
 
   duplicateEntries[0] = updateEntry;
   duplicateEntries[1] = updateEntry;
+
   if (GPUUpdateBindGroupEXT(groups[0],
                             (uint32_t)GPU_ARRAY_LEN(duplicateEntries),
-                            duplicateEntries) != GPU_ERROR_INVALID_ARGUMENT ||
-      GPUUpdateBindGroupEXT(groups[0], 1u, &updateEntry) != GPU_OK) {
+                            duplicateEntries) != GPU_ERROR_INVALID_ARGUMENT
+      || GPUUpdateBindGroupEXT(groups[0], 1u, &updateEntry) != GPU_OK) {
     fprintf(stderr, "bindless duplicate update validation failed\n");
     goto cleanup;
   }
 
-  if (GPUUpdateBindGroupEXT(regularGroup, 1u, &updateEntry) !=
-        GPU_ERROR_INVALID_ARGUMENT) {
+  if (GPUUpdateBindGroupEXT(regularGroup, 1u, &updateEntry) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "bindless update accepted a regular group\n");
     goto cleanup;
   }
 
   updateEntry.textureView = NULL;
-  if (GPUUpdateBindGroupEXT(groups[0], 1u, &updateEntry) !=
-        GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUUpdateBindGroupEXT(groups[0], 1u, &updateEntry) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "bindless update accepted a null resource\n");
     goto cleanup;
   }
+
   updateEntry.textureView = view;
 
   updateEntry.arrayIndex = 2u;
-  if (GPUUpdateBindGroupEXT(groups[0], 1u, &updateEntry) !=
-        GPU_ERROR_INVALID_ARGUMENT) {
+
+  if (GPUUpdateBindGroupEXT(groups[0], 1u, &updateEntry) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "bindless update accepted an out-of-range slot\n");
     goto cleanup;
   }
 
   layoutEntry.bindingType = GPU_BINDING_STORAGE_BUFFER;
-  layoutInfo.chain.pNext   = &bindlessInfo;
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &bufferLayout) != GPU_OK ||
-      !bufferLayout) {
+  layoutInfo.chain.pNext  = &bindlessInfo;
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &bufferLayout) != GPU_OK
+      || !bufferLayout) {
     fprintf(stderr, "bindless sparse buffer layout creation failed\n");
     goto cleanup;
   }
+
   groupInfo.layout     = bufferLayout;
   groupInfo.entryCount = 0u;
   groupInfo.pEntries   = NULL;
-  if (GPUCreateBindGroup(device, &groupInfo, &bufferGroup) != GPU_OK ||
-      !bufferGroup) {
+
+  if (GPUCreateBindGroup(device, &groupInfo, &bufferGroup) != GPU_OK
+      || !bufferGroup) {
     fprintf(stderr, "bindless sparse buffer group creation failed\n");
     goto cleanup;
   }
-  pipelineGroups[0] = bufferLayout;
-  pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+
+  pipelineGroups[0]                 = bufferLayout;
+  pipelineInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize     = sizeof(pipelineInfo);
   pipelineInfo.bindGroupLayoutCount = 1u;
   pipelineInfo.ppBindGroupLayouts   = pipelineGroups;
+
   if (GPUCreatePipelineLayout(device,
                               &pipelineInfo,
-                              &bufferPipeline) != GPU_OK ||
-      !bufferPipeline) {
+                              &bufferPipeline) != GPU_OK
+      || !bufferPipeline) {
     fprintf(stderr, "bindless sparse buffer validation failed\n");
     goto cleanup;
   }
+
   api = gpuDeviceApi(device);
+
   if (!api) {
     fprintf(stderr, "bindless sparse buffer backend lookup failed\n");
     goto cleanup;
   }
-  savedDescriptor                  = api->descriptor;
+
+  savedDescriptor                 = api->descriptor;
   api->descriptor.bindRenderGroup = NULL;
-  renderPass._pipelineLayout       = bufferPipeline;
+  renderPass._pipelineLayout      = bufferPipeline;
   GPUBindRenderGroup(&renderPass, 0u, bufferGroup, 0u, NULL);
   api->descriptor = savedDescriptor;
+
   if (renderPass._boundGroups[0] != bufferGroup) {
     fprintf(stderr, "bindless sparse buffer bind failed\n");
     goto cleanup;

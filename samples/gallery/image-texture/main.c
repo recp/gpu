@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 typedef struct ImageVertex {
@@ -51,6 +67,7 @@ build_uniforms(const WebGPUImageTexture *state, ImageUniforms *uniforms) {
   float aspect;
 
   aspect = gpu_sample_aspect_ratio(state->width, state->height);
+
   if (aspect >= 1.0f) {
     uniforms->scale[0] = 0.82f / aspect;
     uniforms->scale[1] = 0.82f;
@@ -68,17 +85,20 @@ resize_canvas(WebGPUImageTexture *state) {
 
   oldWidth  = state->width;
   oldHeight = state->height;
+
   if (!resize_webgpu_canvas(state->swapchain,
                             &state->width,
                             &state->height)) {
     return 0;
   }
-  if (!state->uniformBuffer ||
-      (oldWidth == state->width && oldHeight == state->height)) {
+
+  if (!state->uniformBuffer
+      || (oldWidth == state->width && oldHeight == state->height)) {
     return 1;
   }
 
   build_uniforms(state, &uniforms);
+
   return GPUQueueWriteBuffer(state->queue,
                              state->uniformBuffer,
                              0u,
@@ -88,12 +108,13 @@ resize_canvas(WebGPUImageTexture *state) {
 
 static int
 create_shader(WebGPUImageTexture *state) {
-  void      *artifact;
-  uint64_t   artifactSize;
-  GPUResult  result;
+  void     *artifact;
+  uint64_t  artifactSize;
+  GPUResult result;
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/image_texture.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /image_texture.us", 1);
     return 0;
@@ -104,41 +125,44 @@ create_shader(WebGPUImageTexture *state) {
                                          artifactSize,
                                          &state->library);
   free(artifact);
+
   if (result != GPU_OK || !state->library) {
     set_status("GPU: failed to compile the image texture artifact", 1);
     return 0;
   }
+
   if (GPUCreateShaderLayout(state->device,
                             state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 1u ||
-      !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0] ||
-      !state->shaderLayout->pipelineLayout) {
+                            &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 1u
+      || !state->shaderLayout->bindGroupLayouts
+      || !state->shaderLayout->bindGroupLayouts[0]
+      || !state->shaderLayout->pipelineLayout) {
     set_status("GPU: unexpected image texture reflection", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_pipeline(WebGPUImageTexture *state) {
   GPUVertexAttribute          attributes[2] = {0};
-  GPUVertexBufferLayout       vertexLayout  = {0};
-  GPUColorTargetState         color         = {0};
   GPURenderPipelineCreateInfo info          = {0};
+  GPUColorTargetState         color         = {0};
+  GPUVertexBufferLayout       vertexLayout  = {0};
 
-  attributes[0].format          = GPU_VERTEX_FORMAT_FLOAT32X2;
-  attributes[0].offset          = offsetof(ImageVertex, position);
+  attributes[0].format         = GPU_VERTEX_FORMAT_FLOAT32X2;
+  attributes[0].offset         = offsetof(ImageVertex, position);
   attributes[0].shaderLocation = 0u;
-  attributes[1].format          = GPU_VERTEX_FORMAT_FLOAT32X2;
-  attributes[1].offset          = offsetof(ImageVertex, uv);
+  attributes[1].format         = GPU_VERTEX_FORMAT_FLOAT32X2;
+  attributes[1].offset         = offsetof(ImageVertex, uv);
   attributes[1].shaderLocation = 1u;
-  vertexLayout.pAttributes      = attributes;
-  vertexLayout.strideBytes      = sizeof(ImageVertex);
-  vertexLayout.attributeCount   = 2u;
-  vertexLayout.stepMode         = GPU_VERTEX_STEP_MODE_VERTEX;
+  vertexLayout.pAttributes     = attributes;
+  vertexLayout.strideBytes     = sizeof(ImageVertex);
+  vertexLayout.attributeCount  = 2u;
+  vertexLayout.stepMode        = GPU_VERTEX_STEP_MODE_VERTEX;
 
   color.format          = GPUGetSwapchainFormat(state->swapchain);
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
@@ -159,29 +183,31 @@ create_pipeline(WebGPUImageTexture *state) {
   info.frontFace                = GPU_FRONT_FACE_CCW;
   info.multisample.sampleCount  = 1u;
   info.multisample.sampleMask   = UINT32_MAX;
+
   if (GPUCreateRenderPipeline(state->device,
                               &info,
-                              &state->pipeline) != GPU_OK ||
-      !state->pipeline) {
+                              &state->pipeline) != GPU_OK
+      || !state->pipeline) {
     set_status("GPU: failed to create the image texture pipeline", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_resources(WebGPUImageTexture *state) {
-  ImageUniforms           uniforms;
-  GPUBufferCreateInfo     bufferInfo  = {0};
-  GPUTextureCreateInfo    textureInfo = {0};
-  GPUTextureWriteRegion   write       = {0};
-  GPUTextureViewCreateInfo viewInfo   = {0};
-  GPUSamplerCreateInfo    samplerInfo = {0};
-  GPUBindGroupEntry       entries[3]  = {0};
-  GPUBindGroupCreateInfo  groupInfo   = {0};
-  char                   *pixels;
-  int                     imageWidth;
-  int                     imageHeight;
+  GPUBindGroupEntry        entries[3]  = {0};
+  GPUTextureCreateInfo     textureInfo = {0};
+  GPUBufferCreateInfo      bufferInfo  = {0};
+  GPUBindGroupCreateInfo   groupInfo   = {0};
+  GPUSamplerCreateInfo     samplerInfo = {0};
+  GPUTextureWriteRegion    write       = {0};
+  GPUTextureViewCreateInfo viewInfo    = {0};
+  ImageUniforms            uniforms;
+  char                    *pixels;
+  int                      imageWidth;
+  int                      imageHeight;
 
   build_uniforms(state, &uniforms);
 
@@ -189,40 +215,41 @@ create_resources(WebGPUImageTexture *state) {
   bufferInfo.chain.structSize = sizeof(bufferInfo);
   bufferInfo.label            = "image-texture-vertices";
   bufferInfo.sizeBytes        = sizeof(kVertices);
-  bufferInfo.usage            = GPU_BUFFER_USAGE_VERTEX |
-                                GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(state->device,
                       &bufferInfo,
-                      &state->vertexBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->vertexBuffer,
-                          0u,
-                          kVertices,
-                          sizeof(kVertices)) != GPU_OK) {
+                      &state->vertexBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->vertexBuffer,
+                             0u,
+                             kVertices,
+                             sizeof(kVertices)) != GPU_OK) {
     return 0;
   }
 
   bufferInfo.label     = "image-texture-uniforms";
   bufferInfo.sizeBytes = sizeof(uniforms);
-  bufferInfo.usage     = GPU_BUFFER_USAGE_UNIFORM |
-                         GPU_BUFFER_USAGE_COPY_DST;
+  bufferInfo.usage     = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+
   if (GPUCreateBuffer(state->device,
                       &bufferInfo,
-                      &state->uniformBuffer) != GPU_OK ||
-      GPUQueueWriteBuffer(state->queue,
-                          state->uniformBuffer,
-                          0u,
-                          &uniforms,
-                          sizeof(uniforms)) != GPU_OK) {
+                      &state->uniformBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue,
+                             state->uniformBuffer,
+                             0u,
+                             &uniforms,
+                             sizeof(uniforms)) != GPU_OK) {
     return 0;
   }
 
   imageWidth  = 0;
   imageHeight = 0;
-  pixels = emscripten_get_preloaded_image_data("/texture-coordinate.png",
-                                                &imageWidth,
-                                                &imageHeight);
-  if (!pixels || imageWidth <= 0 || imageHeight <= 0) {
+
+  if (!(pixels = emscripten_get_preloaded_image_data("/texture-coordinate.png",
+                                                     &imageWidth,
+                                                     &imageHeight))
+      || imageWidth <= 0 || imageHeight <= 0) {
     free(pixels);
     set_status("GPU: browser failed to decode texture-coordinate.png", 1);
     return 0;
@@ -238,8 +265,8 @@ create_resources(WebGPUImageTexture *state) {
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
-  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
-                                 GPU_TEXTURE_USAGE_COPY_DST;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
+
   if (GPUCreateTexture(state->device,
                        &textureInfo,
                        &state->texture) != GPU_OK) {
@@ -254,15 +281,16 @@ create_resources(WebGPUImageTexture *state) {
   write.layerCount   = 1u;
   write.bytesPerRow  = (uint32_t)imageWidth * 4u;
   write.rowsPerImage = (uint32_t)imageHeight;
+
   if (GPUQueueWriteTexture(state->queue,
                            state->texture,
                            &write,
                            pixels,
-                           (uint64_t)imageWidth *
-                             (uint64_t)imageHeight * 4u) != GPU_OK) {
+                           (uint64_t)imageWidth * (uint64_t)imageHeight * 4u) != GPU_OK) {
     free(pixels);
     return 0;
   }
+
   free(pixels);
 
   viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
@@ -272,15 +300,16 @@ create_resources(WebGPUImageTexture *state) {
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM_SRGB;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(state->texture,
                            &viewInfo,
                            &state->textureView) != GPU_OK) {
     return 0;
   }
 
-  samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  samplerInfo.chain.structSize = sizeof(samplerInfo);
-  samplerInfo.label            = "image-texture-linear-sampler";
+  samplerInfo.chain.sType        = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  samplerInfo.chain.structSize   = sizeof(samplerInfo);
+  samplerInfo.label              = "image-texture-linear-sampler";
   samplerInfo.desc.minFilter     = GPU_FILTER_LINEAR;
   samplerInfo.desc.magFilter     = GPU_FILTER_LINEAR;
   samplerInfo.desc.mipFilter     = GPU_MIP_FILTER_LINEAR;
@@ -288,6 +317,7 @@ create_resources(WebGPUImageTexture *state) {
   samplerInfo.desc.addressV      = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressW      = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.maxAnisotropy = 8u;
+
   if (GPUCreateSampler(state->device,
                        &samplerInfo,
                        false,
@@ -312,40 +342,45 @@ create_resources(WebGPUImageTexture *state) {
   groupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
   groupInfo.pEntries         = entries;
   groupInfo.entryCount       = 3u;
+
   if (GPUCreateBindGroup(state->device,
                          &groupInfo,
                          &state->bindGroup) != GPU_OK) {
     return 0;
   }
+
   return 1;
 }
 
 static void
 render_frame(void *userData) {
-  WebGPUImageTexture            *state;
-  GPUFrame                      *frame;
-  GPUCommandBuffer              *cmdb;
-  GPURenderPassEncoder          *pass;
-  GPUBufferBinding               vertexBuffer = {0};
-  GPURenderPassColorAttachment   color        = {0};
-  GPURenderPassCreateInfo        passInfo     = {0};
+  GPUFrameStats                stats;
+  GPURenderPassCreateInfo      passInfo     = {0};
+  GPURenderPassColorAttachment color        = {0};
+  GPUBufferBinding             vertexBuffer = {0};
+  WebGPUImageTexture          *state;
+  GPUFrame                    *frame;
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassEncoder        *pass;
 
   state = userData;
+
   if (!resize_canvas(state)) {
     set_status("GPU: failed to resize the image texture sample", 1);
     emscripten_cancel_main_loop();
     return;
   }
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) {
+  if (!(frame = GPUBeginFrame(state->swapchain))) {
     return;
   }
+
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(state->queue,
                               "image-texture-webgpu-frame",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+                              &cmdb) != GPU_OK
+      || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
@@ -357,13 +392,14 @@ render_frame(void *userData) {
   color.clearColor.float32[1] = 0.018f;
   color.clearColor.float32[2] = 0.048f;
   color.clearColor.float32[3] = 1.0f;
-  passInfo.chain.sType        = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  passInfo.chain.structSize   = sizeof(passInfo);
+
+  passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.structSize     = sizeof(passInfo);
   passInfo.label                = "image-texture-webgpu-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
@@ -375,15 +411,15 @@ render_frame(void *userData) {
   GPUBindVertexBuffers(pass, 0u, 1u, &vertexBuffer);
   GPUDraw(pass, 6u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
+
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     set_status("GPU: failed to finish the image texture frame", 1);
   } else {
-    GPUFrameStats stats;
-
     state->frameCount++;
-    if (state->frameCount > WARM_FRAME_COUNT &&
-        GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.hotPathAllocCount != 0u || stats.hotPathFreeCount != 0u)) {
+
+    if (state->frameCount > WARM_FRAME_COUNT
+        && GPUGetLastFrameStats(state->device, &stats) == GPU_OK
+        && (stats.hotPathAllocCount != 0u || stats.hotPathFreeCount != 0u)) {
       set_status("GPU: warm image texture frame allocated wrapper memory", 1);
       emscripten_cancel_main_loop();
     }
@@ -391,14 +427,15 @@ render_frame(void *userData) {
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
-  WebGPUImageTexture *state;
   GPURuntimeConfig    runtime = {0};
+  WebGPUImageTexture *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status(!adapter ? "GPU: failed to request WebGPU adapter"
                         : "GPU: failed to request WebGPU device",
@@ -409,33 +446,35 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (GPUConfigureRuntime(device, &runtime) != GPU_OK) {
     set_status("GPU: failed to configure WebGPU runtime stats", 1);
     return;
   }
 
   state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               state->adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
+                                              state->adapter,
+                                              (void *)"#canvas",
+                                              GPU_SURFACE_WEB_CANVAS,
+                                              1.0f);
+
   if (!state->queue || !state->surface || !resize_canvas(state)) {
     set_status("GPU: failed to create WebGPU queue or canvas surface", 1);
     return;
   }
 
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain ||
-      !create_shader(state) ||
-      !create_pipeline(state) ||
-      !create_resources(state)) {
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))
+      || !create_shader(state)
+      || !create_pipeline(state)
+      || !create_resources(state)) {
     set_status("GPU: failed to initialize image texture resources", 1);
     return;
   }
@@ -454,7 +493,9 @@ main(void) {
   info.label            = "image-texture-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create WebGPU instance", 1);
     return 1;
@@ -465,5 +506,6 @@ main(void) {
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   return result == GPU_OK ? 0 : 1;
 }

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 #include "../../src/api/device_internal.h"
 
@@ -5,23 +21,37 @@ enum {
   INTEGER_CLEAR_WIDTH          = 4u,
   INTEGER_CLEAR_HEIGHT         = 4u,
   INTEGER_CLEAR_ROW_PITCH      = 256u,
-  INTEGER_CLEAR_READBACK_BYTES = INTEGER_CLEAR_ROW_PITCH *
-                                 INTEGER_CLEAR_HEIGHT
+  INTEGER_CLEAR_READBACK_BYTES = INTEGER_CLEAR_ROW_PITCH * INTEGER_CLEAR_HEIGHT
 };
+
+static const GPUClearColorValue uintClear = {
+  .uint32 = {1u, 2u, 3u, 4u}
+};
+
+static const GPUClearColorValue sintClear = {
+  .sint32 = {-1, -2, 3, 4}
+};
+
+static const uint8_t uintExpected[4] = {1u, 2u, 3u, 4u};
+static const uint8_t sintExpected[4] = {255u, 254u, 3u, 4u};
 
 static bool
 integer_clear_pixels_equal(const uint8_t *pixels,
                            const uint8_t  expected[4]) {
-  for (uint32_t y = 0u; y < INTEGER_CLEAR_HEIGHT; y++) {
-    const uint8_t *row;
+  const uint8_t *row;
+  uint32_t       y;
+  uint32_t       x;
 
+  for (y = 0u; y < INTEGER_CLEAR_HEIGHT; y++) {
     row = pixels + (uint64_t)y * INTEGER_CLEAR_ROW_PITCH;
-    for (uint32_t x = 0u; x < INTEGER_CLEAR_WIDTH; x++) {
+
+    for (x = 0u; x < INTEGER_CLEAR_WIDTH; x++) {
       if (memcmp(row + x * 4u, expected, 4u) != 0) {
         return false;
       }
     }
   }
+
   return true;
 }
 
@@ -35,6 +65,7 @@ integer_clear_submit(GPUDevice        *device,
   GPUResult          result;
 
   fence = NULL;
+
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
     return false;
   }
@@ -46,9 +77,11 @@ integer_clear_submit(GPUDevice        *device,
   submitInfo.ppCommandBuffers   = buffers;
   submitInfo.fence              = fence;
   result                        = GPUQueueSubmit(queue, &submitInfo);
+
   if (result == GPU_OK) {
     result = GPUWaitFence(fence, UINT64_MAX);
   }
+
   GPUDestroyFence(fence);
   return result == GPU_OK;
 }
@@ -59,23 +92,23 @@ integer_clear_case(GPUDevice                *device,
                    const GPUClearColorValue *clearColor,
                    const uint8_t             expected[4],
                    const char               *label) {
-  GPUQueue                     *queue;
-  GPUCommandBuffer             *cmdb;
-  GPURenderPassEncoder         *renderPass;
-  GPUTransferPassEncoder           *copyPass;
-  GPUTexture                   *texture;
-  GPUTextureView               *view;
-  GPUBuffer                    *readback;
-  GPUTextureCreateInfo          textureInfo = {0};
-  GPUTextureViewCreateInfo      viewInfo = {0};
-  GPUBufferCreateInfo           bufferInfo = {0};
-  GPURenderPassColorAttachment  color = {0};
-  GPURenderPassCreateInfo       passInfo = {0};
-  GPUTextureBarrier             textureBarrier = {0};
-  GPUBarrierBatch               barrierBatch = {0};
-  GPUBufferTextureCopyRegion    copyRegion = {0};
-  uint8_t                       pixels[INTEGER_CLEAR_READBACK_BYTES] = {0};
-  int                           ok;
+  GPUTextureCreateInfo         textureInfo                          = {0};
+  GPUTextureViewCreateInfo     viewInfo                             = {0};
+  GPUBufferCreateInfo          bufferInfo                           = {0};
+  GPURenderPassColorAttachment color                                = {0};
+  GPURenderPassCreateInfo      passInfo                             = {0};
+  GPUTextureBarrier            textureBarrier                       = {0};
+  GPUBarrierBatch              barrierBatch                         = {0};
+  GPUBufferTextureCopyRegion   copyRegion                           = {0};
+  uint8_t                      pixels[INTEGER_CLEAR_READBACK_BYTES] = {0};
+  GPUQueue                    *queue;
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassEncoder        *renderPass;
+  GPUTransferPassEncoder      *copyPass;
+  GPUTexture                  *texture;
+  GPUTextureView              *view;
+  GPUBuffer                   *readback;
+  int                          ok;
 
   queue      = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   cmdb       = NULL;
@@ -84,7 +117,7 @@ integer_clear_case(GPUDevice                *device,
   texture    = NULL;
   view       = NULL;
   readback   = NULL;
-  ok         = queue != NULL;
+  ok = queue != NULL;
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
@@ -98,8 +131,8 @@ integer_clear_case(GPUDevice                *device,
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET |
                                  GPU_TEXTURE_USAGE_COPY_SRC;
-  ok = ok && GPUCreateTexture(device, &textureInfo, &texture) == GPU_OK &&
-       texture;
+  ok = ok && GPUCreateTexture(device, &textureInfo, &texture) == GPU_OK
+       && texture;
 
   viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   viewInfo.chain.structSize = sizeof(viewInfo);
@@ -116,8 +149,9 @@ integer_clear_case(GPUDevice                *device,
   bufferInfo.sizeBytes        = INTEGER_CLEAR_READBACK_BYTES;
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
                                 GPU_BUFFER_USAGE_COPY_SRC;
-  ok = ok && GPUCreateBuffer(device, &bufferInfo, &readback) == GPU_OK &&
-       readback;
+  ok = ok && GPUCreateBuffer(device, &bufferInfo, &readback) == GPU_OK
+       && readback;
+
   if (!ok || GPUAcquireCommandBuffer(queue, label, &cmdb) != GPU_OK || !cmdb) {
     fprintf(stderr, "%s setup failed\n", label);
     ok = 0;
@@ -133,32 +167,33 @@ integer_clear_case(GPUDevice                *device,
   passInfo.label                = label;
   passInfo.colorAttachmentCount = 1u;
   passInfo.pColorAttachments    = &color;
-  renderPass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!renderPass) {
+
+  if (!(renderPass = GPUBeginRenderPass(cmdb, &passInfo))) {
     fprintf(stderr, "%s render pass failed\n", label);
     ok = 0;
     goto cleanup;
   }
+
   GPUEndRenderPass(renderPass);
   renderPass = NULL;
 
-  textureBarrier.texture    = texture;
-  textureBarrier.srcAccess  = GPU_ACCESS_COLOR_WRITE;
-  textureBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
-  textureBarrier.mipCount   = 1u;
-  textureBarrier.layerCount = 1u;
+  textureBarrier.texture           = texture;
+  textureBarrier.srcAccess         = GPU_ACCESS_COLOR_WRITE;
+  textureBarrier.dstAccess         = GPU_ACCESS_TRANSFER_READ;
+  textureBarrier.mipCount          = 1u;
+  textureBarrier.layerCount        = 1u;
   barrierBatch.srcStages           = GPU_STAGE_FRAGMENT;
   barrierBatch.dstStages           = GPU_STAGE_TRANSFER;
   barrierBatch.textureBarrierCount = 1u;
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginTransferPass(cmdb, label);
-  if (!copyPass) {
+  if (!(copyPass = GPUBeginTransferPass(cmdb, label))) {
     fprintf(stderr, "%s copy pass failed\n", label);
     ok = 0;
     goto cleanup;
   }
+
   copyRegion.bytesPerRow        = INTEGER_CLEAR_ROW_PITCH;
   copyRegion.rowsPerImage       = INTEGER_CLEAR_HEIGHT;
   copyRegion.texture.width      = INTEGER_CLEAR_WIDTH;
@@ -169,14 +204,15 @@ integer_clear_case(GPUDevice                *device,
   GPUEndTransferPass(copyPass);
   copyPass = NULL;
 
-  ok   = integer_clear_submit(device, queue, cmdb);
+  ok = integer_clear_submit(device, queue, cmdb);
   cmdb = NULL;
+
   if (!ok || GPUQueueReadBuffer(queue,
                                 readback,
                                 0u,
                                 pixels,
-                                sizeof(pixels)) != GPU_OK ||
-      !integer_clear_pixels_equal(pixels, expected)) {
+                                sizeof(pixels)) != GPU_OK
+      || !integer_clear_pixels_equal(pixels, expected)) {
     fprintf(stderr,
             "%s mismatch: got=%u,%u,%u,%u expected=%u,%u,%u,%u\n",
             label,
@@ -206,23 +242,16 @@ cleanup:
 
 int
 gpu_test_texture_integer_clear(GPUDevice *device) {
-  static const GPUClearColorValue uintClear = {
-    .uint32 = {1u, 2u, 3u, 4u}
-  };
-  static const GPUClearColorValue sintClear = {
-    .sint32 = {-1, -2, 3, 4}
-  };
-  static const uint8_t uintExpected[4] = {1u, 2u, 3u, 4u};
-  static const uint8_t sintExpected[4] = {255u, 254u, 3u, 4u};
   GPUFormatCapabilities caps;
 
   if (GPUGetFormatCapabilities(device->adapter,
                                GPU_FORMAT_RGBA8_UINT,
-                               &caps) != GPU_OK ||
-      !caps.colorAttachment) {
+                               &caps) != GPU_OK
+      || !caps.colorAttachment) {
     printf("integer clear skipped: RGBA8_UINT unsupported\n");
     return 1;
   }
+
   if (!integer_clear_case(device,
                           GPU_FORMAT_RGBA8_UINT,
                           &uintClear,
@@ -233,11 +262,12 @@ gpu_test_texture_integer_clear(GPUDevice *device) {
 
   if (GPUGetFormatCapabilities(device->adapter,
                                GPU_FORMAT_RGBA8_SINT,
-                               &caps) != GPU_OK ||
-      !caps.colorAttachment) {
+                               &caps) != GPU_OK
+      || !caps.colorAttachment) {
     printf("integer clear skipped: RGBA8_SINT unsupported\n");
     return 1;
   }
+
   return integer_clear_case(device,
                             GPU_FORMAT_RGBA8_SINT,
                             &sintClear,

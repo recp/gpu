@@ -1,7 +1,33 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 #include "../../src/api/device_internal.h"
 #include "../../src/api/render/pipeline_internal.h"
 #include "../../src/backend/mt/binding_limits.h"
+
+static const char source[] =
+  "#include <metal_stdlib>\n"
+  "using namespace metal;\n"
+  "struct SlotVertexIn { float2 position [[attribute(0)]]; };\n"
+  "vertex float4 slot_vs(SlotVertexIn input [[stage_in]], "
+  "constant float4& offset [[buffer(0)]]) {\n"
+  "  return float4(input.position + offset.xy, offset.z, 1.0);\n"
+  "}\n"
+  "fragment float4 slot_fs() { return float4(1.0); }\n";
 
 static void
 init_vertex_layout(GPUVertexAttribute    *attribute,
@@ -27,41 +53,32 @@ init_pipeline_info(GPURenderPipelineCreateInfo *info,
   memset(info, 0, sizeof(*info));
   memset(colorTarget, 0, sizeof(*colorTarget));
 
-  colorTarget->format                = GPU_FORMAT_BGRA8_UNORM;
-  info->chain.sType                  = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  info->chain.structSize             = sizeof(*info);
-  info->layout                       = layout;
-  info->library                      = library;
-  info->vertexEntry                  = vertexEntry;
-  info->fragmentEntry                = fragmentEntry;
-  info->colorTargetCount             = 1u;
-  info->pColorTargets                = colorTarget;
-  info->primitiveTopology            = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  info->cullMode                     = GPU_CULL_MODE_NONE;
-  info->frontFace                    = GPU_FRONT_FACE_CCW;
-  info->multisample.sampleCount      = 1u;
+  colorTarget->format           = GPU_FORMAT_BGRA8_UNORM;
+  info->chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  info->chain.structSize        = sizeof(*info);
+  info->layout                  = layout;
+  info->library                 = library;
+  info->vertexEntry             = vertexEntry;
+  info->fragmentEntry           = fragmentEntry;
+  info->colorTargetCount        = 1u;
+  info->pColorTargets           = colorTarget;
+  info->primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  info->cullMode                = GPU_CULL_MODE_NONE;
+  info->frontFace               = GPU_FRONT_FACE_CCW;
+  info->multisample.sampleCount = 1u;
 }
 
 static int
 check_direct_msl_slots(GPUDevice *device) {
-  static const char source[] =
-    "#include <metal_stdlib>\n"
-    "using namespace metal;\n"
-    "struct SlotVertexIn { float2 position [[attribute(0)]]; };\n"
-    "vertex float4 slot_vs(SlotVertexIn input [[stage_in]], "
-    "constant float4& offset [[buffer(0)]]) {\n"
-    "  return float4(input.position + offset.xy, offset.z, 1.0);\n"
-    "}\n"
-    "fragment float4 slot_fs() { return float4(1.0); }\n";
   GPUShaderLibrary            *library;
   GPUBindGroupLayout          *groupLayout;
   GPUPipelineLayout           *pipelineLayout;
   GPURenderPipeline           *pipeline;
   GPUBindGroupLayout          *groups[1];
   GPUShaderLibraryCreateInfo   libraryInfo = {0};
-  GPUBindGroupLayoutEntry      groupEntry = {0};
-  GPUBindGroupLayoutCreateInfo groupInfo = {0};
-  GPUPipelineLayoutCreateInfo  layoutInfo = {0};
+  GPUBindGroupLayoutEntry      groupEntry  = {0};
+  GPUBindGroupLayoutCreateInfo groupInfo   = {0};
+  GPUPipelineLayoutCreateInfo  layoutInfo  = {0};
   GPUVertexAttribute           attribute;
   GPUVertexBufferLayout        vertexLayout;
   GPUVertexBufferLayout        vertexLayouts[MT_VERTEX_BUFFER_COUNT] = {{0}};
@@ -81,23 +98,25 @@ check_direct_msl_slots(GPUDevice *device) {
   libraryInfo.sourceKind       = GPU_SHADER_SOURCE_MSL_TEXT;
   libraryInfo.sourceData       = source;
   libraryInfo.sourceSize       = sizeof(source) - 1u;
-  if (GPUCreateShaderLibrary(device, &libraryInfo, &library) != GPU_OK ||
-      !library) {
+
+  if (GPUCreateShaderLibrary(device, &libraryInfo, &library) != GPU_OK
+      || !library) {
     fprintf(stderr, "Metal vertex/resource slot shader setup failed\n");
     goto cleanup;
   }
 
-  groupEntry.binding     = 0u;
-  groupEntry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
-  groupEntry.visibility  = GPU_SHADER_STAGE_VERTEX_BIT;
-  groupEntry.arrayCount  = 1u;
+  groupEntry.binding         = 0u;
+  groupEntry.bindingType     = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntry.visibility      = GPU_SHADER_STAGE_VERTEX_BIT;
+  groupEntry.arrayCount      = 1u;
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "metal-vertex-resource-group";
   groupInfo.entryCount       = 1u;
   groupInfo.pEntries         = &groupEntry;
-  if (GPUCreateBindGroupLayout(device, &groupInfo, &groupLayout) != GPU_OK ||
-      !groupLayout) {
+
+  if (GPUCreateBindGroupLayout(device, &groupInfo, &groupLayout) != GPU_OK
+      || !groupLayout) {
     fprintf(stderr, "Metal vertex/resource slot group setup failed\n");
     goto cleanup;
   }
@@ -108,8 +127,9 @@ check_direct_msl_slots(GPUDevice *device) {
   layoutInfo.label                = "metal-vertex-resource-layout";
   layoutInfo.bindGroupLayoutCount = 1u;
   layoutInfo.ppBindGroupLayouts   = groups;
-  if (GPUCreatePipelineLayout(device, &layoutInfo, &pipelineLayout) != GPU_OK ||
-      !pipelineLayout) {
+
+  if (GPUCreatePipelineLayout(device, &layoutInfo, &pipelineLayout) != GPU_OK
+      || !pipelineLayout) {
     fprintf(stderr, "Metal vertex/resource pipeline layout setup failed\n");
     goto cleanup;
   }
@@ -124,22 +144,24 @@ check_direct_msl_slots(GPUDevice *device) {
   pipelineInfo.label                    = "metal-vertex-resource-pipeline";
   pipelineInfo.vertex.bufferLayoutCount = 1u;
   pipelineInfo.vertex.pBufferLayouts    = &vertexLayout;
-  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline ||
-      pipeline->_requiredBindGroupMask != 1u) {
+
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK
+      || !pipeline
+      || pipeline->_requiredBindGroupMask != 1u) {
     fprintf(stderr,
             "raw Metal shader did not retain its explicit resource group\n");
     goto cleanup;
   }
+
   GPUDestroyRenderPipeline(pipeline);
   pipeline = (GPURenderPipeline *)(uintptr_t)1u;
 
   vertexLayouts[MT_VERTEX_BUFFER_COUNT - 1u] = vertexLayout;
   pipelineInfo.vertex.bufferLayoutCount      = MT_VERTEX_BUFFER_COUNT;
   pipelineInfo.vertex.pBufferLayouts         = vertexLayouts;
-  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) !=
-        GPU_ERROR_UNSUPPORTED ||
-      pipeline != NULL) {
+
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_ERROR_UNSUPPORTED
+      || pipeline != NULL) {
     fprintf(stderr, "Metal accepted overlapping vertex/resource slots\n");
     goto cleanup;
   }
@@ -155,13 +177,13 @@ cleanup:
 }
 
 static int
-create_manual_slot_layout(GPUDevice              *device,
-                          GPUBindGroupLayout     **outEmptyGroup,
-                          GPUBindGroupLayout     **outResourceGroup,
-                          GPUPipelineLayout      **outPipelineLayout) {
+create_manual_slot_layout(GPUDevice           *device,
+                          GPUBindGroupLayout **outEmptyGroup,
+                          GPUBindGroupLayout **outResourceGroup,
+                          GPUPipelineLayout  **outPipelineLayout) {
   GPUBindGroupLayout          *groups[2];
-  GPUBindGroupLayoutEntry      entry = {0};
-  GPUBindGroupLayoutCreateInfo groupInfo = {0};
+  GPUBindGroupLayoutEntry      entry      = {0};
+  GPUBindGroupLayoutCreateInfo groupInfo  = {0};
   GPUPipelineLayoutCreateInfo  layoutInfo = {0};
 
   *outEmptyGroup     = NULL;
@@ -171,17 +193,19 @@ create_manual_slot_layout(GPUDevice              *device,
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "metal-empty-group";
+
   if (GPUCreateBindGroupLayout(device, &groupInfo, outEmptyGroup) != GPU_OK) {
     return 0;
   }
 
-  entry.binding     = 0u;
-  entry.bindingType = GPU_BINDING_UNIFORM_BUFFER;
-  entry.visibility  = GPU_SHADER_STAGE_VERTEX_BIT;
-  entry.arrayCount  = 1u;
+  entry.binding        = 0u;
+  entry.bindingType    = GPU_BINDING_UNIFORM_BUFFER;
+  entry.visibility     = GPU_SHADER_STAGE_VERTEX_BIT;
+  entry.arrayCount     = 1u;
   groupInfo.label      = "metal-manual-resource-group";
   groupInfo.entryCount = 1u;
   groupInfo.pEntries   = &entry;
+
   if (GPUCreateBindGroupLayout(device, &groupInfo, outResourceGroup) != GPU_OK) {
     return 0;
   }
@@ -200,22 +224,22 @@ create_manual_slot_layout(GPUDevice              *device,
 
 static int
 check_usl_slot_plan(GPUDevice *device, const char *bytecodePath) {
-  GPUShaderLibrary            *library;
-  GPUBindGroupLayout          *reflectionGroups[2];
-  GPUBindGroupLayout          *emptyGroup;
-  GPUBindGroupLayout          *manualGroup;
-  GPUPipelineLayout           *reflectionLayout;
-  GPUPipelineLayout           *manualLayout;
-  GPURenderPipeline           *pipeline;
-  GPUVertexBufferLayout        vertexLayouts[MT_VERTEX_BUFFER_COUNT] = {{0}};
-  GPUVertexAttribute           attribute;
-  GPUVertexBufferLayout        vertexLayout;
-  GPUColorTargetState          colorTarget;
-  GPURenderPipelineCreateInfo  pipelineInfo;
-  uint64_t                     bytecodeSize;
-  uint32_t                     groupCount;
-  void                        *bytecode;
-  int                          ok;
+  GPUShaderLibrary           *library;
+  GPUBindGroupLayout         *reflectionGroups[2];
+  GPUBindGroupLayout         *emptyGroup;
+  GPUBindGroupLayout         *manualGroup;
+  GPUPipelineLayout          *reflectionLayout;
+  GPUPipelineLayout          *manualLayout;
+  GPURenderPipeline          *pipeline;
+  GPUVertexBufferLayout       vertexLayouts[MT_VERTEX_BUFFER_COUNT] = {{0}};
+  GPUVertexAttribute          attribute;
+  GPUVertexBufferLayout       vertexLayout;
+  GPUColorTargetState         colorTarget;
+  GPURenderPipelineCreateInfo pipelineInfo;
+  uint64_t                    bytecodeSize;
+  uint32_t                    groupCount;
+  void                       *bytecode;
+  int                         ok;
 
   library             = NULL;
   reflectionGroups[0] = NULL;
@@ -229,28 +253,30 @@ check_usl_slot_plan(GPUDevice *device, const char *bytecodePath) {
   ok                  = 0;
 
   bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize);
-  if (!bytecode ||
-      GPUCreateShaderLibraryFromUSL(device,
-                                    bytecode,
-                                    bytecodeSize,
-                                    &library) != GPU_OK ||
-      !library) {
+
+  if (!bytecode
+      || GPUCreateShaderLibraryFromUSL(device,
+                                       bytecode,
+                                       bytecodeSize,
+                                       &library) != GPU_OK
+      || !library) {
     fprintf(stderr, "Metal USL slot library setup failed\n");
     goto cleanup;
   }
 
   groupCount = (uint32_t)GPU_ARRAY_LEN(reflectionGroups);
+
   if (GPUCreateBindGroupLayoutsFromReflection(device,
+                                              library,
+                                              &groupCount,
+                                              reflectionGroups) != GPU_OK
+      || groupCount != (uint32_t)GPU_ARRAY_LEN(reflectionGroups)
+      || GPUCreatePipelineLayoutFromReflection(device,
                                                library,
-                                               &groupCount,
-                                               reflectionGroups) != GPU_OK ||
-      groupCount != (uint32_t)GPU_ARRAY_LEN(reflectionGroups) ||
-      GPUCreatePipelineLayoutFromReflection(device,
-                                            library,
-                                            groupCount,
-                                            reflectionGroups,
-                                            &reflectionLayout) != GPU_OK ||
-      !reflectionLayout) {
+                                               groupCount,
+                                               reflectionGroups,
+                                               &reflectionLayout) != GPU_OK
+      || !reflectionLayout) {
     fprintf(stderr, "Metal USL reflection slot layout setup failed\n");
     goto cleanup;
   }
@@ -262,23 +288,25 @@ check_usl_slot_plan(GPUDevice *device, const char *bytecodePath) {
                      "api_slot_vs",
                      "api_fs",
                      &colorTarget);
-  pipelineInfo.label = "metal-usl-sparse-slot-pipeline";
+  pipelineInfo.label                         = "metal-usl-sparse-slot-pipeline";
   vertexLayouts[MT_VERTEX_BUFFER_COUNT - 1u] = vertexLayout;
   pipelineInfo.vertex.bufferLayoutCount      = MT_VERTEX_BUFFER_COUNT;
   pipelineInfo.vertex.pBufferLayouts         = vertexLayouts;
-  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
+
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK
+      || !pipeline) {
     fprintf(stderr, "Metal rejected non-overlapping sparse USL slots\n");
     goto cleanup;
   }
+
   GPUDestroyRenderPipeline(pipeline);
   pipeline = (GPURenderPipeline *)(uintptr_t)1u;
 
   vertexLayouts[MT_VERTEX_BUFFER_COUNT - 1u] = (GPUVertexBufferLayout){0};
   vertexLayouts[MT_VERTEX_BUFFER_COUNT - 2u] = vertexLayout;
-  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) !=
-        GPU_ERROR_UNSUPPORTED ||
-      pipeline != NULL) {
+
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_ERROR_UNSUPPORTED
+      || pipeline != NULL) {
     fprintf(stderr, "Metal accepted a USL vertex/resource slot collision\n");
     goto cleanup;
   }
@@ -294,9 +322,9 @@ check_usl_slot_plan(GPUDevice *device, const char *bytecodePath) {
   vertexLayouts[MT_VERTEX_BUFFER_COUNT - 2u] = (GPUVertexBufferLayout){0};
   vertexLayouts[MT_VERTEX_BUFFER_COUNT - 1u] = vertexLayout;
   pipelineInfo.layout                        = manualLayout;
-  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) !=
-        GPU_ERROR_INVALID_ARGUMENT ||
-      pipeline != NULL) {
+
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_ERROR_INVALID_ARGUMENT
+      || pipeline != NULL) {
     fprintf(stderr, "Metal accepted a mismatched manual USL slot plan\n");
     goto cleanup;
   }
@@ -321,10 +349,11 @@ gpu_test_metal_vertex_slots(GPUDevice *device, const char *bytecodePath) {
   GPUApi *api;
 
   api = gpuDeviceApi(device);
+
   if (!api || api->backend != GPU_BACKEND_METAL) {
     return 1;
   }
 
-  return check_direct_msl_slots(device) &&
-         check_usl_slot_plan(device, bytecodePath);
+  return check_direct_msl_slots(device)
+         && check_usl_slot_plan(device, bytecodePath);
 }

@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-/* Backend-neutral; query adapter support before optional format use. */
+/* backend-neutral; query adapter support before optional format use. */
 typedef enum GPUFormat {
   GPU_FORMAT_UNDEFINED = 0,
 

@@ -27,6 +27,7 @@ extern "C" {
 #include "vertex.h"
 #include "depthstencil.h"
 
+typedef struct GPURenderPipeline GPURenderPipeline;
 typedef struct GPUPipelineLayout GPUPipelineLayout;
 typedef struct GPUPipelineCache  GPUPipelineCache;
 typedef struct GPUDevice         GPUDevice;
@@ -66,6 +67,7 @@ typedef enum GPUBlendOp {
 } GPUBlendOp;
 
 typedef uint32_t GPUColorWriteMaskFlags;
+
 /* zero-initialized masks write all channels; NONE must be used alone. */
 enum {
   GPU_COLOR_WRITE_DEFAULT = 0u,
@@ -120,25 +122,23 @@ typedef struct GPUMultisampleState {
   bool     alphaToCoverageEnable;
 } GPUMultisampleState;
 
-typedef struct GPURenderPipeline GPURenderPipeline;
-
 typedef struct GPURenderPipelineCreateInfo {
   GPUChainedStruct            chain;
-  const char                  *label;
-  GPUPipelineLayout           *layout;
-  GPUPipelineCache            *cache;
-  GPUShaderLibrary            *library;
-  const char                  *vertexEntry;
-  const char                  *fragmentEntry;
-  const GPUColorTargetState   *pColorTargets;
-  const GPUDepthStencilState  *pDepthStencilState;
-  GPUVertexState               vertex;
-  uint32_t                     colorTargetCount;
-  GPUFormat                    depthStencilFormat;
-  GPUPrimitiveTopology         primitiveTopology;
-  GPUCullMode                  cullMode;
-  GPUFrontFace                 frontFace;
-  GPUMultisampleState          multisample;
+  const char                 *label;
+  GPUPipelineLayout          *layout;
+  GPUPipelineCache           *cache;
+  GPUShaderLibrary           *library;
+  const char                 *vertexEntry;
+  const char                 *fragmentEntry;
+  const GPUColorTargetState  *pColorTargets;
+  const GPUDepthStencilState *pDepthStencilState;
+  GPUVertexState              vertex;
+  uint32_t                    colorTargetCount;
+  GPUFormat                   depthStencilFormat;
+  GPUPrimitiveTopology        primitiveTopology;
+  GPUCullMode                 cullMode;
+  GPUFrontFace                frontFace;
+  GPUMultisampleState         multisample;
 } GPURenderPipelineCreateInfo;
 
 /* replaces the vertex stage when chained to GPURenderPipelineCreateInfo. */
@@ -151,15 +151,15 @@ typedef struct GPUMeshPipelineEXT {
 
 GPU_EXPORT
 GPUResult
-GPUCreateRenderPipeline(GPUDevice                          * __restrict device,
-                        const GPURenderPipelineCreateInfo  * __restrict info,
-                        GPURenderPipeline                 ** __restrict outPipeline);
+GPUCreateRenderPipeline(GPUDevice                         *__restrict device,
+                        const GPURenderPipelineCreateInfo *__restrict info,
+                        GPURenderPipeline                **__restrict outPipeline);
 
 GPU_EXPORT
 GPUResult
-GPUCreatePipelineCache(GPUDevice                         * __restrict device,
-                       const GPUPipelineCacheCreateInfo  * __restrict info,
-                       GPUPipelineCache                 ** __restrict outCache);
+GPUCreatePipelineCache(GPUDevice                        *__restrict device,
+                       const GPUPipelineCacheCreateInfo *__restrict info,
+                       GPUPipelineCache                **__restrict outCache);
 
 GPU_EXPORT
 void
@@ -167,24 +167,24 @@ GPUDestroyPipelineCache(GPUPipelineCache *cache);
 
 GPU_EXPORT
 GPUResult
-GPUPrewarmRenderPipelines(GPUDevice                        * __restrict device,
-                          GPUPipelineCache                 * __restrict cache,
+GPUPrewarmRenderPipelines(GPUDevice                         *__restrict device,
+                          GPUPipelineCache                  *__restrict cache,
                           uint32_t                                      count,
-                          const GPURenderPipelineCreateInfo * __restrict infos);
+                          const GPURenderPipelineCreateInfo *__restrict infos);
 
 GPU_EXPORT
 GPUResult
-GPUCompileRenderPipelineAsync(GPUDevice                         * __restrict device,
-                              GPUPipelineCache                  * __restrict cache,
-                              const GPURenderPipelineCreateInfo * __restrict info,
-                              GPUPipelineCompileHandle          * __restrict outHandle);
+GPUCompileRenderPipelineAsync(GPUDevice                         *__restrict device,
+                              GPUPipelineCache                  *__restrict cache,
+                              const GPURenderPipelineCreateInfo *__restrict info,
+                              GPUPipelineCompileHandle          *__restrict outHandle);
 
 GPU_EXPORT
 GPUResult
-GPUPollRenderPipelineCompile(GPUDevice                 * __restrict device,
-                             GPUPipelineCompileHandle               handle,
-                             GPUPipelineCompileStatus  * __restrict outStatus,
-                             GPURenderPipeline        ** __restrict outPipeline);
+GPUPollRenderPipelineCompile(GPUDevice                *__restrict device,
+                             GPUPipelineCompileHandle             handle,
+                             GPUPipelineCompileStatus *__restrict outStatus,
+                             GPURenderPipeline       **__restrict outPipeline);
 
 GPU_EXPORT
 void

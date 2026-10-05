@@ -53,13 +53,9 @@ typedef struct GPUExternalSemaphoreExport {
 } GPUExternalSemaphoreExport;
 
 typedef struct GPUApiMultiGPU {
-  GPUResult
-  (*createInterop)(GPUDevice           *firstDevice,
-                   GPUDevice           *secondDevice,
-                   GPUDeviceInteropEXT *interop);
+  GPUResult (*createInterop)(GPUDevice *firstDevice, GPUDevice *secondDevice, GPUDeviceInteropEXT *interop);
 
-  void
-  (*destroyInterop)(GPUDeviceInteropEXT *interop);
+  void (*destroyInterop)(GPUDeviceInteropEXT *interop);
 
   GPUResult
   (*getBufferRequirements)(GPUDeviceInteropEXT       *interop,
@@ -94,13 +90,13 @@ typedef struct GPUApiMultiGPU {
                      GPUSemaphore                 *secondSemaphore);
 
   GPUResult
-  (*encodeRelease)(GPUDeviceInteropEXT           *interop,
-                   GPUCommandBuffer              *cmdb,
+  (*encodeRelease)(GPUDeviceInteropEXT            *interop,
+                   GPUCommandBuffer               *cmdb,
                    const GPUSharedBarrierBatchEXT *barriers);
 
   GPUResult
-  (*encodeAcquire)(GPUDeviceInteropEXT           *interop,
-                   GPUCommandBuffer              *cmdb,
+  (*encodeAcquire)(GPUDeviceInteropEXT            *interop,
+                   GPUCommandBuffer               *cmdb,
                    const GPUSharedBarrierBatchEXT *barriers);
 
   GPUResult
@@ -109,37 +105,31 @@ typedef struct GPUApiMultiGPU {
                                    GPUMemoryRequirements     *outRequirements);
 
   GPUResult
-  (*createExternalBuffer)(GPUDevice                  *device,
-                          const GPUBufferCreateInfo  *info,
-                          GPUBuffer                 **outBuffer,
-                          GPUExternalMemoryExport    *outExport);
+  (*createExternalBuffer)(GPUDevice                 *device,
+                          const GPUBufferCreateInfo *info,
+                          GPUBuffer                **outBuffer,
+                          GPUExternalMemoryExport   *outExport);
 
   GPUResult
-  (*getExternalTextureRequirements)(
-    GPUDevice                  *device,
-    const GPUTextureCreateInfo *info,
-    GPUMemoryRequirements      *outRequirements
-  );
+  (*getExternalTextureRequirements)(GPUDevice                  *device,
+                                    const GPUTextureCreateInfo *info,
+                                    GPUMemoryRequirements      *outRequirements);
 
   GPUResult
-  (*createExternalTexture)(GPUDevice                   *device,
-                           const GPUTextureCreateInfo  *info,
-                           GPUTexture                 **outTexture,
-                           GPUExternalMemoryExport     *outExport);
+  (*createExternalTexture)(GPUDevice                  *device,
+                           const GPUTextureCreateInfo *info,
+                           GPUTexture                **outTexture,
+                           GPUExternalMemoryExport    *outExport);
 
   GPUResult
-  (*createExternalSemaphore)(GPUDevice                     *device,
-                             const GPUSemaphoreCreateInfo  *info,
-                             GPUSemaphore                  *semaphore,
-                             GPUExternalSemaphoreExport    *outExport);
+  (*createExternalSemaphore)(GPUDevice                    *device,
+                             const GPUSemaphoreCreateInfo *info,
+                             GPUSemaphore                 *semaphore,
+                             GPUExternalSemaphoreExport   *outExport);
 
-  GPUResult
-  (*encodeExternalRelease)(GPUCommandBuffer               *cmdb,
-                           const GPUSharedBarrierBatchEXT *barriers);
+  GPUResult (*encodeExternalRelease)(GPUCommandBuffer *cmdb, const GPUSharedBarrierBatchEXT *barriers);
 
-  GPUResult
-  (*encodeExternalAcquire)(GPUCommandBuffer               *cmdb,
-                           const GPUSharedBarrierBatchEXT *barriers);
+  GPUResult (*encodeExternalAcquire)(GPUCommandBuffer *cmdb, const GPUSharedBarrierBatchEXT *barriers);
 } GPUApiMultiGPU;
 
 #endif /* gpu_gpudef_multigpu_h */

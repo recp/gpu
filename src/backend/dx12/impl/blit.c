@@ -273,11 +273,10 @@ dx12_blitTexture(GPUCommandBuffer         *cmdb,
 
   gpuDevice = gpuCommandBufferDevice(cmdb);
   device    = gpuDevice ? gpuDevice->_priv : NULL;
-  gpuBlitTextureRenderFallback(
-    cmdb,
-    info,
-    device && device->manualBlitFiltering
-      ? &dx12_blitTextureManualShaders
-      : &dx12_blitTextureShaders
-  );
+
+  gpuBlitTextureRenderFallback(cmdb,
+                               info,
+                               device && device->manualBlitFiltering
+                                 ? &dx12_blitTextureManualShaders
+                                 : &dx12_blitTextureShaders);
 }

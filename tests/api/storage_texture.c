@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 
 enum {
@@ -5,21 +21,15 @@ enum {
   GPU_STORAGE_VIEW_HEIGHT     = 4u,
   GPU_STORAGE_BASE_WIDTH      = GPU_STORAGE_VIEW_WIDTH * 2u,
   GPU_STORAGE_BASE_HEIGHT     = GPU_STORAGE_VIEW_HEIGHT * 2u,
-  GPU_STORAGE_VIEW_BYTES      = GPU_STORAGE_VIEW_WIDTH *
-                                GPU_STORAGE_VIEW_HEIGHT * 4u,
-  GPU_STORAGE_BASE_BYTES      = GPU_STORAGE_BASE_WIDTH *
-                                GPU_STORAGE_BASE_HEIGHT * 4u,
+  GPU_STORAGE_VIEW_BYTES      = GPU_STORAGE_VIEW_WIDTH * GPU_STORAGE_VIEW_HEIGHT * 4u,
+  GPU_STORAGE_BASE_BYTES      = GPU_STORAGE_BASE_WIDTH * GPU_STORAGE_BASE_HEIGHT * 4u,
   GPU_STORAGE_ROW_PITCH       = 256u,
-  GPU_STORAGE_VIEW_COPY_BYTES = GPU_STORAGE_ROW_PITCH *
-                                GPU_STORAGE_VIEW_HEIGHT,
-  GPU_STORAGE_BASE_COPY_BYTES = GPU_STORAGE_ROW_PITCH *
-                                GPU_STORAGE_BASE_HEIGHT,
+  GPU_STORAGE_VIEW_COPY_BYTES = GPU_STORAGE_ROW_PITCH * GPU_STORAGE_VIEW_HEIGHT,
+  GPU_STORAGE_BASE_COPY_BYTES = GPU_STORAGE_ROW_PITCH * GPU_STORAGE_BASE_HEIGHT,
   GPU_STORAGE_TARGET_OFFSET   = 0u,
   GPU_STORAGE_LAYER_OFFSET    = GPU_STORAGE_VIEW_COPY_BYTES,
-  GPU_STORAGE_MIP_OFFSET      = GPU_STORAGE_LAYER_OFFSET +
-                                GPU_STORAGE_VIEW_COPY_BYTES,
-  GPU_STORAGE_READBACK_BYTES  = GPU_STORAGE_MIP_OFFSET +
-                                GPU_STORAGE_BASE_COPY_BYTES
+  GPU_STORAGE_MIP_OFFSET      = GPU_STORAGE_LAYER_OFFSET + GPU_STORAGE_VIEW_COPY_BYTES,
+  GPU_STORAGE_READBACK_BYTES  = GPU_STORAGE_MIP_OFFSET + GPU_STORAGE_BASE_COPY_BYTES
 };
 
 static void
@@ -28,7 +38,9 @@ fill_rgba8(uint8_t *pixels,
            uint8_t  red,
            uint8_t  green,
            uint8_t  blue) {
-  for (uint32_t i = 0u; i < pixelCount; i++) {
+  uint32_t i;
+
+  for (i = 0u; i < pixelCount; i++) {
     pixels[i * 4u + 0u] = red;
     pixels[i * 4u + 1u] = green;
     pixels[i * 4u + 2u] = blue;
@@ -48,10 +60,10 @@ check_rgba8(const uint8_t *pixels,
     for (uint32_t x = 0u; x < width; x++) {
       uint32_t offset = baseOffset + y * GPU_STORAGE_ROW_PITCH + x * 4u;
 
-      if (pixels[offset + 0u] != red ||
-          pixels[offset + 1u] != green ||
-          pixels[offset + 2u] != blue ||
-          pixels[offset + 3u] != 255u) {
+      if (pixels[offset + 0u] != red
+          || pixels[offset + 1u] != green
+          || pixels[offset + 2u] != blue
+          || pixels[offset + 3u] != 255u) {
         fprintf(stderr,
                 "storage texture pixel mismatch at %u,%u: %u %u %u %u\n",
                 x,
@@ -64,6 +76,7 @@ check_rgba8(const uint8_t *pixels,
       }
     }
   }
+
   return 1;
 }
 
@@ -79,7 +92,7 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   GPUBuffer                     *readback;
   GPUCommandBuffer              *cmdb;
   GPUComputePassEncoder         *computePass;
-  GPUTransferPassEncoder            *copyPass;
+  GPUTransferPassEncoder        *copyPass;
   GPUFence                      *fence;
   void                          *bytecode;
   GPUCommandBuffer              *submitBuffers[1];
@@ -121,7 +134,8 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   fence        = NULL;
   bytecodeSize = 0u;
   bytecode     = gpu_test_read_file(bytecodePath, &bytecodeSize);
-  ok           = queue && bytecode;
+  ok = queue && bytecode;
+
   if (!ok) {
     fprintf(stderr, "storage texture fixture setup failed\n");
     goto cleanup;
@@ -147,29 +161,25 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   if (GPUCreateShaderLibraryFromUSL(device,
                                     bytecode,
                                     bytecodeSize,
-                                    &library) != GPU_OK ||
-      !library ||
-      GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !shaderLayout || shaderLayout->bindGroupLayoutCount != 1u ||
-      !shaderLayout->bindGroupLayouts ||
-      !shaderLayout->bindGroupLayouts[0] ||
-      !shaderLayout->pipelineLayout) {
+                                    &library) != GPU_OK
+      || !library
+      || GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK
+      || !shaderLayout || shaderLayout->bindGroupLayoutCount != 1u
+      || !shaderLayout->bindGroupLayouts
+      || !shaderLayout->bindGroupLayouts[0]
+      || !shaderLayout->pipelineLayout) {
     fprintf(stderr, "storage texture shader layout creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
-  layoutEntries = GPUGetBindGroupLayoutEntries(
-    shaderLayout->bindGroupLayouts[0],
-    &layoutEntryCount
-  );
-  if (!layoutEntries || layoutEntryCount != 1u ||
-      layoutEntries[0].binding != 0u ||
-      layoutEntries[0].bindingType != GPU_BINDING_STORAGE_TEXTURE ||
-      layoutEntries[0].storageTexture.viewType != GPU_TEXTURE_VIEW_2D_ARRAY ||
-      layoutEntries[0].storageTexture.access !=
-        GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY ||
-      layoutEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT) {
+  if (!(layoutEntries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[0],
+                                                     &layoutEntryCount)) || layoutEntryCount != 1u
+      || layoutEntries[0].binding != 0u
+      || layoutEntries[0].bindingType != GPU_BINDING_STORAGE_TEXTURE
+      || layoutEntries[0].storageTexture.viewType != GPU_TEXTURE_VIEW_2D_ARRAY
+      || layoutEntries[0].storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY
+      || layoutEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT) {
     fprintf(stderr, "storage texture reflection mismatch\n");
     ok = 0;
     goto cleanup;
@@ -181,8 +191,9 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   pipelineInfo.layout           = shaderLayout->pipelineLayout;
   pipelineInfo.library          = library;
   pipelineInfo.entryPoint       = "storage_view_cs";
-  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
+
+  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK
+      || !pipeline) {
     fprintf(stderr, "storage texture compute pipeline creation failed\n");
     ok = 0;
     goto cleanup;
@@ -207,6 +218,7 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   textureInfo.usage            = GPU_TEXTURE_USAGE_STORAGE |
                                  GPU_TEXTURE_USAGE_COPY_SRC |
                                  GPU_TEXTURE_USAGE_COPY_DST;
+
   if (GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK || !texture) {
     fprintf(stderr, "storage texture creation failed\n");
     ok = 0;
@@ -220,6 +232,7 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   writeRegion.layerCount     = 1u;
   writeRegion.bytesPerRow    = GPU_STORAGE_BASE_WIDTH * 4u;
   writeRegion.rowsPerImage   = GPU_STORAGE_BASE_HEIGHT;
+
   if (GPUQueueWriteTexture(queue,
                            texture,
                            &writeRegion,
@@ -236,6 +249,7 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   writeRegion.baseArrayLayer = 0u;
   writeRegion.bytesPerRow    = GPU_STORAGE_VIEW_WIDTH * 4u;
   writeRegion.rowsPerImage   = GPU_STORAGE_VIEW_HEIGHT;
+
   if (GPUQueueWriteTexture(queue,
                            texture,
                            &writeRegion,
@@ -247,6 +261,7 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   }
 
   writeRegion.baseArrayLayer = 1u;
+
   if (GPUQueueWriteTexture(queue,
                            texture,
                            &writeRegion,
@@ -266,21 +281,23 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   viewInfo.mipLevelCount    = 1u;
   viewInfo.baseArrayLayer   = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK || !view) {
     fprintf(stderr, "storage texture view creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
-  groupEntry.binding       = 0u;
-  groupEntry.bindingType   = GPU_BINDING_STORAGE_TEXTURE;
-  groupEntry.textureView   = view;
+  groupEntry.binding         = 0u;
+  groupEntry.bindingType     = GPU_BINDING_STORAGE_TEXTURE;
+  groupEntry.textureView     = view;
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "api-storage-texture-group";
   groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
   groupInfo.entryCount       = 1u;
   groupInfo.pEntries         = &groupEntry;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "storage texture bind group creation failed\n");
     ok = 0;
@@ -293,6 +310,7 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   bufferInfo.sizeBytes        = GPU_STORAGE_READBACK_BYTES;
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
                                 GPU_BUFFER_USAGE_COPY_SRC;
+
   if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK || !readback) {
     fprintf(stderr, "storage texture readback buffer creation failed\n");
     ok = 0;
@@ -301,47 +319,47 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
 
   if (GPUAcquireCommandBuffer(queue,
                               "api-storage-texture",
-                              &cmdb) != GPU_OK ||
-      !cmdb || !(computePass = GPUBeginComputePass(cmdb,
-                                                   "api-storage-texture"))) {
+                              &cmdb) != GPU_OK
+      || !cmdb || !(computePass = GPUBeginComputePass(cmdb,
+                                                      "api-storage-texture"))) {
     fprintf(stderr, "storage texture compute pass creation failed\n");
     ok = 0;
     goto cleanup;
   }
+
   GPUBindComputePipeline(computePass, pipeline);
   GPUBindComputeGroup(computePass, 0u, group, 0u, NULL);
   GPUDispatch(computePass, 1u, 1u, 1u);
   GPUEndComputePass(computePass);
   computePass = NULL;
 
-  textureBarrier.texture    = texture;
-  textureBarrier.srcAccess  = GPU_ACCESS_SHADER_WRITE;
-  textureBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
-  textureBarrier.baseMip    = 0u;
-  textureBarrier.mipCount   = 2u;
-  textureBarrier.baseLayer  = 0u;
-  textureBarrier.layerCount = 2u;
+  textureBarrier.texture           = texture;
+  textureBarrier.srcAccess         = GPU_ACCESS_SHADER_WRITE;
+  textureBarrier.dstAccess         = GPU_ACCESS_TRANSFER_READ;
+  textureBarrier.baseMip           = 0u;
+  textureBarrier.mipCount          = 2u;
+  textureBarrier.baseLayer         = 0u;
+  textureBarrier.layerCount        = 2u;
   barrierBatch.srcStages           = GPU_STAGE_COMPUTE;
   barrierBatch.dstStages           = GPU_STAGE_TRANSFER;
   barrierBatch.textureBarrierCount = 1u;
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginTransferPass(cmdb, "api-storage-texture-readback");
-  if (!copyPass) {
+  if (!(copyPass = GPUBeginTransferPass(cmdb, "api-storage-texture-readback"))) {
     fprintf(stderr, "storage texture copy pass creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
-  copyRegion.bytesPerRow                 = GPU_STORAGE_ROW_PITCH;
-  copyRegion.rowsPerImage                = GPU_STORAGE_VIEW_HEIGHT;
-  copyRegion.texture.texture.mipLevel    = 1u;
+  copyRegion.bytesPerRow                    = GPU_STORAGE_ROW_PITCH;
+  copyRegion.rowsPerImage                   = GPU_STORAGE_VIEW_HEIGHT;
+  copyRegion.texture.texture.mipLevel       = 1u;
   copyRegion.texture.texture.baseArrayLayer = 1u;
-  copyRegion.texture.width               = GPU_STORAGE_VIEW_WIDTH;
-  copyRegion.texture.height              = GPU_STORAGE_VIEW_HEIGHT;
-  copyRegion.texture.depth               = 1u;
-  copyRegion.texture.layerCount          = 1u;
+  copyRegion.texture.width                  = GPU_STORAGE_VIEW_WIDTH;
+  copyRegion.texture.height                 = GPU_STORAGE_VIEW_HEIGHT;
+  copyRegion.texture.depth                  = 1u;
+  copyRegion.texture.layerCount             = 1u;
   GPUCopyTextureToBuffer(copyPass, texture, readback, &copyRegion);
 
   copyRegion.bufferOffset                   = GPU_STORAGE_LAYER_OFFSET;
@@ -370,41 +388,43 @@ gpu_test_storage_texture_view(GPUDevice *device, const char *bytecodePath) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = submitBuffers;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "storage texture submission failed\n");
     cmdb = NULL;
     ok = 0;
     goto cleanup;
   }
+
   cmdb = NULL;
 
   if (GPUQueueReadBuffer(queue,
                          readback,
                          0u,
                          pixels,
-                         sizeof(pixels)) != GPU_OK ||
-      !check_rgba8(pixels,
-                   GPU_STORAGE_TARGET_OFFSET,
-                   GPU_STORAGE_VIEW_WIDTH,
-                   GPU_STORAGE_VIEW_HEIGHT,
-                   255u,
-                   0u,
-                   0u) ||
-      !check_rgba8(pixels,
-                   GPU_STORAGE_LAYER_OFFSET,
-                   GPU_STORAGE_VIEW_WIDTH,
-                   GPU_STORAGE_VIEW_HEIGHT,
-                   0u,
-                   0u,
-                   255u) ||
-      !check_rgba8(pixels,
-                   GPU_STORAGE_MIP_OFFSET,
-                   GPU_STORAGE_BASE_WIDTH,
-                   GPU_STORAGE_BASE_HEIGHT,
-                   0u,
-                   255u,
-                   0u)) {
+                         sizeof(pixels)) != GPU_OK
+      || !check_rgba8(pixels,
+                      GPU_STORAGE_TARGET_OFFSET,
+                      GPU_STORAGE_VIEW_WIDTH,
+                      GPU_STORAGE_VIEW_HEIGHT,
+                      255u,
+                      0u,
+                      0u)
+      || !check_rgba8(pixels,
+                      GPU_STORAGE_LAYER_OFFSET,
+                      GPU_STORAGE_VIEW_WIDTH,
+                      GPU_STORAGE_VIEW_HEIGHT,
+                      0u,
+                      0u,
+                      255u)
+      || !check_rgba8(pixels,
+                      GPU_STORAGE_MIP_OFFSET,
+                      GPU_STORAGE_BASE_WIDTH,
+                      GPU_STORAGE_BASE_HEIGHT,
+                      0u,
+                      255u,
+                      0u)) {
     fprintf(stderr, "storage texture subresource readback failed\n");
     ok = 0;
     goto cleanup;

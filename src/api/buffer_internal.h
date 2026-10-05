@@ -39,7 +39,7 @@ GPUResult
 gpuValidateBufferCreateInfo(const GPUDevice           *device,
                             const GPUBufferCreateInfo *info);
 
-static inline GPUApi *
+static inline GPUApi*
 gpuBufferApi(const GPUBuffer *buffer) {
   return buffer ? gpuDeviceApi(buffer->device) : NULL;
 }
@@ -53,10 +53,10 @@ static inline bool
 gpuBufferRangeValid(const GPUBuffer *buffer,
                     uint64_t         offset,
                     uint64_t         sizeBytes) {
-  return buffer &&
-         sizeBytes > 0u &&
-         offset <= buffer->sizeBytes &&
-         sizeBytes <= buffer->sizeBytes - offset;
+  return buffer
+         && sizeBytes > 0u
+         && offset <= buffer->sizeBytes
+         && sizeBytes <= buffer->sizeBytes - offset;
 }
 
 static inline bool

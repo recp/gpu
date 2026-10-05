@@ -24,27 +24,24 @@ gpu_samplerDescIsValid(const GPUSamplerDesc *desc) {
     return 0;
   }
 
-  return (desc->minFilter == GPU_FILTER_NEAREST ||
-          desc->minFilter == GPU_FILTER_LINEAR) &&
-         (desc->magFilter == GPU_FILTER_NEAREST ||
-          desc->magFilter == GPU_FILTER_LINEAR) &&
-         (desc->mipFilter == GPU_MIP_FILTER_NEAREST ||
-          desc->mipFilter == GPU_MIP_FILTER_LINEAR) &&
-         (desc->addressU == GPU_ADDRESS_MODE_REPEAT ||
-          desc->addressU == GPU_ADDRESS_MODE_MIRRORED_REPEAT ||
-          desc->addressU == GPU_ADDRESS_MODE_CLAMP_TO_EDGE) &&
-         (desc->addressV == GPU_ADDRESS_MODE_REPEAT ||
-          desc->addressV == GPU_ADDRESS_MODE_MIRRORED_REPEAT ||
-          desc->addressV == GPU_ADDRESS_MODE_CLAMP_TO_EDGE) &&
-         (desc->addressW == GPU_ADDRESS_MODE_REPEAT ||
-          desc->addressW == GPU_ADDRESS_MODE_MIRRORED_REPEAT ||
-          desc->addressW == GPU_ADDRESS_MODE_CLAMP_TO_EDGE) &&
-         (uint32_t)desc->compare <= GPU_COMPARE_ALWAYS &&
-         desc->maxAnisotropy <= 16u &&
-         (desc->maxAnisotropy <= 1u ||
-          (desc->minFilter == GPU_FILTER_LINEAR &&
-           desc->magFilter == GPU_FILTER_LINEAR &&
-           desc->mipFilter == GPU_MIP_FILTER_LINEAR));
+  return (desc->minFilter == GPU_FILTER_NEAREST || desc->minFilter == GPU_FILTER_LINEAR)
+         && (desc->magFilter == GPU_FILTER_NEAREST || desc->magFilter == GPU_FILTER_LINEAR)
+         && (desc->mipFilter == GPU_MIP_FILTER_NEAREST || desc->mipFilter == GPU_MIP_FILTER_LINEAR)
+         && (desc->addressU == GPU_ADDRESS_MODE_REPEAT
+             || desc->addressU == GPU_ADDRESS_MODE_MIRRORED_REPEAT
+             || desc->addressU == GPU_ADDRESS_MODE_CLAMP_TO_EDGE)
+         && (desc->addressV == GPU_ADDRESS_MODE_REPEAT
+             || desc->addressV == GPU_ADDRESS_MODE_MIRRORED_REPEAT
+             || desc->addressV == GPU_ADDRESS_MODE_CLAMP_TO_EDGE)
+         && (desc->addressW == GPU_ADDRESS_MODE_REPEAT
+             || desc->addressW == GPU_ADDRESS_MODE_MIRRORED_REPEAT
+             || desc->addressW == GPU_ADDRESS_MODE_CLAMP_TO_EDGE)
+         && (uint32_t)desc->compare <= GPU_COMPARE_ALWAYS
+         && desc->maxAnisotropy <= 16u
+         && (desc->maxAnisotropy <= 1u
+             || (desc->minFilter == GPU_FILTER_LINEAR
+                 && desc->magFilter == GPU_FILTER_LINEAR
+                 && desc->mipFilter == GPU_MIP_FILTER_LINEAR));
 }
 
 GPU_EXPORT
@@ -52,25 +49,29 @@ GPUResult
 GPUCreateSampler(GPUDevice                  *__restrict device,
                  const GPUSamplerCreateInfo *__restrict info,
                  bool                                   staticIfSupported,
-                 GPUSampler               **__restrict outSampler) {
-  GPUApi *api;
+                 GPUSampler                **__restrict outSampler) {
+  GPUApi   *api;
   GPUResult result;
 
   if (!outSampler) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outSampler = NULL;
 
   if (!device || !info) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
-      info->chain.sType != GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO) {
+
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE
+      && info->chain.sType != GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (!gpu_samplerDescIsValid(&info->desc)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -83,19 +84,22 @@ GPUCreateSampler(GPUDevice                  *__restrict device,
   }
 
   result = api->sampler.createSampler(api,
-                                      device,
-                                      info,
-                                      staticIfSupported,
-                                      outSampler);
+                                     device,
+                                     info,
+                                     staticIfSupported,
+                                     outSampler);
+
   if (result != GPU_OK) {
     return result;
   }
+
   if (!*outSampler) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   (*outSampler)->device = device;
   (*outSampler)->desc   = info->desc;
+
   return GPU_OK;
 }
 

@@ -19,9 +19,22 @@
 
 #include "../../../api/usl_target.h"
 
+#define VK__ADD_EXT_IF(X, R)                                                \
+  if (!strcmp(X, extensions[i].extensionName)) {                            \
+    adapterVk->extensionNames[adapterVk->nEnabledExtensions++] = X;         \
+    R;                                                                      \
+  }                                                                         \
+  assert(adapterVk->nEnabledExtensions < 64);
+
+typedef struct GPUQueuePlanVk {
+  GPUQueueFlagBits bits;
+  uint32_t         familyIndex;
+  uint32_t         count;
+} GPUQueuePlanVk;
+
 #ifdef DEBUG
 GPU_HIDE
-static char const *
+static char const*
 vk__devicetype_string(const VkPhysicalDeviceType type) {
   switch (type) {
     case VK_PHYSICAL_DEVICE_TYPE_OTHER:
@@ -59,11 +72,13 @@ vk_adapterType(VkPhysicalDeviceType type) {
 static bool
 vk_hasQueueCapability(const GPUAdapterVk *adapter,
                       VkQueueFlags        capability) {
+  uint32_t i;
+
   if (!adapter) {
     return false;
   }
 
-  for (uint32_t i = 0; i < adapter->nQueFamilies; i++) {
+  for (i = 0; i < adapter->nQueFamilies; i++) {
     if (adapter->queueFamilyProps[i].queueFlags & capability) {
       return true;
     }
@@ -81,7 +96,7 @@ static uint32_t
 vk_uslTargetProfile(const GPUAdapter *adapter) {
   const GPUInstanceVk *instanceVk;
   const GPUAdapterVk  *adapterVk;
-  uint32_t             version;
+  uint32_t version;
 
   if (!adapter || !adapter->inst || !adapter->inst->_priv || !adapter->_priv) {
     return 0u;
@@ -92,13 +107,14 @@ vk_uslTargetProfile(const GPUAdapter *adapter) {
   version    = instanceVk->apiVersion < adapterVk->props.apiVersion
                  ? instanceVk->apiVersion
                  : adapterVk->props.apiVersion;
+
   return gpu_uslVulkanProfile(VK_API_VERSION_MAJOR(version),
                               VK_API_VERSION_MINOR(version));
 }
 
 static bool
 vk_subgroupStageFromGPU(GPUShaderStageFlags stage,
-                        VkShaderStageFlags  *outStage) {
+                        VkShaderStageFlags *outStage) {
   if (!outStage) {
     return false;
   }
@@ -127,13 +143,11 @@ vk_subgroupStageFromGPU(GPUShaderStageFlags stage,
 }
 
 static bool
-vk_subgroupOperationsFromGPU(
-  GPUBackendSubgroupOperationFlags operations,
-  VkSubgroupFeatureFlags          *outOperations) {
-  const GPUBackendSubgroupOperationFlags knownOperations =
-    GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
-    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
-    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
+vk_subgroupOperationsFromGPU(GPUBackendSubgroupOperationFlags operations,
+                             VkSubgroupFeatureFlags          *outOperations) {
+  const GPUBackendSubgroupOperationFlags knownOperations = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
+                                                           GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
+                                                           GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
   VkSubgroupFeatureFlags native;
 
   if (!outOperations || (operations & ~knownOperations) != 0u) {
@@ -141,48 +155,53 @@ vk_subgroupOperationsFromGPU(
   }
 
   native = 0u;
+
   if ((operations & GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT) != 0u) {
     native |= VK_SUBGROUP_FEATURE_BASIC_BIT;
   }
+
   if ((operations & GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT) != 0u) {
     native |= VK_SUBGROUP_FEATURE_SHUFFLE_BIT;
   }
+
   if ((operations &
        GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT) != 0u) {
     native |= VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT;
   }
+
   *outOperations = native;
+
   return true;
 }
 
 static bool
-vk_supportsSubgroupOperations(
-  const GPUAdapter                 * __restrict adapter,
-  GPUShaderStageFlags                           stage,
-  GPUBackendSubgroupOperationFlags              operations) {
-  GPUAdapterVk          *adapterVk;
+vk_supportsSubgroupOperations(const GPUAdapter     *__restrict adapter,
+                              GPUShaderStageFlags              stage,
+                              GPUBackendSubgroupOperationFlags operations) {
+  GPUAdapterVk *adapterVk;
   VkShaderStageFlags     nativeStage;
   VkSubgroupFeatureFlags nativeOperations;
 
   adapterVk = adapter ? adapter->_priv : NULL;
-  return adapterVk && adapterVk->subgroupSize > 0u &&
-         vk_subgroupStageFromGPU(stage, &nativeStage) &&
-         vk_subgroupOperationsFromGPU(operations, &nativeOperations) &&
-         (adapterVk->subgroupStages & nativeStage) == nativeStage &&
-         (adapterVk->subgroupOperations & nativeOperations) ==
+
+  return adapterVk && adapterVk->subgroupSize > 0u
+         && vk_subgroupStageFromGPU(stage, &nativeStage)
+         && vk_subgroupOperationsFromGPU(operations, &nativeOperations)
+         && (adapterVk->subgroupStages & nativeStage) == nativeStage
+         && (adapterVk->subgroupOperations & nativeOperations) ==
            nativeOperations;
 }
 
 static bool
 vk_hasSubgroupCapability(const GPUAdapterVk *adapter) {
-  return adapter && adapter->subgroupSize > 0u &&
-         (adapter->subgroupStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0u &&
-         (adapter->subgroupOperations & VK_SUBGROUP_FEATURE_BASIC_BIT) != 0u;
+  return adapter && adapter->subgroupSize > 0u
+         && (adapter->subgroupStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0u
+         && (adapter->subgroupOperations & VK_SUBGROUP_FEATURE_BASIC_BIT) != 0u;
 }
 
 #ifdef VK_KHR_cooperative_matrix
 static bool
-vk_subgroupMatrixComponent(VkComponentTypeKHR                  native,
+vk_subgroupMatrixComponent(VkComponentTypeKHR                 native,
                            GPUSubgroupMatrixComponentTypeEXT *outType) {
   if (!outType) {
     return false;
@@ -235,12 +254,15 @@ vk_subgroupMatrixStages(VkShaderStageFlags native) {
   GPUShaderStageFlags stages;
 
   stages = 0u;
+
   if (native & VK_SHADER_STAGE_VERTEX_BIT) {
     stages |= GPU_SHADER_STAGE_VERTEX_BIT;
   }
+
   if (native & VK_SHADER_STAGE_FRAGMENT_BIT) {
     stages |= GPU_SHADER_STAGE_FRAGMENT_BIT;
   }
+
   if (native & VK_SHADER_STAGE_COMPUTE_BIT) {
     stages |= GPU_SHADER_STAGE_COMPUTE_BIT;
   }
@@ -248,60 +270,65 @@ vk_subgroupMatrixStages(VkShaderStageFlags native) {
   if (native & VK_SHADER_STAGE_TASK_BIT_EXT) {
     stages |= GPU_SHADER_STAGE_TASK_BIT;
   }
+
   if (native & VK_SHADER_STAGE_MESH_BIT_EXT) {
     stages |= GPU_SHADER_STAGE_MESH_BIT;
   }
 #endif
+
   return stages;
 }
 
 static GPUResult
-vk_getSubgroupMatrixProperties(
-  const GPUAdapter               * __restrict adapter,
-  uint32_t                       * __restrict inoutPropertyCount,
-  GPUSubgroupMatrixPropertiesEXT * __restrict outProperties) {
-  GPUAdapterVk                  *adapterVk;
+vk_getSubgroupMatrixProperties(const GPUAdapter               *__restrict adapter,
+                               uint32_t                       *__restrict inoutPropertyCount,
+                               GPUSubgroupMatrixPropertiesEXT *__restrict outProperties) {
+  GPUSubgroupMatrixPropertiesEXT property;
+  GPUAdapterVk                     *adapterVk;
   VkCooperativeMatrixPropertiesKHR *native;
-  VkResult                       result;
-  GPUShaderStageFlags            stages;
-  uint32_t                       capacity;
-  uint32_t                       nativeCount;
-  uint32_t                       count;
-  uint32_t                       written;
+  VkResult            result;
+  GPUShaderStageFlags stages;
+  uint32_t            capacity;
+  uint32_t            nativeCount;
+  uint32_t            count;
+  uint32_t            written;
+  uint32_t            i;
+  uint32_t            propertyIndex;
 
   adapterVk = adapter ? adapter->_priv : NULL;
+
   if (!adapterVk || !inoutPropertyCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
-  if (!adapterVk->subgroupMatrix ||
-      !adapterVk->getCooperativeMatrixProperties) {
+
+  if (!adapterVk->subgroupMatrix
+      || !adapterVk->getCooperativeMatrixProperties) {
     *inoutPropertyCount = 0u;
     return GPU_ERROR_UNSUPPORTED;
   }
 
   nativeCount = 0u;
-  result = adapterVk->getCooperativeMatrixProperties(
-    adapterVk->physicalDevice,
-    &nativeCount,
-    NULL
-  );
+  result      = adapterVk->getCooperativeMatrixProperties(adapterVk->physicalDevice,
+                                                          &nativeCount,
+                                                          NULL);
+
   if (result != VK_SUCCESS || nativeCount == 0u) {
     *inoutPropertyCount = 0u;
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  native = calloc(nativeCount, sizeof(*native));
-  if (!native) {
+  if (!(native = calloc(nativeCount, sizeof(*native)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
-  for (uint32_t i = 0u; i < nativeCount; i++) {
+
+  for (i = 0u; i < nativeCount; i++) {
     native[i].sType = VK_STRUCTURE_TYPE_COOPERATIVE_MATRIX_PROPERTIES_KHR;
   }
-  result = adapterVk->getCooperativeMatrixProperties(
-    adapterVk->physicalDevice,
-    &nativeCount,
-    native
-  );
+
+  result = adapterVk->getCooperativeMatrixProperties(adapterVk->physicalDevice,
+                                                     &nativeCount,
+                                                     native);
+
   if (result != VK_SUCCESS) {
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
@@ -311,75 +338,84 @@ vk_getSubgroupMatrixProperties(
   stages   = vk_subgroupMatrixStages(adapterVk->subgroupMatrixStages);
   count    = 0u;
   written  = 0u;
-  for (uint32_t i = 0u; i < nativeCount; i++) {
-    GPUSubgroupMatrixPropertiesEXT property;
 
+  for (propertyIndex = 0u; propertyIndex < nativeCount; propertyIndex++) {
     memset(&property, 0, sizeof(property));
-    if (native[i].scope != VK_SCOPE_SUBGROUP_KHR || stages == 0u ||
-        !vk_subgroupMatrixComponent(native[i].AType, &property.aType) ||
-        !vk_subgroupMatrixComponent(native[i].BType, &property.bType) ||
-        !vk_subgroupMatrixComponent(native[i].CType, &property.cType) ||
-        !vk_subgroupMatrixComponent(native[i].ResultType,
-                                    &property.resultType)) {
+
+    if (native[propertyIndex].scope != VK_SCOPE_SUBGROUP_KHR || stages == 0u
+        || !vk_subgroupMatrixComponent(native[propertyIndex].AType, &property.aType)
+        || !vk_subgroupMatrixComponent(native[propertyIndex].BType, &property.bType)
+        || !vk_subgroupMatrixComponent(native[propertyIndex].CType, &property.cType)
+        || !vk_subgroupMatrixComponent(native[propertyIndex].ResultType,
+                                       &property.resultType)) {
       continue;
     }
 
-    property.m                      = native[i].MSize;
-    property.n                      = native[i].NSize;
-    property.k                      = native[i].KSize;
+    property.m                      = native[propertyIndex].MSize;
+    property.n                      = native[propertyIndex].NSize;
+    property.k                      = native[propertyIndex].KSize;
     property.stages                 = stages;
     property.scope                  = GPU_SUBGROUP_MATRIX_SCOPE_SUBGROUP_EXT;
-    property.saturatingAccumulation = native[i].saturatingAccumulation != 0u;
+    property.saturatingAccumulation = native[propertyIndex].saturatingAccumulation != 0u;
+
     if (outProperties && written < capacity) {
       outProperties[written++] = property;
     }
+
     count++;
   }
+
   free(native);
 
   *inoutPropertyCount = count;
   if (count == 0u) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  return outProperties && capacity < count
-           ? GPU_ERROR_INSUFFICIENT_CAPACITY
-           : GPU_OK;
+
+  return outProperties && capacity < count ? GPU_ERROR_INSUFFICIENT_CAPACITY : GPU_OK;
 }
 
 static bool
 vk_hasSubgroupMatrixProperty(GPUAdapter *adapter) {
   GPUAdapterVk *adapterVk;
-  GPUResult     result;
-  uint32_t      count;
+  GPUResult result;
+  uint32_t  count;
 
   adapterVk = adapter ? adapter->_priv : NULL;
+
   if (!adapterVk || !vk_hasSubgroupCapability(adapterVk)) {
     return false;
   }
 
   adapterVk->subgroupMatrix = true;
-  count = 0u;
-  result = vk_getSubgroupMatrixProperties(adapter, &count, NULL);
+  count                     = 0u;
+  result                    = vk_getSubgroupMatrixProperties(adapter, &count, NULL);
   adapterVk->subgroupMatrix = result == GPU_OK && count > 0u;
+
   return adapterVk->subgroupMatrix;
 }
 #endif
 
 static bool
 vk_addDeviceExtension(GPUAdapterVk *adapter, const char *name) {
+  uint32_t i;
+
   if (!adapter || !name) {
     return false;
   }
-  for (uint32_t i = 0u; i < adapter->nEnabledExtensions; i++) {
+
+  for (i = 0u; i < adapter->nEnabledExtensions; i++) {
     if (strcmp(adapter->extensionNames[i], name) == 0) {
       return true;
     }
   }
+
   if (adapter->nEnabledExtensions >= GPU_ARRAY_LEN(adapter->extensionNames)) {
     return false;
   }
 
   adapter->extensionNames[adapter->nEnabledExtensions++] = (char *)name;
+
   return true;
 }
 
@@ -398,34 +434,35 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
   bool rayTracingPipeline;
   bool executionGraph;
 
-  descriptorIndexing =
-    adapter && adapter->descriptorIndexing &&
-    (vk_featureEnabled(enabledFeatureMask,
-                       GPU_FEATURE_DESCRIPTOR_INDEXING) ||
-     vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_BINDLESS));
-  meshShader = vk_featureEnabled(enabledFeatureMask,
-                                 GPU_FEATURE_MESH_SHADER);
-  rayQuery = vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_RAY_QUERY);
-  rayTracingPipeline = vk_featureEnabled(
-    enabledFeatureMask,
-    GPU_FEATURE_RAY_TRACING_PIPELINE
-  );
-  executionGraph = vk_featureEnabled(enabledFeatureMask,
-                                     GPU_FEATURE_EXECUTION_GRAPH);
+  descriptorIndexing = adapter && adapter->descriptorIndexing
+                       && (vk_featureEnabled(enabledFeatureMask,
+                                             GPU_FEATURE_DESCRIPTOR_INDEXING)
+        || vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_BINDLESS));
+  meshShader         = vk_featureEnabled(enabledFeatureMask,
+                                         GPU_FEATURE_MESH_SHADER);
+  rayQuery           = vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_RAY_QUERY);
+  rayTracingPipeline = vk_featureEnabled(enabledFeatureMask,
+                                         GPU_FEATURE_RAY_TRACING_PIPELINE);
+  executionGraph     = vk_featureEnabled(enabledFeatureMask,
+                                         GPU_FEATURE_EXECUTION_GRAPH);
 
   if (strcmp(name, VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
   }
+
   if (strcmp(name, VK_KHR_16BIT_STORAGE_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
   }
+
   if (strcmp(name, VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask,
                              GPU_FEATURE_SUBGROUP_MATRIX);
   }
+
   if (strcmp(name, VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_ATOMIC64);
   }
+
   if (strcmp(name, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) == 0) {
     return descriptorIndexing || rayQuery;
   }
@@ -436,17 +473,18 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
 #endif
 #ifdef VK_KHR_buffer_device_address
   if (strcmp(name, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) == 0) {
-    return (adapter && adapter->descriptorBuffer) || rayQuery ||
-           rayTracingPipeline || executionGraph ||
-           vk_featureEnabled(enabledFeatureMask,
-                             GPU_FEATURE_BUFFER_DEVICE_ADDRESS);
+    return (adapter && adapter->descriptorBuffer) || rayQuery
+           || rayTracingPipeline || executionGraph
+           || vk_featureEnabled(enabledFeatureMask,
+                                GPU_FEATURE_BUFFER_DEVICE_ADDRESS);
   }
 #endif
 #ifdef VK_AMDX_shader_enqueue
-  if (strcmp(name, VK_AMDX_SHADER_ENQUEUE_EXTENSION_NAME) == 0 ||
-      strcmp(name, VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME) == 0) {
+  if (strcmp(name, VK_AMDX_SHADER_ENQUEUE_EXTENSION_NAME) == 0
+      || strcmp(name, VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME) == 0) {
     return executionGraph;
   }
+
   if (strcmp(name, VK_KHR_MAINTENANCE_5_EXTENSION_NAME) == 0) {
     return executionGraph
 #ifdef VK_KHR_pipeline_binary
@@ -456,9 +494,9 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
   }
 #endif
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
-  if (strcmp(name, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) == 0 ||
-      strcmp(name, VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0 ||
-      strcmp(name, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME) == 0) {
+  if (strcmp(name, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) == 0
+      || strcmp(name, VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0
+      || strcmp(name, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME) == 0) {
     return rayQuery || rayTracingPipeline;
   }
 #endif
@@ -487,18 +525,18 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
 #ifdef VK_KHR_shader_clock
   if (strcmp(name, VK_KHR_SHADER_CLOCK_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask,
-                             GPU_FEATURE_SHADER_SUBGROUP_CLOCK) ||
-           vk_featureEnabled(enabledFeatureMask,
-                             GPU_FEATURE_SHADER_DEVICE_CLOCK);
+                             GPU_FEATURE_SHADER_SUBGROUP_CLOCK)
+           || vk_featureEnabled(enabledFeatureMask,
+                                GPU_FEATURE_SHADER_DEVICE_CLOCK);
   }
 #endif
 #ifdef VK_KHR_compute_shader_derivatives
   if (strcmp(name,
              VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask,
-                             GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS) ||
-           vk_featureEnabled(enabledFeatureMask,
-                             GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR);
+                             GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS)
+           || vk_featureEnabled(enabledFeatureMask,
+                                GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR);
   }
 #endif
 #ifdef VK_KHR_shader_untyped_pointers
@@ -509,26 +547,23 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
 #ifdef VK_KHR_copy_memory_indirect
   if (strcmp(name, VK_KHR_COPY_MEMORY_INDIRECT_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask,
-                             GPU_FEATURE_INDIRECT_MEMORY_COPY) ||
-           vk_featureEnabled(
-             enabledFeatureMask,
-             GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
-           );
+                             GPU_FEATURE_INDIRECT_MEMORY_COPY)
+           || vk_featureEnabled(enabledFeatureMask,
+                                GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY);
   }
 #ifdef VK_KHR_format_feature_flags2
   if (strcmp(name, VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME) == 0) {
-    return vk_featureEnabled(
-      enabledFeatureMask,
-      GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
-    );
+    return vk_featureEnabled(enabledFeatureMask,
+                             GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY);
   }
 #endif
 #endif
   if (strcmp(name, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME) == 0) {
-    return (adapter && (adapter->signedZeroInfNanPreserve || adapter->denormPreserve ||
-                        adapter->roundingRTE || adapter->floatControls2)) ||
-           rayQuery || rayTracingPipeline || meshShader;
+    return (adapter && (adapter->signedZeroInfNanPreserve || adapter->denormPreserve
+                        || adapter->roundingRTE || adapter->floatControls2))
+           || rayQuery || rayTracingPipeline || meshShader;
   }
+
   if (strcmp(name, VK_KHR_SPIRV_1_4_EXTENSION_NAME) == 0) {
     return rayQuery || rayTracingPipeline || meshShader;
   }
@@ -539,22 +574,27 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
 static uint32_t
 vk_collectDeviceExtensions(const GPUAdapterVk *adapter,
                            uint64_t            enabledFeatureMask,
-                           const char         **extensions,
-                           uint32_t             capacity) {
+                           const char        **extensions,
+                           uint32_t            capacity) {
   uint32_t count;
+  uint32_t i;
 
   count = 0u;
-  for (uint32_t i = 0u; i < adapter->nEnabledExtensions; i++) {
+
+  for (i = 0u; i < adapter->nEnabledExtensions; i++) {
     if (!vk_extensionEnabled(adapter,
                              adapter->extensionNames[i],
                              enabledFeatureMask)) {
       continue;
     }
+
     if (count >= capacity) {
       return 0u;
     }
+
     extensions[count++] = adapter->extensionNames[i];
   }
+
   return count;
 }
 
@@ -563,35 +603,42 @@ static bool
 vk_hasHostVisibleDescriptorBufferMemory(VkPhysicalDevice physicalDevice,
                                         VkDevice         device) {
   VkPhysicalDeviceMemoryProperties memoryProperties;
-  VkBufferCreateInfo                info = {0};
-  VkMemoryRequirements              requirements;
-  VkBuffer                          buffer;
-  bool                              supported;
+  VkBufferCreateInfo               info = {0};
+  VkMemoryRequirements             requirements;
+  VkBuffer buffer;
+  uint32_t i;
+  bool supported;
 
   if (!physicalDevice || !device) {
     return false;
   }
-  info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  info.size  = 256u;
-  info.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+
+  info.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  info.size        = 256u;
+  info.usage       = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
                VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
                VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
   info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
   if (vkCreateBuffer(device, &info, NULL, &buffer) != VK_SUCCESS) {
     return false;
   }
+
   vkGetBufferMemoryRequirements(device, buffer, &requirements);
   vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
   supported = false;
-  for (uint32_t i = 0u; i < memoryProperties.memoryTypeCount; i++) {
-    if ((requirements.memoryTypeBits & (1u << i)) != 0u &&
-        (memoryProperties.memoryTypes[i].propertyFlags &
+
+  for (i = 0u; i < memoryProperties.memoryTypeCount; i++) {
+    if ((requirements.memoryTypeBits & (1u << i)) != 0u
+        && (memoryProperties.memoryTypes[i].propertyFlags &
          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u) {
       supported = true;
       break;
     }
   }
+
   vkDestroyBuffer(device, buffer, NULL);
+
   return supported;
 }
 #endif
@@ -600,31 +647,33 @@ static void
 vk_querySubgroupCapabilities(GPUInstanceVk *instance,
                              GPUAdapterVk  *adapter,
                              bool           sizeControl) {
-  PFN_vkGetPhysicalDeviceProperties2 getProperties2;
   VkPhysicalDeviceSubgroupSizeControlProperties sizeProperties = {0};
-  VkPhysicalDeviceSubgroupProperties            subgroup = {0};
-  VkPhysicalDeviceProperties2                   properties = {0};
+  VkPhysicalDeviceSubgroupProperties            subgroup       = {0};
+  VkPhysicalDeviceProperties2                   properties     = {0};
+  PFN_vkGetPhysicalDeviceProperties2 getProperties2;
 
-  if (!instance || !adapter ||
-      instance->apiVersion < VK_API_VERSION_1_1 ||
-      adapter->props.apiVersion < VK_API_VERSION_1_1) {
+  if (!instance || !adapter
+      || instance->apiVersion < VK_API_VERSION_1_1
+      || adapter->props.apiVersion < VK_API_VERSION_1_1) {
     return;
   }
 
   getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
     vkGetInstanceProcAddr(instance->inst, "vkGetPhysicalDeviceProperties2");
+
   if (!getProperties2) {
     return;
   }
 
-  subgroup.sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
+  subgroup.sType   = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
   properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
   properties.pNext = &subgroup;
+
   if (sizeControl) {
-    sizeProperties.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES;
-    subgroup.pNext = &sizeProperties;
+    sizeProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES;
+    subgroup.pNext       = &sizeProperties;
   }
+
   getProperties2(adapter->physicalDevice, &properties);
 
   adapter->subgroupOperations = subgroup.supportedOperations;
@@ -632,214 +681,470 @@ vk_querySubgroupCapabilities(GPUInstanceVk *instance,
   adapter->subgroupSize       = subgroup.subgroupSize;
   adapter->minSubgroupSize    = subgroup.subgroupSize;
   adapter->maxSubgroupSize    = subgroup.subgroupSize;
-  if (sizeControl && sizeProperties.minSubgroupSize > 0u &&
-      sizeProperties.maxSubgroupSize >= sizeProperties.minSubgroupSize) {
+
+  if (sizeControl && sizeProperties.minSubgroupSize > 0u
+      && sizeProperties.maxSubgroupSize >= sizeProperties.minSubgroupSize) {
     adapter->minSubgroupSize = sizeProperties.minSubgroupSize;
     adapter->maxSubgroupSize = sizeProperties.maxSubgroupSize;
   }
 }
 
+static uint32_t
+vk_limitU32(uint32_t implementationLimit, uint32_t nativeLimit) {
+  return implementationLimit < nativeLimit ? implementationLimit : nativeLimit;
+}
+
+static void
+vk_getLimits(const GPUAdapter *__restrict adapter,
+             GPULimits        *__restrict outLimits) {
+  GPUAdapterVk                 *adapterVk;
+  const VkPhysicalDeviceLimits *native;
+
+  adapterVk = adapter ? adapter->_priv : NULL;
+
+  if (!adapterVk || !outLimits) {
+    return;
+  }
+
+  native                                     = &adapterVk->props.limits;
+  outLimits->maxBindGroups                   = vk_limitU32(outLimits->maxBindGroups,
+                                                           native->maxBoundDescriptorSets);
+  outLimits->maxBindingsPerGroup             = vk_limitU32(outLimits->maxBindingsPerGroup,
+                                                           native->maxPerStageResources);
+  outLimits->maxDynamicUniformBuffers        = vk_limitU32(outLimits->maxDynamicUniformBuffers,
+                                                           native->maxDescriptorSetUniformBuffersDynamic);
+  outLimits->maxDynamicStorageBuffers        = vk_limitU32(outLimits->maxDynamicStorageBuffers,
+                                                           native->maxDescriptorSetStorageBuffersDynamic);
+  outLimits->minUniformBufferOffsetAlignment = native->minUniformBufferOffsetAlignment;
+  outLimits->minStorageBufferOffsetAlignment = native->minStorageBufferOffsetAlignment;
+  outLimits->maxColorAttachments             = vk_limitU32(outLimits->maxColorAttachments,
+                                                           native->maxColorAttachments);
+  outLimits->maxComputeWorkgroupSizeX        = native->maxComputeWorkGroupSize[0];
+  outLimits->maxComputeWorkgroupSizeY        = native->maxComputeWorkGroupSize[1];
+  outLimits->maxComputeWorkgroupSizeZ        = native->maxComputeWorkGroupSize[2];
+  outLimits->maxPushConstantSizeBytes        = native->maxPushConstantsSize;
+  outLimits->maxSamplerAnisotropy            = adapterVk->features.samplerAnisotropy
+      ? vk_limitU32(16u, (uint32_t)native->maxSamplerAnisotropy)
+      : 1u;
+
+  if (vk_hasSubgroupCapability(adapterVk)) {
+    outLimits->minSubgroupSize = adapterVk->minSubgroupSize;
+    outLimits->maxSubgroupSize = adapterVk->maxSubgroupSize;
+  }
+}
+
+static void
+vk_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
+                         GPUFormat                         format,
+                         GPUFormatCapabilities *__restrict outCaps) {
+  VkImageFormatProperties imageProperties;
+  VkFormatProperties      properties;
+  GPUAdapterVk *adapterVk;
+  VkFormat             nativeFormat;
+  VkFormatFeatureFlags features;
+  VkImageUsageFlags    imageUsage;
+
+  adapterVk = adapter ? adapter->_priv : NULL;
+
+  if (!adapterVk || !outCaps
+      || !vk_formatFromGPU(format, &nativeFormat)) {
+    if (outCaps) {
+      memset(outCaps, 0, sizeof(*outCaps));
+    }
+
+    return;
+  }
+
+  vkGetPhysicalDeviceFormatProperties(adapterVk->physicalDevice,
+                                      nativeFormat,
+                                      &properties);
+  features = properties.optimalTilingFeatures;
+  memset(outCaps, 0, sizeof(*outCaps));
+  outCaps->sampled         = (features & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0u;
+  outCaps->filterable      = (features & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0u;
+  outCaps->storage         = (features & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0u;
+  outCaps->colorAttachment = (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) != 0u;
+  outCaps->blendable       = (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0u;
+  outCaps->depthStencil    = (features & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0u;
+
+  if (outCaps->colorAttachment || outCaps->depthStencil) {
+    imageUsage = outCaps->depthStencil
+                   ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+                   : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    if (vkGetPhysicalDeviceImageFormatProperties(adapterVk->physicalDevice,
+                                                 nativeFormat,
+                                                 VK_IMAGE_TYPE_2D,
+                                                 VK_IMAGE_TILING_OPTIMAL,
+                                                 imageUsage,
+                                                 0u,
+                                                 &imageProperties) == VK_SUCCESS) {
+      outCaps->supportedSampleCounts = imageProperties.sampleCounts &
+        (GPU_SAMPLE_COUNT_1_BIT |
+         GPU_SAMPLE_COUNT_2_BIT |
+         GPU_SAMPLE_COUNT_4_BIT |
+         GPU_SAMPLE_COUNT_8_BIT);
+    }
+  }
+}
+
+static bool
+vk__queueFlags(GPUQueueFlagBits bits, VkQueueFlags *outFlags) {
+  VkQueueFlags flags;
+  uint32_t     mappedBits;
+
+  flags      = 0u;
+  mappedBits = GPU_QUEUE_GRAPHICS_BIT |
+               GPU_QUEUE_COMPUTE_BIT |
+               GPU_QUEUE_TRANSFER_BIT;
+
+  if (bits & GPU_QUEUE_GRAPHICS_BIT)
+    flags |= VK_QUEUE_GRAPHICS_BIT;
+
+  if (bits & GPU_QUEUE_COMPUTE_BIT)
+    flags |= VK_QUEUE_COMPUTE_BIT;
+
+  if (bits & GPU_QUEUE_TRANSFER_BIT)
+    flags |= VK_QUEUE_TRANSFER_BIT;
+
+  *outFlags = flags;
+
+  return ((uint32_t)bits & ~mappedBits) == 0u;
+}
+
+static uint32_t
+vk__flagCount(VkQueueFlags flags) {
+  uint32_t count;
+
+  count = 0u;
+
+  while (flags) {
+    flags &= flags - 1u;
+    count++;
+  }
+
+  return count;
+}
+
+static uint32_t
+vk__findQueueFamily(const GPUAdapterVk *adapterVk,
+                    GPUQueueFlagBits    requiredBits,
+                    GPUQueueFlagBits    optionalBits,
+                    uint32_t            count,
+                    VkQueueFlags        nativeRequiredFlags) {
+  const VkQueueFamilyProperties *family;
+  VkQueueFlags requiredFlags;
+  VkQueueFlags optionalFlags;
+  VkQueueFlags commonFlags;
+  uint32_t     bestIndex;
+  uint32_t     bestScore;
+  uint32_t     i;
+  uint32_t     missingOptional;
+  uint32_t     extraCapabilities;
+  uint32_t     score;
+
+  requiredFlags = 0u;
+  optionalFlags = 0u;
+
+  if (!vk__queueFlags(requiredBits, &requiredFlags)) {
+    return UINT32_MAX;
+  }
+
+  requiredFlags |= nativeRequiredFlags;
+  (void)vk__queueFlags(optionalBits, &optionalFlags);
+  commonFlags = VK_QUEUE_GRAPHICS_BIT |
+                  VK_QUEUE_COMPUTE_BIT |
+                  VK_QUEUE_TRANSFER_BIT |
+                  VK_QUEUE_SPARSE_BINDING_BIT;
+  bestIndex   = UINT32_MAX;
+  bestScore   = UINT32_MAX;
+
+  for (i = 0; i < adapterVk->nQueFamilies; i++) {
+    family = &adapterVk->queueFamilyProps[i];
+
+    if (family->queueCount < count
+        || (family->queueFlags & requiredFlags) != requiredFlags) {
+      continue;
+    }
+
+    missingOptional   = vk__flagCount(optionalFlags & ~family->queueFlags);
+    extraCapabilities = vk__flagCount((family->queueFlags & commonFlags) & ~requiredFlags);
+    score             = missingOptional * 16u + extraCapabilities;
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex;
+}
+
+static GPUQueuePlanVk*
+vk__findQueuePlan(GPUQueuePlanVk *plans,
+                  uint32_t        planCount,
+                  uint32_t        familyIndex) {
+  uint32_t i;
+
+  for (i = 0; i < planCount; i++) {
+    if (plans[i].familyIndex == familyIndex) {
+      return &plans[i];
+    }
+  }
+
+  return NULL;
+}
+
 GPU_HIDE
-GPUAdapter *
+GPUAdapter*
 vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
-  GPUAdapter                              *adapter;
-  GPUAdapterVk                            *adapterVk;
-  GPUInstanceVk                           *instanceVk;
-  VkExtensionProperties                   *extensions;
-  PFN_vkGetPhysicalDeviceFeatures2KHR       getFeatures2;
-  VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicFeatures = {0};
-  VkPhysicalDeviceFeatures2KHR              features2 = {0};
-  VkPhysicalDeviceShaderFloat16Int8Features float16Features = {0};
-  VkPhysicalDeviceFeatures2KHR              float16Features2 = {0};
-  VkPhysicalDevice16BitStorageFeatures      storage16Features = {0};
-  VkPhysicalDeviceFeatures2                 storage16Features2 = {0};
-  VkPhysicalDeviceVulkanMemoryModelFeatures memoryModelFeatures = {0};
-  VkPhysicalDeviceFeatures2                 memoryModelFeatures2 = {0};
-  VkPhysicalDeviceShaderAtomicInt64Features atomic64Features = {0};
-  VkPhysicalDeviceFeatures2                 atomic64Features2 = {0};
+  GPUAdapter                         *adapter;
+  GPUAdapterVk                       *adapterVk;
+  GPUInstanceVk                      *instanceVk;
+  VkExtensionProperties              *extensions;
+  PFN_vkGetPhysicalDeviceFeatures2KHR getFeatures2;
+  VkPhysicalDeviceDynamicRenderingFeaturesKHR  dynamicFeatures      = {0};
+  VkPhysicalDeviceFeatures2KHR                 features2            = {0};
+  VkPhysicalDeviceShaderFloat16Int8Features    float16Features      = {0};
+  VkPhysicalDeviceFeatures2KHR                 float16Features2     = {0};
+  VkPhysicalDevice16BitStorageFeatures         storage16Features    = {0};
+  VkPhysicalDeviceFeatures2                    storage16Features2   = {0};
+  VkPhysicalDeviceVulkanMemoryModelFeatures    memoryModelFeatures  = {0};
+  VkPhysicalDeviceFeatures2                    memoryModelFeatures2 = {0};
+  VkPhysicalDeviceShaderAtomicInt64Features    atomic64Features     = {0};
+  VkPhysicalDeviceFeatures2                    atomic64Features2    = {0};
 #ifdef VK_EXT_shader_atomic_float
-  VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatAtomicFeatures = {0};
+  VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatAtomicFeatures  = {0};
   VkPhysicalDeviceFeatures2                    floatAtomicFeatures2 = {0};
-  bool                                         floatAtomicExtension = false;
+  bool floatAtomicExtension = false;
 #endif
-  VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
-  VkPhysicalDeviceFeatures2                  descriptorFeatures2 = {0};
-  VkPhysicalDeviceTimelineSemaphoreFeatures  timelineFeatures = {0};
-  VkPhysicalDeviceFeatures2                  timelineFeatures2 = {0};
-  VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {0};
-  VkPhysicalDeviceFeatures2                  sync2Features2 = {0};
+  VkPhysicalDeviceDescriptorIndexingFeatures          descriptorFeatures          = {0};
+  VkPhysicalDeviceFeatures2                           descriptorFeatures2         = {0};
+  VkPhysicalDeviceTimelineSemaphoreFeatures           timelineFeatures            = {0};
+  VkPhysicalDeviceFeatures2                           timelineFeatures2           = {0};
+  VkPhysicalDeviceSynchronization2FeaturesKHR         sync2Features               = {0};
+  VkPhysicalDeviceFeatures2                           sync2Features2              = {0};
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
-  VkPhysicalDevicePresentIdFeaturesKHR       presentIdFeatures = {0};
-  VkPhysicalDevicePresentWaitFeaturesKHR     presentWaitFeatures = {0};
-  VkPhysicalDeviceFeatures2                  presentFeatures2 = {0};
+  VkPhysicalDevicePresentIdFeaturesKHR                presentIdFeatures           = {0};
+  VkPhysicalDevicePresentWaitFeaturesKHR              presentWaitFeatures         = {0};
+  VkPhysicalDeviceFeatures2                           presentFeatures2            = {0};
 #endif
-  VkPhysicalDeviceBufferDeviceAddressFeatures bufferAddressFeatures = {0};
-  VkPhysicalDeviceFeatures2                  bufferAddressFeatures2 = {0};
+  VkPhysicalDeviceBufferDeviceAddressFeatures         bufferAddressFeatures       = {0};
+  VkPhysicalDeviceFeatures2                           bufferAddressFeatures2      = {0};
 #ifdef VK_EXT_descriptor_buffer
-  VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptorBufferFeatures = {0};
-  VkPhysicalDeviceFeatures2                    descriptorBufferFeatures2 = {0};
-  VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptorBufferProperties = {0};
-  VkPhysicalDeviceProperties2                  descriptorBufferProperties2 = {0};
+  VkPhysicalDeviceDescriptorBufferFeaturesEXT         descriptorBufferFeatures    = {0};
+  VkPhysicalDeviceFeatures2                           descriptorBufferFeatures2   = {0};
+  VkPhysicalDeviceDescriptorBufferPropertiesEXT       descriptorBufferProperties  = {0};
+  VkPhysicalDeviceProperties2                         descriptorBufferProperties2 = {0};
 #endif
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
-  VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationFeatures = {0};
-  VkPhysicalDeviceRayQueryFeaturesKHR          rayQueryFeatures = {0};
-  VkPhysicalDeviceFeatures2                    rayQueryFeatures2 = {0};
-  VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationProperties = {0};
-  VkPhysicalDeviceProperties2                  rayQueryProperties2 = {0};
+  VkPhysicalDeviceAccelerationStructureFeaturesKHR    accelerationFeatures        = {0};
+  VkPhysicalDeviceRayQueryFeaturesKHR                 rayQueryFeatures            = {0};
+  VkPhysicalDeviceFeatures2                           rayQueryFeatures2           = {0};
+  VkPhysicalDeviceAccelerationStructurePropertiesKHR  accelerationProperties      = {0};
+  VkPhysicalDeviceProperties2                         rayQueryProperties2         = {0};
 #endif
 #ifdef VK_KHR_ray_tracing_pipeline
-  VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayPipelineFeatures = {0};
-  VkPhysicalDeviceFeatures2                     rayPipelineFeatures2 = {0};
-  VkPhysicalDeviceRayTracingPipelinePropertiesKHR rayPipelineProperties = {0};
-  VkPhysicalDeviceProperties2                   rayPipelineProperties2 = {0};
+  VkPhysicalDeviceRayTracingPipelineFeaturesKHR       rayPipelineFeatures         = {0};
+  VkPhysicalDeviceFeatures2                           rayPipelineFeatures2        = {0};
+  VkPhysicalDeviceRayTracingPipelinePropertiesKHR     rayPipelineProperties       = {0};
+  VkPhysicalDeviceProperties2                         rayPipelineProperties2      = {0};
 #endif
 #ifdef VK_KHR_fragment_shading_rate
-  VkPhysicalDeviceFragmentShadingRateFeaturesKHR vrsFeatures = {0};
-  VkPhysicalDeviceFeatures2                  vrsFeatures2 = {0};
-  VkPhysicalDeviceFragmentShadingRatePropertiesKHR vrsProps = {0};
-  VkPhysicalDeviceProperties2                vrsProps2 = {0};
+  VkPhysicalDeviceFragmentShadingRateFeaturesKHR      vrsFeatures                 = {0};
+  VkPhysicalDeviceFeatures2                           vrsFeatures2                = {0};
+  VkPhysicalDeviceFragmentShadingRatePropertiesKHR    vrsProps                    = {0};
+  VkPhysicalDeviceProperties2                         vrsProps2                   = {0};
 #endif
 #ifdef VK_EXT_mesh_shader
-  VkPhysicalDeviceMeshShaderFeaturesEXT      meshFeatures = {0};
-  VkPhysicalDeviceFeatures2                  meshFeatures2 = {0};
-  VkPhysicalDeviceMeshShaderPropertiesEXT    meshProperties = {0};
-  VkPhysicalDeviceProperties2                meshProperties2 = {0};
+  VkPhysicalDeviceMeshShaderFeaturesEXT               meshFeatures                = {0};
+  VkPhysicalDeviceFeatures2                           meshFeatures2               = {0};
+  VkPhysicalDeviceMeshShaderPropertiesEXT             meshProperties              = {0};
+  VkPhysicalDeviceProperties2                         meshProperties2             = {0};
 #endif
 #ifdef VK_KHR_cooperative_matrix
-  VkPhysicalDeviceCooperativeMatrixFeaturesKHR cooperativeFeatures = {0};
-  VkPhysicalDeviceFeatures2                  cooperativeFeatures2 = {0};
-  VkPhysicalDeviceCooperativeMatrixPropertiesKHR cooperativeProperties = {0};
-  VkPhysicalDeviceProperties2                cooperativeProperties2 = {0};
+  VkPhysicalDeviceCooperativeMatrixFeaturesKHR        cooperativeFeatures         = {0};
+  VkPhysicalDeviceFeatures2                           cooperativeFeatures2        = {0};
+  VkPhysicalDeviceCooperativeMatrixPropertiesKHR      cooperativeProperties       = {0};
+  VkPhysicalDeviceProperties2                         cooperativeProperties2      = {0};
 #endif
 #ifdef VK_KHR_pipeline_binary
-  VkPhysicalDeviceMaintenance5FeaturesKHR    maintenance5Features = {0};
-  VkPhysicalDevicePipelineBinaryFeaturesKHR  pipelineBinaryFeatures = {0};
-  VkPhysicalDeviceFeatures2                  pipelineBinaryFeatures2 = {0};
-  VkPhysicalDevicePipelineBinaryPropertiesKHR pipelineBinaryProperties = {0};
-  VkPhysicalDeviceProperties2                pipelineBinaryProperties2 = {0};
+  VkPhysicalDeviceMaintenance5FeaturesKHR             maintenance5Features        = {0};
+  VkPhysicalDevicePipelineBinaryFeaturesKHR           pipelineBinaryFeatures      = {0};
+  VkPhysicalDeviceFeatures2                           pipelineBinaryFeatures2     = {0};
+  VkPhysicalDevicePipelineBinaryPropertiesKHR         pipelineBinaryProperties    = {0};
+  VkPhysicalDeviceProperties2                         pipelineBinaryProperties2   = {0};
 #endif
 #ifdef VK_KHR_shader_clock
-  VkPhysicalDeviceShaderClockFeaturesKHR     shaderClockFeatures = {0};
-  VkPhysicalDeviceFeatures2                  shaderClockFeatures2 = {0};
+  VkPhysicalDeviceShaderClockFeaturesKHR              shaderClockFeatures         = {0};
+  VkPhysicalDeviceFeatures2                           shaderClockFeatures2        = {0};
 #endif
 #ifdef VK_KHR_compute_shader_derivatives
-  VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
-                                                derivativeFeatures = {0};
-  VkPhysicalDeviceFeatures2                     derivativeFeatures2 = {0};
+  VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR derivativeFeatures          = {0};
+  VkPhysicalDeviceFeatures2                           derivativeFeatures2         = {0};
 #endif
 #ifdef VK_KHR_shader_fma
-  VkPhysicalDeviceShaderFmaFeaturesKHR fmaFeatures = {0};
-  VkPhysicalDeviceFeatures2            fmaFeatures2 = {0};
-  bool                                shaderFmaExtension = false;
+  VkPhysicalDeviceShaderFmaFeaturesKHR                fmaFeatures                 = {0};
+  VkPhysicalDeviceFeatures2                           fmaFeatures2                = {0};
+  bool shaderFmaExtension = false;
 #endif
 #ifdef VK_KHR_shader_float_controls2
-  VkPhysicalDeviceShaderFloatControls2FeaturesKHR floatControls2Features = {0};
+  VkPhysicalDeviceShaderFloatControls2FeaturesKHR floatControls2Features  = {0};
   VkPhysicalDeviceFeatures2                       floatControls2Features2 = {0};
-  bool                                           floatControls2Extension = false;
+  bool floatControls2Extension = false;
 #endif
 #ifdef VK_KHR_shader_untyped_pointers
-  VkPhysicalDeviceShaderUntypedPointersFeaturesKHR
-                                                untypedPointerFeatures = {0};
-  VkPhysicalDeviceFeatures2                     untypedPointerFeatures2 = {0};
+  VkPhysicalDeviceShaderUntypedPointersFeaturesKHR untypedPointerFeatures     = {0};
+  VkPhysicalDeviceFeatures2                        untypedPointerFeatures2    = {0};
 #endif
 #ifdef VK_KHR_copy_memory_indirect
-  VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR
-                                                indirectCopyFeatures = {0};
-  VkPhysicalDeviceFeatures2                     indirectCopyFeatures2 = {0};
-  VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR
-                                                indirectCopyProperties = {0};
-  VkPhysicalDeviceProperties2                   indirectCopyProperties2 = {0};
+  VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR    indirectCopyFeatures       = {0};
+  VkPhysicalDeviceFeatures2                        indirectCopyFeatures2      = {0};
+  VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR  indirectCopyProperties     = {0};
+  VkPhysicalDeviceProperties2                      indirectCopyProperties2    = {0};
 #endif
 #ifdef VK_AMDX_shader_enqueue
-  VkPhysicalDeviceShaderEnqueueFeaturesAMDX executionGraphFeatures = {0};
-  VkPhysicalDeviceFeatures2                 executionGraphFeatures2 = {0};
-  VkPhysicalDeviceMaintenance5FeaturesKHR   executionGraphMaintenance5 = {0};
+  VkPhysicalDeviceShaderEnqueueFeaturesAMDX        executionGraphFeatures     = {0};
+  VkPhysicalDeviceFeatures2                        executionGraphFeatures2    = {0};
+  VkPhysicalDeviceMaintenance5FeaturesKHR          executionGraphMaintenance5 = {0};
 #endif
 #ifdef VK_AMDX_shader_enqueue
-  bool                                      executionGraphExtension;
-  bool                                      executionGraphMaintenance5Extension;
-  bool                                      pipelineLibraryExtension;
+  bool executionGraphExtension;
+  bool executionGraphMaintenance5Extension;
+  bool pipelineLibraryExtension;
 #endif
-  VkResult                                  err;
-  uint32_t                                  i, nExtensions;
-  bool                                      incrementalPresentEnabled;
-  bool                                      displayTimingEnabled;
-  bool                                      dynamicExtension;
-  bool                                      dynamicCore;
-  bool                                      descriptorExtension;
-  bool                                      subgroupSizeControl;
-  bool                                      float16Extension;
-  bool                                      float16Core;
-  bool                                      storage16Extension;
-  bool                                      storage16Core;
-  bool                                      memoryModelExtension;
-  bool                                      memoryModelCore;
-  bool                                      atomic64Extension;
-  bool                                      atomic64Core;
-  bool                                      descriptorCore;
-  bool                                      bufferAddressExtension;
-  bool                                      bufferAddressCore;
+  VkResult err;
+  uint32_t i;
+  uint32_t nExtensions;
+  bool incrementalPresentEnabled;
+  bool displayTimingEnabled;
+  bool dynamicExtension;
+  bool dynamicCore;
+  bool descriptorExtension;
+  bool subgroupSizeControl;
+  bool float16Extension;
+  bool float16Core;
+  bool storage16Extension;
+  bool storage16Core;
+  bool memoryModelExtension;
+  bool memoryModelCore;
+  bool atomic64Extension;
+  bool atomic64Core;
+  bool descriptorCore;
+  bool bufferAddressExtension;
+  bool bufferAddressCore;
 #ifdef VK_EXT_descriptor_buffer
-  bool                                      descriptorBufferExtension;
+  bool descriptorBufferExtension;
 #endif
-  bool                                      timelineCore;
-  bool                                      sync2Extension;
-  bool                                      sync2Core;
+  bool timelineCore;
+  bool sync2Extension;
+  bool sync2Core;
 #if defined(_WIN32) || defined(WIN32) || \
     defined(__linux__) || defined(__ANDROID__)
-  bool                                      externalInteropCore;
-  bool                                      externalMemoryExtension;
-  bool                                      externalSemaphoreExtension;
+  bool externalInteropCore;
+  bool externalMemoryExtension;
+  bool externalSemaphoreExtension;
 #endif
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
-  bool                                      presentIdExtension;
-  bool                                      presentWaitExtension;
+  bool presentIdExtension;
+  bool presentWaitExtension;
 #endif
-  bool                                      maintenance1Extension;
-  bool                                      maintenance1Core;
+  bool maintenance1Extension;
+  bool maintenance1Core;
 #ifdef VK_KHR_pipeline_binary
-  bool                                      maintenance5Extension;
-  bool                                      pipelineBinaryExtension;
+  bool maintenance5Extension;
+  bool pipelineBinaryExtension;
 #endif
 #if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
-  bool                                      maintenance5Core;
+  bool maintenance5Core;
 #endif
-  bool                                      spirv14Extension;
-  bool                                      shaderFloatControlsExtension;
-  bool                                      spirv14Core;
+  bool spirv14Extension;
+  bool shaderFloatControlsExtension;
+  bool spirv14Core;
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
-  bool                                      accelerationExtension;
-  bool                                      rayQueryExtension;
-  bool                                      deferredHostExtension;
-  bool                                      rayQueryDependencies;
+  bool accelerationExtension;
+  bool rayQueryExtension;
+  bool deferredHostExtension;
+  bool rayQueryDependencies;
 #endif
 #ifdef VK_KHR_ray_tracing_pipeline
-  bool                                      rayPipelineExtension;
+  bool rayPipelineExtension;
 #endif
 #ifdef VK_KHR_fragment_shading_rate
-  bool                                      vrsExtension;
+  bool vrsExtension;
 #endif
 #ifdef VK_EXT_mesh_shader
-  bool                                      meshExtension;
-  bool                                      spirv14ExtensionUsable;
+  bool meshExtension;
+  bool spirv14ExtensionUsable;
 #endif
 #ifdef VK_KHR_cooperative_matrix
-  bool                                      cooperativeExtension;
+  bool cooperativeExtension;
 #endif
 #ifdef VK_KHR_shader_clock
-  bool                                      shaderClockExtension;
+  bool shaderClockExtension;
 #endif
 #ifdef VK_KHR_compute_shader_derivatives
-  bool                                      derivativeExtension;
+  bool derivativeExtension;
 #endif
 #ifdef VK_KHR_shader_untyped_pointers
-  bool                                      untypedPointerExtension;
+  bool untypedPointerExtension;
 #endif
 #ifdef VK_KHR_copy_memory_indirect
-  bool                                      indirectCopyExtension;
-  bool                                      formatFeatureFlags2Extension;
-  bool                                      formatFeatureFlags2Core;
+  bool indirectCopyExtension;
+  bool formatFeatureFlags2Extension;
+  bool formatFeatureFlags2Core;
+#endif
+
+#ifdef VK_KHR_fragment_shading_rate
+  VkFormatProperties formatProps;
+#endif
+  PFN_vkGetPhysicalDeviceProperties2             getFloatProperties;
+#ifdef VK_KHR_pipeline_binary
+  PFN_vkGetPhysicalDeviceProperties2             getBinaryProperties;
+#endif
+#ifdef VK_AMDX_shader_enqueue
+  PFN_vkGetPhysicalDeviceProperties2             getGraphProperties;
+#endif
+#ifdef VK_KHR_copy_memory_indirect
+  PFN_vkGetPhysicalDeviceProperties2             getCopyProperties;
+#endif
+#ifdef VK_EXT_descriptor_buffer
+  PFN_vkGetPhysicalDeviceProperties2             getDescriptorProperties;
+#endif
+#ifdef VK_KHR_cooperative_matrix
+  PFN_vkGetPhysicalDeviceProperties2             getMatrixProperties;
+#endif
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+  PFN_vkGetPhysicalDeviceProperties2             getRayProperties;
+#endif
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+#ifdef VK_KHR_ray_tracing_pipeline
+  PFN_vkGetPhysicalDeviceProperties2             getPipelineProperties;
+#endif
+#endif
+#ifdef VK_KHR_fragment_shading_rate
+  PFN_vkGetPhysicalDeviceProperties2             getRateProperties;
+  PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR getRates;
+  VkPhysicalDeviceFragmentShadingRateKHR *rates;
+#endif
+#ifdef VK_EXT_mesh_shader
+  PFN_vkGetPhysicalDeviceProperties2 getMeshProperties;
+#endif
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+#ifdef VK_KHR_ray_tracing_pipeline
+  uint64_t maxSize;
+  uint32_t axisIndex;
+#endif
+#endif
+#ifdef VK_KHR_fragment_shading_rate
+  uint32_t rateCount;
+#endif
+#ifdef VK_KHR_shader_float_controls2
+  bool core;
+#endif
+#ifdef VK_KHR_copy_memory_indirect
+  bool memoryCopy;
+  bool textureCopy;
 #endif
 #ifdef VK_AMDX_shader_enqueue
   executionGraphExtension             = false;
@@ -869,9 +1174,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #ifdef VK_EXT_descriptor_buffer
   descriptorBufferExtension = false;
 #endif
-  timelineCore              = false;
-  sync2Extension            = false;
-  sync2Core                 = false;
+  timelineCore   = false;
+  sync2Extension = false;
+  sync2Core      = false;
 #if defined(_WIN32) || defined(WIN32) || \
     defined(__linux__) || defined(__ANDROID__)
   externalInteropCore        = false;
@@ -879,60 +1184,62 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   externalSemaphoreExtension = false;
 #endif
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
-  presentIdExtension        = false;
-  presentWaitExtension      = false;
+  presentIdExtension   = false;
+  presentWaitExtension = false;
 #endif
-  maintenance1Extension     = false;
-  maintenance1Core          = false;
+  maintenance1Extension = false;
+  maintenance1Core      = false;
 #ifdef VK_KHR_pipeline_binary
-  maintenance5Extension     = false;
-  pipelineBinaryExtension   = false;
+  maintenance5Extension   = false;
+  pipelineBinaryExtension = false;
 #endif
 #if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
-  maintenance5Core          = false;
+  maintenance5Core = false;
 #endif
-  spirv14Extension          = false;
+  spirv14Extension             = false;
   shaderFloatControlsExtension = false;
-  spirv14Core               = false;
+  spirv14Core                  = false;
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
-  accelerationExtension     = false;
-  rayQueryExtension         = false;
-  deferredHostExtension     = false;
-  rayQueryDependencies      = false;
+  accelerationExtension = false;
+  rayQueryExtension     = false;
+  deferredHostExtension = false;
+  rayQueryDependencies  = false;
 #endif
 #ifdef VK_KHR_ray_tracing_pipeline
-  rayPipelineExtension      = false;
+  rayPipelineExtension = false;
 #endif
 #ifdef VK_KHR_fragment_shading_rate
-  vrsExtension              = false;
+  vrsExtension = false;
 #endif
 #ifdef VK_EXT_mesh_shader
-  meshExtension                 = false;
-  spirv14ExtensionUsable       = false;
+  meshExtension          = false;
+  spirv14ExtensionUsable = false;
 #endif
 #ifdef VK_KHR_cooperative_matrix
-  cooperativeExtension         = false;
+  cooperativeExtension = false;
 #endif
 #ifdef VK_KHR_shader_clock
-  shaderClockExtension          = false;
+  shaderClockExtension = false;
 #endif
 #ifdef VK_KHR_compute_shader_derivatives
-  derivativeExtension           = false;
+  derivativeExtension = false;
 #endif
 #ifdef VK_KHR_shader_untyped_pointers
-  untypedPointerExtension       = false;
+  untypedPointerExtension = false;
 #endif
 #ifdef VK_KHR_copy_memory_indirect
-  indirectCopyExtension         = false;
-  formatFeatureFlags2Extension  = false;
-  formatFeatureFlags2Core       = false;
+  indirectCopyExtension        = false;
+  formatFeatureFlags2Extension = false;
+  formatFeatureFlags2Core      = false;
 #endif
 
-  adapter                   = calloc(1, sizeof(*adapter));
-  adapterVk                 = calloc(1, sizeof(*adapterVk));
+  adapter   = calloc(1, sizeof(*adapter));
+  adapterVk = calloc(1, sizeof(*adapterVk));
+
   if (!adapter || !adapterVk) {
     goto fail;
   }
+
   adapterVk->physicalDevice = raw;
   adapter->_priv            = adapterVk;
   adapter->inst             = inst;
@@ -940,47 +1247,45 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 
   vkGetPhysicalDeviceProperties(raw, &adapterVk->props);
 
-  /* Call with NULL data to get count */
+  /* call with NULL data to get count */
   vkGetPhysicalDeviceQueueFamilyProperties(adapterVk->physicalDevice,
                                            &adapterVk->nQueFamilies,
                                            NULL);
+
   if (adapterVk->nQueFamilies == 0u) {
     goto fail;
   }
 
-  adapterVk->queueFamilyProps = malloc(adapterVk->nQueFamilies *
-                                       sizeof(*adapterVk->queueFamilyProps));
-  if (!adapterVk->queueFamilyProps) {
+  if (!(adapterVk->queueFamilyProps = malloc(adapterVk->nQueFamilies *
+                                       sizeof(*adapterVk->queueFamilyProps)))) {
     goto fail;
   }
+
   vkGetPhysicalDeviceQueueFamilyProperties(adapterVk->physicalDevice,
                                            &adapterVk->nQueFamilies,
                                            adapterVk->queueFamilyProps);
   vkGetPhysicalDeviceFeatures(adapterVk->physicalDevice, &adapterVk->features);
 
-  /* Look for device extensions */
-  err = vkEnumerateDeviceExtensionProperties(adapterVk->physicalDevice, NULL,
-                                             &nExtensions, NULL);
+  /* look for device extensions */
+  err = vkEnumerateDeviceExtensionProperties(adapterVk->physicalDevice,
+                                             NULL,
+                                             &nExtensions,
+                                             NULL);
+
   if (err != VK_SUCCESS) {
     goto fail;
   }
 
-#define VK__ADD_EXT_IF(X, R)                                                  \
-    if (!strcmp(X, extensions[i].extensionName)) {                            \
-      adapterVk->extensionNames[adapterVk->nEnabledExtensions++] = X;         \
-      R;                                                                      \
-    }                                                                         \
-    assert(adapterVk->nEnabledExtensions < 64);
-
   if (nExtensions > 0) {
-    extensions = malloc(sizeof(*extensions) * nExtensions);
-    if (!extensions) {
+    if (!(extensions = malloc(sizeof(*extensions) * nExtensions))) {
       goto fail;
     }
+
     err = vkEnumerateDeviceExtensionProperties(adapterVk->physicalDevice,
                                                NULL,
                                                &nExtensions,
                                                extensions);
+
     if (err != VK_SUCCESS && err != VK_INCOMPLETE) {
       goto fail;
     }
@@ -998,6 +1303,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         storage16Extension = true;
       }
+
       if (!strcmp(VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         memoryModelExtension = true;
@@ -1040,6 +1346,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         dynamicExtension = true;
       }
+
       if (!strcmp(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         sync2Extension = true;
@@ -1049,6 +1356,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         externalMemoryExtension = true;
       }
+
       if (!strcmp(VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         externalSemaphoreExtension = true;
@@ -1058,6 +1366,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         externalMemoryExtension = true;
       }
+
       if (!strcmp(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         externalSemaphoreExtension = true;
@@ -1068,6 +1377,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         presentIdExtension = true;
       }
+
       if (!strcmp(VK_KHR_PRESENT_WAIT_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         presentWaitExtension = true;
@@ -1077,6 +1387,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         subgroupSizeControl = true;
       }
+
       if (!strcmp(VK_KHR_MAINTENANCE1_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         maintenance1Extension = true;
@@ -1086,6 +1397,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         maintenance5Extension = true;
       }
+
       if (!strcmp(VK_KHR_PIPELINE_BINARY_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         pipelineBinaryExtension = true;
@@ -1095,6 +1407,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         spirv14Extension = true;
       }
+
       if (!strcmp(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         shaderFloatControlsExtension = true;
@@ -1104,10 +1417,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         accelerationExtension = true;
       }
+
       if (!strcmp(VK_KHR_RAY_QUERY_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         rayQueryExtension = true;
       }
+
       if (!strcmp(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         deferredHostExtension = true;
@@ -1124,10 +1439,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                   extensions[i].extensionName)) {
         executionGraphExtension = true;
       }
+
       if (!strcmp(VK_KHR_MAINTENANCE_5_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         executionGraphMaintenance5Extension = true;
       }
+
       if (!strcmp(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         pipelineLibraryExtension = true;
@@ -1195,42 +1512,44 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                        adapter->supportsDisplayTiming = true);
       }
     }
+
     free(extensions);
   }
 
-  if (instanceVk && instanceVk->apiVersion >= VK_API_VERSION_1_3 &&
-      adapterVk->props.apiVersion >= VK_API_VERSION_1_3) {
+  if (instanceVk && instanceVk->apiVersion >= VK_API_VERSION_1_3
+      && adapterVk->props.apiVersion >= VK_API_VERSION_1_3) {
     subgroupSizeControl = true;
   }
-  maintenance1Core = instanceVk &&
-                     instanceVk->apiVersion >= VK_API_VERSION_1_1 &&
-                     adapterVk->props.apiVersion >= VK_API_VERSION_1_1;
+
+  maintenance1Core = instanceVk
+                     && instanceVk->apiVersion >= VK_API_VERSION_1_1
+                     && adapterVk->props.apiVersion >= VK_API_VERSION_1_1;
 #if defined(_WIN32) || defined(WIN32) || \
     defined(__linux__) || defined(__ANDROID__)
   externalInteropCore = maintenance1Core;
 #endif
   if (!maintenance1Core && maintenance1Extension) {
-    adapterVk->extensionNames[adapterVk->nEnabledExtensions++] =
-      VK_KHR_MAINTENANCE1_EXTENSION_NAME;
+    adapterVk->extensionNames[adapterVk->nEnabledExtensions++] = VK_KHR_MAINTENANCE1_EXTENSION_NAME;
     assert(adapterVk->nEnabledExtensions < 64);
   }
+
   adapterVk->negativeViewport = maintenance1Core || maintenance1Extension;
 #if defined(_WIN32) || defined(WIN32)
-  if (externalInteropCore && externalMemoryExtension &&
-      externalSemaphoreExtension &&
-      vk_addDeviceExtension(adapterVk,
-                            VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME) &&
-      vk_addDeviceExtension(adapterVk,
-                            VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME)) {
+  if (externalInteropCore && externalMemoryExtension
+      && externalSemaphoreExtension
+      && vk_addDeviceExtension(adapterVk,
+                               VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME)
+      && vk_addDeviceExtension(adapterVk,
+                               VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME)) {
     adapterVk->externalInterop = true;
   }
 #elif defined(__linux__) || defined(__ANDROID__)
-  if (externalInteropCore && externalMemoryExtension &&
-      externalSemaphoreExtension &&
-      vk_addDeviceExtension(adapterVk,
-                            VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME) &&
-      vk_addDeviceExtension(adapterVk,
-                            VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME)) {
+  if (externalInteropCore && externalMemoryExtension
+      && externalSemaphoreExtension
+      && vk_addDeviceExtension(adapterVk,
+                               VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME)
+      && vk_addDeviceExtension(adapterVk,
+                               VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME)) {
     adapterVk->externalInterop = true;
   }
 #endif
@@ -1238,193 +1557,193 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                                adapterVk,
                                subgroupSizeControl);
 
-  dynamicCore = instanceVk && instanceVk->apiVersion >= VK_API_VERSION_1_3 &&
-                adapterVk->props.apiVersion >= VK_API_VERSION_1_3;
-  sync2Core = dynamicCore;
+  dynamicCore  = instanceVk && instanceVk->apiVersion >= VK_API_VERSION_1_3
+                 && adapterVk->props.apiVersion >= VK_API_VERSION_1_3;
+  sync2Core    = dynamicCore;
   getFeatures2 = instanceVk
                    ? (PFN_vkGetPhysicalDeviceFeatures2KHR)
                        vkGetInstanceProcAddr(instanceVk->inst,
                                              "vkGetPhysicalDeviceFeatures2")
                    : NULL;
+
   if (!getFeatures2 && instanceVk) {
     getFeatures2 = (PFN_vkGetPhysicalDeviceFeatures2KHR)
       vkGetInstanceProcAddr(instanceVk->inst,
                             "vkGetPhysicalDeviceFeatures2KHR");
   }
-  float16Core = instanceVk &&
-                instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
-                adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
-  storage16Core = instanceVk &&
-                  instanceVk->apiVersion >= VK_API_VERSION_1_1 &&
-                  adapterVk->props.apiVersion >= VK_API_VERSION_1_1;
-  memoryModelCore = instanceVk &&
-                    instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
-                    adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
-  atomic64Core = instanceVk &&
-                 instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
-                 adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
-  descriptorCore = instanceVk &&
-                   instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
-                   adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
+
+  float16Core       = instanceVk
+                      && instanceVk->apiVersion >= VK_API_VERSION_1_2
+                      && adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
+  storage16Core     = instanceVk
+                      && instanceVk->apiVersion >= VK_API_VERSION_1_1
+                      && adapterVk->props.apiVersion >= VK_API_VERSION_1_1;
+  memoryModelCore   = instanceVk
+                      && instanceVk->apiVersion >= VK_API_VERSION_1_2
+                      && adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
+  atomic64Core      = instanceVk
+                      && instanceVk->apiVersion >= VK_API_VERSION_1_2
+                      && adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
+  descriptorCore    = instanceVk
+                      && instanceVk->apiVersion >= VK_API_VERSION_1_2
+                      && adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
   bufferAddressCore = descriptorCore;
 #ifdef VK_KHR_copy_memory_indirect
-  formatFeatureFlags2Core = instanceVk &&
-                            instanceVk->apiVersion >= VK_API_VERSION_1_3 &&
-                            adapterVk->props.apiVersion >= VK_API_VERSION_1_3;
+  formatFeatureFlags2Core = instanceVk
+                            && instanceVk->apiVersion >= VK_API_VERSION_1_3
+                            && adapterVk->props.apiVersion >= VK_API_VERSION_1_3;
 #endif
-  timelineCore = instanceVk &&
-                 instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
-                 adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
-  spirv14Core = timelineCore;
-  if (spirv14Core || shaderFloatControlsExtension) {
-    PFN_vkGetPhysicalDeviceProperties2      getProperties2;
-    VkPhysicalDeviceFloatControlsProperties floatControls = {0};
-    VkPhysicalDeviceProperties2             properties2   = {0};
+  timelineCore = instanceVk
+                 && instanceVk->apiVersion >= VK_API_VERSION_1_2
+                 && adapterVk->props.apiVersion >= VK_API_VERSION_1_2;
+  spirv14Core  = timelineCore;
 
-    getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+  if (spirv14Core || shaderFloatControlsExtension) {
+    VkPhysicalDeviceFloatControlsProperties floatControls   = {0};
+    VkPhysicalDeviceProperties2             floatProperties = {0};
+
+    getFloatProperties = (PFN_vkGetPhysicalDeviceProperties2)
       vkGetInstanceProcAddr(instanceVk->inst,
                             "vkGetPhysicalDeviceProperties2");
-    if (!getProperties2) {
-      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+
+    if (!getFloatProperties) {
+      getFloatProperties = (PFN_vkGetPhysicalDeviceProperties2)
         vkGetInstanceProcAddr(instanceVk->inst,
                               "vkGetPhysicalDeviceProperties2KHR");
     }
-    if (getProperties2) {
-      floatControls.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES;
-      properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-      properties2.pNext = &floatControls;
-      getProperties2(raw, &properties2);
-      adapterVk->signedZeroInfNanPreserve =
-        (floatControls.shaderSignedZeroInfNanPreserveFloat16 ? 1u : 0u) |
+
+    if (getFloatProperties) {
+      floatControls.sType   = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES;
+      floatProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+      floatProperties.pNext = &floatControls;
+      getFloatProperties(raw, &floatProperties);
+      adapterVk->signedZeroInfNanPreserve = (floatControls.shaderSignedZeroInfNanPreserveFloat16 ? 1u : 0u) |
         (floatControls.shaderSignedZeroInfNanPreserveFloat32 ? 2u : 0u) |
         (floatControls.shaderSignedZeroInfNanPreserveFloat64 ? 4u : 0u);
-      adapterVk->denormPreserve =
-        (floatControls.shaderDenormPreserveFloat16 ? 1u : 0u) |
+      adapterVk->denormPreserve           = (floatControls.shaderDenormPreserveFloat16 ? 1u : 0u) |
         (floatControls.shaderDenormPreserveFloat32 ? 2u : 0u) |
         (floatControls.shaderDenormPreserveFloat64 ? 4u : 0u);
-      adapterVk->roundingRTE =
-        (floatControls.shaderRoundingModeRTEFloat16 ? 1u : 0u) |
+      adapterVk->roundingRTE              = (floatControls.shaderRoundingModeRTEFloat16 ? 1u : 0u) |
         (floatControls.shaderRoundingModeRTEFloat32 ? 2u : 0u) |
         (floatControls.shaderRoundingModeRTEFloat64 ? 4u : 0u);
-      if ((adapterVk->signedZeroInfNanPreserve || adapterVk->denormPreserve ||
-           adapterVk->roundingRTE) && !spirv14Core &&
-          !vk_addDeviceExtension(adapterVk,
-                                 VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME)) {
+
+      if ((adapterVk->signedZeroInfNanPreserve || adapterVk->denormPreserve
+           || adapterVk->roundingRTE) && !spirv14Core
+          && !vk_addDeviceExtension(adapterVk,
+                                    VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME)) {
         goto fail;
       }
     }
   }
 #ifdef VK_KHR_shader_float_controls2
-  if (getFeatures2 && instanceVk->apiVersion >= VK_API_VERSION_1_1 &&
-      adapterVk->props.apiVersion >= VK_API_VERSION_1_1) {
-    bool core = instanceVk->apiVersion >= VK_MAKE_API_VERSION(0, 1, 4, 0) &&
-                adapterVk->props.apiVersion >= VK_MAKE_API_VERSION(0, 1, 4, 0);
+  if (getFeatures2 && instanceVk->apiVersion >= VK_API_VERSION_1_1
+      && adapterVk->props.apiVersion >= VK_API_VERSION_1_1) {
+    core = instanceVk->apiVersion >= VK_MAKE_API_VERSION(0, 1, 4, 0)
+                && adapterVk->props.apiVersion >= VK_MAKE_API_VERSION(0, 1, 4, 0);
+
     if (core || (floatControls2Extension && (spirv14Core || shaderFloatControlsExtension))) {
-      floatControls2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT_CONTROLS_2_FEATURES_KHR;
+      floatControls2Features.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT_CONTROLS_2_FEATURES_KHR;
       floatControls2Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
       floatControls2Features2.pNext = &floatControls2Features;
       getFeatures2(raw, &floatControls2Features2);
       adapterVk->floatControls2 = floatControls2Features.shaderFloatControls2 == VK_TRUE;
-      if (adapterVk->floatControls2 && !core &&
-          (!vk_addDeviceExtension(adapterVk, VK_KHR_SHADER_FLOAT_CONTROLS_2_EXTENSION_NAME) ||
-           (!spirv14Core && !vk_addDeviceExtension(adapterVk, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME)))) {
+
+      if (adapterVk->floatControls2 && !core
+          && (!vk_addDeviceExtension(adapterVk, VK_KHR_SHADER_FLOAT_CONTROLS_2_EXTENSION_NAME)
+              || (!spirv14Core && !vk_addDeviceExtension(adapterVk, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME)))) {
         goto fail;
       }
     }
   }
 #endif
 #if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
-  maintenance5Core = instanceVk &&
-                     instanceVk->apiVersion >= VK_API_VERSION_1_4 &&
-                     adapterVk->props.apiVersion >= VK_API_VERSION_1_4;
+  maintenance5Core = instanceVk
+                     && instanceVk->apiVersion >= VK_API_VERSION_1_4
+                     && adapterVk->props.apiVersion >= VK_API_VERSION_1_4;
 #endif
 #ifdef VK_EXT_mesh_shader
-  spirv14ExtensionUsable = instanceVk &&
-                           instanceVk->apiVersion >= VK_API_VERSION_1_1 &&
-                           adapterVk->props.apiVersion >= VK_API_VERSION_1_1 &&
-                           spirv14Extension &&
-                           shaderFloatControlsExtension;
+  spirv14ExtensionUsable = instanceVk
+                           && instanceVk->apiVersion >= VK_API_VERSION_1_1
+                           && adapterVk->props.apiVersion >= VK_API_VERSION_1_1
+                           && spirv14Extension
+                           && shaderFloatControlsExtension;
 #endif
   if (getFeatures2 && (float16Core || float16Extension)) {
-    float16Features.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
+    float16Features.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
     float16Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     float16Features2.pNext = &float16Features;
     getFeatures2(raw, &float16Features2);
     adapterVk->shaderFloat16 = float16Features.shaderFloat16;
   }
+
   if (getFeatures2 && (storage16Core || storage16Extension)) {
-    storage16Features.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
+    storage16Features.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
     storage16Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     storage16Features2.pNext = &storage16Features;
     getFeatures2(raw, &storage16Features2);
-    adapterVk->storageBuffer16BitAccess =
-      storage16Features.storageBuffer16BitAccess;
-    if (adapterVk->storageBuffer16BitAccess && !storage16Core &&
-        !vk_addDeviceExtension(adapterVk,
-                               VK_KHR_16BIT_STORAGE_EXTENSION_NAME)) {
+    adapterVk->storageBuffer16BitAccess = storage16Features.storageBuffer16BitAccess;
+
+    if (adapterVk->storageBuffer16BitAccess && !storage16Core
+        && !vk_addDeviceExtension(adapterVk,
+                                  VK_KHR_16BIT_STORAGE_EXTENSION_NAME)) {
       goto fail;
     }
   }
+
   if (getFeatures2 && (memoryModelCore || memoryModelExtension)) {
-    memoryModelFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES;
+    memoryModelFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES;
     memoryModelFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     memoryModelFeatures2.pNext = &memoryModelFeatures;
     getFeatures2(raw, &memoryModelFeatures2);
     adapterVk->vulkanMemoryModel = memoryModelFeatures.vulkanMemoryModel;
-    if (adapterVk->vulkanMemoryModel && !memoryModelCore &&
-        !vk_addDeviceExtension(adapterVk,
-                               VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME)) {
+
+    if (adapterVk->vulkanMemoryModel && !memoryModelCore
+        && !vk_addDeviceExtension(adapterVk,
+                                  VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME)) {
       goto fail;
     }
   }
 #ifdef VK_KHR_pipeline_binary
-  if (getFeatures2 && pipelineBinaryExtension &&
-      (maintenance5Core || maintenance5Extension)) {
-    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
-
-    maintenance5Features.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR;
-    pipelineBinaryFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR;
+  if (getFeatures2 && pipelineBinaryExtension
+      && (maintenance5Core || maintenance5Extension)) {
+    maintenance5Features.sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR;
+    pipelineBinaryFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR;
     maintenance5Features.pNext    = &pipelineBinaryFeatures;
-    pipelineBinaryFeatures2.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    pipelineBinaryFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     pipelineBinaryFeatures2.pNext = &maintenance5Features;
     getFeatures2(raw, &pipelineBinaryFeatures2);
-    if (maintenance5Features.maintenance5 &&
-        pipelineBinaryFeatures.pipelineBinaries) {
-      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+
+    if (maintenance5Features.maintenance5
+        && pipelineBinaryFeatures.pipelineBinaries) {
+      getBinaryProperties = (PFN_vkGetPhysicalDeviceProperties2)
         vkGetInstanceProcAddr(instanceVk->inst,
                               "vkGetPhysicalDeviceProperties2");
-      if (!getProperties2) {
-        getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+
+      if (!getBinaryProperties) {
+        getBinaryProperties = (PFN_vkGetPhysicalDeviceProperties2)
           vkGetInstanceProcAddr(instanceVk->inst,
                                 "vkGetPhysicalDeviceProperties2KHR");
       }
-      if (getProperties2) {
-        pipelineBinaryProperties.sType =
-          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_PROPERTIES_KHR;
-        pipelineBinaryProperties2.sType =
-          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+
+      if (getBinaryProperties) {
+        pipelineBinaryProperties.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_PROPERTIES_KHR;
+        pipelineBinaryProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         pipelineBinaryProperties2.pNext = &pipelineBinaryProperties;
-        getProperties2(raw, &pipelineBinaryProperties2);
-        adapterVk->pipelineBinaryInternalCache =
-          pipelineBinaryProperties.pipelineBinaryInternalCache;
-        adapterVk->pipelineBinaryPrefersInternalCache =
-          pipelineBinaryProperties.pipelineBinaryPrefersInternalCache;
-        if (!maintenance5Core &&
-            !vk_addDeviceExtension(adapterVk,
-                                   VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
+        getBinaryProperties(raw, &pipelineBinaryProperties2);
+        adapterVk->pipelineBinaryInternalCache        = pipelineBinaryProperties.pipelineBinaryInternalCache;
+        adapterVk->pipelineBinaryPrefersInternalCache = pipelineBinaryProperties.pipelineBinaryPrefersInternalCache;
+
+        if (!maintenance5Core
+            && !vk_addDeviceExtension(adapterVk,
+                                      VK_KHR_MAINTENANCE_5_EXTENSION_NAME)) {
           goto fail;
         }
+
         if (!vk_addDeviceExtension(adapterVk,
                                    VK_KHR_PIPELINE_BINARY_EXTENSION_NAME)) {
           goto fail;
         }
+
         adapterVk->pipelineBinary = true;
       }
     }
@@ -1432,267 +1751,245 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #endif
 #ifdef VK_EXT_shader_atomic_float
   if (getFeatures2 && floatAtomicExtension) {
-    floatAtomicFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
+    floatAtomicFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
     floatAtomicFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     floatAtomicFeatures2.pNext = &floatAtomicFeatures;
     getFeatures2(raw, &floatAtomicFeatures2);
     adapterVk->floatAtomicAdd = (floatAtomicFeatures.shaderBufferFloat32AtomicAdd ? 1u : 0u) |
                                (floatAtomicFeatures.shaderSharedFloat32AtomicAdd ? 2u : 0u);
-    if (adapterVk->floatAtomicAdd &&
-        !vk_addDeviceExtension(adapterVk, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME)) {
+
+    if (adapterVk->floatAtomicAdd
+        && !vk_addDeviceExtension(adapterVk, VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME)) {
       goto fail;
     }
   }
 #endif
   if (getFeatures2 && (atomic64Core || atomic64Extension)) {
-    atomic64Features.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES;
+    atomic64Features.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES;
     atomic64Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     atomic64Features2.pNext = &atomic64Features;
     getFeatures2(raw, &atomic64Features2);
-    if (adapterVk->features.shaderInt64 &&
-        atomic64Features.shaderBufferInt64Atomics) {
-      if (!atomic64Core &&
-          !vk_addDeviceExtension(adapterVk,
-                                 VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME)) {
+
+    if (adapterVk->features.shaderInt64
+        && atomic64Features.shaderBufferInt64Atomics) {
+      if (!atomic64Core
+          && !vk_addDeviceExtension(adapterVk,
+                                    VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME)) {
         goto fail;
       }
+
       adapterVk->atomic64 = true;
     }
   }
 #ifdef VK_KHR_shader_clock
   if (getFeatures2 && shaderClockExtension) {
-    shaderClockFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR;
-    shaderClockFeatures2.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    shaderClockFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR;
+    shaderClockFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     shaderClockFeatures2.pNext = &shaderClockFeatures;
     getFeatures2(raw, &shaderClockFeatures2);
-    adapterVk->shaderSubgroupClock =
-      adapterVk->features.shaderInt64 &&
-      shaderClockFeatures.shaderSubgroupClock == VK_TRUE;
-    adapterVk->shaderDeviceClock =
-      adapterVk->features.shaderInt64 &&
-      shaderClockFeatures.shaderDeviceClock == VK_TRUE;
-    if ((adapterVk->shaderSubgroupClock || adapterVk->shaderDeviceClock) &&
-        !vk_addDeviceExtension(adapterVk,
-                               VK_KHR_SHADER_CLOCK_EXTENSION_NAME)) {
+    adapterVk->shaderSubgroupClock = adapterVk->features.shaderInt64
+                                     && shaderClockFeatures.shaderSubgroupClock == VK_TRUE;
+    adapterVk->shaderDeviceClock   = adapterVk->features.shaderInt64
+                                     && shaderClockFeatures.shaderDeviceClock == VK_TRUE;
+
+    if ((adapterVk->shaderSubgroupClock || adapterVk->shaderDeviceClock)
+        && !vk_addDeviceExtension(adapterVk,
+                                  VK_KHR_SHADER_CLOCK_EXTENSION_NAME)) {
       goto fail;
     }
   }
 #endif
 #ifdef VK_KHR_compute_shader_derivatives
   if (getFeatures2 && derivativeExtension) {
-    derivativeFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR;
-    derivativeFeatures2.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    derivativeFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR;
+    derivativeFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     derivativeFeatures2.pNext = &derivativeFeatures;
     getFeatures2(raw, &derivativeFeatures2);
-    adapterVk->computeDerivativeQuads =
-      derivativeFeatures.computeDerivativeGroupQuads == VK_TRUE;
-    adapterVk->computeDerivativeLinear =
-      derivativeFeatures.computeDerivativeGroupLinear == VK_TRUE;
-    if ((adapterVk->computeDerivativeQuads ||
-         adapterVk->computeDerivativeLinear) &&
-        !vk_addDeviceExtension(
-          adapterVk,
-          VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME)) {
+    adapterVk->computeDerivativeQuads  = derivativeFeatures.computeDerivativeGroupQuads == VK_TRUE;
+    adapterVk->computeDerivativeLinear = derivativeFeatures.computeDerivativeGroupLinear == VK_TRUE;
+
+    if ((adapterVk->computeDerivativeQuads
+         || adapterVk->computeDerivativeLinear)
+        && !vk_addDeviceExtension(adapterVk,
+                                  VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME)) {
       goto fail;
     }
   }
 #endif
 #ifdef VK_KHR_shader_fma
   if (getFeatures2 && shaderFmaExtension) {
-    fmaFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FMA_FEATURES_KHR;
+    fmaFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FMA_FEATURES_KHR;
     fmaFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     fmaFeatures2.pNext = &fmaFeatures;
     getFeatures2(raw, &fmaFeatures2);
-    adapterVk->shaderFma =
-      (fmaFeatures.shaderFmaFloat16 ? 1u : 0u) |
+    adapterVk->shaderFma = (fmaFeatures.shaderFmaFloat16 ? 1u : 0u) |
       (fmaFeatures.shaderFmaFloat32 ? 2u : 0u) |
       (fmaFeatures.shaderFmaFloat64 ? 4u : 0u);
-    if (adapterVk->shaderFma &&
-        !vk_addDeviceExtension(adapterVk, VK_KHR_SHADER_FMA_EXTENSION_NAME)) {
+
+    if (adapterVk->shaderFma
+        && !vk_addDeviceExtension(adapterVk, VK_KHR_SHADER_FMA_EXTENSION_NAME)) {
       goto fail;
     }
   }
 #endif
 #ifdef VK_KHR_shader_untyped_pointers
   if (getFeatures2 && untypedPointerExtension) {
-    untypedPointerFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR;
-    untypedPointerFeatures2.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    untypedPointerFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR;
+    untypedPointerFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     untypedPointerFeatures2.pNext = &untypedPointerFeatures;
     getFeatures2(raw, &untypedPointerFeatures2);
-    adapterVk->shaderUntypedPointers =
-      untypedPointerFeatures.shaderUntypedPointers == VK_TRUE;
-    if (adapterVk->shaderUntypedPointers &&
-        !vk_addDeviceExtension(
-          adapterVk,
-          VK_KHR_SHADER_UNTYPED_POINTERS_EXTENSION_NAME)) {
+    adapterVk->shaderUntypedPointers = untypedPointerFeatures.shaderUntypedPointers == VK_TRUE;
+
+    if (adapterVk->shaderUntypedPointers
+        && !vk_addDeviceExtension(adapterVk,
+                                  VK_KHR_SHADER_UNTYPED_POINTERS_EXTENSION_NAME)) {
       goto fail;
     }
   }
 #endif
   if (getFeatures2 && (bufferAddressCore || bufferAddressExtension)) {
-    bufferAddressFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+    bufferAddressFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
     bufferAddressFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     bufferAddressFeatures2.pNext = &bufferAddressFeatures;
     getFeatures2(raw, &bufferAddressFeatures2);
-    adapterVk->bufferDeviceAddress =
-      bufferAddressFeatures.bufferDeviceAddress == VK_TRUE;
+    adapterVk->bufferDeviceAddress = bufferAddressFeatures.bufferDeviceAddress == VK_TRUE;
 #ifdef VK_KHR_buffer_device_address
-    if (adapterVk->bufferDeviceAddress && !bufferAddressCore &&
-        !vk_addDeviceExtension(adapterVk,
-                               VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
+    if (adapterVk->bufferDeviceAddress && !bufferAddressCore
+        && !vk_addDeviceExtension(adapterVk,
+                                  VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
       goto fail;
     }
 #endif
   }
 #ifdef VK_AMDX_shader_enqueue
-  if (getFeatures2 && executionGraphExtension &&
-      pipelineLibraryExtension && adapterVk->bufferDeviceAddress &&
-      instanceVk && instanceVk->apiVersion >= VK_API_VERSION_1_3 &&
-      adapterVk->props.apiVersion >= VK_API_VERSION_1_3 &&
-      (maintenance5Core || executionGraphMaintenance5Extension)) {
-    executionGraphFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ENQUEUE_FEATURES_AMDX;
-    executionGraphMaintenance5.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR;
-    executionGraphFeatures.pNext = &executionGraphMaintenance5;
-    executionGraphFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    executionGraphFeatures2.pNext = &executionGraphFeatures;
+  if (getFeatures2 && executionGraphExtension
+      && pipelineLibraryExtension && adapterVk->bufferDeviceAddress
+      && instanceVk && instanceVk->apiVersion >= VK_API_VERSION_1_3
+      && adapterVk->props.apiVersion >= VK_API_VERSION_1_3
+      && (maintenance5Core || executionGraphMaintenance5Extension)) {
+    executionGraphFeatures.sType     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ENQUEUE_FEATURES_AMDX;
+    executionGraphMaintenance5.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR;
+    executionGraphFeatures.pNext     = &executionGraphMaintenance5;
+    executionGraphFeatures2.sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    executionGraphFeatures2.pNext    = &executionGraphFeatures;
     getFeatures2(raw, &executionGraphFeatures2);
-    if (executionGraphFeatures.shaderEnqueue &&
-        executionGraphMaintenance5.maintenance5) {
-      PFN_vkGetPhysicalDeviceProperties2 getProperties2;
-      VkPhysicalDeviceShaderEnqueuePropertiesAMDX graphProperties = {0};
-      VkPhysicalDeviceProperties2                 properties2 = {0};
 
-      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+    if (executionGraphFeatures.shaderEnqueue
+        && executionGraphMaintenance5.maintenance5) {
+      VkPhysicalDeviceShaderEnqueuePropertiesAMDX graphProperties  = {0};
+      VkPhysicalDeviceProperties2                 graphProperties2 = {0};
+
+      getGraphProperties = (PFN_vkGetPhysicalDeviceProperties2)
         vkGetInstanceProcAddr(instanceVk->inst,
                               "vkGetPhysicalDeviceProperties2");
-      if (!getProperties2) {
-        getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+
+      if (!getGraphProperties) {
+        getGraphProperties = (PFN_vkGetPhysicalDeviceProperties2)
           vkGetInstanceProcAddr(instanceVk->inst,
                                 "vkGetPhysicalDeviceProperties2KHR");
       }
-      graphProperties.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ENQUEUE_PROPERTIES_AMDX;
-      properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-      properties2.pNext = &graphProperties;
-      if (getProperties2) {
-        getProperties2(raw, &properties2);
+
+      graphProperties.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ENQUEUE_PROPERTIES_AMDX;
+      graphProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+      graphProperties2.pNext = &graphProperties;
+
+      if (getGraphProperties) {
+        getGraphProperties(raw, &graphProperties2);
       }
-      if (graphProperties.executionGraphDispatchAddressAlignment > 0u &&
-          vk_addDeviceExtension(adapterVk,
-                                VK_AMDX_SHADER_ENQUEUE_EXTENSION_NAME) &&
-          vk_addDeviceExtension(adapterVk,
-                                VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME) &&
-          (maintenance5Core ||
-           vk_addDeviceExtension(adapterVk,
-                                 VK_KHR_MAINTENANCE_5_EXTENSION_NAME))) {
-        adapterVk->executionGraphDispatchAddressAlignment =
-          graphProperties.executionGraphDispatchAddressAlignment;
-        adapterVk->executionGraph = true;
+
+      if (graphProperties.executionGraphDispatchAddressAlignment > 0u
+          && vk_addDeviceExtension(adapterVk,
+                                   VK_AMDX_SHADER_ENQUEUE_EXTENSION_NAME)
+          && vk_addDeviceExtension(adapterVk,
+                                   VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME)
+          && (maintenance5Core
+              || vk_addDeviceExtension(adapterVk,
+                                       VK_KHR_MAINTENANCE_5_EXTENSION_NAME))) {
+        adapterVk->executionGraphDispatchAddressAlignment = graphProperties.executionGraphDispatchAddressAlignment;
+        adapterVk->executionGraph                         = true;
       }
     }
   }
 #endif
 #ifdef VK_KHR_copy_memory_indirect
-  if (getFeatures2 && indirectCopyExtension &&
-      adapterVk->bufferDeviceAddress) {
-    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
-    bool                               memoryCopy;
-    bool                               textureCopy;
-
-    indirectCopyFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_KHR;
-    indirectCopyFeatures2.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  if (getFeatures2 && indirectCopyExtension
+      && adapterVk->bufferDeviceAddress) {
+    indirectCopyFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_KHR;
+    indirectCopyFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     indirectCopyFeatures2.pNext = &indirectCopyFeatures;
     getFeatures2(raw, &indirectCopyFeatures2);
 
-    memoryCopy = indirectCopyFeatures.indirectMemoryCopy == VK_TRUE;
-    textureCopy =
-      indirectCopyFeatures.indirectMemoryToImageCopy == VK_TRUE &&
-      (formatFeatureFlags2Core || formatFeatureFlags2Extension);
+    memoryCopy  = indirectCopyFeatures.indirectMemoryCopy == VK_TRUE;
+    textureCopy = indirectCopyFeatures.indirectMemoryToImageCopy == VK_TRUE
+                  && (formatFeatureFlags2Core || formatFeatureFlags2Extension);
 
-    getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+    getCopyProperties = (PFN_vkGetPhysicalDeviceProperties2)
       vkGetInstanceProcAddr(instanceVk->inst,
                             "vkGetPhysicalDeviceProperties2");
-    if (!getProperties2) {
-      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+
+    if (!getCopyProperties) {
+      getCopyProperties = (PFN_vkGetPhysicalDeviceProperties2)
         vkGetInstanceProcAddr(instanceVk->inst,
                               "vkGetPhysicalDeviceProperties2KHR");
     }
-    if ((memoryCopy || textureCopy) && getProperties2) {
-      indirectCopyProperties.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_KHR;
-      indirectCopyProperties2.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+
+    if ((memoryCopy || textureCopy) && getCopyProperties) {
+      indirectCopyProperties.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_KHR;
+      indirectCopyProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
       indirectCopyProperties2.pNext = &indirectCopyProperties;
-      getProperties2(raw, &indirectCopyProperties2);
-      if (indirectCopyProperties.supportedQueues != 0u &&
-          vk_addDeviceExtension(adapterVk,
-                                VK_KHR_COPY_MEMORY_INDIRECT_EXTENSION_NAME) &&
-          (!textureCopy || formatFeatureFlags2Core ||
-           vk_addDeviceExtension(
-             adapterVk,
-             VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME
-           ))) {
+      getCopyProperties(raw, &indirectCopyProperties2);
+
+      if (indirectCopyProperties.supportedQueues != 0u
+          && vk_addDeviceExtension(adapterVk,
+                                   VK_KHR_COPY_MEMORY_INDIRECT_EXTENSION_NAME)
+          && (!textureCopy || formatFeatureFlags2Core
+              || vk_addDeviceExtension(adapterVk,
+                                       VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME))) {
         adapterVk->indirectMemoryCopy          = memoryCopy;
         adapterVk->indirectMemoryToTextureCopy = textureCopy;
-        adapterVk->indirectCopyQueues =
-          indirectCopyProperties.supportedQueues;
+        adapterVk->indirectCopyQueues          = indirectCopyProperties.supportedQueues;
       }
     }
   }
 #endif
 #ifdef VK_EXT_descriptor_buffer
-  if (getFeatures2 && descriptorBufferExtension &&
-      adapterVk->bufferDeviceAddress) {
-    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
-
-    descriptorBufferFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
-    descriptorBufferFeatures2.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  if (getFeatures2 && descriptorBufferExtension
+      && adapterVk->bufferDeviceAddress) {
+    descriptorBufferFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
+    descriptorBufferFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     descriptorBufferFeatures2.pNext = &descriptorBufferFeatures;
     getFeatures2(raw, &descriptorBufferFeatures2);
 
-    getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+    getDescriptorProperties = (PFN_vkGetPhysicalDeviceProperties2)
       vkGetInstanceProcAddr(instanceVk->inst,
                             "vkGetPhysicalDeviceProperties2");
-    if (!getProperties2) {
-      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+
+    if (!getDescriptorProperties) {
+      getDescriptorProperties = (PFN_vkGetPhysicalDeviceProperties2)
         vkGetInstanceProcAddr(instanceVk->inst,
                               "vkGetPhysicalDeviceProperties2KHR");
     }
-    if (descriptorBufferFeatures.descriptorBuffer && getProperties2) {
-      descriptorBufferProperties.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
-      descriptorBufferProperties2.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+
+    if (descriptorBufferFeatures.descriptorBuffer && getDescriptorProperties) {
+      descriptorBufferProperties.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
+      descriptorBufferProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
       descriptorBufferProperties2.pNext = &descriptorBufferProperties;
-      getProperties2(raw, &descriptorBufferProperties2);
-      if (descriptorBufferProperties.descriptorBufferOffsetAlignment > 0u &&
-          descriptorBufferProperties.maxDescriptorBufferBindings >=
-            GPU_ENCODER_MAX_BIND_GROUPS &&
-          descriptorBufferProperties.maxResourceDescriptorBufferBindings >=
-            GPU_ENCODER_MAX_BIND_GROUPS &&
-          descriptorBufferProperties.maxSamplerDescriptorBufferBindings >=
-            GPU_ENCODER_MAX_BIND_GROUPS &&
-          descriptorBufferProperties.maxResourceDescriptorBufferRange > 0u &&
-          descriptorBufferProperties.maxSamplerDescriptorBufferRange > 0u &&
-          vk_addDeviceExtension(adapterVk,
-                                VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME) &&
-          (bufferAddressCore ||
-           vk_addDeviceExtension(adapterVk,
-                                 VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME))) {
+      getDescriptorProperties(raw, &descriptorBufferProperties2);
+
+      if (descriptorBufferProperties.descriptorBufferOffsetAlignment > 0u
+          && descriptorBufferProperties.maxDescriptorBufferBindings >=
+            GPU_ENCODER_MAX_BIND_GROUPS
+          && descriptorBufferProperties.maxResourceDescriptorBufferBindings >=
+            GPU_ENCODER_MAX_BIND_GROUPS
+          && descriptorBufferProperties.maxSamplerDescriptorBufferBindings >=
+            GPU_ENCODER_MAX_BIND_GROUPS
+          && descriptorBufferProperties.maxResourceDescriptorBufferRange > 0u
+          && descriptorBufferProperties.maxSamplerDescriptorBufferRange > 0u
+          && vk_addDeviceExtension(adapterVk,
+                                   VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME)
+          && (bufferAddressCore
+              || vk_addDeviceExtension(adapterVk,
+                                       VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME))) {
         adapterVk->descriptorBufferProperties = descriptorBufferProperties;
         adapterVk->descriptorBuffer           = true;
       }
@@ -1700,337 +1997,308 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   }
 #endif
   adapterVk->boundedDescriptorIndexing = true;
+
   if (getFeatures2 && (descriptorCore || descriptorExtension)) {
-    descriptorFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    descriptorFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
     descriptorFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     descriptorFeatures2.pNext = &descriptorFeatures;
     getFeatures2(raw, &descriptorFeatures2);
-    adapterVk->descriptorIndexing =
-      descriptorFeatures.shaderUniformBufferArrayNonUniformIndexing &&
-      descriptorFeatures.shaderSampledImageArrayNonUniformIndexing &&
-      descriptorFeatures.shaderStorageBufferArrayNonUniformIndexing &&
-      descriptorFeatures.shaderStorageImageArrayNonUniformIndexing;
-    adapterVk->bindless = adapterVk->descriptorIndexing &&
-                          descriptorFeatures.descriptorBindingPartiallyBound;
+    adapterVk->descriptorIndexing = descriptorFeatures.shaderUniformBufferArrayNonUniformIndexing
+                                    && descriptorFeatures.shaderSampledImageArrayNonUniformIndexing
+                                    && descriptorFeatures.shaderStorageBufferArrayNonUniformIndexing
+                                    && descriptorFeatures.shaderStorageImageArrayNonUniformIndexing;
+    adapterVk->bindless           = adapterVk->descriptorIndexing
+                                    && descriptorFeatures.descriptorBindingPartiallyBound;
   }
 #ifdef VK_KHR_cooperative_matrix
   if (getFeatures2 && cooperativeExtension) {
-    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
-
-    cooperativeFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR;
+    cooperativeFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR;
     cooperativeFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     cooperativeFeatures2.pNext = &cooperativeFeatures;
     getFeatures2(raw, &cooperativeFeatures2);
 
-    getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+    getMatrixProperties = (PFN_vkGetPhysicalDeviceProperties2)
       vkGetInstanceProcAddr(instanceVk->inst,
                             "vkGetPhysicalDeviceProperties2");
-    if (!getProperties2) {
-      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+
+    if (!getMatrixProperties) {
+      getMatrixProperties = (PFN_vkGetPhysicalDeviceProperties2)
         vkGetInstanceProcAddr(instanceVk->inst,
                               "vkGetPhysicalDeviceProperties2KHR");
     }
-    adapterVk->getCooperativeMatrixProperties =
-      (PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR)
-        vkGetInstanceProcAddr(
-          instanceVk->inst,
-          "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR"
-        );
-    if (cooperativeFeatures.cooperativeMatrix &&
-        adapterVk->vulkanMemoryModel && getProperties2 &&
-        adapterVk->getCooperativeMatrixProperties) {
-      cooperativeProperties.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_KHR;
+
+    adapterVk->getCooperativeMatrixProperties = (PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR)
+        vkGetInstanceProcAddr(instanceVk->inst,
+                              "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR");
+
+    if (cooperativeFeatures.cooperativeMatrix
+        && adapterVk->vulkanMemoryModel && getMatrixProperties
+        && adapterVk->getCooperativeMatrixProperties) {
+      cooperativeProperties.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_KHR;
       cooperativeProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
       cooperativeProperties2.pNext = &cooperativeProperties;
-      getProperties2(raw, &cooperativeProperties2);
-      adapterVk->subgroupMatrixStages =
-        cooperativeProperties.cooperativeMatrixSupportedStages;
-      if ((adapterVk->subgroupMatrixStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0u &&
-          vk_hasSubgroupMatrixProperty(adapter) &&
-          !vk_addDeviceExtension(adapterVk,
-                                 VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME)) {
+      getMatrixProperties(raw, &cooperativeProperties2);
+      adapterVk->subgroupMatrixStages = cooperativeProperties.cooperativeMatrixSupportedStages;
+
+      if ((adapterVk->subgroupMatrixStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0u
+          && vk_hasSubgroupMatrixProperty(adapter)
+          && !vk_addDeviceExtension(adapterVk,
+                                    VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME)) {
         goto fail;
       }
     }
   }
 #endif
   if (getFeatures2 && timelineCore) {
-    timelineFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+    timelineFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
     timelineFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     timelineFeatures2.pNext = &timelineFeatures;
     getFeatures2(raw, &timelineFeatures2);
     adapterVk->timelineSemaphore = timelineFeatures.timelineSemaphore;
   }
+
   if (getFeatures2 && (sync2Core || sync2Extension)) {
-    sync2Features.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
+    sync2Features.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
     sync2Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     sync2Features2.pNext = &sync2Features;
     getFeatures2(raw, &sync2Features2);
+
     if (sync2Features.synchronization2) {
       if (!sync2Core) {
-        adapterVk->extensionNames[adapterVk->nEnabledExtensions++] =
-          VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME;
+        adapterVk->extensionNames[adapterVk->nEnabledExtensions++] = VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME;
         assert(adapterVk->nEnabledExtensions < 64);
       }
+
       adapterVk->synchronization2 = true;
     }
   }
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
   if (getFeatures2 && presentIdExtension && presentWaitExtension) {
-    presentIdFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR;
-    presentWaitFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR;
-    presentFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    presentIdFeatures.sType   = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR;
+    presentWaitFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR;
+    presentFeatures2.sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     presentWaitFeatures.pNext = &presentIdFeatures;
     presentFeatures2.pNext    = &presentWaitFeatures;
     getFeatures2(raw, &presentFeatures2);
-    if (presentIdFeatures.presentId && presentWaitFeatures.presentWait &&
-        vk_addDeviceExtension(adapterVk,
-                              VK_KHR_PRESENT_ID_EXTENSION_NAME) &&
-        vk_addDeviceExtension(adapterVk,
-                              VK_KHR_PRESENT_WAIT_EXTENSION_NAME)) {
+
+    if (presentIdFeatures.presentId && presentWaitFeatures.presentWait
+        && vk_addDeviceExtension(adapterVk,
+                                 VK_KHR_PRESENT_ID_EXTENSION_NAME)
+        && vk_addDeviceExtension(adapterVk,
+                                 VK_KHR_PRESENT_WAIT_EXTENSION_NAME)) {
       adapterVk->presentWait = true;
     }
   }
 #endif
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
-  rayQueryDependencies = instanceVk &&
-                         instanceVk->apiVersion >= VK_API_VERSION_1_1 &&
-                         adapterVk->props.apiVersion >= VK_API_VERSION_1_1 &&
-                         accelerationExtension && rayQueryExtension &&
-                         deferredHostExtension &&
-                         (timelineCore ||
-                          (descriptorExtension && bufferAddressExtension &&
-                           spirv14Extension &&
-                           shaderFloatControlsExtension));
-  if (getFeatures2 && rayQueryDependencies) {
-    bufferAddressFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-    accelerationFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
-    rayQueryFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
-    rayQueryFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    rayQueryFeatures.pNext       = &accelerationFeatures;
-    accelerationFeatures.pNext   = &bufferAddressFeatures;
-    rayQueryFeatures2.pNext      = &rayQueryFeatures;
-    getFeatures2(raw, &rayQueryFeatures2);
-    if (rayQueryFeatures.rayQuery &&
-        accelerationFeatures.accelerationStructure &&
-        bufferAddressFeatures.bufferDeviceAddress) {
-      PFN_vkGetPhysicalDeviceProperties2 getProperties2;
+  rayQueryDependencies = instanceVk
+                         && instanceVk->apiVersion >= VK_API_VERSION_1_1
+                         && adapterVk->props.apiVersion >= VK_API_VERSION_1_1
+                         && accelerationExtension && rayQueryExtension
+                         && deferredHostExtension
+                         && (timelineCore
+                             || (descriptorExtension && bufferAddressExtension
+                              && spirv14Extension
+                              && shaderFloatControlsExtension));
 
-      if (!vk_addDeviceExtension(
-            adapterVk,
-            VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) ||
-          !vk_addDeviceExtension(adapterVk,
-                                 VK_KHR_RAY_QUERY_EXTENSION_NAME) ||
-          !vk_addDeviceExtension(
-            adapterVk,
-            VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME) ||
-          (!timelineCore &&
-           (!vk_addDeviceExtension(
-              adapterVk,
-              VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) ||
-            !vk_addDeviceExtension(adapterVk,
-                                   VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME) ||
-            !vk_addDeviceExtension(adapterVk,
-                                   VK_KHR_SPIRV_1_4_EXTENSION_NAME)))) {
+  if (getFeatures2 && rayQueryDependencies) {
+    bufferAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+    accelerationFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    rayQueryFeatures.sType      = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+    rayQueryFeatures2.sType     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    rayQueryFeatures.pNext      = &accelerationFeatures;
+    accelerationFeatures.pNext  = &bufferAddressFeatures;
+    rayQueryFeatures2.pNext     = &rayQueryFeatures;
+    getFeatures2(raw, &rayQueryFeatures2);
+
+    if (rayQueryFeatures.rayQuery
+        && accelerationFeatures.accelerationStructure
+        && bufferAddressFeatures.bufferDeviceAddress) {
+      if (!vk_addDeviceExtension(adapterVk,
+                                 VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)
+          || !vk_addDeviceExtension(adapterVk,
+                                    VK_KHR_RAY_QUERY_EXTENSION_NAME)
+          || !vk_addDeviceExtension(adapterVk,
+                                    VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
+          || (!timelineCore
+              && (!vk_addDeviceExtension(adapterVk,
+                                         VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)
+               || !vk_addDeviceExtension(adapterVk,
+                                         VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME)
+               || !vk_addDeviceExtension(adapterVk,
+                                         VK_KHR_SPIRV_1_4_EXTENSION_NAME)))) {
         goto fail;
       }
 
-      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+      getRayProperties = (PFN_vkGetPhysicalDeviceProperties2)
         vkGetInstanceProcAddr(instanceVk->inst,
                               "vkGetPhysicalDeviceProperties2");
-      if (!getProperties2) {
-        getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+
+      if (!getRayProperties) {
+        getRayProperties = (PFN_vkGetPhysicalDeviceProperties2)
           vkGetInstanceProcAddr(instanceVk->inst,
                                 "vkGetPhysicalDeviceProperties2KHR");
       }
-      if (getProperties2) {
-        accelerationProperties.sType =
-          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
-        rayQueryProperties2.sType =
-          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-        rayQueryProperties2.pNext = &accelerationProperties;
-        getProperties2(raw, &rayQueryProperties2);
+
+      if (getRayProperties) {
+        accelerationProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+        rayQueryProperties2.sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        rayQueryProperties2.pNext    = &accelerationProperties;
+        getRayProperties(raw, &rayQueryProperties2);
         adapterVk->accelerationStructureScratchAlignment =
           accelerationProperties.minAccelerationStructureScratchOffsetAlignment;
-        adapterVk->rayQuery =
-          adapterVk->accelerationStructureScratchAlignment > 0u;
+        adapterVk->rayQuery                              = adapterVk->accelerationStructureScratchAlignment > 0u;
       }
     }
   }
 #ifdef VK_KHR_ray_tracing_pipeline
   if (getFeatures2 && adapterVk->rayQuery && rayPipelineExtension) {
-    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
-
-    rayPipelineFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+    rayPipelineFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
     rayPipelineFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     rayPipelineFeatures2.pNext = &rayPipelineFeatures;
     getFeatures2(raw, &rayPipelineFeatures2);
-    if (rayPipelineFeatures.rayTracingPipeline &&
-        vk_addDeviceExtension(
-          adapterVk,
-          VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
-      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+
+    if (rayPipelineFeatures.rayTracingPipeline
+        && vk_addDeviceExtension(adapterVk,
+                                 VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
+      getPipelineProperties = (PFN_vkGetPhysicalDeviceProperties2)
         vkGetInstanceProcAddr(instanceVk->inst,
                               "vkGetPhysicalDeviceProperties2");
-      if (!getProperties2) {
-        getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+
+      if (!getPipelineProperties) {
+        getPipelineProperties = (PFN_vkGetPhysicalDeviceProperties2)
           vkGetInstanceProcAddr(instanceVk->inst,
                                 "vkGetPhysicalDeviceProperties2KHR");
       }
-      if (getProperties2) {
-        rayPipelineProperties.sType =
-          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
-        rayPipelineProperties2.sType =
-          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-        rayPipelineProperties2.pNext = &rayPipelineProperties;
-        getProperties2(raw, &rayPipelineProperties2);
-        adapterVk->rayTracingShaderGroupHandleSize =
-          rayPipelineProperties.shaderGroupHandleSize;
-        adapterVk->rayTracingShaderGroupHandleAlignment =
-          rayPipelineProperties.shaderGroupHandleAlignment;
-        adapterVk->rayTracingShaderGroupBaseAlignment =
-          rayPipelineProperties.shaderGroupBaseAlignment;
-        adapterVk->rayTracingMaxRecursionDepth =
-          rayPipelineProperties.maxRayRecursionDepth;
-        adapterVk->rayTracingMaxHitAttributeSizeBytes =
-          rayPipelineProperties.maxRayHitAttributeSize;
-        adapterVk->rayTracingMaxDispatchCount =
-          rayPipelineProperties.maxRayDispatchInvocationCount;
-        for (uint32_t i = 0u; i < 3u; i++) {
-          uint64_t maxSize;
 
-          maxSize =
-            (uint64_t)adapterVk->props.limits.maxComputeWorkGroupCount[i] *
-            adapterVk->props.limits.maxComputeWorkGroupSize[i];
-          adapterVk->rayTracingMaxDispatchSize[i] =
-            maxSize > UINT32_MAX ? UINT32_MAX : (uint32_t)maxSize;
+      if (getPipelineProperties) {
+        rayPipelineProperties.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+        rayPipelineProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        rayPipelineProperties2.pNext = &rayPipelineProperties;
+        getPipelineProperties(raw, &rayPipelineProperties2);
+        adapterVk->rayTracingShaderGroupHandleSize      = rayPipelineProperties.shaderGroupHandleSize;
+        adapterVk->rayTracingShaderGroupHandleAlignment = rayPipelineProperties.shaderGroupHandleAlignment;
+        adapterVk->rayTracingShaderGroupBaseAlignment   = rayPipelineProperties.shaderGroupBaseAlignment;
+        adapterVk->rayTracingMaxRecursionDepth          = rayPipelineProperties.maxRayRecursionDepth;
+        adapterVk->rayTracingMaxHitAttributeSizeBytes   = rayPipelineProperties.maxRayHitAttributeSize;
+        adapterVk->rayTracingMaxDispatchCount           = rayPipelineProperties.maxRayDispatchInvocationCount;
+
+        for (axisIndex = 0u; axisIndex < 3u; axisIndex++) {
+          maxSize                                         = (uint64_t)adapterVk->props.limits.maxComputeWorkGroupCount[axisIndex] *
+            adapterVk->props.limits.maxComputeWorkGroupSize[axisIndex];
+          adapterVk->rayTracingMaxDispatchSize[axisIndex] = maxSize > UINT32_MAX ? UINT32_MAX : (uint32_t)maxSize;
         }
-        adapterVk->rayTracingPipeline =
-          adapterVk->rayTracingShaderGroupHandleSize > 0u &&
-          adapterVk->rayTracingShaderGroupHandleAlignment > 0u &&
-          adapterVk->rayTracingShaderGroupBaseAlignment > 0u &&
-          adapterVk->rayTracingMaxRecursionDepth > 0u &&
-          adapterVk->rayTracingMaxHitAttributeSizeBytes > 0u &&
-          adapterVk->rayTracingMaxDispatchCount > 0u &&
-          adapterVk->rayTracingMaxDispatchSize[0] > 0u &&
-          adapterVk->rayTracingMaxDispatchSize[1] > 0u &&
-          adapterVk->rayTracingMaxDispatchSize[2] > 0u;
+
+        adapterVk->rayTracingPipeline = adapterVk->rayTracingShaderGroupHandleSize > 0u
+                                        && adapterVk->rayTracingShaderGroupHandleAlignment > 0u
+                                        && adapterVk->rayTracingShaderGroupBaseAlignment > 0u
+                                        && adapterVk->rayTracingMaxRecursionDepth > 0u
+                                        && adapterVk->rayTracingMaxHitAttributeSizeBytes > 0u
+                                        && adapterVk->rayTracingMaxDispatchCount > 0u
+                                        && adapterVk->rayTracingMaxDispatchSize[0] > 0u
+                                        && adapterVk->rayTracingMaxDispatchSize[1] > 0u
+                                        && adapterVk->rayTracingMaxDispatchSize[2] > 0u;
       }
     }
   }
 #endif
 #endif
-  if (getFeatures2 &&
-      (dynamicCore ||
-       (dynamicExtension && instanceVk->apiVersion >= VK_API_VERSION_1_2 &&
-        adapterVk->props.apiVersion >= VK_API_VERSION_1_2))) {
-    dynamicFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
-    features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR;
-    features2.pNext = &dynamicFeatures;
+  if (getFeatures2
+      && (dynamicCore
+          || (dynamicExtension && instanceVk->apiVersion >= VK_API_VERSION_1_2
+           && adapterVk->props.apiVersion >= VK_API_VERSION_1_2))) {
+    dynamicFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
+    features2.sType       = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR;
+    features2.pNext       = &dynamicFeatures;
     getFeatures2(raw, &features2);
+
     if (dynamicFeatures.dynamicRendering) {
       if (!dynamicCore) {
-        adapterVk->extensionNames[adapterVk->nEnabledExtensions++] =
-          VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME;
+        adapterVk->extensionNames[adapterVk->nEnabledExtensions++] = VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME;
         assert(adapterVk->nEnabledExtensions < 64);
       }
+
       adapterVk->dynamicRendering = true;
     }
   }
 #ifdef VK_KHR_fragment_shading_rate
   if (getFeatures2 && vrsExtension) {
-    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
-    PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR getRates;
-    VkPhysicalDeviceFragmentShadingRateKHR *rates;
-    VkFormatProperties formatProps;
-    uint32_t rateCount;
-
-    vrsFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+    vrsFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
     vrsFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     vrsFeatures2.pNext = &vrsFeatures;
     getFeatures2(raw, &vrsFeatures2);
-    adapterVk->vrsDrawRate = vrsFeatures.pipelineFragmentShadingRate;
-    adapterVk->vrsAttachment =
-      vrsFeatures.attachmentFragmentShadingRate &&
-      adapterVk->dynamicRendering;
+    adapterVk->vrsDrawRate   = vrsFeatures.pipelineFragmentShadingRate;
+    adapterVk->vrsAttachment = vrsFeatures.attachmentFragmentShadingRate
+                               && adapterVk->dynamicRendering;
+
     if (adapterVk->vrsDrawRate || adapterVk->vrsAttachment) {
-      adapterVk->vrsCombiners =
-        GPU_SHADING_RATE_COMBINER_KEEP_BIT_EXT |
+      adapterVk->vrsCombiners = GPU_SHADING_RATE_COMBINER_KEEP_BIT_EXT |
         GPU_SHADING_RATE_COMBINER_REPLACE_BIT_EXT;
 
-      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+      getRateProperties = (PFN_vkGetPhysicalDeviceProperties2)
         vkGetInstanceProcAddr(instanceVk->inst,
                               "vkGetPhysicalDeviceProperties2");
-      if (!getProperties2) {
-        getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+
+      if (!getRateProperties) {
+        getRateProperties = (PFN_vkGetPhysicalDeviceProperties2)
           vkGetInstanceProcAddr(instanceVk->inst,
                                 "vkGetPhysicalDeviceProperties2KHR");
       }
-      if (getProperties2) {
-        vrsProps.sType =
-          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR;
+
+      if (getRateProperties) {
+        vrsProps.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR;
         vrsProps2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         vrsProps2.pNext = &vrsProps;
-        getProperties2(raw, &vrsProps2);
-        adapterVk->minVRSTexelSize =
-          vrsProps.minFragmentShadingRateAttachmentTexelSize;
-        adapterVk->maxVRSTexelSize =
-          vrsProps.maxFragmentShadingRateAttachmentTexelSize;
-        adapterVk->maxVRSTexelAspectRatio =
-          vrsProps.maxFragmentShadingRateAttachmentTexelSizeAspectRatio;
+        getRateProperties(raw, &vrsProps2);
+        adapterVk->minVRSTexelSize        = vrsProps.minFragmentShadingRateAttachmentTexelSize;
+        adapterVk->maxVRSTexelSize        = vrsProps.maxFragmentShadingRateAttachmentTexelSize;
+        adapterVk->maxVRSTexelAspectRatio = vrsProps.maxFragmentShadingRateAttachmentTexelSizeAspectRatio;
+
         if (vrsProps.fragmentShadingRateNonTrivialCombinerOps) {
           adapterVk->vrsCombiners |=
             GPU_SHADING_RATE_COMBINER_MIN_BIT_EXT |
             GPU_SHADING_RATE_COMBINER_MAX_BIT_EXT;
         }
+
       } else {
         adapterVk->vrsAttachment = false;
       }
+
       if (adapterVk->vrsAttachment) {
         memset(&formatProps, 0, sizeof(formatProps));
         vkGetPhysicalDeviceFormatProperties(raw,
                                             VK_FORMAT_R8_UINT,
                                             &formatProps);
-        if (adapterVk->minVRSTexelSize.width == 0u ||
-            adapterVk->minVRSTexelSize.height == 0u ||
-            adapterVk->maxVRSTexelSize.width <
-              adapterVk->minVRSTexelSize.width ||
-            adapterVk->maxVRSTexelSize.height <
-              adapterVk->minVRSTexelSize.height ||
-            (formatProps.optimalTilingFeatures &
+
+        if (adapterVk->minVRSTexelSize.width == 0u
+            || adapterVk->minVRSTexelSize.height == 0u
+            || adapterVk->maxVRSTexelSize.width <
+              adapterVk->minVRSTexelSize.width
+            || adapterVk->maxVRSTexelSize.height <
+              adapterVk->minVRSTexelSize.height
+            || (formatProps.optimalTilingFeatures &
              VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) ==
               0u) {
           adapterVk->vrsAttachment = false;
         }
       }
 
-      getRates = (PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR)
+      getRates  = (PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR)
         vkGetInstanceProcAddr(instanceVk->inst,
                               "vkGetPhysicalDeviceFragmentShadingRatesKHR");
       rateCount = 0u;
       rates     = NULL;
-      if (getRates &&
-          getRates(raw, &rateCount, NULL) == VK_SUCCESS && rateCount > 0u) {
+
+      if (getRates
+          && getRates(raw, &rateCount, NULL) == VK_SUCCESS && rateCount > 0u) {
         rates = calloc(rateCount, sizeof(*rates));
       }
+
       if (rates) {
         for (i = 0u; i < rateCount; i++) {
-          rates[i].sType =
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR;
+          rates[i].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR;
         }
+
         if (getRates(raw, &rateCount, rates) == VK_SUCCESS) {
           for (i = 0u; i < rateCount; i++) {
             const VkExtent2D size = rates[i].fragmentSize;
@@ -2051,55 +2319,55 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
               adapterVk->vrsRates |= GPU_SHADING_RATE_4X4_BIT_EXT;
           }
         }
+
         free(rates);
       }
+
       if ((adapterVk->vrsRates & GPU_SHADING_RATE_1X1_BIT_EXT) == 0u) {
-        adapterVk->vrsDrawRate = false;
+        adapterVk->vrsDrawRate   = false;
         adapterVk->vrsAttachment = false;
       }
+
       if (adapterVk->vrsDrawRate || adapterVk->vrsAttachment) {
-        adapterVk->extensionNames[adapterVk->nEnabledExtensions++] =
-          VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME;
+        adapterVk->extensionNames[adapterVk->nEnabledExtensions++] = VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME;
         assert(adapterVk->nEnabledExtensions < 64);
       }
     }
   }
 #endif
 #ifdef VK_EXT_mesh_shader
-  if (getFeatures2 && meshExtension &&
-      (spirv14Core || spirv14ExtensionUsable)) {
-    PFN_vkGetPhysicalDeviceProperties2 getProperties2;
-
-    meshFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+  if (getFeatures2 && meshExtension
+      && (spirv14Core || spirv14ExtensionUsable)) {
+    meshFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
     meshFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     meshFeatures2.pNext = &meshFeatures;
     getFeatures2(raw, &meshFeatures2);
-    getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+    getMeshProperties = (PFN_vkGetPhysicalDeviceProperties2)
       vkGetInstanceProcAddr(instanceVk->inst,
                             "vkGetPhysicalDeviceProperties2");
-    if (!getProperties2) {
-      getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
+
+    if (!getMeshProperties) {
+      getMeshProperties = (PFN_vkGetPhysicalDeviceProperties2)
         vkGetInstanceProcAddr(instanceVk->inst,
                               "vkGetPhysicalDeviceProperties2KHR");
     }
-    if (meshFeatures.meshShader && getProperties2) {
-      meshProperties.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT;
+
+    if (meshFeatures.meshShader && getMeshProperties) {
+      meshProperties.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT;
       meshProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
       meshProperties2.pNext = &meshProperties;
-      getProperties2(raw, &meshProperties2);
+      getMeshProperties(raw, &meshProperties2);
+
       if (!spirv14Core) {
-        if (!vk_addDeviceExtension(
-              adapterVk,
-              VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME) ||
-            !vk_addDeviceExtension(adapterVk,
-                                   VK_KHR_SPIRV_1_4_EXTENSION_NAME)) {
+        if (!vk_addDeviceExtension(adapterVk,
+                                   VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME)
+            || !vk_addDeviceExtension(adapterVk,
+                                      VK_KHR_SPIRV_1_4_EXTENSION_NAME)) {
           goto fail;
         }
       }
-      adapterVk->extensionNames[adapterVk->nEnabledExtensions++] =
-        VK_EXT_MESH_SHADER_EXTENSION_NAME;
+
+      adapterVk->extensionNames[adapterVk->nEnabledExtensions++] = VK_EXT_MESH_SHADER_EXTENSION_NAME;
       assert(adapterVk->nEnabledExtensions < 64);
       adapterVk->meshShader = true;
       adapterVk->taskShader = meshFeatures.taskShader;
@@ -2109,18 +2377,13 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       memcpy(adapterVk->meshLimits.meshWorkgroupSize,
              meshProperties.maxMeshWorkGroupSize,
              sizeof(adapterVk->meshLimits.meshWorkgroupSize));
-      adapterVk->meshLimits.maxTaskWorkgroupInvocations =
-        meshFeatures.taskShader
+      adapterVk->meshLimits.maxTaskWorkgroupInvocations = meshFeatures.taskShader
           ? meshProperties.maxTaskWorkGroupInvocations
           : 0u;
-      adapterVk->meshLimits.maxMeshWorkgroupInvocations =
-        meshProperties.maxMeshWorkGroupInvocations;
-      adapterVk->meshLimits.maxPayloadSizeBytes =
-        meshFeatures.taskShader ? meshProperties.maxTaskPayloadSize : 0u;
-      adapterVk->meshLimits.maxOutputVertices =
-        meshProperties.maxMeshOutputVertices;
-      adapterVk->meshLimits.maxOutputPrimitives =
-        meshProperties.maxMeshOutputPrimitives;
+      adapterVk->meshLimits.maxMeshWorkgroupInvocations = meshProperties.maxMeshWorkGroupInvocations;
+      adapterVk->meshLimits.maxPayloadSizeBytes         = meshFeatures.taskShader ? meshProperties.maxTaskPayloadSize : 0u;
+      adapterVk->meshLimits.maxOutputVertices           = meshProperties.maxMeshOutputVertices;
+      adapterVk->meshLimits.maxOutputPrimitives         = meshProperties.maxMeshOutputPrimitives;
     }
   }
 #endif
@@ -2131,18 +2394,21 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 
 fail:
   free(extensions);
+
   if (adapterVk) {
     free(adapterVk->queueFamilyProps);
   }
+
   free(adapterVk);
   free(adapter);
+
   return NULL;
 }
 
 GPU_HIDE
 GPUResult
-vk_getAdapterProperties(const GPUAdapter     * __restrict adapter,
-                        GPUAdapterProperties * __restrict outProps) {
+vk_getAdapterProperties(const GPUAdapter     *__restrict adapter,
+                        GPUAdapterProperties *__restrict outProps) {
   GPUAdapterVk *adapterVk;
 
   if (!adapter || !outProps || !adapter->_priv) {
@@ -2151,12 +2417,14 @@ vk_getAdapterProperties(const GPUAdapter     * __restrict adapter,
 
   adapterVk = adapter->_priv;
   memset(outProps, 0, sizeof(*outProps));
-  outProps->backend        = GPU_BACKEND_VULKAN;
-  outProps->name           = adapterVk->props.deviceName;
-  outProps->type           = vk_adapterType(adapterVk->props.deviceType);
+  outProps->backend = GPU_BACKEND_VULKAN;
+  outProps->name    = adapterVk->props.deviceName;
+  outProps->type    = vk_adapterType(adapterVk->props.deviceType);
+
   if (vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT)) {
     outProps->executionFlags |= GPU_EXECUTION_GRAPHICS_BIT;
   }
+
   if (vk_hasQueueCapability(adapterVk, VK_QUEUE_COMPUTE_BIT)) {
     outProps->executionFlags |= GPU_EXECUTION_COMPUTE_BIT;
   }
@@ -2166,30 +2434,32 @@ vk_getAdapterProperties(const GPUAdapter     * __restrict adapter,
 
 GPU_HIDE
 GPUResult
-vk_getAdapterIdentity(const GPUAdapter   * __restrict adapter,
-                      GPUAdapterIdentity * __restrict outIdentity) {
+vk_getAdapterIdentity(const GPUAdapter   *__restrict adapter,
+                      GPUAdapterIdentity *__restrict outIdentity) {
+  VkPhysicalDeviceProperties2  properties;
+  VkPhysicalDeviceIDProperties identity;
+  uint8_t                      zeroUUID[VK_UUID_SIZE] = {0};
   PFN_vkGetPhysicalDeviceProperties2 getProperties2;
-  VkPhysicalDeviceProperties2        properties;
-  VkPhysicalDeviceIDProperties       identity;
   GPUInstanceVk                     *instanceVk;
   GPUAdapterVk                      *adapterVk;
-  uint8_t                            zeroUUID[VK_UUID_SIZE] = {0};
 
-  if (!adapter || !outIdentity || !adapter->inst ||
-      !adapter->inst->_priv || !adapter->_priv) {
+  if (!adapter || !outIdentity || !adapter->inst
+      || !adapter->inst->_priv || !adapter->_priv) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  instanceVk = adapter->inst->_priv;
-  adapterVk  = adapter->_priv;
+  instanceVk     = adapter->inst->_priv;
+  adapterVk      = adapter->_priv;
   getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
     vkGetInstanceProcAddr(instanceVk->inst,
                           "vkGetPhysicalDeviceProperties2");
+
   if (!getProperties2) {
     getProperties2 = (PFN_vkGetPhysicalDeviceProperties2)
       vkGetInstanceProcAddr(instanceVk->inst,
                             "vkGetPhysicalDeviceProperties2KHR");
   }
+
   if (!getProperties2) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -2208,6 +2478,7 @@ vk_getAdapterIdentity(const GPUAdapter   * __restrict adapter,
            sizeof(outIdentity->deviceUUID));
     outIdentity->validFlags |= GPU_ADAPTER_IDENTITY_UUID_BIT;
   }
+
   if (identity.deviceLUIDValid) {
     _Static_assert(VK_LUID_SIZE == sizeof(outIdentity->luid),
                    "Vulkan LUID size changed");
@@ -2236,21 +2507,21 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_TIMESTAMPS:
       return vk_hasTimestampCapability(adapterVk);
     case GPU_FEATURE_PIPELINE_STATISTICS:
-      return adapterVk->features.pipelineStatisticsQuery &&
-             (vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT) ||
-              vk_hasQueueCapability(adapterVk, VK_QUEUE_COMPUTE_BIT));
+      return adapterVk->features.pipelineStatisticsQuery
+             && (vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT)
+                 || vk_hasQueueCapability(adapterVk, VK_QUEUE_COMPUTE_BIT));
     case GPU_FEATURE_INDIRECT_DRAW:
       return vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT);
     case GPU_FEATURE_MULTI_DRAW:
-      return adapterVk->features.multiDrawIndirect &&
-             vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT);
+      return adapterVk->features.multiDrawIndirect
+             && vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT);
     case GPU_FEATURE_SUBGROUPS:
       return vk_hasSubgroupCapability(adapterVk);
     case GPU_FEATURE_SHADER_F16:
       return adapterVk->shaderFloat16;
     case GPU_FEATURE_DESCRIPTOR_INDEXING:
-      return adapterVk->descriptorIndexing ||
-             adapterVk->boundedDescriptorIndexing;
+      return adapterVk->descriptorIndexing
+             || adapterVk->boundedDescriptorIndexing;
     case GPU_FEATURE_BINDLESS:
       return adapterVk->bindless;
     case GPU_FEATURE_MESH_SHADER:
@@ -2284,171 +2555,61 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_PLACED_RESOURCES:
       return true;
     case GPU_FEATURE_SPARSE_TEXTURES:
-      return adapterVk->features.sparseBinding &&
-             (adapterVk->features.sparseResidencyImage2D ||
-              adapterVk->features.sparseResidencyImage3D) &&
-             vk_hasQueueCapability(adapterVk,
-                                   VK_QUEUE_SPARSE_BINDING_BIT);
+      return adapterVk->features.sparseBinding
+             && (adapterVk->features.sparseResidencyImage2D
+                 || adapterVk->features.sparseResidencyImage3D)
+             && vk_hasQueueCapability(adapterVk,
+                                      VK_QUEUE_SPARSE_BINDING_BIT);
     case GPU_FEATURE_SPARSE_BUFFERS:
-      return adapterVk->features.sparseBinding &&
-             adapterVk->features.sparseResidencyBuffer &&
-             vk_hasQueueCapability(adapterVk,
-                                   VK_QUEUE_SPARSE_BINDING_BIT);
+      return adapterVk->features.sparseBinding
+             && adapterVk->features.sparseResidencyBuffer
+             && vk_hasQueueCapability(adapterVk,
+                                      VK_QUEUE_SPARSE_BINDING_BIT);
     case GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT:
-      return adapterVk->features.sparseBinding &&
-             (adapterVk->features.sparseResidencyBuffer ||
-              adapterVk->features.sparseResidencyImage2D ||
-              adapterVk->features.sparseResidencyImage3D) &&
-             vk_hasQueueCapability(adapterVk,
-                                   VK_QUEUE_SPARSE_BINDING_BIT);
+      return adapterVk->features.sparseBinding
+             && (adapterVk->features.sparseResidencyBuffer
+                 || adapterVk->features.sparseResidencyImage2D
+                 || adapterVk->features.sparseResidencyImage3D)
+             && vk_hasQueueCapability(adapterVk,
+                                      VK_QUEUE_SPARSE_BINDING_BIT);
     default:
       return false;
   }
 }
 
-static uint32_t
-vk_limitU32(uint32_t implementationLimit, uint32_t nativeLimit) {
-  return implementationLimit < nativeLimit ? implementationLimit : nativeLimit;
-}
-
-static void
-vk_getLimits(const GPUAdapter * __restrict adapter,
-             GPULimits       * __restrict outLimits) {
-  GPUAdapterVk                 *adapterVk;
-  const VkPhysicalDeviceLimits *native;
-
-  adapterVk = adapter ? adapter->_priv : NULL;
-  if (!adapterVk || !outLimits) {
-    return;
-  }
-
-  native = &adapterVk->props.limits;
-  outLimits->maxBindGroups = vk_limitU32(
-    outLimits->maxBindGroups,
-    native->maxBoundDescriptorSets
-  );
-  outLimits->maxBindingsPerGroup = vk_limitU32(
-    outLimits->maxBindingsPerGroup,
-    native->maxPerStageResources
-  );
-  outLimits->maxDynamicUniformBuffers = vk_limitU32(
-    outLimits->maxDynamicUniformBuffers,
-    native->maxDescriptorSetUniformBuffersDynamic
-  );
-  outLimits->maxDynamicStorageBuffers = vk_limitU32(
-    outLimits->maxDynamicStorageBuffers,
-    native->maxDescriptorSetStorageBuffersDynamic
-  );
-  outLimits->minUniformBufferOffsetAlignment =
-    native->minUniformBufferOffsetAlignment;
-  outLimits->minStorageBufferOffsetAlignment =
-    native->minStorageBufferOffsetAlignment;
-  outLimits->maxColorAttachments = vk_limitU32(
-    outLimits->maxColorAttachments,
-    native->maxColorAttachments
-  );
-  outLimits->maxComputeWorkgroupSizeX = native->maxComputeWorkGroupSize[0];
-  outLimits->maxComputeWorkgroupSizeY = native->maxComputeWorkGroupSize[1];
-  outLimits->maxComputeWorkgroupSizeZ = native->maxComputeWorkGroupSize[2];
-  outLimits->maxPushConstantSizeBytes  = native->maxPushConstantsSize;
-  outLimits->maxSamplerAnisotropy      =
-    adapterVk->features.samplerAnisotropy
-      ? vk_limitU32(16u, (uint32_t)native->maxSamplerAnisotropy)
-      : 1u;
-  if (vk_hasSubgroupCapability(adapterVk)) {
-    outLimits->minSubgroupSize = adapterVk->minSubgroupSize;
-    outLimits->maxSubgroupSize = adapterVk->maxSubgroupSize;
-  }
-}
-
-static void
-vk_getFormatCapabilities(
-  const GPUAdapter      * __restrict adapter,
-  GPUFormat              format,
-  GPUFormatCapabilities * __restrict outCaps) {
-  GPUAdapterVk            *adapterVk;
-  VkImageFormatProperties imageProperties;
-  VkFormatProperties       properties;
-  VkFormat                 nativeFormat;
-  VkFormatFeatureFlags     features;
-  VkImageUsageFlags        imageUsage;
-
-  adapterVk = adapter ? adapter->_priv : NULL;
-  if (!adapterVk || !outCaps ||
-      !vk_formatFromGPU(format, &nativeFormat)) {
-    if (outCaps) {
-      memset(outCaps, 0, sizeof(*outCaps));
-    }
-    return;
-  }
-
-  vkGetPhysicalDeviceFormatProperties(adapterVk->physicalDevice,
-                                      nativeFormat,
-                                      &properties);
-  features = properties.optimalTilingFeatures;
-  memset(outCaps, 0, sizeof(*outCaps));
-  outCaps->sampled =
-    (features & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0u;
-  outCaps->filterable =
-    (features & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0u;
-  outCaps->storage =
-    (features & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0u;
-  outCaps->colorAttachment =
-    (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) != 0u;
-  outCaps->blendable =
-    (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0u;
-  outCaps->depthStencil =
-    (features & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0u;
-  if (outCaps->colorAttachment || outCaps->depthStencil) {
-    imageUsage = outCaps->depthStencil
-                   ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
-                   : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    if (vkGetPhysicalDeviceImageFormatProperties(
-          adapterVk->physicalDevice,
-          nativeFormat,
-          VK_IMAGE_TYPE_2D,
-          VK_IMAGE_TILING_OPTIMAL,
-          imageUsage,
-          0u,
-          &imageProperties) == VK_SUCCESS) {
-      outCaps->supportedSampleCounts =
-        imageProperties.sampleCounts &
-        (GPU_SAMPLE_COUNT_1_BIT |
-         GPU_SAMPLE_COUNT_2_BIT |
-         GPU_SAMPLE_COUNT_4_BIT |
-         GPU_SAMPLE_COUNT_8_BIT);
-    }
-  }
-}
-
 GPU_HIDE
-GPUAdapter *
-vk_getAvailableAdapters(GPUInstance * __restrict inst,
-                        uint32_t                 maxNumberOfItems) {
-  GPUInstanceVk    *instVk;
-  GPUAdapter       *firstAdapter, *lastAdapter, *adapter;
+GPUAdapter*
+vk_getAvailableAdapters(GPUInstance *__restrict inst,
+                        uint32_t                maxNumberOfItems) {
+  GPUInstanceVk *instVk;
+  GPUAdapter    *firstAdapter;
+  GPUAdapter    *lastAdapter;
+  GPUAdapter    *adapter;
   VkPhysicalDevice *physicalDevices;
-  VkInstance        instRaw;
-  VkResult          err;
-  uint32_t          i, gpuCount;
+  VkInstance instRaw;
+  VkResult   err;
+  uint32_t   i;
+  uint32_t   gpuCount;
 
   firstAdapter = lastAdapter = NULL;
   instVk       = inst->_priv;
   instRaw      = instVk->inst;
 
-  gpuCount    = 0;
-  err         = vkEnumeratePhysicalDevices(instRaw, &gpuCount, NULL);
+  gpuCount = 0;
+  err      = vkEnumeratePhysicalDevices(instRaw, &gpuCount, NULL);
+
   if (err != VK_SUCCESS || gpuCount == 0u) {
     return NULL;
   }
 
-  physicalDevices = malloc(sizeof(VkPhysicalDevice) * gpuCount);
-  if (!physicalDevices) {
+  if (!(physicalDevices = malloc(sizeof(VkPhysicalDevice) * gpuCount))) {
     return NULL;
   }
-  err             = vkEnumeratePhysicalDevices(instRaw,
-                                               &gpuCount,
-                                               physicalDevices);
+
+  err = vkEnumeratePhysicalDevices(instRaw,
+                                   &gpuCount,
+                                   physicalDevices);
+
   if (err != VK_SUCCESS && err != VK_INCOMPLETE) {
     free(physicalDevices);
     return NULL;
@@ -2456,12 +2617,17 @@ vk_getAvailableAdapters(GPUInstance * __restrict inst,
 
   for (i = 0; i < gpuCount && i < maxNumberOfItems; i++) {
     adapter = vk_newAdapter(inst, physicalDevices[i]);
+
     if (!adapter) {
       continue;
     }
 
-    if (lastAdapter) { lastAdapter->next = adapter; }
-    else             { firstAdapter      = adapter; }
+    if (lastAdapter) {
+      lastAdapter->next = adapter;
+    } else {
+      firstAdapter = adapter;
+    }
+
     lastAdapter = adapter;
   }
 
@@ -2471,28 +2637,32 @@ vk_getAvailableAdapters(GPUInstance * __restrict inst,
 }
 
 GPU_HIDE
-GPUAdapter *
-vk_selectAdapter(GPUInstance        * __restrict inst,
-                 GPUAdapter         * __restrict adapters,
-                 GPUPowerPreference              powerPreference) {
+GPUAdapter*
+vk_selectAdapter(GPUInstance *__restrict inst,
+                 GPUAdapter  *__restrict adapters,
+                 GPUPowerPreference      powerPreference) {
+  GPUAdapter *adaptersByType[VK_PHYSICAL_DEVICE_TYPE_CPU + 1] = {0};
+  GPUAdapter *priorityList[VK_PHYSICAL_DEVICE_TYPE_CPU + 1];
   GPUAdapter   *adapter;
   GPUAdapterVk *adapterVk;
-  GPUAdapter   *adaptersByType[VK_PHYSICAL_DEVICE_TYPE_CPU + 1] = {0};
-  GPUAdapter   *priorityList[VK_PHYSICAL_DEVICE_TYPE_CPU + 1];
-  uint32_t      i;
+  uint32_t i;
 
   GPU__UNUSED(inst);
+
   if (powerPreference == GPU_POWER_PREFERENCE_DEFAULT) {
     return adapters;
   }
+
   adapter   = adapters;
   adapterVk = NULL;
 
   while (adapter) {
     adapterVk = adapter->_priv;
+
     if (!adaptersByType[adapterVk->props.deviceType]) {
       adaptersByType[adapterVk->props.deviceType] = adapter;
     }
+
     adapter = adapter->next;
   }
 
@@ -2503,6 +2673,7 @@ vk_selectAdapter(GPUInstance        * __restrict inst,
     priorityList[0] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU];
     priorityList[1] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU];
   }
+
   priorityList[2] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU];
   priorityList[3] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_CPU];
   priorityList[4] = adaptersByType[VK_PHYSICAL_DEVICE_TYPE_OTHER];
@@ -2510,7 +2681,11 @@ vk_selectAdapter(GPUInstance        * __restrict inst,
   for (i = 0;
        i < GPU_ARRAY_LEN(priorityList) && !(adapter = priorityList[i]);
        i++);
-  if (!adapter) { goto err; }
+
+  if (!adapter) {
+    goto err;
+  }
+
   adapterVk = adapter->_priv;
 
 #ifdef DEBUG
@@ -2535,199 +2710,112 @@ vk_destroyAdapter(GPUAdapter * __restrict adapter) {
   }
 
   adapterVk = adapter->_priv;
+
   if (adapterVk) {
     free(adapterVk->queueFamilyProps);
     free(adapterVk);
   }
+
   free(adapter);
 }
 
-typedef struct GPUQueuePlanVk {
-  GPUQueueFlagBits bits;
-  uint32_t         familyIndex;
-  uint32_t         count;
-} GPUQueuePlanVk;
-
-static bool
-vk__queueFlags(GPUQueueFlagBits bits, VkQueueFlags *outFlags) {
-  VkQueueFlags flags;
-  uint32_t     mappedBits;
-
-  flags      = 0u;
-  mappedBits = GPU_QUEUE_GRAPHICS_BIT |
-               GPU_QUEUE_COMPUTE_BIT |
-               GPU_QUEUE_TRANSFER_BIT;
-
-  if (bits & GPU_QUEUE_GRAPHICS_BIT) flags |= VK_QUEUE_GRAPHICS_BIT;
-  if (bits & GPU_QUEUE_COMPUTE_BIT)  flags |= VK_QUEUE_COMPUTE_BIT;
-  if (bits & GPU_QUEUE_TRANSFER_BIT) flags |= VK_QUEUE_TRANSFER_BIT;
-
-  *outFlags = flags;
-  return ((uint32_t)bits & ~mappedBits) == 0u;
-}
-
-static uint32_t
-vk__flagCount(VkQueueFlags flags) {
-  uint32_t count;
-
-  count = 0u;
-  while (flags) {
-    flags &= flags - 1u;
-    count++;
-  }
-  return count;
-}
-
-static uint32_t
-vk__findQueueFamily(const GPUAdapterVk *adapterVk,
-                    GPUQueueFlagBits    requiredBits,
-                    GPUQueueFlagBits    optionalBits,
-                    uint32_t            count,
-                    VkQueueFlags        nativeRequiredFlags) {
-  VkQueueFlags requiredFlags;
-  VkQueueFlags optionalFlags;
-  VkQueueFlags commonFlags;
-  uint32_t     bestIndex;
-  uint32_t     bestScore;
-
-  requiredFlags = 0u;
-  optionalFlags = 0u;
-  if (!vk__queueFlags(requiredBits, &requiredFlags)) {
-    return UINT32_MAX;
-  }
-  requiredFlags |= nativeRequiredFlags;
-  (void)vk__queueFlags(optionalBits, &optionalFlags);
-  commonFlags   = VK_QUEUE_GRAPHICS_BIT |
-                  VK_QUEUE_COMPUTE_BIT |
-                  VK_QUEUE_TRANSFER_BIT |
-                  VK_QUEUE_SPARSE_BINDING_BIT;
-  bestIndex     = UINT32_MAX;
-  bestScore     = UINT32_MAX;
-
-  for (uint32_t i = 0; i < adapterVk->nQueFamilies; i++) {
-    const VkQueueFamilyProperties *family;
-    uint32_t missingOptional;
-    uint32_t extraCapabilities;
-    uint32_t score;
-
-    family = &adapterVk->queueFamilyProps[i];
-    if (family->queueCount < count ||
-        (family->queueFlags & requiredFlags) != requiredFlags) {
-      continue;
-    }
-
-    missingOptional   = vk__flagCount(optionalFlags & ~family->queueFlags);
-    extraCapabilities = vk__flagCount((family->queueFlags & commonFlags) &
-                                      ~requiredFlags);
-    score              = missingOptional * 16u + extraCapabilities;
-    if (score < bestScore) {
-      bestScore = score;
-      bestIndex = i;
-    }
-  }
-
-  return bestIndex;
-}
-
-static GPUQueuePlanVk*
-vk__findQueuePlan(GPUQueuePlanVk *plans,
-                  uint32_t        planCount,
-                  uint32_t        familyIndex) {
-  for (uint32_t i = 0; i < planCount; i++) {
-    if (plans[i].familyIndex == familyIndex) {
-      return &plans[i];
-    }
-  }
-  return NULL;
-}
-
 GPU_HIDE
-GPUDevice *
-vk_createDevice(GPUAdapter              * __restrict adapter,
+GPUDevice*
+vk_createDevice(GPUAdapter   *__restrict adapter,
                 const GPUQueueCreateInfo queCI[],
                 uint32_t                 nQueCI,
                 uint64_t                 enabledFeatureMask) {
+  const char                                         *deviceExtensions[64];
+  VkPhysicalDeviceFeatures                            coreFeatures             = {0};
+#ifdef VK_KHR_shader_float_controls2
+  VkPhysicalDeviceShaderFloatControls2FeaturesKHR     floatControls2Features   = {0};
+#endif
+#ifdef VK_KHR_shader_fma
+  VkPhysicalDeviceShaderFmaFeaturesKHR                fmaFeatures              = {0};
+#endif
+  VkPhysicalDeviceDynamicRenderingFeaturesKHR         dynamicFeatures          = {0};
+  VkPhysicalDeviceShaderFloat16Int8Features           float16Features          = {0};
+  VkPhysicalDevice16BitStorageFeatures                storage16Features        = {0};
+  VkPhysicalDeviceVulkanMemoryModelFeatures           memoryModelFeatures      = {0};
+  VkPhysicalDeviceShaderAtomicInt64Features           atomic64Features         = {0};
+#ifdef VK_EXT_shader_atomic_float
+  VkPhysicalDeviceShaderAtomicFloatFeaturesEXT        floatAtomicFeatures      = {0};
+#endif
+  VkPhysicalDeviceDescriptorIndexingFeatures          descriptorFeatures       = {0};
+  VkPhysicalDeviceTimelineSemaphoreFeatures           timelineFeatures         = {0};
+  VkPhysicalDeviceSynchronization2FeaturesKHR         sync2Features            = {0};
+#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
+  VkPhysicalDevicePresentIdFeaturesKHR                presentIdFeatures        = {0};
+  VkPhysicalDevicePresentWaitFeaturesKHR              presentWaitFeatures      = {0};
+#endif
+  VkPhysicalDeviceBufferDeviceAddressFeatures         bufferAddressFeatures    = {0};
+#ifdef VK_EXT_descriptor_buffer
+  VkPhysicalDeviceDescriptorBufferFeaturesEXT         descriptorBufferFeatures = {0};
+#endif
+#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
+  VkPhysicalDeviceAccelerationStructureFeaturesKHR    accelerationFeatures     = {0};
+  VkPhysicalDeviceRayQueryFeaturesKHR                 rayQueryFeatures         = {0};
+#endif
+#ifdef VK_KHR_ray_tracing_pipeline
+  VkPhysicalDeviceRayTracingPipelineFeaturesKHR       rayPipelineFeatures      = {0};
+#endif
+#ifdef VK_EXT_mesh_shader
+  VkPhysicalDeviceMeshShaderFeaturesEXT               meshFeatures             = {0};
+#endif
+#ifdef VK_KHR_fragment_shading_rate
+  VkPhysicalDeviceFragmentShadingRateFeaturesKHR      vrsFeatures              = {0};
+#endif
+#ifdef VK_KHR_cooperative_matrix
+  VkPhysicalDeviceCooperativeMatrixFeaturesKHR        cooperativeFeatures      = {0};
+#endif
+#if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
+  VkPhysicalDeviceMaintenance5FeaturesKHR             maintenance5Features     = {0};
+#endif
+#ifdef VK_KHR_pipeline_binary
+  VkPhysicalDevicePipelineBinaryFeaturesKHR           pipelineBinaryFeatures   = {0};
+#endif
+#ifdef VK_KHR_shader_clock
+  VkPhysicalDeviceShaderClockFeaturesKHR              shaderClockFeatures      = {0};
+#endif
+#ifdef VK_KHR_compute_shader_derivatives
+  VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR derivativeFeatures       = {0};
+#endif
+#ifdef VK_KHR_shader_untyped_pointers
+  VkPhysicalDeviceShaderUntypedPointersFeaturesKHR    untypedPointerFeatures   = {0};
+#endif
+#ifdef VK_KHR_copy_memory_indirect
+  VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR       indirectCopyFeatures     = {0};
+#endif
+#ifdef VK_AMDX_shader_enqueue
+  VkPhysicalDeviceShaderEnqueueFeaturesAMDX           executionGraphFeatures   = {0};
+#endif
+  VkDeviceCreateInfo deviceCI = {0};
   GPUDevice               *device;
   GPUDeviceVk             *deviceVk;
   GPUAdapterVk            *adapterVk;
   GPUQueuePlanVk          *plans;
   GPUQueuePlanVk          *plan;
   VkDeviceQueueCreateInfo *queues;
-  const char              *deviceExtensions[64];
   float                   *queuePriorities;
-  VkPhysicalDeviceFeatures coreFeatures = {0};
-#ifdef VK_KHR_shader_float_controls2
-  VkPhysicalDeviceShaderFloatControls2FeaturesKHR floatControls2Features = {0};
-#endif
-#ifdef VK_KHR_shader_fma
-  VkPhysicalDeviceShaderFmaFeaturesKHR fmaFeatures = {0};
-#endif
-  VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicFeatures = {0};
-  VkPhysicalDeviceShaderFloat16Int8Features float16Features = {0};
-  VkPhysicalDevice16BitStorageFeatures storage16Features = {0};
-  VkPhysicalDeviceVulkanMemoryModelFeatures memoryModelFeatures = {0};
-  VkPhysicalDeviceShaderAtomicInt64Features atomic64Features = {0};
-#ifdef VK_EXT_shader_atomic_float
-  VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatAtomicFeatures = {0};
-#endif
-  VkPhysicalDeviceDescriptorIndexingFeatures descriptorFeatures = {0};
-  VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures = {0};
-  VkPhysicalDeviceSynchronization2FeaturesKHR sync2Features = {0};
-#if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
-  VkPhysicalDevicePresentIdFeaturesKHR   presentIdFeatures = {0};
-  VkPhysicalDevicePresentWaitFeaturesKHR presentWaitFeatures = {0};
-#endif
-  VkPhysicalDeviceBufferDeviceAddressFeatures bufferAddressFeatures = {0};
-#ifdef VK_EXT_descriptor_buffer
-  VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptorBufferFeatures = {0};
-#endif
-#if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
-  VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationFeatures = {0};
-  VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {0};
-#endif
-#ifdef VK_KHR_ray_tracing_pipeline
-  VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayPipelineFeatures = {0};
-#endif
-#ifdef VK_EXT_mesh_shader
-  VkPhysicalDeviceMeshShaderFeaturesEXT meshFeatures = {0};
-#endif
-#ifdef VK_KHR_fragment_shading_rate
-  VkPhysicalDeviceFragmentShadingRateFeaturesKHR vrsFeatures = {0};
-#endif
-#ifdef VK_KHR_cooperative_matrix
-  VkPhysicalDeviceCooperativeMatrixFeaturesKHR cooperativeFeatures = {0};
-#endif
+  GPUQueue                *queue;
+  VkResult result;
+  uint32_t familyIndex;
+  uint32_t deviceExtensionCount;
+  uint32_t maxQueueCount;
+  uint32_t planCount;
+  uint32_t totalQueueCount;
+  uint32_t queueInfoIndex;
+  uint32_t planIndex;
+  uint32_t sparseIndex;
+  uint32_t priorityIndex;
+  uint32_t nativeQueueIndex;
+  uint32_t createdPlanIndex;
+  uint32_t queueIndex;
+  uint32_t cleanupIndex;
 #if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
-  VkPhysicalDeviceMaintenance5FeaturesKHR maintenance5Features = {0};
-  bool                                    maintenance5Required;
+  bool maintenance5Required;
 #endif
-#ifdef VK_KHR_pipeline_binary
-  VkPhysicalDevicePipelineBinaryFeaturesKHR pipelineBinaryFeatures = {0};
-#endif
-#ifdef VK_KHR_shader_clock
-  VkPhysicalDeviceShaderClockFeaturesKHR shaderClockFeatures = {0};
-#endif
-#ifdef VK_KHR_compute_shader_derivatives
-  VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
-    derivativeFeatures = {0};
-#endif
-#ifdef VK_KHR_shader_untyped_pointers
-  VkPhysicalDeviceShaderUntypedPointersFeaturesKHR
-    untypedPointerFeatures = {0};
-#endif
-#ifdef VK_KHR_copy_memory_indirect
-  VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR indirectCopyFeatures = {0};
-#endif
-#ifdef VK_AMDX_shader_enqueue
-  VkPhysicalDeviceShaderEnqueueFeaturesAMDX executionGraphFeatures = {0};
-#endif
-  VkDeviceCreateInfo       deviceCI = {0};
-  VkResult                 result;
-  uint32_t                 familyIndex;
-  uint32_t                 deviceExtensionCount;
-  uint32_t                 maxQueueCount;
-  uint32_t                 planCount;
-  uint32_t                 totalQueueCount;
+  bool sparseQueue;
 
   device          = NULL;
   deviceVk        = NULL;
@@ -2745,6 +2833,7 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   deviceVk = calloc(1, sizeof(*deviceVk));
   plans    = calloc(nQueCI, sizeof(*plans));
   queues   = calloc(nQueCI, sizeof(*queues));
+
   if (!device || !deviceVk || !plans || !queues) {
     goto err;
   }
@@ -2755,220 +2844,241 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   if (pthread_mutex_init(&deviceVk->classicRenderLock, NULL) != 0) {
     goto err;
   }
+
   deviceVk->classicRenderLockInitialized = true;
 #endif
 
   adapterVk = adapter->_priv;
+
   if (!adapterVk->negativeViewport) {
     goto err;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u &&
-      !adapterVk->shaderFloat16) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u
+      && !adapterVk->shaderFloat16) {
     goto err;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u &&
-      !adapterVk->atomic64) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u
+      && !adapterVk->atomic64) {
     goto err;
   }
+
   if (vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_SHADER_SUBGROUP_CLOCK) &&
-      !adapterVk->shaderSubgroupClock) {
+                        GPU_FEATURE_SHADER_SUBGROUP_CLOCK)
+      && !adapterVk->shaderSubgroupClock) {
     goto err;
   }
+
   if (vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_SHADER_DEVICE_CLOCK) &&
-      !adapterVk->shaderDeviceClock) {
+                        GPU_FEATURE_SHADER_DEVICE_CLOCK)
+      && !adapterVk->shaderDeviceClock) {
     goto err;
   }
+
   if (vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS) &&
-      !adapterVk->computeDerivativeQuads) {
+                        GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS)
+      && !adapterVk->computeDerivativeQuads) {
     goto err;
   }
+
   if (vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR) &&
-      !adapterVk->computeDerivativeLinear) {
+                        GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR)
+      && !adapterVk->computeDerivativeLinear) {
     goto err;
   }
+
   if (vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_BUFFER_DEVICE_ADDRESS) &&
-      !adapterVk->bufferDeviceAddress) {
+                        GPU_FEATURE_BUFFER_DEVICE_ADDRESS)
+      && !adapterVk->bufferDeviceAddress) {
     goto err;
   }
+
   if (vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_INDIRECT_MEMORY_COPY) &&
-      !adapterVk->indirectMemoryCopy) {
+                        GPU_FEATURE_INDIRECT_MEMORY_COPY)
+      && !adapterVk->indirectMemoryCopy) {
     goto err;
   }
-  if (vk_featureEnabled(
-        enabledFeatureMask,
-        GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
-      ) && !adapterVk->indirectMemoryToTextureCopy) {
+
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY) && !adapterVk->indirectMemoryToTextureCopy) {
     goto err;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u &&
-      !adapterVk->descriptorIndexing &&
-      !adapterVk->boundedDescriptorIndexing) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u
+      && !adapterVk->descriptorIndexing
+      && !adapterVk->boundedDescriptorIndexing) {
     goto err;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u &&
-      !adapterVk->bindless) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u
+      && !adapterVk->bindless) {
     goto err;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u &&
-      !adapterVk->meshShader) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u
+      && !adapterVk->meshShader) {
     goto err;
   }
+
   if ((enabledFeatureMask &
-       (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u &&
-      !adapterVk->vrsDrawRate && !adapterVk->vrsAttachment) {
+       (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u
+      && !adapterVk->vrsDrawRate && !adapterVk->vrsAttachment) {
     goto err;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u &&
-      !adapterVk->rayQuery) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u
+      && !adapterVk->rayQuery) {
     goto err;
   }
+
   if ((enabledFeatureMask &
-       (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u &&
-      !adapterVk->rayTracingPipeline) {
+       (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u
+      && !adapterVk->rayTracingPipeline) {
     goto err;
   }
-  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_EXECUTION_GRAPH) &&
-      !adapterVk->executionGraph) {
+
+  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_EXECUTION_GRAPH)
+      && !adapterVk->executionGraph) {
     goto err;
   }
+
   if ((enabledFeatureMask &
-       (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u &&
-      !adapterVk->subgroupMatrix) {
+       (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u
+      && !adapterVk->subgroupMatrix) {
     goto err;
   }
+
   planCount       = 0u;
   maxQueueCount   = 0u;
   totalQueueCount = 0u;
 
-  for (uint32_t i = 0; i < nQueCI; i++) {
+  for (queueInfoIndex = 0; queueInfoIndex < nQueCI; queueInfoIndex++) {
     familyIndex = vk__findQueueFamily(adapterVk,
-                                      queCI[i].flags,
-                                      queCI[i].optionalFlags,
-                                      queCI[i].count,
-                                      i == 0u &&
-                                      (vk_featureEnabled(
-                                         enabledFeatureMask,
-                                         GPU_FEATURE_SPARSE_TEXTURES
-                                       ) ||
-                                       vk_featureEnabled(
-                                         enabledFeatureMask,
-                                         GPU_FEATURE_SPARSE_BUFFERS
-                                       ))
+                                      queCI[queueInfoIndex].flags,
+                                      queCI[queueInfoIndex].optionalFlags,
+                                      queCI[queueInfoIndex].count,
+                                      queueInfoIndex == 0u
+                                      && (vk_featureEnabled(enabledFeatureMask,
+                                                            GPU_FEATURE_SPARSE_TEXTURES)
+                                          || vk_featureEnabled(enabledFeatureMask,
+                                                               GPU_FEATURE_SPARSE_BUFFERS))
                                         ? VK_QUEUE_SPARSE_BINDING_BIT
                                         : 0u);
+
     if (familyIndex == UINT32_MAX) {
       goto err;
     }
 
     plan = vk__findQueuePlan(plans, planCount, familyIndex);
+
     if (!plan) {
       plan              = &plans[planCount++];
       plan->familyIndex = familyIndex;
     }
-    plan->bits |= queCI[i].flags;
-    if (queCI[i].count > plan->count) {
-      plan->count = queCI[i].count;
+
+    plan->bits |= queCI[queueInfoIndex].flags;
+
+    if (queCI[queueInfoIndex].count > plan->count) {
+      plan->count = queCI[queueInfoIndex].count;
     }
   }
 
-  for (uint32_t i = 0; i < planCount; i++) {
-    if (plans[i].count > maxQueueCount) {
-      maxQueueCount = plans[i].count;
+  for (planIndex = 0; planIndex < planCount; planIndex++) {
+    if (plans[planIndex].count > maxQueueCount) {
+      maxQueueCount = plans[planIndex].count;
     }
-    totalQueueCount += plans[i].count;
+
+    totalQueueCount += plans[planIndex].count;
   }
 
-  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SPARSE_TEXTURES) ||
-      vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SPARSE_BUFFERS)) {
-    bool sparseQueue;
-
+  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SPARSE_TEXTURES)
+      || vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SPARSE_BUFFERS)) {
     sparseQueue = false;
-    for (uint32_t i = 0u; i < planCount; i++) {
-      if ((adapterVk->queueFamilyProps[plans[i].familyIndex].queueFlags &
+
+    for (sparseIndex = 0u; sparseIndex < planCount; sparseIndex++) {
+      if ((adapterVk->queueFamilyProps[plans[sparseIndex].familyIndex].queueFlags &
            VK_QUEUE_SPARSE_BINDING_BIT) != 0u) {
         sparseQueue = true;
         break;
       }
     }
+
     if (!sparseQueue) {
       goto err;
     }
   }
 
   queuePriorities = calloc(maxQueueCount, sizeof(*queuePriorities));
+
   if (!queuePriorities || totalQueueCount == 0u) {
     goto err;
   }
-  for (uint32_t i = 0; i < maxQueueCount; i++) {
-    queuePriorities[i] = 1.0f;
+
+  for (priorityIndex = 0; priorityIndex < maxQueueCount; priorityIndex++) {
+    queuePriorities[priorityIndex] = 1.0f;
   }
 
-  for (uint32_t i = 0; i < planCount; i++) {
-    queues[i].sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queues[i].queueFamilyIndex = plans[i].familyIndex;
-    queues[i].queueCount       = plans[i].count;
-    queues[i].pQueuePriorities = queuePriorities;
+  for (nativeQueueIndex = 0; nativeQueueIndex < planCount; nativeQueueIndex++) {
+    queues[nativeQueueIndex].sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queues[nativeQueueIndex].queueFamilyIndex = plans[nativeQueueIndex].familyIndex;
+    queues[nativeQueueIndex].queueCount       = plans[nativeQueueIndex].count;
+    queues[nativeQueueIndex].pQueuePriorities = queuePriorities;
   }
 
-  deviceExtensionCount = vk_collectDeviceExtensions(
-    adapterVk,
-    enabledFeatureMask,
-    deviceExtensions,
-    (uint32_t)GPU_ARRAY_LEN(deviceExtensions)
-  );
+  deviceExtensionCount = vk_collectDeviceExtensions(adapterVk,
+                                                    enabledFeatureMask,
+                                                    deviceExtensions,
+                                                    (uint32_t)GPU_ARRAY_LEN(deviceExtensions));
 
   if (vk_featureEnabled(enabledFeatureMask,
                         GPU_FEATURE_PIPELINE_STATISTICS)) {
-    coreFeatures.pipelineStatisticsQuery =
-      adapterVk->features.pipelineStatisticsQuery;
+    coreFeatures.pipelineStatisticsQuery = adapterVk->features.pipelineStatisticsQuery;
   }
+
   if (vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_DESCRIPTOR_INDEXING) ||
-      vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_BINDLESS)) {
+                        GPU_FEATURE_DESCRIPTOR_INDEXING)
+      || vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_BINDLESS)) {
     if (adapterVk->descriptorIndexing) {
       coreFeatures.shaderUniformBufferArrayDynamicIndexing =
         adapterVk->features.shaderUniformBufferArrayDynamicIndexing;
-      coreFeatures.shaderSampledImageArrayDynamicIndexing =
-        adapterVk->features.shaderSampledImageArrayDynamicIndexing;
+      coreFeatures.shaderSampledImageArrayDynamicIndexing  = adapterVk->features.shaderSampledImageArrayDynamicIndexing;
       coreFeatures.shaderStorageBufferArrayDynamicIndexing =
         adapterVk->features.shaderStorageBufferArrayDynamicIndexing;
-      coreFeatures.shaderStorageImageArrayDynamicIndexing =
-        adapterVk->features.shaderStorageImageArrayDynamicIndexing;
+      coreFeatures.shaderStorageImageArrayDynamicIndexing  = adapterVk->features.shaderStorageImageArrayDynamicIndexing;
     }
   }
+
   if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_MULTI_DRAW)) {
     coreFeatures.multiDrawIndirect = adapterVk->features.multiDrawIndirect;
   }
+
   if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SPARSE_TEXTURES)) {
     coreFeatures.sparseBinding          = VK_TRUE;
-    coreFeatures.sparseResidencyImage2D =
-      adapterVk->features.sparseResidencyImage2D;
-    coreFeatures.sparseResidencyImage3D =
-      adapterVk->features.sparseResidencyImage3D;
+    coreFeatures.sparseResidencyImage2D = adapterVk->features.sparseResidencyImage2D;
+    coreFeatures.sparseResidencyImage3D = adapterVk->features.sparseResidencyImage3D;
   }
+
   if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SPARSE_BUFFERS)) {
     coreFeatures.sparseBinding         = VK_TRUE;
     coreFeatures.sparseResidencyBuffer = VK_TRUE;
   }
-  coreFeatures.independentBlend   = adapterVk->features.independentBlend;
-  coreFeatures.shaderFloat64      = adapterVk->features.shaderFloat64;
-  coreFeatures.imageCubeArray     = adapterVk->features.imageCubeArray;
-  coreFeatures.samplerAnisotropy  = adapterVk->features.samplerAnisotropy;
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u ||
-      vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_SHADER_SUBGROUP_CLOCK) ||
-      vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_SHADER_DEVICE_CLOCK)) {
+
+  coreFeatures.independentBlend  = adapterVk->features.independentBlend;
+  coreFeatures.shaderFloat64     = adapterVk->features.shaderFloat64;
+  coreFeatures.imageCubeArray    = adapterVk->features.imageCubeArray;
+  coreFeatures.samplerAnisotropy = adapterVk->features.samplerAnisotropy;
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u
+      || vk_featureEnabled(enabledFeatureMask,
+                           GPU_FEATURE_SHADER_SUBGROUP_CLOCK)
+      || vk_featureEnabled(enabledFeatureMask,
+                           GPU_FEATURE_SHADER_DEVICE_CLOCK)) {
     coreFeatures.shaderInt64 = VK_TRUE;
   }
-  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16) &&
-      adapterVk->features.shaderInt16) {
+
+  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16)
+      && adapterVk->features.shaderInt16) {
     coreFeatures.shaderInt16 = VK_TRUE;
   }
 
@@ -2978,245 +3088,220 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   deviceCI.pQueueCreateInfos       = queues;
   deviceCI.enabledExtensionCount   = deviceExtensionCount;
   deviceCI.ppEnabledExtensionNames = deviceExtensions;
+
   if (adapterVk->dynamicRendering) {
-    dynamicFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
+    dynamicFeatures.sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
     dynamicFeatures.dynamicRendering = VK_TRUE;
-    deviceCI.pNext = &dynamicFeatures;
+    deviceCI.pNext                   = &dynamicFeatures;
   }
+
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u) {
-    float16Features.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
+    float16Features.sType         = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
     float16Features.pNext         = (void *)deviceCI.pNext;
     float16Features.shaderFloat16 = VK_TRUE;
     deviceCI.pNext                = &float16Features;
+
     if (adapterVk->storageBuffer16BitAccess) {
-      storage16Features.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
-      storage16Features.pNext = (void *)deviceCI.pNext;
+      storage16Features.sType                    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
+      storage16Features.pNext                    = (void *)deviceCI.pNext;
       storage16Features.storageBuffer16BitAccess = VK_TRUE;
-      deviceCI.pNext = &storage16Features;
+      deviceCI.pNext                             = &storage16Features;
     }
   }
 #ifdef VK_EXT_shader_atomic_float
   if (adapterVk->floatAtomicAdd) {
-    floatAtomicFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
-    floatAtomicFeatures.pNext = (void *)deviceCI.pNext;
+    floatAtomicFeatures.sType                        = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
+    floatAtomicFeatures.pNext                        = (void *)deviceCI.pNext;
     floatAtomicFeatures.shaderBufferFloat32AtomicAdd = (adapterVk->floatAtomicAdd & 1u) != 0u;
     floatAtomicFeatures.shaderSharedFloat32AtomicAdd = (adapterVk->floatAtomicAdd & 2u) != 0u;
-    deviceCI.pNext = &floatAtomicFeatures;
+    deviceCI.pNext                                   = &floatAtomicFeatures;
   }
 #endif
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u) {
-    atomic64Features.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES;
-    atomic64Features.pNext = (void *)deviceCI.pNext;
+    atomic64Features.sType                    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES;
+    atomic64Features.pNext                    = (void *)deviceCI.pNext;
     atomic64Features.shaderBufferInt64Atomics = VK_TRUE;
-    deviceCI.pNext = &atomic64Features;
+    deviceCI.pNext                            = &atomic64Features;
   }
 #ifdef VK_KHR_shader_clock
   if (vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_SHADER_SUBGROUP_CLOCK) ||
-      vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_SHADER_DEVICE_CLOCK)) {
-    shaderClockFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR;
-    shaderClockFeatures.pNext = (void *)deviceCI.pNext;
-    shaderClockFeatures.shaderSubgroupClock =
-      vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_SHADER_SUBGROUP_CLOCK);
-    shaderClockFeatures.shaderDeviceClock =
-      vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_SHADER_DEVICE_CLOCK);
-    deviceCI.pNext = &shaderClockFeatures;
+                        GPU_FEATURE_SHADER_SUBGROUP_CLOCK)
+      || vk_featureEnabled(enabledFeatureMask,
+                           GPU_FEATURE_SHADER_DEVICE_CLOCK)) {
+    shaderClockFeatures.sType               = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR;
+    shaderClockFeatures.pNext               = (void *)deviceCI.pNext;
+    shaderClockFeatures.shaderSubgroupClock = vk_featureEnabled(enabledFeatureMask,
+                                                                GPU_FEATURE_SHADER_SUBGROUP_CLOCK);
+    shaderClockFeatures.shaderDeviceClock   = vk_featureEnabled(enabledFeatureMask,
+                                                                GPU_FEATURE_SHADER_DEVICE_CLOCK);
+    deviceCI.pNext                          = &shaderClockFeatures;
   }
 #endif
 #ifdef VK_KHR_compute_shader_derivatives
   if (vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS) ||
-      vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR)) {
-    derivativeFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR;
-    derivativeFeatures.pNext = (void *)deviceCI.pNext;
-    derivativeFeatures.computeDerivativeGroupQuads =
-      vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS);
-    derivativeFeatures.computeDerivativeGroupLinear =
-      vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR);
-    deviceCI.pNext = &derivativeFeatures;
+                        GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS)
+      || vk_featureEnabled(enabledFeatureMask,
+                           GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR)) {
+    derivativeFeatures.sType                        = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR;
+    derivativeFeatures.pNext                        = (void *)deviceCI.pNext;
+    derivativeFeatures.computeDerivativeGroupQuads  = vk_featureEnabled(enabledFeatureMask,
+                                                                        GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS);
+    derivativeFeatures.computeDerivativeGroupLinear = vk_featureEnabled(enabledFeatureMask,
+                                                                        GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR);
+    deviceCI.pNext                                  = &derivativeFeatures;
   }
 #endif
 #ifdef VK_KHR_shader_fma
   if (adapterVk->shaderFma) {
-    fmaFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FMA_FEATURES_KHR;
-    fmaFeatures.pNext = (void *)deviceCI.pNext;
-    fmaFeatures.shaderFmaFloat16 = (adapterVk->shaderFma & 1u) &&
-      vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
+    fmaFeatures.sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FMA_FEATURES_KHR;
+    fmaFeatures.pNext            = (void *)deviceCI.pNext;
+    fmaFeatures.shaderFmaFloat16 = (adapterVk->shaderFma & 1u)
+                                   && vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
     fmaFeatures.shaderFmaFloat32 = (adapterVk->shaderFma & 2u) != 0u;
     fmaFeatures.shaderFmaFloat64 = (adapterVk->shaderFma & 4u) && coreFeatures.shaderFloat64;
-    deviceCI.pNext = &fmaFeatures;
+    deviceCI.pNext               = &fmaFeatures;
   }
 #endif
 #ifdef VK_KHR_shader_float_controls2
   if (adapterVk->floatControls2) {
-    floatControls2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT_CONTROLS_2_FEATURES_KHR;
-    floatControls2Features.pNext = (void *)deviceCI.pNext;
+    floatControls2Features.sType                = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT_CONTROLS_2_FEATURES_KHR;
+    floatControls2Features.pNext                = (void *)deviceCI.pNext;
     floatControls2Features.shaderFloatControls2 = VK_TRUE;
-    deviceCI.pNext = &floatControls2Features;
+    deviceCI.pNext                              = &floatControls2Features;
   }
 #endif
 #ifdef VK_KHR_shader_untyped_pointers
   if (adapterVk->shaderUntypedPointers) {
-    untypedPointerFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR;
-    untypedPointerFeatures.pNext = (void *)deviceCI.pNext;
+    untypedPointerFeatures.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR;
+    untypedPointerFeatures.pNext                 = (void *)deviceCI.pNext;
     untypedPointerFeatures.shaderUntypedPointers = VK_TRUE;
-    deviceCI.pNext = &untypedPointerFeatures;
+    deviceCI.pNext                               = &untypedPointerFeatures;
   }
 #endif
 #ifdef VK_KHR_copy_memory_indirect
   if (vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_INDIRECT_MEMORY_COPY) ||
-      vk_featureEnabled(
-        enabledFeatureMask,
-        GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
-      )) {
-    indirectCopyFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_KHR;
-    indirectCopyFeatures.pNext = (void *)deviceCI.pNext;
-    indirectCopyFeatures.indirectMemoryCopy =
-      vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_INDIRECT_MEMORY_COPY);
-    indirectCopyFeatures.indirectMemoryToImageCopy =
-      vk_featureEnabled(
-        enabledFeatureMask,
-        GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
-      );
-    deviceCI.pNext = &indirectCopyFeatures;
+                        GPU_FEATURE_INDIRECT_MEMORY_COPY)
+      || vk_featureEnabled(enabledFeatureMask,
+                           GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY)) {
+    indirectCopyFeatures.sType                     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_KHR;
+    indirectCopyFeatures.pNext                     = (void *)deviceCI.pNext;
+    indirectCopyFeatures.indirectMemoryCopy        = vk_featureEnabled(enabledFeatureMask,
+                                                                       GPU_FEATURE_INDIRECT_MEMORY_COPY);
+    indirectCopyFeatures.indirectMemoryToImageCopy = vk_featureEnabled(enabledFeatureMask,
+                                                                       GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY);
+    deviceCI.pNext                                 = &indirectCopyFeatures;
   }
 #endif
-  if (adapterVk->descriptorIndexing &&
-      ((enabledFeatureMask &
-        (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u ||
-       (enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u)) {
-    descriptorFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-    descriptorFeatures.pNext = (void *)deviceCI.pNext;
+  if (adapterVk->descriptorIndexing
+      && ((enabledFeatureMask &
+        (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u
+          || (enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u)) {
+    descriptorFeatures.sType                                      = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    descriptorFeatures.pNext                                      = (void *)deviceCI.pNext;
     descriptorFeatures.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE;
-    descriptorFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+    descriptorFeatures.shaderSampledImageArrayNonUniformIndexing  = VK_TRUE;
     descriptorFeatures.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
-    descriptorFeatures.shaderStorageImageArrayNonUniformIndexing = VK_TRUE;
+    descriptorFeatures.shaderStorageImageArrayNonUniformIndexing  = VK_TRUE;
+
     if ((enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u) {
       descriptorFeatures.descriptorBindingPartiallyBound = VK_TRUE;
     }
+
     deviceCI.pNext = &descriptorFeatures;
   }
+
   if (adapterVk->timelineSemaphore) {
-    timelineFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+    timelineFeatures.sType             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
     timelineFeatures.pNext             = (void *)deviceCI.pNext;
     timelineFeatures.timelineSemaphore = VK_TRUE;
-    deviceCI.pNext                      = &timelineFeatures;
+    deviceCI.pNext                     = &timelineFeatures;
   }
+
   if (adapterVk->synchronization2) {
-    sync2Features.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
+    sync2Features.sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
     sync2Features.pNext            = (void *)deviceCI.pNext;
     sync2Features.synchronization2 = VK_TRUE;
     deviceCI.pNext                 = &sync2Features;
   }
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
   if (adapterVk->presentWait) {
-    presentIdFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR;
-    presentIdFeatures.pNext     = (void *)deviceCI.pNext;
-    presentIdFeatures.presentId = VK_TRUE;
-    presentWaitFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR;
+    presentIdFeatures.sType         = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR;
+    presentIdFeatures.pNext         = (void *)deviceCI.pNext;
+    presentIdFeatures.presentId     = VK_TRUE;
+    presentWaitFeatures.sType       = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR;
     presentWaitFeatures.pNext       = &presentIdFeatures;
     presentWaitFeatures.presentWait = VK_TRUE;
     deviceCI.pNext                  = &presentWaitFeatures;
   }
 #endif
-  if (adapterVk->descriptorBuffer ||
-      vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_RAY_QUERY) ||
-      vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_EXECUTION_GRAPH) ||
-      vk_featureEnabled(enabledFeatureMask,
-                        GPU_FEATURE_BUFFER_DEVICE_ADDRESS)) {
-    bufferAddressFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-    bufferAddressFeatures.pNext = (void *)deviceCI.pNext;
+  if (adapterVk->descriptorBuffer
+      || vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_RAY_QUERY)
+      || vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_EXECUTION_GRAPH)
+      || vk_featureEnabled(enabledFeatureMask,
+                           GPU_FEATURE_BUFFER_DEVICE_ADDRESS)) {
+    bufferAddressFeatures.sType               = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+    bufferAddressFeatures.pNext               = (void *)deviceCI.pNext;
     bufferAddressFeatures.bufferDeviceAddress = VK_TRUE;
-    deviceCI.pNext = &bufferAddressFeatures;
+    deviceCI.pNext                            = &bufferAddressFeatures;
   }
 #ifdef VK_EXT_descriptor_buffer
   if (adapterVk->descriptorBuffer) {
-    descriptorBufferFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
-    descriptorBufferFeatures.pNext = (void *)deviceCI.pNext;
+    descriptorBufferFeatures.sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
+    descriptorBufferFeatures.pNext            = (void *)deviceCI.pNext;
     descriptorBufferFeatures.descriptorBuffer = VK_TRUE;
-    deviceCI.pNext = &descriptorBufferFeatures;
+    deviceCI.pNext                            = &descriptorBufferFeatures;
   }
 #endif
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u) {
-    accelerationFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
-    rayQueryFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
-    accelerationFeatures.pNext = (void *)deviceCI.pNext;
+    accelerationFeatures.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    rayQueryFeatures.sType                     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+    accelerationFeatures.pNext                 = (void *)deviceCI.pNext;
     accelerationFeatures.accelerationStructure = VK_TRUE;
-    rayQueryFeatures.pNext   = &accelerationFeatures;
-    rayQueryFeatures.rayQuery = VK_TRUE;
-    deviceCI.pNext            = &rayQueryFeatures;
+    rayQueryFeatures.pNext                     = &accelerationFeatures;
+    rayQueryFeatures.rayQuery                  = VK_TRUE;
+    deviceCI.pNext                             = &rayQueryFeatures;
   }
 #endif
 #ifdef VK_KHR_ray_tracing_pipeline
   if ((enabledFeatureMask &
        (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u) {
-    rayPipelineFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
-    rayPipelineFeatures.pNext = (void *)deviceCI.pNext;
+    rayPipelineFeatures.sType              = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+    rayPipelineFeatures.pNext              = (void *)deviceCI.pNext;
     rayPipelineFeatures.rayTracingPipeline = VK_TRUE;
-    deviceCI.pNext = &rayPipelineFeatures;
+    deviceCI.pNext                         = &rayPipelineFeatures;
   }
 #endif
 #ifdef VK_EXT_mesh_shader
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u) {
-    meshFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+    meshFeatures.sType      = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
     meshFeatures.pNext      = (void *)deviceCI.pNext;
     meshFeatures.meshShader = VK_TRUE;
     meshFeatures.taskShader = adapterVk->taskShader;
-    deviceCI.pNext           = &meshFeatures;
+    deviceCI.pNext          = &meshFeatures;
   }
 #endif
 #ifdef VK_KHR_fragment_shading_rate
   if ((enabledFeatureMask &
        (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u) {
-    vrsFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
-    vrsFeatures.pNext = (void *)deviceCI.pNext;
-    vrsFeatures.pipelineFragmentShadingRate = adapterVk->vrsDrawRate;
+    vrsFeatures.sType                         = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+    vrsFeatures.pNext                         = (void *)deviceCI.pNext;
+    vrsFeatures.pipelineFragmentShadingRate   = adapterVk->vrsDrawRate;
     vrsFeatures.attachmentFragmentShadingRate = adapterVk->vrsAttachment;
-    deviceCI.pNext = &vrsFeatures;
+    deviceCI.pNext                            = &vrsFeatures;
   }
 #endif
 #ifdef VK_KHR_cooperative_matrix
   if ((enabledFeatureMask &
        (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u) {
-    memoryModelFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES;
-    memoryModelFeatures.pNext = (void *)deviceCI.pNext;
+    memoryModelFeatures.sType             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES;
+    memoryModelFeatures.pNext             = (void *)deviceCI.pNext;
     memoryModelFeatures.vulkanMemoryModel = VK_TRUE;
-    deviceCI.pNext = &memoryModelFeatures;
-    cooperativeFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR;
-    cooperativeFeatures.pNext = (void *)deviceCI.pNext;
+    deviceCI.pNext                        = &memoryModelFeatures;
+    cooperativeFeatures.sType             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR;
+    cooperativeFeatures.pNext             = (void *)deviceCI.pNext;
     cooperativeFeatures.cooperativeMatrix = VK_TRUE;
-    deviceCI.pNext = &cooperativeFeatures;
+    deviceCI.pNext                        = &cooperativeFeatures;
   }
 #endif
 #if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
@@ -3225,34 +3310,31 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
   maintenance5Required = adapterVk->pipelineBinary;
 #endif
 #ifdef VK_AMDX_shader_enqueue
-  maintenance5Required = maintenance5Required ||
-                         vk_featureEnabled(enabledFeatureMask,
-                                           GPU_FEATURE_EXECUTION_GRAPH);
+  maintenance5Required = maintenance5Required
+                         || vk_featureEnabled(enabledFeatureMask,
+                                              GPU_FEATURE_EXECUTION_GRAPH);
 #endif
   if (maintenance5Required) {
-    maintenance5Features.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR;
-    maintenance5Features.pNext       = (void *)deviceCI.pNext;
+    maintenance5Features.sType        = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR;
+    maintenance5Features.pNext        = (void *)deviceCI.pNext;
     maintenance5Features.maintenance5 = VK_TRUE;
-    deviceCI.pNext = &maintenance5Features;
+    deviceCI.pNext                    = &maintenance5Features;
   }
 #endif
 #ifdef VK_KHR_pipeline_binary
   if (adapterVk->pipelineBinary) {
-    pipelineBinaryFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR;
-    pipelineBinaryFeatures.pNext = (void *)deviceCI.pNext;
+    pipelineBinaryFeatures.sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR;
+    pipelineBinaryFeatures.pNext            = (void *)deviceCI.pNext;
     pipelineBinaryFeatures.pipelineBinaries = VK_TRUE;
-    deviceCI.pNext = &pipelineBinaryFeatures;
+    deviceCI.pNext                          = &pipelineBinaryFeatures;
   }
 #endif
 #ifdef VK_AMDX_shader_enqueue
   if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_EXECUTION_GRAPH)) {
-    executionGraphFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ENQUEUE_FEATURES_AMDX;
-    executionGraphFeatures.pNext = (void *)deviceCI.pNext;
+    executionGraphFeatures.sType         = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ENQUEUE_FEATURES_AMDX;
+    executionGraphFeatures.pNext         = (void *)deviceCI.pNext;
     executionGraphFeatures.shaderEnqueue = VK_TRUE;
-    deviceCI.pNext = &executionGraphFeatures;
+    deviceCI.pNext                       = &executionGraphFeatures;
   }
 #endif
 
@@ -3260,6 +3342,7 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
                           &deviceCI,
                           NULL,
                           &deviceVk->device);
+
   if (result != VK_SUCCESS) {
 #ifdef DEBUG
     fprintf(stderr, "vkCreateDevice failed: %d\n", result);
@@ -3267,63 +3350,44 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
     goto err;
   }
 
-  deviceVk->maxDrawIndirectCount =
-    adapterVk->props.limits.maxDrawIndirectCount;
-  deviceVk->colorSampleCounts =
-    adapterVk->props.limits.framebufferColorSampleCounts;
-  deviceVk->depthSampleCounts =
-    adapterVk->props.limits.framebufferDepthSampleCounts;
-  deviceVk->multiDrawIndirect = coreFeatures.multiDrawIndirect;
-  deviceVk->independentBlend  = coreFeatures.independentBlend;
-  deviceVk->timelineSemaphore = adapterVk->timelineSemaphore;
+  deviceVk->maxDrawIndirectCount = adapterVk->props.limits.maxDrawIndirectCount;
+  deviceVk->colorSampleCounts    = adapterVk->props.limits.framebufferColorSampleCounts;
+  deviceVk->depthSampleCounts    = adapterVk->props.limits.framebufferDepthSampleCounts;
+  deviceVk->multiDrawIndirect    = coreFeatures.multiDrawIndirect;
+  deviceVk->independentBlend     = coreFeatures.independentBlend;
+  deviceVk->timelineSemaphore    = adapterVk->timelineSemaphore;
 #if defined(_WIN32) || defined(WIN32)
   if (adapterVk->externalInterop) {
-    deviceVk->getMemoryHandle =
-      (PFN_vkGetMemoryWin32HandleKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetMemoryWin32HandleKHR"
-      );
-    deviceVk->getSemaphoreHandle =
-      (PFN_vkGetSemaphoreWin32HandleKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetSemaphoreWin32HandleKHR"
-      );
-    deviceVk->importSemaphoreHandle =
-      (PFN_vkImportSemaphoreWin32HandleKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkImportSemaphoreWin32HandleKHR"
-      );
-    deviceVk->externalInterop = deviceVk->getMemoryHandle &&
-                                deviceVk->getSemaphoreHandle &&
-                                deviceVk->importSemaphoreHandle;
+    deviceVk->getMemoryHandle       = (PFN_vkGetMemoryWin32HandleKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                         "vkGetMemoryWin32HandleKHR");
+    deviceVk->getSemaphoreHandle    = (PFN_vkGetSemaphoreWin32HandleKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                            "vkGetSemaphoreWin32HandleKHR");
+    deviceVk->importSemaphoreHandle = (PFN_vkImportSemaphoreWin32HandleKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                               "vkImportSemaphoreWin32HandleKHR");
+    deviceVk->externalInterop       = deviceVk->getMemoryHandle
+                                && deviceVk->getSemaphoreHandle
+                                && deviceVk->importSemaphoreHandle;
   }
 #elif defined(__linux__) || defined(__ANDROID__)
   if (adapterVk->externalInterop) {
-    deviceVk->getMemoryHandle =
-      (PFN_vkGetMemoryFdKHR)vkGetDeviceProcAddr(deviceVk->device,
-                                                "vkGetMemoryFdKHR");
-    deviceVk->getSemaphoreHandle =
-      (PFN_vkGetSemaphoreFdKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetSemaphoreFdKHR"
-      );
-    deviceVk->importSemaphoreHandle =
-      (PFN_vkImportSemaphoreFdKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkImportSemaphoreFdKHR"
-      );
-    deviceVk->externalInterop = deviceVk->getMemoryHandle &&
-                                deviceVk->getSemaphoreHandle &&
-                                deviceVk->importSemaphoreHandle;
+    deviceVk->getMemoryHandle       = (PFN_vkGetMemoryFdKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                "vkGetMemoryFdKHR");
+    deviceVk->getSemaphoreHandle    = (PFN_vkGetSemaphoreFdKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                   "vkGetSemaphoreFdKHR");
+    deviceVk->importSemaphoreHandle = (PFN_vkImportSemaphoreFdKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                      "vkImportSemaphoreFdKHR");
+    deviceVk->externalInterop       = deviceVk->getMemoryHandle
+                                && deviceVk->getSemaphoreHandle
+                                && deviceVk->importSemaphoreHandle;
   }
 #endif
-  device->uslFloatPreserve = adapterVk->signedZeroInfNanPreserve;
+  device->uslFloatPreserve  = adapterVk->signedZeroInfNanPreserve;
   device->uslDenormPreserve = adapterVk->denormPreserve;
-  device->uslRoundingRTE = adapterVk->roundingRTE;
+  device->uslRoundingRTE    = adapterVk->roundingRTE;
   device->uslFloatControls2 = adapterVk->floatControls2;
-  device->uslHalfRoundtrip = gpu_uslVulkanHalfRoundtrip(adapterVk->props.vendorID,
-                                                        adapterVk->props.deviceID,
-                                                        adapterVk->props.driverVersion);
+  device->uslHalfRoundtrip  = gpu_uslVulkanHalfRoundtrip(adapterVk->props.vendorID,
+                                                         adapterVk->props.deviceID,
+                                                         adapterVk->props.driverVersion);
 #ifdef VK_EXT_shader_atomic_float
   device->uslFloatAtomicAdd = (floatAtomicFeatures.shaderBufferFloat32AtomicAdd ? 1u : 0u) |
                             (floatAtomicFeatures.shaderSharedFloat32AtomicAdd ? 2u : 0u);
@@ -3339,279 +3403,206 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
 #endif
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
   if (adapterVk->presentWait) {
-    deviceVk->waitForPresent =
-      (PFN_vkWaitForPresentKHR)vkGetDeviceProcAddr(deviceVk->device,
-                                                   "vkWaitForPresentKHR");
+    deviceVk->waitForPresent = (PFN_vkWaitForPresentKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                            "vkWaitForPresentKHR");
     deviceVk->presentWait    = deviceVk->waitForPresent != NULL;
   }
 #endif
-  if (adapterVk->bufferDeviceAddress &&
-      (adapterVk->descriptorBuffer ||
-       vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_RAY_QUERY) ||
-       vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_EXECUTION_GRAPH) ||
-       vk_featureEnabled(enabledFeatureMask,
-                         GPU_FEATURE_BUFFER_DEVICE_ADDRESS))) {
-    deviceVk->getBufferDeviceAddress =
-      (PFN_vkGetBufferDeviceAddress)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetBufferDeviceAddress"
-      );
+  if (adapterVk->bufferDeviceAddress
+      && (adapterVk->descriptorBuffer
+          || vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_RAY_QUERY)
+          || vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_EXECUTION_GRAPH)
+          || vk_featureEnabled(enabledFeatureMask,
+                               GPU_FEATURE_BUFFER_DEVICE_ADDRESS))) {
+    deviceVk->getBufferDeviceAddress = (PFN_vkGetBufferDeviceAddress)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                         "vkGetBufferDeviceAddress");
+
     if (!deviceVk->getBufferDeviceAddress) {
-      deviceVk->getBufferDeviceAddress =
-        (PFN_vkGetBufferDeviceAddress)vkGetDeviceProcAddr(
-          deviceVk->device,
-          "vkGetBufferDeviceAddressKHR"
-        );
+      deviceVk->getBufferDeviceAddress = (PFN_vkGetBufferDeviceAddress)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                           "vkGetBufferDeviceAddressKHR");
     }
+
     if (!deviceVk->getBufferDeviceAddress) {
       goto err;
     }
+
     deviceVk->bufferDeviceAddress = true;
   }
 #ifdef VK_AMDX_shader_enqueue
   if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_EXECUTION_GRAPH)) {
-    deviceVk->createExecutionGraphPipelines =
-      (PFN_vkCreateExecutionGraphPipelinesAMDX)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkCreateExecutionGraphPipelinesAMDX"
-      );
+    deviceVk->createExecutionGraphPipelines        =
+      (PFN_vkCreateExecutionGraphPipelinesAMDX)vkGetDeviceProcAddr(deviceVk->device,
+                                                                   "vkCreateExecutionGraphPipelinesAMDX");
     deviceVk->getExecutionGraphPipelineScratchSize =
-      (PFN_vkGetExecutionGraphPipelineScratchSizeAMDX)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetExecutionGraphPipelineScratchSizeAMDX"
-      );
-    deviceVk->getExecutionGraphPipelineNodeIndex =
-      (PFN_vkGetExecutionGraphPipelineNodeIndexAMDX)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetExecutionGraphPipelineNodeIndexAMDX"
-      );
-    deviceVk->initializeGraphScratchMemory =
-      (PFN_vkCmdInitializeGraphScratchMemoryAMDX)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkCmdInitializeGraphScratchMemoryAMDX"
-      );
-    deviceVk->dispatchGraph =
-      (PFN_vkCmdDispatchGraphAMDX)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkCmdDispatchGraphAMDX"
-      );
-    deviceVk->dispatchGraphIndirect =
-      (PFN_vkCmdDispatchGraphIndirectAMDX)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkCmdDispatchGraphIndirectAMDX"
-      );
-    if (!deviceVk->createExecutionGraphPipelines ||
-        !deviceVk->getExecutionGraphPipelineScratchSize ||
-        !deviceVk->getExecutionGraphPipelineNodeIndex ||
-        !deviceVk->initializeGraphScratchMemory ||
-        !deviceVk->dispatchGraph || !deviceVk->dispatchGraphIndirect ||
-        !deviceVk->getBufferDeviceAddress) {
+      (PFN_vkGetExecutionGraphPipelineScratchSizeAMDX)vkGetDeviceProcAddr(deviceVk->device,
+                                                                          "vkGetExecutionGraphPipelineScratchSizeAMDX");
+    deviceVk->getExecutionGraphPipelineNodeIndex   =
+      (PFN_vkGetExecutionGraphPipelineNodeIndexAMDX)vkGetDeviceProcAddr(deviceVk->device,
+                                                                        "vkGetExecutionGraphPipelineNodeIndexAMDX");
+    deviceVk->initializeGraphScratchMemory         =
+      (PFN_vkCmdInitializeGraphScratchMemoryAMDX)vkGetDeviceProcAddr(deviceVk->device,
+                                                                     "vkCmdInitializeGraphScratchMemoryAMDX");
+    deviceVk->dispatchGraph                        = (PFN_vkCmdDispatchGraphAMDX)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                     "vkCmdDispatchGraphAMDX");
+    deviceVk->dispatchGraphIndirect                = (PFN_vkCmdDispatchGraphIndirectAMDX)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                             "vkCmdDispatchGraphIndirectAMDX");
+
+    if (!deviceVk->createExecutionGraphPipelines
+        || !deviceVk->getExecutionGraphPipelineScratchSize
+        || !deviceVk->getExecutionGraphPipelineNodeIndex
+        || !deviceVk->initializeGraphScratchMemory
+        || !deviceVk->dispatchGraph || !deviceVk->dispatchGraphIndirect
+        || !deviceVk->getBufferDeviceAddress) {
       goto err;
     }
-    deviceVk->executionGraphDispatchAddressAlignment =
-      adapterVk->executionGraphDispatchAddressAlignment;
-    deviceVk->executionGraph = true;
+
+    deviceVk->executionGraphDispatchAddressAlignment = adapterVk->executionGraphDispatchAddressAlignment;
+    deviceVk->executionGraph                         = true;
   }
 #endif
 #ifdef VK_KHR_copy_memory_indirect
   if (vk_featureEnabled(enabledFeatureMask,
                         GPU_FEATURE_INDIRECT_MEMORY_COPY)) {
-    deviceVk->copyMemoryIndirect =
-      (PFN_vkCmdCopyMemoryIndirectKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkCmdCopyMemoryIndirectKHR"
-      );
+    deviceVk->copyMemoryIndirect = (PFN_vkCmdCopyMemoryIndirectKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                       "vkCmdCopyMemoryIndirectKHR");
+
     if (!deviceVk->copyMemoryIndirect) {
       goto err;
     }
+
     deviceVk->indirectMemoryCopy = true;
   }
-  if (vk_featureEnabled(
-        enabledFeatureMask,
-        GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY
-      )) {
-    deviceVk->copyMemoryToImageIndirect =
-      (PFN_vkCmdCopyMemoryToImageIndirectKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkCmdCopyMemoryToImageIndirectKHR"
-      );
+
+  if (vk_featureEnabled(enabledFeatureMask,
+                        GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY)) {
+    deviceVk->copyMemoryToImageIndirect = (PFN_vkCmdCopyMemoryToImageIndirectKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                     "vkCmdCopyMemoryToImageIndirectKHR");
+
     if (!deviceVk->copyMemoryToImageIndirect) {
       goto err;
     }
+
     deviceVk->indirectMemoryToTextureCopy = true;
   }
 #endif
 #ifdef VK_EXT_descriptor_buffer
   if (adapterVk->descriptorBuffer) {
-    deviceVk->getDescriptorSetLayoutSize =
-      (PFN_vkGetDescriptorSetLayoutSizeEXT)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetDescriptorSetLayoutSizeEXT"
-      );
+    deviceVk->getDescriptorSetLayoutSize          = (PFN_vkGetDescriptorSetLayoutSizeEXT)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                             "vkGetDescriptorSetLayoutSizeEXT");
     deviceVk->getDescriptorSetLayoutBindingOffset =
-      (PFN_vkGetDescriptorSetLayoutBindingOffsetEXT)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetDescriptorSetLayoutBindingOffsetEXT"
-      );
-    deviceVk->getDescriptor =
-      (PFN_vkGetDescriptorEXT)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetDescriptorEXT"
-      );
-    deviceVk->bindDescriptorBuffers =
-      (PFN_vkCmdBindDescriptorBuffersEXT)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkCmdBindDescriptorBuffersEXT"
-      );
-    deviceVk->setDescriptorBufferOffsets =
-      (PFN_vkCmdSetDescriptorBufferOffsetsEXT)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkCmdSetDescriptorBufferOffsetsEXT"
-      );
-    if (deviceVk->getDescriptorSetLayoutSize &&
-        deviceVk->getDescriptorSetLayoutBindingOffset &&
-        deviceVk->getDescriptor && deviceVk->bindDescriptorBuffers &&
-        deviceVk->setDescriptorBufferOffsets &&
-        vk_hasHostVisibleDescriptorBufferMemory(adapterVk->physicalDevice,
-                                                deviceVk->device)) {
-      deviceVk->descriptorBufferProperties =
-        adapterVk->descriptorBufferProperties;
-      deviceVk->descriptorBuffer = true;
+      (PFN_vkGetDescriptorSetLayoutBindingOffsetEXT)vkGetDeviceProcAddr(deviceVk->device,
+                                                                        "vkGetDescriptorSetLayoutBindingOffsetEXT");
+    deviceVk->getDescriptor                       = (PFN_vkGetDescriptorEXT)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                "vkGetDescriptorEXT");
+    deviceVk->bindDescriptorBuffers               = (PFN_vkCmdBindDescriptorBuffersEXT)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                           "vkCmdBindDescriptorBuffersEXT");
+    deviceVk->setDescriptorBufferOffsets          = (PFN_vkCmdSetDescriptorBufferOffsetsEXT)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                                "vkCmdSetDescriptorBufferOffsetsEXT");
+
+    if (deviceVk->getDescriptorSetLayoutSize
+        && deviceVk->getDescriptorSetLayoutBindingOffset
+        && deviceVk->getDescriptor && deviceVk->bindDescriptorBuffers
+        && deviceVk->setDescriptorBufferOffsets
+        && vk_hasHostVisibleDescriptorBufferMemory(adapterVk->physicalDevice,
+                                                   deviceVk->device)) {
+      deviceVk->descriptorBufferProperties = adapterVk->descriptorBufferProperties;
+      deviceVk->descriptorBuffer           = true;
     }
   }
 #endif
 #ifdef VK_KHR_pipeline_binary
   if (adapterVk->pipelineBinary) {
-    deviceVk->createPipelineBinaries =
-      (PFN_vkCreatePipelineBinariesKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkCreatePipelineBinariesKHR"
-      );
-    deviceVk->destroyPipelineBinary =
-      (PFN_vkDestroyPipelineBinaryKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkDestroyPipelineBinaryKHR"
-      );
-    deviceVk->getPipelineKey =
-      (PFN_vkGetPipelineKeyKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetPipelineKeyKHR"
-      );
-    deviceVk->getPipelineBinaryData =
-      (PFN_vkGetPipelineBinaryDataKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetPipelineBinaryDataKHR"
-      );
-    deviceVk->releaseCapturedPipelineData =
-      (PFN_vkReleaseCapturedPipelineDataKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkReleaseCapturedPipelineDataKHR"
-      );
-    if (deviceVk->createPipelineBinaries &&
-        deviceVk->destroyPipelineBinary && deviceVk->getPipelineKey &&
-        deviceVk->getPipelineBinaryData &&
-        deviceVk->releaseCapturedPipelineData) {
-      deviceVk->pipelineBinary = true;
-      deviceVk->pipelineBinaryInternalCache =
-        adapterVk->pipelineBinaryInternalCache;
-      deviceVk->pipelineBinaryPrefersInternalCache =
-        adapterVk->pipelineBinaryPrefersInternalCache;
+    deviceVk->createPipelineBinaries      = (PFN_vkCreatePipelineBinariesKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                 "vkCreatePipelineBinariesKHR");
+    deviceVk->destroyPipelineBinary       = (PFN_vkDestroyPipelineBinaryKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                "vkDestroyPipelineBinaryKHR");
+    deviceVk->getPipelineKey              = (PFN_vkGetPipelineKeyKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                         "vkGetPipelineKeyKHR");
+    deviceVk->getPipelineBinaryData       = (PFN_vkGetPipelineBinaryDataKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                "vkGetPipelineBinaryDataKHR");
+    deviceVk->releaseCapturedPipelineData = (PFN_vkReleaseCapturedPipelineDataKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                      "vkReleaseCapturedPipelineDataKHR");
+
+    if (deviceVk->createPipelineBinaries
+        && deviceVk->destroyPipelineBinary && deviceVk->getPipelineKey
+        && deviceVk->getPipelineBinaryData
+        && deviceVk->releaseCapturedPipelineData) {
+      deviceVk->pipelineBinary                     = true;
+      deviceVk->pipelineBinaryInternalCache        = adapterVk->pipelineBinaryInternalCache;
+      deviceVk->pipelineBinaryPrefersInternalCache = adapterVk->pipelineBinaryPrefersInternalCache;
     }
   }
 #endif
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u) {
-    deviceVk->createAccelerationStructure =
-      (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkCreateAccelerationStructureKHR"
-      );
-    deviceVk->destroyAccelerationStructure =
-      (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkDestroyAccelerationStructureKHR"
-      );
+    deviceVk->createAccelerationStructure        = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                             "vkCreateAccelerationStructureKHR");
+    deviceVk->destroyAccelerationStructure       =
+      (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                 "vkDestroyAccelerationStructureKHR");
     deviceVk->getAccelerationStructureBuildSizes =
-      (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetAccelerationStructureBuildSizesKHR"
-      );
-    deviceVk->buildAccelerationStructures =
-      (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkCmdBuildAccelerationStructuresKHR"
-      );
-    deviceVk->getAccelerationStructureAddress =
-      (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetAccelerationStructureDeviceAddressKHR"
-      );
-    if (!deviceVk->createAccelerationStructure ||
-        !deviceVk->destroyAccelerationStructure ||
-        !deviceVk->getAccelerationStructureBuildSizes ||
-        !deviceVk->buildAccelerationStructures ||
-        !deviceVk->getAccelerationStructureAddress) {
+      (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                       "vkGetAccelerationStructureBuildSizesKHR");
+    deviceVk->buildAccelerationStructures        =
+      (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                   "vkCmdBuildAccelerationStructuresKHR");
+    deviceVk->getAccelerationStructureAddress    =
+      (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                          "vkGetAccelerationStructureDeviceAddressKHR");
+
+    if (!deviceVk->createAccelerationStructure
+        || !deviceVk->destroyAccelerationStructure
+        || !deviceVk->getAccelerationStructureBuildSizes
+        || !deviceVk->buildAccelerationStructures
+        || !deviceVk->getAccelerationStructureAddress) {
       goto err;
     }
-    deviceVk->accelerationStructureScratchAlignment =
-      adapterVk->accelerationStructureScratchAlignment;
-    deviceVk->rayQuery = true;
+
+    deviceVk->accelerationStructureScratchAlignment = adapterVk->accelerationStructureScratchAlignment;
+    deviceVk->rayQuery                              = true;
   }
 #endif
 #ifdef VK_KHR_ray_tracing_pipeline
   if ((enabledFeatureMask &
        (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u) {
-    deviceVk->createRayTracingPipelines =
-      (PFN_vkCreateRayTracingPipelinesKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkCreateRayTracingPipelinesKHR"
-      );
+    deviceVk->createRayTracingPipelines       = (PFN_vkCreateRayTracingPipelinesKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                        "vkCreateRayTracingPipelinesKHR");
     deviceVk->getRayTracingShaderGroupHandles =
-      (PFN_vkGetRayTracingShaderGroupHandlesKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkGetRayTracingShaderGroupHandlesKHR"
-      );
-    deviceVk->traceRays =
-      (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(
-        deviceVk->device,
-        "vkCmdTraceRaysKHR"
-      );
-    if (!deviceVk->createRayTracingPipelines ||
-        !deviceVk->getRayTracingShaderGroupHandles ||
-        !deviceVk->traceRays) {
+      (PFN_vkGetRayTracingShaderGroupHandlesKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                    "vkGetRayTracingShaderGroupHandlesKHR");
+    deviceVk->traceRays                       = (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                           "vkCmdTraceRaysKHR");
+
+    if (!deviceVk->createRayTracingPipelines
+        || !deviceVk->getRayTracingShaderGroupHandles
+        || !deviceVk->traceRays) {
       goto err;
     }
-    deviceVk->rayTracingShaderGroupHandleSize =
-      adapterVk->rayTracingShaderGroupHandleSize;
-    deviceVk->rayTracingShaderGroupHandleAlignment =
-      adapterVk->rayTracingShaderGroupHandleAlignment;
-    deviceVk->rayTracingShaderGroupBaseAlignment =
-      adapterVk->rayTracingShaderGroupBaseAlignment;
-    device->rayTracingLimits.maxDispatchCount =
-      adapterVk->rayTracingMaxDispatchCount;
+
+    deviceVk->rayTracingShaderGroupHandleSize      = adapterVk->rayTracingShaderGroupHandleSize;
+    deviceVk->rayTracingShaderGroupHandleAlignment = adapterVk->rayTracingShaderGroupHandleAlignment;
+    deviceVk->rayTracingShaderGroupBaseAlignment   = adapterVk->rayTracingShaderGroupBaseAlignment;
+    device->rayTracingLimits.maxDispatchCount      = adapterVk->rayTracingMaxDispatchCount;
     memcpy(device->rayTracingLimits.maxDispatchSize,
            adapterVk->rayTracingMaxDispatchSize,
            sizeof(device->rayTracingLimits.maxDispatchSize));
-    device->rayTracingLimits.maxRecursionDepth =
-      adapterVk->rayTracingMaxRecursionDepth;
-    device->rayTracingLimits.maxHitAttributeSizeBytes =
-      adapterVk->rayTracingMaxHitAttributeSizeBytes;
-    deviceVk->rayTracingPipeline = true;
+    device->rayTracingLimits.maxRecursionDepth        = adapterVk->rayTracingMaxRecursionDepth;
+    device->rayTracingLimits.maxHitAttributeSizeBytes = adapterVk->rayTracingMaxHitAttributeSizeBytes;
+    deviceVk->rayTracingPipeline                      = true;
   }
 #endif
 #ifdef VK_KHR_fragment_shading_rate
   if ((enabledFeatureMask &
        (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u) {
     if (adapterVk->vrsDrawRate) {
-      deviceVk->setFragmentShadingRate =
-        (PFN_vkCmdSetFragmentShadingRateKHR)vkGetDeviceProcAddr(
-          deviceVk->device,
-          "vkCmdSetFragmentShadingRateKHR"
-        );
+      deviceVk->setFragmentShadingRate = (PFN_vkCmdSetFragmentShadingRateKHR)vkGetDeviceProcAddr(deviceVk->device,
+                                                                                                 "vkCmdSetFragmentShadingRateKHR");
+
       if (!deviceVk->setFragmentShadingRate) {
         goto err;
       }
     }
+
     deviceVk->minVRSTexelSize        = adapterVk->minVRSTexelSize;
     deviceVk->maxVRSTexelSize        = adapterVk->maxVRSTexelSize;
     deviceVk->maxVRSTexelAspectRatio = adapterVk->maxVRSTexelAspectRatio;
@@ -3621,70 +3612,75 @@ vk_createDevice(GPUAdapter              * __restrict adapter,
 #endif
 #ifdef VK_EXT_mesh_shader
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u) {
-    deviceVk->drawMeshTasks  = (PFN_vkCmdDrawMeshTasksEXT)
+    deviceVk->drawMeshTasks = (PFN_vkCmdDrawMeshTasksEXT)
       vkGetDeviceProcAddr(deviceVk->device, "vkCmdDrawMeshTasksEXT");
+
     if (!deviceVk->drawMeshTasks) {
       goto err;
     }
-    deviceVk->meshShader     = true;
-    deviceVk->taskShader     = adapterVk->taskShader;
-    device->meshLimits       = adapterVk->meshLimits;
+
+    deviceVk->meshShader = true;
+    deviceVk->taskShader = adapterVk->taskShader;
+    device->meshLimits   = adapterVk->meshLimits;
   }
 #endif
   if (adapterVk->synchronization2) {
     deviceVk->pipelineBarrier2 = (PFN_vkCmdPipelineBarrier2KHR)
       vkGetDeviceProcAddr(deviceVk->device, "vkCmdPipelineBarrier2");
+
     if (!deviceVk->pipelineBarrier2) {
       deviceVk->pipelineBarrier2 = (PFN_vkCmdPipelineBarrier2KHR)
         vkGetDeviceProcAddr(deviceVk->device, "vkCmdPipelineBarrier2KHR");
     }
+
     deviceVk->synchronization2 = deviceVk->pipelineBarrier2 != NULL;
   }
+
   if (adapterVk->dynamicRendering) {
     deviceVk->beginRendering = (PFN_vkCmdBeginRenderingKHR)
       vkGetDeviceProcAddr(deviceVk->device, "vkCmdBeginRendering");
-    deviceVk->endRendering = (PFN_vkCmdEndRenderingKHR)
+    deviceVk->endRendering   = (PFN_vkCmdEndRenderingKHR)
       vkGetDeviceProcAddr(deviceVk->device, "vkCmdEndRendering");
+
     if (!deviceVk->beginRendering || !deviceVk->endRendering) {
       deviceVk->beginRendering = (PFN_vkCmdBeginRenderingKHR)
         vkGetDeviceProcAddr(deviceVk->device, "vkCmdBeginRenderingKHR");
-      deviceVk->endRendering = (PFN_vkCmdEndRenderingKHR)
+      deviceVk->endRendering   = (PFN_vkCmdEndRenderingKHR)
         vkGetDeviceProcAddr(deviceVk->device, "vkCmdEndRenderingKHR");
     }
+
     if (!deviceVk->beginRendering || !deviceVk->endRendering) {
       goto err;
     }
+
     deviceVk->dynamicRendering = true;
   }
 
-  device->_priv            = deviceVk;
-  device->inst             = adapter->inst;
-  device->adapter          = adapter;
-  device->uslTargetProfile = vk_uslTargetProfile(adapter);
-  device->uslBoundedDescriptorIndexing =
-    vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_DESCRIPTOR_INDEXING) &&
-    !adapterVk->descriptorIndexing;
+  device->_priv                        = deviceVk;
+  device->inst                         = adapter->inst;
+  device->adapter                      = adapter;
+  device->uslTargetProfile             = vk_uslTargetProfile(adapter);
+  device->uslBoundedDescriptorIndexing = vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_DESCRIPTOR_INDEXING)
+                                         && !adapterVk->descriptorIndexing;
+
   if (device->uslTargetProfile == 0u) {
     goto err;
   }
 
-  deviceVk->createdQueues = calloc(totalQueueCount,
-                                   sizeof(*deviceVk->createdQueues));
-  if (!deviceVk->createdQueues) {
+  if (!(deviceVk->createdQueues = calloc(totalQueueCount,
+                                         sizeof(*deviceVk->createdQueues)))) {
     goto err;
   }
 
-  for (uint32_t i = 0; i < planCount; i++) {
-    for (uint32_t queueIndex = 0; queueIndex < plans[i].count; queueIndex++) {
-      GPUQueue        *queue;
-
-      queue = vk_createCommandQueue(device,
-                                    plans[i].familyIndex,
-                                    queueIndex,
-                                    plans[i].bits);
-      if (!queue) {
+  for (createdPlanIndex = 0; createdPlanIndex < planCount; createdPlanIndex++) {
+    for (queueIndex = 0; queueIndex < plans[createdPlanIndex].count; queueIndex++) {
+      if (!(queue = vk_createCommandQueue(device,
+                                          plans[createdPlanIndex].familyIndex,
+                                          queueIndex,
+                                          plans[createdPlanIndex].bits))) {
         goto err;
       }
+
       deviceVk->createdQueues[deviceVk->nCreatedQueues++] = queue;
       device->queueFamilies |= queue->bits;
     }
@@ -3699,20 +3695,25 @@ err:
   free(queuePriorities);
   free(queues);
   free(plans);
+
   if (deviceVk) {
     if (deviceVk->device) {
       vkDeviceWaitIdle(deviceVk->device);
     }
+
     if (deviceVk->createdQueues) {
-      for (uint32_t i = 0; i < deviceVk->nCreatedQueues; i++) {
-        vk_destroyCommandQueue(deviceVk->createdQueues[i]);
+      for (cleanupIndex = 0; cleanupIndex < deviceVk->nCreatedQueues; cleanupIndex++) {
+        vk_destroyCommandQueue(deviceVk->createdQueues[cleanupIndex]);
       }
     }
+
     free(deviceVk->createdQueues);
+
     if (deviceVk->device) {
       vk_destroyClassicRenderTargets(deviceVk);
       vkDestroyDevice(deviceVk->device, NULL);
     }
+
     if (deviceVk->classicRenderLockInitialized) {
 #if defined(_WIN32) || defined(WIN32)
       DeleteCriticalSection(&deviceVk->classicRenderLock);
@@ -3720,8 +3721,10 @@ err:
       pthread_mutex_destroy(&deviceVk->classicRenderLock);
 #endif
     }
+
     free(deviceVk);
   }
+
   free(device);
 
   return NULL;
@@ -3731,26 +3734,32 @@ GPU_HIDE
 void
 vk_destroyDevice(GPUDevice * __restrict device) {
   GPUDeviceVk *deviceVk;
+  uint32_t i;
 
   if (!device) {
     return;
   }
 
   deviceVk = device->_priv;
+
   if (deviceVk) {
     if (deviceVk->device) {
       vkDeviceWaitIdle(deviceVk->device);
     }
+
     if (deviceVk->createdQueues) {
-      for (uint32_t i = 0; i < deviceVk->nCreatedQueues; i++) {
+      for (i = 0; i < deviceVk->nCreatedQueues; i++) {
         vk_destroyCommandQueue(deviceVk->createdQueues[i]);
       }
     }
+
     free(deviceVk->createdQueues);
+
     if (deviceVk->device) {
       vk_destroyClassicRenderTargets(deviceVk);
       vkDestroyDevice(deviceVk->device, NULL);
     }
+
     if (deviceVk->classicRenderLockInitialized) {
 #if defined(_WIN32) || defined(WIN32)
       DeleteCriticalSection(&deviceVk->classicRenderLock);
@@ -3758,27 +3767,29 @@ vk_destroyDevice(GPUDevice * __restrict device) {
       pthread_mutex_destroy(&deviceVk->classicRenderLock);
 #endif
     }
+
     free(deviceVk);
   }
+
   free(device);
 }
 
 GPU_HIDE
 void
 vk_initDevice(GPUApiDevice *apiDevice) {
-  apiDevice->getAvailableAdapters        = vk_getAvailableAdapters;
-  apiDevice->selectAdapter               = vk_selectAdapter;
-  apiDevice->destroyAdapter              = vk_destroyAdapter;
-  apiDevice->getAdapterProperties        = vk_getAdapterProperties;
-  apiDevice->getAdapterIdentity          = vk_getAdapterIdentity;
-  apiDevice->supportsFeature             = vk_supportsFeature;
-  apiDevice->supportsSubgroupOperations  = vk_supportsSubgroupOperations;
-  apiDevice->getLimits                   = vk_getLimits;
-  apiDevice->getFormatCapabilities       = vk_getFormatCapabilities;
+  apiDevice->getAvailableAdapters       = vk_getAvailableAdapters;
+  apiDevice->selectAdapter              = vk_selectAdapter;
+  apiDevice->destroyAdapter             = vk_destroyAdapter;
+  apiDevice->getAdapterProperties       = vk_getAdapterProperties;
+  apiDevice->getAdapterIdentity         = vk_getAdapterIdentity;
+  apiDevice->supportsFeature            = vk_supportsFeature;
+  apiDevice->supportsSubgroupOperations = vk_supportsSubgroupOperations;
+  apiDevice->getLimits                  = vk_getLimits;
+  apiDevice->getFormatCapabilities      = vk_getFormatCapabilities;
 #ifdef VK_KHR_cooperative_matrix
   apiDevice->getSubgroupMatrixProperties = vk_getSubgroupMatrixProperties;
 #endif
-  apiDevice->createDevice                = vk_createDevice;
-  apiDevice->waitIdle                    = vk_waitDeviceIdle;
-  apiDevice->destroyDevice               = vk_destroyDevice;
+  apiDevice->createDevice  = vk_createDevice;
+  apiDevice->waitIdle      = vk_waitDeviceIdle;
+  apiDevice->destroyDevice = vk_destroyDevice;
 }

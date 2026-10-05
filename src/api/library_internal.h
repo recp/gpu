@@ -134,7 +134,7 @@ struct GPUShaderFunction {
 };
 
 GPU_HIDE
-GPUShaderFunction *
+GPUShaderFunction*
 gpuShaderFunction(GPUShaderLibrary *library, const char *name);
 
 GPU_HIDE
@@ -145,43 +145,41 @@ gpuDestroyShaderFunction(GPUShaderLibrary  *library,
 GPU_HIDE
 int
 gpuGetShaderLibraryWorkgroupSize(const GPUShaderLibrary *library,
-                                 const char               *entryPoint,
-                                 GPUShaderStageFlags       stage,
-                                 uint32_t                  outSize[3]);
+                                 const char             *entryPoint,
+                                 GPUShaderStageFlags     stage,
+                                 uint32_t                outSize[3]);
 
 GPU_HIDE
 int
 gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
-                                        const char *entryPoint,
-                                        uint32_t outSize[3]);
+                                        const char             *entryPoint,
+                                        uint32_t                outSize[3]);
 
 GPU_HIDE
 int
 gpuGetShaderLibraryPTXEntry(const GPUShaderLibrary *library,
-                            const char               *entryPoint,
-                            GPUShaderPTXEntryView     *outEntry);
+                            const char             *entryPoint,
+                            GPUShaderPTXEntryView  *outEntry);
 
 GPU_HIDE
 int
 gpuGetShaderLibraryMeshOutputInfo(const GPUShaderLibrary *library,
-                                  const char               *entryPoint,
-                                  uint32_t                 *outTopology,
-                                  uint32_t                 *outMaxVertices,
-                                  uint32_t                 *outMaxPrimitives);
+                                  const char             *entryPoint,
+                                  uint32_t               *outTopology,
+                                  uint32_t               *outMaxVertices,
+                                  uint32_t               *outMaxPrimitives);
 
 GPU_HIDE
 int
 gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
-                              const char *entryPoint,
-                              GPUShaderStageFlags *outStage);
+                              const char             *entryPoint,
+                              GPUShaderStageFlags    *outStage);
 
 GPU_HIDE
 int
-gpuGetShaderLibraryExecutionGraphEntry(
-  const GPUShaderLibrary                 *library,
-  const char                             *entryPoint,
-  GPUShaderExecutionGraphEntryInfo       *outEntry
-);
+gpuGetShaderLibraryExecutionGraphEntry(const GPUShaderLibrary           *library,
+                                       const char                       *entryPoint,
+                                       GPUShaderExecutionGraphEntryInfo *outEntry);
 
 GPU_HIDE
 uint32_t
@@ -189,54 +187,52 @@ gpuGetShaderLibraryExecutionGraphEntryCount(const GPUShaderLibrary *library);
 
 GPU_HIDE
 int
-gpuGetShaderLibraryExecutionGraphEntryAt(
-  const GPUShaderLibrary                 *library,
-  uint32_t                                index,
-  GPUShaderExecutionGraphEntryInfo       *outEntry
-);
+gpuGetShaderLibraryExecutionGraphEntryAt(const GPUShaderLibrary           *library,
+                                         uint32_t                          index,
+                                         GPUShaderExecutionGraphEntryInfo *outEntry);
 
 GPU_HIDE
 int
 gpuGetShaderLibraryPayloadInfo(const GPUShaderLibrary *library,
-                               const char               *entryPoint,
-                               GPUShaderStageFlags       stage,
-                               uint32_t                 *outSizeBytes,
-                               const char              **outType);
+                               const char             *entryPoint,
+                               GPUShaderStageFlags     stage,
+                               uint32_t               *outSizeBytes,
+                               const char            **outType);
 
 GPU_HIDE
 int
 gpuGetShaderLibraryRayInterfaceInfo(const GPUShaderLibrary *library,
-                                    const char               *entryPoint,
-                                    GPUShaderStageFlags       stage,
-                                    uint32_t                 *outPayloadSizeBytes,
-                                    uint32_t                 *outHitAttributeSizeBytes,
-                                    uint32_t                 *outCallableDataSizeBytes);
+                                    const char             *entryPoint,
+                                    GPUShaderStageFlags     stage,
+                                    uint32_t               *outPayloadSizeBytes,
+                                    uint32_t               *outHitAttributeSizeBytes,
+                                    uint32_t               *outCallableDataSizeBytes);
 
 GPU_HIDE
 int
 gpuShaderLibraryHasEntryResourceInfo(const GPUShaderLibrary *library);
 
 GPU_HIDE
-const GPUShaderReflection *
+const GPUShaderReflection*
 gpuShaderReflectionView(const GPUShaderLibrary *library);
 
 GPU_HIDE
 int
 gpuShaderEntryView(const GPUShaderLibrary *library,
-                   const char *entryPoint,
-                   GPUShaderStageFlags *outStage,
-                   GPUShaderReflection *outReflection);
+                   const char             *entryPoint,
+                   GPUShaderStageFlags    *outStage,
+                   GPUShaderReflection    *outReflection);
 
 GPU_HIDE
 int
-gpuGetShaderResourceBackendBinding(const GPUShaderLibrary *library,
+gpuGetShaderResourceBackendBinding(const GPUShaderLibrary            *library,
                                    const GPUShaderResourceReflection *resource,
-                                   uint32_t *outBinding);
+                                   uint32_t                          *outBinding);
 
 GPU_HIDE
-const GPUShaderStaticSamplerInfo *
+const GPUShaderStaticSamplerInfo*
 gpuGetShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
-                                  uint32_t *outCount);
+                                  uint32_t               *outCount);
 
 GPU_HIDE
 uint64_t
@@ -251,13 +247,13 @@ GPU_HIDE
 GPUResult
 gpuCompileShaderLibraryEntry(const GPUShaderLibrary *library,
                              const char             *entryPoint,
-                             GPUShaderSourceBlob     *outSource);
+                             GPUShaderSourceBlob    *outSource);
 
 GPU_HIDE
 GPUResult
 gpuCompileShaderLibraryEntryMask(const GPUShaderLibrary *library,
                                  uint64_t                entryMask,
-                                 GPUShaderSourceBlob     *outSource);
+                                 GPUShaderSourceBlob    *outSource);
 
 GPU_HIDE
 void

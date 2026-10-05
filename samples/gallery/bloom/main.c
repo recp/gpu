@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 #include <stdio.h>
@@ -49,9 +65,11 @@ device_error(GPUDevice                *device,
 
   (void)device;
   state = userData;
+
   if (!state || !error || state->failed) {
     return;
   }
+
   state->failed = true;
   set_status(error->message ? error->message : "GPU: unknown device error", 1);
   emscripten_cancel_main_loop();
@@ -66,20 +84,12 @@ resize_canvas(WebGPUBloom *state) {
 
 static void
 fill_source(void) {
-  for (uint32_t y = 0u; y < BLOOM_TEXTURE_SIZE; y++) {
-    for (uint32_t x = 0u; x < BLOOM_TEXTURE_SIZE; x++) {
-      int32_t  cyanX;
-      int32_t  cyanY;
-      int32_t  orangeX;
-      int32_t  orangeY;
-      int32_t  triangleX;
-      int32_t  triangleY;
-      int32_t  triangleHalfWidth;
-      uint32_t offset;
-      uint8_t  red;
-      uint8_t  green;
-      uint8_t  blue;
+  int32_t  cyanX, cyanY, orangeX, orangeY, triangleX, triangleY, triangleHalfWidth;
+  uint32_t y, x, offset;
+  uint8_t  red, green, blue;
 
+  for (y = 0u; y < BLOOM_TEXTURE_SIZE; y++) {
+    for (x = 0u; x < BLOOM_TEXTURE_SIZE; x++) {
       cyanX     = (int32_t)x - 82;
       cyanY     = (int32_t)y - 142;
       orangeX   = (int32_t)x - 174;
@@ -96,20 +106,24 @@ fill_source(void) {
         green = 220u;
         blue  = 255u;
       }
+
       if (orangeX * orangeX + orangeY * orangeY < 18 * 18) {
         red   = 255u;
         green = 92u;
         blue  = 18u;
       }
+
       if (triangleY >= 0 && triangleY < 36) {
         triangleHalfWidth = triangleY * 3 / 5;
-        if (triangleX >= -triangleHalfWidth &&
-            triangleX <= triangleHalfWidth) {
+
+        if (triangleX >= -triangleHalfWidth
+            && triangleX <= triangleHalfWidth) {
           red   = 255u;
           green = 230u;
           blue  = 96u;
         }
       }
+
       sourcePixels[offset + 0u] = red;
       sourcePixels[offset + 1u] = green;
       sourcePixels[offset + 2u] = blue;
@@ -125,38 +139,36 @@ validate_reflection(WebGPUBloom *state) {
   uint32_t                       computeCount;
   uint32_t                       renderCount;
 
-  computeEntries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[0],
-    &computeCount
-  );
-  renderEntries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[1],
-    &renderCount
-  );
-  if (!computeEntries || computeCount != 2u ||
-      computeEntries[0].binding != 0u ||
-      computeEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      computeEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
-      computeEntries[1].binding != 1u ||
-      computeEntries[1].bindingType != GPU_BINDING_STORAGE_TEXTURE ||
-      computeEntries[1].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
-      computeEntries[1].storageTexture.format != GPU_FORMAT_RGBA8_UNORM ||
-      computeEntries[1].storageTexture.access !=
-        GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY) {
+  computeEntries = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[0],
+                                                &computeCount);
+  renderEntries  = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[1],
+                                                &renderCount);
+
+  if (!computeEntries || computeCount != 2u
+      || computeEntries[0].binding != 0u
+      || computeEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || computeEntries[0].visibility != GPU_SHADER_STAGE_COMPUTE_BIT
+      || computeEntries[1].binding != 1u
+      || computeEntries[1].bindingType != GPU_BINDING_STORAGE_TEXTURE
+      || computeEntries[1].visibility != GPU_SHADER_STAGE_COMPUTE_BIT
+      || computeEntries[1].storageTexture.format != GPU_FORMAT_RGBA8_UNORM
+      || computeEntries[1].storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY) {
     return 0;
   }
-  if (!renderEntries || renderCount != 3u ||
-      renderEntries[0].binding != 0u ||
-      renderEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      renderEntries[1].binding != 1u ||
-      renderEntries[1].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      renderEntries[2].binding != 2u ||
-      renderEntries[2].bindingType != GPU_BINDING_SAMPLER ||
-      renderEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      renderEntries[1].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      renderEntries[2].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
+
+  if (!renderEntries || renderCount != 3u
+      || renderEntries[0].binding != 0u
+      || renderEntries[0].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || renderEntries[1].binding != 1u
+      || renderEntries[1].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || renderEntries[2].binding != 2u
+      || renderEntries[2].bindingType != GPU_BINDING_SAMPLER
+      || renderEntries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT
+      || renderEntries[1].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT
+      || renderEntries[2].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT) {
     return 0;
   }
+
   return 1;
 }
 
@@ -168,6 +180,7 @@ create_shader(WebGPUBloom *state) {
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/bloom.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /bloom.us", 1);
     return 0;
@@ -178,26 +191,28 @@ create_shader(WebGPUBloom *state) {
                                          artifactSize,
                                          &state->library);
   free(artifact);
-  if (result != GPU_OK || !state->library ||
-      GPUCreateShaderLayout(state->device,
-                            state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 2u ||
-      !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0] ||
-      !state->shaderLayout->bindGroupLayouts[1] ||
-      !validate_reflection(state)) {
+
+  if (result != GPU_OK || !state->library
+      || GPUCreateShaderLayout(state->device,
+                               state->library,
+                               &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 2u
+      || !state->shaderLayout->bindGroupLayouts
+      || !state->shaderLayout->bindGroupLayouts[0]
+      || !state->shaderLayout->bindGroupLayouts[1]
+      || !validate_reflection(state)) {
     set_status("GPU: unexpected bloom reflection", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_pipelines(WebGPUBloom *state) {
-  GPUComputePipelineCreateInfo computeInfo = {0};
   GPURenderPipelineCreateInfo  renderInfo  = {0};
+  GPUComputePipelineCreateInfo computeInfo = {0};
   GPUColorTargetState          color       = {0};
 
   computeInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -206,26 +221,29 @@ create_pipelines(WebGPUBloom *state) {
   computeInfo.layout           = state->shaderLayout->pipelineLayout;
   computeInfo.library          = state->library;
   computeInfo.entryPoint       = "blur_horizontal";
+
   if (GPUCreateComputePipeline(state->device,
                                &computeInfo,
-                               &state->horizontalPipeline) != GPU_OK ||
-      !state->horizontalPipeline) {
+                               &state->horizontalPipeline) != GPU_OK
+      || !state->horizontalPipeline) {
     set_status("GPU: failed to create horizontal bloom pipeline", 1);
     return 0;
   }
 
   computeInfo.label      = "webgpu-bloom-vertical";
   computeInfo.entryPoint = "blur_vertical";
+
   if (GPUCreateComputePipeline(state->device,
                                &computeInfo,
-                               &state->verticalPipeline) != GPU_OK ||
-      !state->verticalPipeline) {
+                               &state->verticalPipeline) != GPU_OK
+      || !state->verticalPipeline) {
     set_status("GPU: failed to create vertical bloom pipeline", 1);
     return 0;
   }
 
   color.format          = GPUGetSwapchainFormat(state->swapchain);
   color.blend.writeMask = GPU_COLOR_WRITE_ALL;
+
   renderInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   renderInfo.chain.structSize        = sizeof(renderInfo);
   renderInfo.label                   = "webgpu-bloom-composite";
@@ -240,23 +258,25 @@ create_pipelines(WebGPUBloom *state) {
   renderInfo.frontFace               = GPU_FRONT_FACE_CCW;
   renderInfo.multisample.sampleCount = 1u;
   renderInfo.multisample.sampleMask  = UINT32_MAX;
+
   if (GPUCreateRenderPipeline(state->device,
                               &renderInfo,
-                              &state->renderPipeline) != GPU_OK ||
-      !state->renderPipeline) {
+                              &state->renderPipeline) != GPU_OK
+      || !state->renderPipeline) {
     set_status("GPU: failed to create bloom composite pipeline", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
-create_texture(WebGPUBloom        *state,
-               const char         *textureLabel,
-               const char         *viewLabel,
+create_texture(WebGPUBloom         *state,
+               const char          *textureLabel,
+               const char          *viewLabel,
                GPUTextureUsageFlags usage,
-               GPUTexture        **outTexture,
-               GPUTextureView    **outView) {
+               GPUTexture         **outTexture,
+               GPUTextureView     **outView) {
   GPUTextureCreateInfo     textureInfo = {0};
   GPUTextureViewCreateInfo viewInfo    = {0};
 
@@ -271,10 +291,11 @@ create_texture(WebGPUBloom        *state,
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = usage;
+
   if (GPUCreateTexture(state->device,
                        &textureInfo,
-                       outTexture) != GPU_OK ||
-      !*outTexture) {
+                       outTexture) != GPU_OK
+      || !*outTexture) {
     return 0;
   }
 
@@ -285,22 +306,24 @@ create_texture(WebGPUBloom        *state,
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
-  if (GPUCreateTextureView(*outTexture, &viewInfo, outView) != GPU_OK ||
-      !*outView) {
+
+  if (GPUCreateTextureView(*outTexture, &viewInfo, outView) != GPU_OK
+      || !*outView) {
     GPUDestroyTexture(*outTexture);
     *outTexture = NULL;
     return 0;
   }
+
   return 1;
 }
 
 static int
-create_bind_group(WebGPUBloom *state,
-                  const char  *label,
-                  uint32_t     layoutIndex,
-                  uint32_t     entryCount,
+create_bind_group(WebGPUBloom             *state,
+                  const char              *label,
+                  uint32_t                 layoutIndex,
+                  uint32_t                 entryCount,
                   const GPUBindGroupEntry *entries,
-                  GPUBindGroup **outGroup) {
+                  GPUBindGroup           **outGroup) {
   GPUBindGroupCreateInfo info = {0};
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
@@ -309,51 +332,51 @@ create_bind_group(WebGPUBloom *state,
   info.layout           = state->shaderLayout->bindGroupLayouts[layoutIndex];
   info.pEntries         = entries;
   info.entryCount       = entryCount;
-  return GPUCreateBindGroup(state->device, &info, outGroup) == GPU_OK &&
-         *outGroup;
+
+  return GPUCreateBindGroup(state->device, &info, outGroup) == GPU_OK
+         && *outGroup;
 }
 
 static int
 create_resources(WebGPUBloom *state) {
-  GPUTextureWriteRegion upload = {0};
-  GPUSamplerCreateInfo  samplerInfo = {0};
+  GPUBindGroupEntry     renderEntries[3]     = {0};
   GPUBindGroupEntry     horizontalEntries[2] = {0};
-  GPUBindGroupEntry     verticalEntries[2] = {0};
-  GPUBindGroupEntry     renderEntries[3] = {0};
+  GPUBindGroupEntry     verticalEntries[2]   = {0};
+  GPUSamplerCreateInfo  samplerInfo          = {0};
+  GPUTextureWriteRegion upload               = {0};
 
   if (!create_texture(state,
                       "webgpu-bloom-source",
                       "webgpu-bloom-source-view",
-                      GPU_TEXTURE_USAGE_SAMPLED |
-                        GPU_TEXTURE_USAGE_COPY_DST,
+                      GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST,
                       &state->sourceTexture,
-                      &state->sourceView) ||
-      !create_texture(state,
-                      "webgpu-bloom-temporary",
-                      "webgpu-bloom-temporary-view",
-                      GPU_TEXTURE_USAGE_SAMPLED |
-                        GPU_TEXTURE_USAGE_STORAGE,
-                      &state->temporaryTexture,
-                      &state->temporaryView) ||
-      !create_texture(state,
-                      "webgpu-bloom-output",
-                      "webgpu-bloom-output-view",
-                      GPU_TEXTURE_USAGE_SAMPLED |
-                        GPU_TEXTURE_USAGE_STORAGE,
-                      &state->bloomTexture,
-                      &state->bloomView)) {
+                      &state->sourceView)
+      || !create_texture(state,
+                         "webgpu-bloom-temporary",
+                         "webgpu-bloom-temporary-view",
+                         GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_STORAGE,
+                         &state->temporaryTexture,
+                         &state->temporaryView)
+      || !create_texture(state,
+                         "webgpu-bloom-output",
+                         "webgpu-bloom-output-view",
+                         GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_STORAGE,
+                         &state->bloomTexture,
+                         &state->bloomView)) {
     set_status("GPU: failed to create bloom textures", 1);
     return 0;
   }
 
   fill_source();
-  upload.aspect         = GPU_TEXTURE_ASPECT_ALL;
-  upload.width          = BLOOM_TEXTURE_SIZE;
-  upload.height         = BLOOM_TEXTURE_SIZE;
-  upload.depth          = 1u;
-  upload.layerCount     = 1u;
-  upload.bytesPerRow    = BLOOM_TEXTURE_SIZE * 4u;
-  upload.rowsPerImage   = BLOOM_TEXTURE_SIZE;
+
+  upload.aspect       = GPU_TEXTURE_ASPECT_ALL;
+  upload.width        = BLOOM_TEXTURE_SIZE;
+  upload.height       = BLOOM_TEXTURE_SIZE;
+  upload.depth        = 1u;
+  upload.layerCount   = 1u;
+  upload.bytesPerRow  = BLOOM_TEXTURE_SIZE * 4u;
+  upload.rowsPerImage = BLOOM_TEXTURE_SIZE;
+
   if (GPUQueueWriteTexture(state->queue,
                            state->sourceTexture,
                            &upload,
@@ -372,11 +395,12 @@ create_resources(WebGPUBloom *state) {
   samplerInfo.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   samplerInfo.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+
   if (GPUCreateSampler(state->device,
                        &samplerInfo,
                        false,
-                       &state->sampler) != GPU_OK ||
-      !state->sampler) {
+                       &state->sampler) != GPU_OK
+      || !state->sampler) {
     set_status("GPU: failed to create bloom sampler", 1);
     return 0;
   }
@@ -410,36 +434,37 @@ create_resources(WebGPUBloom *state) {
                          0u,
                          2u,
                          horizontalEntries,
-                         &state->horizontalGroup) ||
-      !create_bind_group(state,
-                         "webgpu-bloom-vertical-group",
-                         0u,
-                         2u,
-                         verticalEntries,
-                         &state->verticalGroup) ||
-      !create_bind_group(state,
-                         "webgpu-bloom-render-group",
-                         1u,
-                         3u,
-                         renderEntries,
-                         &state->renderGroup)) {
+                         &state->horizontalGroup)
+      || !create_bind_group(state,
+                            "webgpu-bloom-vertical-group",
+                            0u,
+                            2u,
+                            verticalEntries,
+                            &state->verticalGroup)
+      || !create_bind_group(state,
+                            "webgpu-bloom-render-group",
+                            1u,
+                            3u,
+                            renderEntries,
+                            &state->renderGroup)) {
     set_status("GPU: failed to create bloom bind groups", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
-encode_blur_pass(GPUCommandBuffer     *cmdb,
-                 GPUComputePipeline   *pipeline,
-                 GPUBindGroup         *group,
-                 const char           *label) {
+encode_blur_pass(GPUCommandBuffer   *cmdb,
+                 GPUComputePipeline *pipeline,
+                 GPUBindGroup       *group,
+                 const char         *label) {
   GPUComputePassEncoder *pass;
 
-  pass = GPUBeginComputePass(cmdb, label);
-  if (!pass) {
+  if (!(pass = GPUBeginComputePass(cmdb, label))) {
     return 0;
   }
+
   GPUBindComputePipeline(pass, pipeline);
   GPUBindComputeGroup(pass, 0u, group, 0u, NULL);
   GPUDispatch(pass,
@@ -447,6 +472,7 @@ encode_blur_pass(GPUCommandBuffer     *cmdb,
               BLOOM_TEXTURE_SIZE / BLOOM_WORKGROUP_SIZE,
               1u);
   GPUEndComputePass(pass);
+
   return 1;
 }
 
@@ -455,14 +481,15 @@ encode_texture_barrier(GPUCommandBuffer    *cmdb,
                        GPUTexture          *texture,
                        GPUPipelineStageMask srcStages,
                        GPUPipelineStageMask dstStages) {
-  GPUTextureBarrier barrier = {0};
   GPUBarrierBatch   batch   = {0};
+  GPUTextureBarrier barrier = {0};
 
   barrier.texture    = texture;
   barrier.srcAccess  = GPU_ACCESS_SHADER_WRITE;
   barrier.dstAccess  = GPU_ACCESS_SHADER_READ;
   barrier.mipCount   = 1u;
   barrier.layerCount = 1u;
+
   batch.pTextureBarriers    = &barrier;
   batch.srcStages           = srcStages;
   batch.dstStages           = dstStages;
@@ -472,24 +499,27 @@ encode_texture_barrier(GPUCommandBuffer    *cmdb,
 
 static void
 render_frame(void *userData) {
-  WebGPUBloom                  *state;
-  GPUFrame                     *frame;
-  GPUCommandBuffer             *cmdb;
-  GPURenderPassEncoder         *pass;
-  GPURenderPassColorAttachment  color    = {0};
-  GPURenderPassCreateInfo       passInfo = {0};
+  GPURenderPassCreateInfo      passInfo = {0};
+  GPURenderPassColorAttachment color    = {0};
+  WebGPUBloom                 *state;
+  GPUFrame                    *frame;
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassEncoder        *pass;
 
   state = userData;
+
   if (!resize_canvas(state)) {
     return;
   }
+
   frame = GPUBeginFrame(state->swapchain);
   cmdb  = NULL;
-  if (!frame ||
-      GPUAcquireCommandBuffer(state->queue,
-                              "webgpu-bloom-frame",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+
+  if (!frame
+      || GPUAcquireCommandBuffer(state->queue,
+                                 "webgpu-bloom-frame",
+                                 &cmdb) != GPU_OK
+      || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
@@ -503,10 +533,12 @@ render_frame(void *userData) {
     set_status("GPU: failed to encode horizontal bloom pass", 1);
     return;
   }
+
   encode_texture_barrier(cmdb,
                          state->temporaryTexture,
                          GPU_STAGE_COMPUTE,
                          GPU_STAGE_COMPUTE);
+
   if (!encode_blur_pass(cmdb,
                         state->verticalPipeline,
                         state->verticalGroup,
@@ -516,6 +548,7 @@ render_frame(void *userData) {
     set_status("GPU: failed to encode vertical bloom pass", 1);
     return;
   }
+
   encode_texture_barrier(cmdb,
                          state->bloomTexture,
                          GPU_STAGE_COMPUTE,
@@ -528,13 +561,14 @@ render_frame(void *userData) {
   color.clearColor.float32[1] = 0.014f;
   color.clearColor.float32[2] = 0.034f;
   color.clearColor.float32[3] = 1.0f;
-  passInfo.chain.sType        = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  passInfo.chain.structSize   = sizeof(passInfo);
+
+  passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.structSize     = sizeof(passInfo);
   passInfo.label                = "webgpu-bloom-composite";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
@@ -544,19 +578,21 @@ render_frame(void *userData) {
   GPUBindRenderGroup(pass, 1u, state->renderGroup, 0u, NULL);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
+
   if (GPUFinishFrame(state->queue, cmdb, frame) != GPU_OK) {
     set_status("GPU: failed to finish bloom frame", 1);
     return;
   }
 
   state->frameCount++;
+
   if (state->frameCount > WARM_FRAME_COUNT) {
     GPUFrameStats stats;
 
-    if (GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.drawCalls != 1u ||
-         stats.hotPathAllocCount != 0u ||
-         stats.hotPathFreeCount != 0u)) {
+    if (GPUGetLastFrameStats(state->device, &stats) == GPU_OK
+        && (stats.drawCalls != 1u
+         || stats.hotPathAllocCount != 0u
+         || stats.hotPathFreeCount != 0u)) {
       set_status("GPU: bloom warm path regression", 1);
       emscripten_cancel_main_loop();
     }
@@ -564,51 +600,57 @@ render_frame(void *userData) {
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
-  WebGPUBloom     *state;
   GPURuntimeConfig runtime = {0};
+  WebGPUBloom     *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status("GPU: failed to request WebGPU device", 1);
     return;
   }
+
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (!state->queue || GPUConfigureRuntime(device, &runtime) != GPU_OK) {
     set_status("GPU: failed to configure bloom runtime", 1);
     return;
   }
+
   if (GPUSetDeviceErrorCallback(device, device_error, state) != GPU_OK) {
     set_status("GPU: failed to install bloom error callback", 1);
     return;
   }
 
   state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
+                                              adapter,
+                                              (void *)"#canvas",
+                                              GPU_SURFACE_WEB_CANVAS,
+                                              1.0f);
+
   if (!state->surface || !resize_canvas(state)) {
     set_status("GPU: failed to create bloom canvas surface", 1);
     return;
   }
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain ||
-      !create_shader(state) ||
-      !create_pipelines(state) ||
-      !create_resources(state)) {
+
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))
+      || !create_shader(state)
+      || !create_pipelines(state)
+      || !create_resources(state)) {
     return;
   }
 
@@ -627,7 +669,9 @@ main(void) {
   info.label            = "bloom-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create WebGPU instance", 1);
     return 1;
@@ -638,5 +682,6 @@ main(void) {
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   return result == GPU_OK ? 0 : 1;
 }

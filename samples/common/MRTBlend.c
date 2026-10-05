@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "MRTBlend.h"
 
 #include <string.h>
@@ -30,8 +46,8 @@ static GPUResult
 create_pipelines(GPUSampleMRTBlend *state) {
   GPUColorTargetState         mrtTargets[2]   = {0};
   GPUColorTargetState         compositeTarget = {0};
-  GPURenderPipelineCreateInfo mrtInfo          = {0};
-  GPURenderPipelineCreateInfo compositeInfo    = {0};
+  GPURenderPipelineCreateInfo mrtInfo         = {0};
+  GPURenderPipelineCreateInfo compositeInfo   = {0};
   GPUResult                   result;
 
   mrtTargets[0].format = GPU_FORMAT_RGBA8_UNORM;
@@ -54,15 +70,18 @@ create_pipelines(GPUSampleMRTBlend *state) {
   mrtInfo.frontFace               = GPU_FRONT_FACE_CCW;
   mrtInfo.multisample.sampleCount = 1u;
   mrtInfo.multisample.sampleMask  = UINT32_MAX;
+
   result = GPUCreateRenderPipeline(state->device,
                                    &mrtInfo,
                                    &state->mrtPipeline);
+
   if (result != GPU_OK || !state->mrtPipeline) {
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
 
   compositeTarget.format          = GPUGetSwapchainFormat(state->swapchain);
   compositeTarget.blend.writeMask = GPU_COLOR_WRITE_ALL;
+
   compositeInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   compositeInfo.chain.structSize        = sizeof(compositeInfo);
   compositeInfo.label                   = "mrt-blend-composite-pipeline";
@@ -78,12 +97,13 @@ create_pipelines(GPUSampleMRTBlend *state) {
   compositeInfo.frontFace               = GPU_FRONT_FACE_CCW;
   compositeInfo.multisample.sampleCount = 1u;
   compositeInfo.multisample.sampleMask  = UINT32_MAX;
+
   result = GPUCreateRenderPipeline(state->device,
                                    &compositeInfo,
                                    &state->compositePipeline);
+
   return result == GPU_OK && state->compositePipeline
-           ? GPU_OK
-           : (result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE);
+           ? GPU_OK : (result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE);
 }
 
 static GPUResult
@@ -99,6 +119,7 @@ create_sampler(GPUSampleMRTBlend *state) {
   info.desc.addressU    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   info.desc.addressV    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
   info.desc.addressW    = GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+
   return GPUCreateSampler(state->device,
                           &info,
                           false,
@@ -115,6 +136,7 @@ create_targets(GPUSampleMRTBlend *state, uint32_t width, uint32_t height) {
   GPUTextureView          *views[2]    = {0};
   GPUBindGroup            *groups[2]   = {0};
   GPUResult                result      = GPU_OK;
+  uint32_t                 i;
 
   if (width == 0u || height == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -129,25 +151,27 @@ create_targets(GPUSampleMRTBlend *state, uint32_t width, uint32_t height) {
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
-  textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET |
-                                 GPU_TEXTURE_USAGE_SAMPLED;
-  viewInfo.chain.sType         = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
-  viewInfo.chain.structSize    = sizeof(viewInfo);
-  viewInfo.viewType            = GPU_TEXTURE_VIEW_2D;
-  viewInfo.format              = GPU_FORMAT_RGBA8_UNORM;
-  viewInfo.mipLevelCount       = 1u;
-  viewInfo.arrayLayerCount     = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET | GPU_TEXTURE_USAGE_SAMPLED;
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(targets); i++) {
-    textureInfo.label = i == 0u ? "mrt-blend-alpha-target"
-                                : "mrt-blend-additive-target";
-    viewInfo.label    = i == 0u ? "mrt-blend-alpha-view"
-                                : "mrt-blend-additive-view";
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.arrayLayerCount  = 1u;
+
+  for (i = 0u; i < GPU_ARRAY_LEN(targets); i++) {
+    textureInfo.label = i == 0u ? "mrt-blend-alpha-target" : "mrt-blend-additive-target";
+    viewInfo.label    = i == 0u ? "mrt-blend-alpha-view" : "mrt-blend-additive-view";
+
     result = GPUCreateTexture(state->device, &textureInfo, &targets[i]);
+
     if (result != GPU_OK) {
       goto cleanup;
     }
+
     result = GPUCreateTextureView(targets[i], &viewInfo, &views[i]);
+
     if (result != GPU_OK) {
       goto cleanup;
     }
@@ -158,22 +182,26 @@ create_targets(GPUSampleMRTBlend *state, uint32_t width, uint32_t height) {
   entries[1].sampler     = state->sampler;
   entries[1].binding     = 1u;
   entries[1].bindingType = GPU_BINDING_SAMPLER;
+
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.layout           = state->shaderLayout->bindGroupLayouts[0];
   groupInfo.pEntries         = entries;
   groupInfo.entryCount       = GPU_ARRAY_LEN(entries);
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(groups); i++) {
+
+  for (i = 0u; i < GPU_ARRAY_LEN(groups); i++) {
     entries[0].textureView = views[i];
-    groupInfo.label = i == 0u ? "mrt-blend-alpha-group"
-                              : "mrt-blend-additive-group";
+
+    groupInfo.label = i == 0u ? "mrt-blend-alpha-group" : "mrt-blend-additive-group";
+
     result = GPUCreateBindGroup(state->device, &groupInfo, &groups[i]);
+
     if (result != GPU_OK) {
       goto cleanup;
     }
   }
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(targets); i++) {
+  for (i = 0u; i < GPU_ARRAY_LEN(targets); i++) {
     GPUDestroyBindGroup(state->compositeGroups[i]);
     GPUDestroyTextureView(state->targetViews[i]);
     GPUDestroyTexture(state->targets[i]);
@@ -181,68 +209,20 @@ create_targets(GPUSampleMRTBlend *state, uint32_t width, uint32_t height) {
     state->targetViews[i]     = views[i];
     state->compositeGroups[i] = groups[i];
   }
+
   state->width      = width;
   state->height     = height;
   state->frameCount = 0u;
+
   return GPU_OK;
 
 cleanup:
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(targets); i++) {
+  for (i = 0u; i < GPU_ARRAY_LEN(targets); i++) {
     GPUDestroyBindGroup(groups[i]);
     GPUDestroyTextureView(views[i]);
     GPUDestroyTexture(targets[i]);
   }
   return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
-}
-
-GPUResult
-GPUSampleMRTBlendInit(GPUSampleMRTBlend *state,
-                      GPUDevice         *device,
-                      GPUQueue          *queue,
-                      GPUSwapchain      *swapchain,
-                      GPUShaderLibrary  *library,
-                      GPUShaderLayout   *shaderLayout,
-                      uint32_t           width,
-                      uint32_t           height) {
-  GPUResult result;
-
-  if (!state || !device || !queue || !swapchain || !library || !shaderLayout ||
-      !shaderLayout->pipelineLayout ||
-      shaderLayout->bindGroupLayoutCount != 1u ||
-      !shaderLayout->bindGroupLayouts || !shaderLayout->bindGroupLayouts[0]) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  memset(state, 0, sizeof(*state));
-  state->device       = device;
-  state->queue        = queue;
-  state->swapchain    = swapchain;
-  state->library      = library;
-  state->shaderLayout = shaderLayout;
-  result = create_pipelines(state);
-  if (result == GPU_OK) {
-    result = create_sampler(state);
-  }
-  if (result == GPU_OK) {
-    result = create_targets(state, width, height);
-  }
-  if (result != GPU_OK) {
-    GPUSampleMRTBlendDestroy(state);
-  }
-  return result;
-}
-
-GPUResult
-GPUSampleMRTBlendResize(GPUSampleMRTBlend *state,
-                        uint32_t           width,
-                        uint32_t           height) {
-  if (!state || width == 0u || height == 0u) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if (state->width == width && state->height == height) {
-    return GPU_OK;
-  }
-  return create_targets(state, width, height);
 }
 
 static void
@@ -259,6 +239,7 @@ render_composite(GPURenderPassEncoder *pass, GPUSampleMRTBlend *state) {
   viewport.maxDepth = 1.0f;
   scissor.width     = leftWidth;
   scissor.height    = state->height;
+
   GPUSetViewport(pass, &viewport);
   GPUSetScissor(pass, &scissor);
   GPUBindRenderGroup(pass, 0u, state->compositeGroups[0], 0u, NULL);
@@ -268,6 +249,7 @@ render_composite(GPURenderPassEncoder *pass, GPUSampleMRTBlend *state) {
   viewport.width = (float)(state->width - leftWidth);
   scissor.x      = (int32_t)leftWidth;
   scissor.width  = state->width - leftWidth;
+
   GPUSetViewport(pass, &viewport);
   GPUSetScissor(pass, &scissor);
   GPUBindRenderGroup(pass, 0u, state->compositeGroups[1], 0u, NULL);
@@ -275,35 +257,95 @@ render_composite(GPURenderPassEncoder *pass, GPUSampleMRTBlend *state) {
 }
 
 GPUResult
-GPUSampleMRTBlendRender(GPUSampleMRTBlend           *state,
-                        void                        *completionSender,
-                        GPUCommandBufferCompletionFn completion) {
-  GPUFrame                     *frame;
-  GPUCommandBuffer             *cmdb;
-  GPURenderPassEncoder         *pass;
-  GPURenderPassColorAttachment  mrtColors[2]     = {0};
-  GPURenderPassColorAttachment  compositeColor   = {0};
-  GPURenderPassCreateInfo       mrtPassInfo       = {0};
-  GPURenderPassCreateInfo       compositePassInfo = {0};
-  GPUTextureBarrier             targetBarriers[2] = {0};
-  GPUBarrierBatch               barrierBatch      = {0};
-  GPUResult                     result;
+GPUSampleMRTBlendInit(GPUSampleMRTBlend *state,
+                      GPUDevice         *device,
+                      GPUQueue          *queue,
+                      GPUSwapchain      *swapchain,
+                      GPUShaderLibrary  *library,
+                      GPUShaderLayout   *shaderLayout,
+                      uint32_t           width,
+                      uint32_t           height) {
+  GPUResult result;
 
-  if (!state || !state->swapchain || !state->mrtPipeline ||
-      !state->compositePipeline) {
+  if (!state || !device || !queue || !swapchain || !library || !shaderLayout
+      || !shaderLayout->pipelineLayout
+      || shaderLayout->bindGroupLayoutCount != 1u
+      || !shaderLayout->bindGroupLayouts || !shaderLayout->bindGroupLayouts[0]) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) {
+  memset(state, 0, sizeof(*state));
+  state->device       = device;
+  state->queue        = queue;
+  state->swapchain    = swapchain;
+  state->library      = library;
+  state->shaderLayout = shaderLayout;
+
+  result = create_pipelines(state);
+
+  if (result == GPU_OK) {
+    result = create_sampler(state);
+  }
+
+  if (result == GPU_OK) {
+    result = create_targets(state, width, height);
+  }
+
+  if (result != GPU_OK) {
+    GPUSampleMRTBlendDestroy(state);
+  }
+
+  return result;
+}
+
+GPUResult
+GPUSampleMRTBlendResize(GPUSampleMRTBlend *state,
+                        uint32_t           width,
+                        uint32_t           height) {
+  if (!state || width == 0u || height == 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (state->width == width && state->height == height) {
+    return GPU_OK;
+  }
+
+  return create_targets(state, width, height);
+}
+
+GPUResult
+GPUSampleMRTBlendRender(GPUSampleMRTBlend           *state,
+                        void                        *completionSender,
+                        GPUCommandBufferCompletionFn completion) {
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassColorAttachment mrtColors[2]      = {0};
+  GPURenderPassColorAttachment compositeColor    = {0};
+  GPURenderPassCreateInfo      mrtPassInfo       = {0};
+  GPURenderPassCreateInfo      compositePassInfo = {0};
+  GPUTextureBarrier            targetBarriers[2] = {0};
+  GPUBarrierBatch              barrierBatch      = {0};
+  GPUFrame                    *frame;
+  GPURenderPassEncoder        *pass;
+  GPUResult                    result;
+  uint32_t                     i;
+
+  if (!state || !state->swapchain || !state->mrtPipeline
+      || !state->compositePipeline) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!(frame = GPUBeginFrame(state->swapchain))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
-  cmdb = NULL;
+
+  cmdb   = NULL;
   result = GPUAcquireCommandBuffer(state->queue, "mrt-blend-frame", &cmdb);
+
   if (result != GPU_OK || !cmdb) {
     GPUEndFrame(frame);
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
+
   if (completion) {
     GPUSetCommandBufferCompletionHandler(cmdb, completionSender, completion);
   }
@@ -322,32 +364,36 @@ GPUSampleMRTBlendRender(GPUSampleMRTBlend           *state,
   mrtColors[1].clearColor.float32[1] = 0.018f;
   mrtColors[1].clearColor.float32[2] = 0.060f;
   mrtColors[1].clearColor.float32[3] = 1.0f;
+
   mrtPassInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   mrtPassInfo.chain.structSize     = sizeof(mrtPassInfo);
   mrtPassInfo.label                = "mrt-blend-offscreen-pass";
   mrtPassInfo.pColorAttachments    = mrtColors;
   mrtPassInfo.colorAttachmentCount = GPU_ARRAY_LEN(mrtColors);
-  pass = GPUBeginRenderPass(cmdb, &mrtPassInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &mrtPassInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   GPUBindRenderPipeline(pass, state->mrtPipeline);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(targetBarriers); i++) {
+  for (i = 0u; i < GPU_ARRAY_LEN(targetBarriers); i++) {
     targetBarriers[i].texture    = state->targets[i];
     targetBarriers[i].srcAccess  = GPU_ACCESS_COLOR_WRITE;
     targetBarriers[i].dstAccess  = GPU_ACCESS_SHADER_READ;
     targetBarriers[i].mipCount   = 1u;
     targetBarriers[i].layerCount = 1u;
   }
+
   barrierBatch.pTextureBarriers    = targetBarriers;
   barrierBatch.srcStages           = GPU_STAGE_FRAGMENT;
   barrierBatch.dstStages           = GPU_STAGE_FRAGMENT;
   barrierBatch.textureBarrierCount = GPU_ARRAY_LEN(targetBarriers);
+
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
   compositeColor.view                  = GPUFrameGetTargetView(frame);
@@ -357,42 +403,51 @@ GPUSampleMRTBlendRender(GPUSampleMRTBlend           *state,
   compositeColor.clearColor.float32[1] = 0.008f;
   compositeColor.clearColor.float32[2] = 0.020f;
   compositeColor.clearColor.float32[3] = 1.0f;
+
   compositePassInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   compositePassInfo.chain.structSize     = sizeof(compositePassInfo);
   compositePassInfo.label                = "mrt-blend-composite-pass";
   compositePassInfo.pColorAttachments    = &compositeColor;
   compositePassInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &compositePassInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &compositePassInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   GPUBindRenderPipeline(pass, state->compositePipeline);
   render_composite(pass, state);
   GPUEndRenderPass(pass);
 
   result = GPUFinishFrame(state->queue, cmdb, frame);
+
   if (result == GPU_OK) {
     state->frameCount++;
   }
+
   return result;
 }
 
 void
 GPUSampleMRTBlendDestroy(GPUSampleMRTBlend *state) {
+  uint32_t i;
+
   if (!state) {
     return;
   }
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(state->targets); i++) {
+  for (i = 0u; i < GPU_ARRAY_LEN(state->targets); i++) {
     GPUDestroyBindGroup(state->compositeGroups[i]);
   }
+
   GPUDestroySampler(state->sampler);
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(state->targets); i++) {
+
+  for (i = 0u; i < GPU_ARRAY_LEN(state->targets); i++) {
     GPUDestroyTextureView(state->targetViews[i]);
     GPUDestroyTexture(state->targets[i]);
   }
+
   GPUDestroyRenderPipeline(state->compositePipeline);
   GPUDestroyRenderPipeline(state->mrtPipeline);
   GPUDestroyShaderLayout(state->shaderLayout);

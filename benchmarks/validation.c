@@ -32,9 +32,20 @@
 #endif
 
 enum {
-  VALIDATION_REPEATS           = 7,
+  VALIDATION_REPEATS          = 7,
   VALIDATION_WARMUP_ITERATIONS = 1000000
 };
+
+typedef struct ValidationFixture {
+  GPUPipelineLayout    *pipelineLayout;
+  GPUBindGroupLayout   *bindGroupLayout;
+  GPURenderPassEncoder  render;
+  GPUComputePassEncoder compute;
+  GPUCommandBuffer      cmdb;
+  GPUQueue              queue;
+  GPUDevice             device;
+  GPUApi                api;
+} ValidationFixture;
 
 #if GPU_BUILD_WITH_VALIDATION
 static const GPUValidationMode validationModes[] = {
@@ -58,16 +69,7 @@ static const char *validationModeNames[] = {
 };
 #endif
 
-typedef struct ValidationFixture {
-  GPUPipelineLayout     *pipelineLayout;
-  GPUBindGroupLayout    *bindGroupLayout;
-  GPURenderPassEncoder   render;
-  GPUComputePassEncoder  compute;
-  GPUCommandBuffer       cmdb;
-  GPUQueue               queue;
-  GPUDevice              device;
-  GPUApi                 api;
-} ValidationFixture;
+enum { MODE_COUNT = (int)GPU_ARRAY_LEN(validationModes) };
 
 static volatile uint64_t validationSink;
 
@@ -78,12 +80,8 @@ validation_draw(GPURenderPassEncoder *pass,
                 size_t                vertexCount,
                 uint32_t              instanceCount,
                 uint32_t              firstInstance) {
-  validationSink += (uint64_t)(pass != NULL) +
-                    (uint64_t)type +
-                    firstVertex +
-                    vertexCount +
-                    instanceCount +
-                    firstInstance;
+  validationSink += (uint64_t)(pass != NULL) + (uint64_t)type + firstVertex + vertexCount + instanceCount
+                    + firstInstance;
 }
 
 static BENCH_NOINLINE void
@@ -98,13 +96,17 @@ static double
 validation_runDraw(ValidationFixture *fixture,
                    GPUValidationMode  mode,
                    uint64_t           iterations) {
-  double begin;
+  double   begin;
+  uint64_t i;
 
   fixture->device.runtimeConfig.validationMode = mode;
+
   begin = bench_now();
-  for (uint64_t i = 0u; i < iterations; i++) {
+
+  for (i = 0u; i < iterations; i++) {
     GPUDraw(&fixture->render, 3u, 1u, 0u, 0u);
   }
+
   return (bench_now() - begin) * 1e9 / (double)iterations;
 }
 
@@ -112,22 +114,28 @@ static double
 validation_runDispatch(ValidationFixture *fixture,
                        GPUValidationMode  mode,
                        uint64_t           iterations) {
-  double begin;
+  double   begin;
+  uint64_t i;
 
   fixture->device.runtimeConfig.validationMode = mode;
+
   begin = bench_now();
-  for (uint64_t i = 0u; i < iterations; i++) {
+
+  for (i = 0u; i < iterations; i++) {
     GPUDispatch(&fixture->compute, 1u, 1u, 1u);
   }
+
   return (bench_now() - begin) * 1e9 / (double)iterations;
 }
 
 static double
 validation_runDirectDraw(ValidationFixture *fixture, uint64_t iterations) {
-  double begin;
+  double   begin;
+  uint64_t i;
 
   begin = bench_now();
-  for (uint64_t i = 0u; i < iterations; i++) {
+
+  for (i = 0u; i < iterations; i++) {
     validation_draw(&fixture->render,
                     GPUPrimitiveTypeTriangle,
                     0u,
@@ -135,18 +143,22 @@ validation_runDirectDraw(ValidationFixture *fixture, uint64_t iterations) {
                     1u,
                     0u);
   }
+
   return (bench_now() - begin) * 1e9 / (double)iterations;
 }
 
 static double
 validation_runDirectDispatch(ValidationFixture *fixture,
                              uint64_t           iterations) {
-  double begin;
+  double   begin;
+  uint64_t i;
 
   begin = bench_now();
-  for (uint64_t i = 0u; i < iterations; i++) {
+
+  for (i = 0u; i < iterations; i++) {
     validation_dispatch(&fixture->compute, 1u, 1u, 1u);
   }
+
   return (bench_now() - begin) * 1e9 / (double)iterations;
 }
 
@@ -158,44 +170,44 @@ validation_init(ValidationFixture *fixture) {
   GPUBindGroupLayout          *layouts[1];
 
   memset(fixture, 0, sizeof(*fixture));
-  fixture->api.rce.drawPrimitives    = validation_draw;
-  fixture->api.compute.dispatch      = validation_dispatch;
-  fixture->device._api               = &fixture->api;
-  fixture->queue._device             = &fixture->device;
-  fixture->cmdb._queue               = &fixture->queue;
-  fixture->render._api               = &fixture->api;
-  fixture->render._device            = &fixture->device;
-  fixture->render._cmdb              = &fixture->cmdb;
-  fixture->render._primitiveType     = GPUPrimitiveTypeTriangle;
-  fixture->render._hasPipeline       = true;
-  fixture->compute._api              = &fixture->api;
-  fixture->compute._device           = &fixture->device;
-  fixture->compute._cmdb             = &fixture->cmdb;
-  fixture->compute._hasPipeline      = true;
+  fixture->api.rce.drawPrimitives = validation_draw;
+  fixture->api.compute.dispatch   = validation_dispatch;
+  fixture->device._api            = &fixture->api;
+  fixture->queue._device          = &fixture->device;
+  fixture->cmdb._queue            = &fixture->queue;
+  fixture->render._api            = &fixture->api;
+  fixture->render._device         = &fixture->device;
+  fixture->render._cmdb           = &fixture->cmdb;
+  fixture->render._primitiveType  = GPUPrimitiveTypeTriangle;
+  fixture->render._hasPipeline    = true;
+  fixture->compute._api           = &fixture->api;
+  fixture->compute._device        = &fixture->device;
+  fixture->compute._cmdb          = &fixture->cmdb;
+  fixture->compute._hasPipeline   = true;
 
-  entry.binding                       = 0u;
-  entry.bindingType                   = GPU_BINDING_UNIFORM_BUFFER;
-  entry.visibility                    = GPU_SHADER_STAGE_VERTEX_BIT |
-                                        GPU_SHADER_STAGE_FRAGMENT_BIT |
-                                        GPU_SHADER_STAGE_COMPUTE_BIT;
-  entry.arrayCount                    = 1u;
-  layoutInfo.chain.sType              =
-    GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
-  layoutInfo.chain.structSize         = sizeof(layoutInfo);
-  layoutInfo.entryCount               = 1u;
-  layoutInfo.pEntries                 = &entry;
+  entry.binding               = 0u;
+  entry.bindingType           = GPU_BINDING_UNIFORM_BUFFER;
+  entry.visibility            = GPU_SHADER_STAGE_VERTEX_BIT |
+                                GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                GPU_SHADER_STAGE_COMPUTE_BIT;
+  entry.arrayCount            = 1u;
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.entryCount       = 1u;
+  layoutInfo.pEntries         = &entry;
+
   if (GPUCreateBindGroupLayout(&fixture->device,
                                &layoutInfo,
                                &fixture->bindGroupLayout) != GPU_OK) {
     return false;
   }
 
-  layouts[0]                          = fixture->bindGroupLayout;
-  pipelineInfo.chain.sType            =
-    GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineInfo.chain.structSize       = sizeof(pipelineInfo);
-  pipelineInfo.bindGroupLayoutCount   = 1u;
-  pipelineInfo.ppBindGroupLayouts     = layouts;
+  layouts[0]                        = fixture->bindGroupLayout;
+  pipelineInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineInfo.chain.structSize     = sizeof(pipelineInfo);
+  pipelineInfo.bindGroupLayoutCount = 1u;
+  pipelineInfo.ppBindGroupLayouts   = layouts;
+
   if (GPUCreatePipelineLayout(&fixture->device,
                               &pipelineInfo,
                               &fixture->pipelineLayout) != GPU_OK) {
@@ -204,12 +216,13 @@ validation_init(ValidationFixture *fixture) {
     return false;
   }
 
-  fixture->render._pipelineLayout        = fixture->pipelineLayout;
-  fixture->render._requiredBindGroupMask = 1u;
-  fixture->render._boundGroupLayouts[0]  = fixture->bindGroupLayout;
+  fixture->render._pipelineLayout         = fixture->pipelineLayout;
+  fixture->render._requiredBindGroupMask  = 1u;
+  fixture->render._boundGroupLayouts[0]   = fixture->bindGroupLayout;
   fixture->compute._pipelineLayout        = fixture->pipelineLayout;
   fixture->compute._requiredBindGroupMask = 1u;
   fixture->compute._boundGroupLayouts[0]  = fixture->bindGroupLayout;
+
   return true;
 }
 
@@ -221,7 +234,6 @@ validation_destroy(ValidationFixture *fixture) {
 
 int
 main(int argc, char *argv[]) {
-  enum { MODE_COUNT = (int)GPU_ARRAY_LEN(validationModes) };
   ValidationFixture fixture;
   double            drawSamples[MODE_COUNT][VALIDATION_REPEATS];
   double            dispatchSamples[MODE_COUNT][VALIDATION_REPEATS];
@@ -229,11 +241,14 @@ main(int argc, char *argv[]) {
   double            directDispatchSamples[VALIDATION_REPEATS];
   double            directDraw;
   double            directDispatch;
+  double            median;
   uint32_t          iterations;
+  uint32_t          mode;
+  uint32_t          repeat;
 
   iterations = 20000000u;
-  if (argc > 2 ||
-      (argc == 2 && !bench_parseU32(argv[1], 10000u, &iterations))) {
+
+  if (argc > 2 || (argc == 2 && !bench_parseU32(argv[1], 10000u, &iterations))) {
     fprintf(stderr, "usage: %s [iterations >= 10000]\n", argv[0]);
     return EXIT_FAILURE;
   }
@@ -242,9 +257,11 @@ main(int argc, char *argv[]) {
     fprintf(stderr, "failed to initialize validation benchmark\n");
     return EXIT_FAILURE;
   }
+
   validation_runDirectDraw(&fixture, VALIDATION_WARMUP_ITERATIONS);
   validation_runDirectDispatch(&fixture, VALIDATION_WARMUP_ITERATIONS);
-  for (uint32_t mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
+
+  for (mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
     validation_runDraw(&fixture,
                        validationModes[mode],
                        VALIDATION_WARMUP_ITERATIONS);
@@ -253,31 +270,26 @@ main(int argc, char *argv[]) {
                            VALIDATION_WARMUP_ITERATIONS);
   }
 
-  for (uint32_t repeat = 0u; repeat < VALIDATION_REPEATS; repeat++) {
-    directDrawSamples[repeat] =
-      validation_runDirectDraw(&fixture, iterations);
-    directDispatchSamples[repeat] =
-      validation_runDirectDispatch(&fixture, iterations);
+  for (repeat = 0u; repeat < VALIDATION_REPEATS; repeat++) {
+    directDrawSamples[repeat]     = validation_runDirectDraw(&fixture, iterations);
+    directDispatchSamples[repeat] = validation_runDirectDispatch(&fixture, iterations);
+
     if ((repeat & 1u) == 0u) {
-      for (uint32_t mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
-        drawSamples[mode][repeat] =
-          validation_runDraw(&fixture, validationModes[mode], iterations);
-        dispatchSamples[mode][repeat] =
-          validation_runDispatch(&fixture, validationModes[mode], iterations);
+      for (mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
+        drawSamples[mode][repeat]     = validation_runDraw(&fixture, validationModes[mode], iterations);
+        dispatchSamples[mode][repeat] = validation_runDispatch(&fixture, validationModes[mode], iterations);
       }
     } else {
-      for (uint32_t mode = (uint32_t)MODE_COUNT; mode-- > 0u;) {
-        dispatchSamples[mode][repeat] =
-          validation_runDispatch(&fixture, validationModes[mode], iterations);
-        drawSamples[mode][repeat] =
-          validation_runDraw(&fixture, validationModes[mode], iterations);
+      for (mode = (uint32_t)MODE_COUNT; mode-- > 0u;) {
+        dispatchSamples[mode][repeat] = validation_runDispatch(&fixture, validationModes[mode], iterations);
+        drawSamples[mode][repeat]     = validation_runDraw(&fixture, validationModes[mode], iterations);
       }
     }
   }
 
-  directDraw = bench_percentile(directDrawSamples,
-                                VALIDATION_REPEATS,
-                                0.5);
+  directDraw     = bench_percentile(directDrawSamples,
+                                    VALIDATION_REPEATS,
+                                    0.5);
   directDispatch = bench_percentile(directDispatchSamples,
                                     VALIDATION_REPEATS,
                                     0.5);
@@ -287,19 +299,18 @@ main(int argc, char *argv[]) {
          iterations,
          VALIDATION_REPEATS);
   printf("direct draw callback    : %8.3f ns/call\n", directDraw);
-  for (uint32_t mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
-    double median;
 
+  for (mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
     median = bench_percentile(drawSamples[mode], VALIDATION_REPEATS, 0.5);
     printf("GPUDraw validation %-7s: %8.3f ns/call  delta %+7.3f ns\n",
            validationModeNames[mode],
            median,
            median - directDraw);
   }
-  printf("direct dispatch callback: %8.3f ns/call\n", directDispatch);
-  for (uint32_t mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
-    double median;
 
+  printf("direct dispatch callback: %8.3f ns/call\n", directDispatch);
+
+  for (mode = 0u; mode < (uint32_t)MODE_COUNT; mode++) {
     median = bench_percentile(dispatchSamples[mode],
                               VALIDATION_REPEATS,
                               0.5);
@@ -308,7 +319,9 @@ main(int argc, char *argv[]) {
            median,
            median - directDispatch);
   }
+
   printf("sink: %" PRIu64 "\n", validationSink);
   validation_destroy(&fixture);
+
   return EXIT_SUCCESS;
 }

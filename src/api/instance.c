@@ -31,53 +31,57 @@ gpu_destroyInstanceAdapters(GPUInstance *instance) {
 
   while (adapter) {
     next = adapter->next;
+
     if (api && api->device.destroyAdapter) {
       api->device.destroyAdapter(adapter);
     } else {
       free(adapter->_priv);
       free(adapter);
     }
+
     adapter = next;
   }
 }
 
 GPU_EXPORT
 GPUResult
-GPUCreateInstance(const GPUInstanceCreateInfo * __restrict info,
-                  GPUInstance                ** __restrict outInstance) {
+GPUCreateInstance(const GPUInstanceCreateInfo *__restrict info,
+                  GPUInstance                **__restrict outInstance) {
   GPUInstanceCreateInfo defaultInfo;
   GPUApi               *api;
 
   if (!outInstance) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outInstance = NULL;
 
   if (!info) {
     memset(&defaultInfo, 0, sizeof(defaultInfo));
-    defaultInfo.chain.sType = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    defaultInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     defaultInfo.chain.structSize = sizeof(defaultInfo);
     defaultInfo.preferredBackend = GPU_BACKEND_DEFAULT;
+
     info = &defaultInfo;
   }
 
-  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
-      info->chain.sType != GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO) {
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE
+      && info->chain.sType != GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  api = gpuApiForBackend(info->preferredBackend);
-  if (!api || !api->instance.createInstance) {
+  if (!(api = gpuApiForBackend(info->preferredBackend)) || !api->instance.createInstance) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  *outInstance = api->instance.createInstance(api, info);
-  if (!*outInstance) {
+  if (!(*outInstance = api->instance.createInstance(api, info))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   (*outInstance)->_api = api;
 
   return GPU_OK;
@@ -94,6 +98,7 @@ GPUDestroyInstance(GPUInstance *instance) {
 
   api = gpuInstanceApi(instance);
   gpu_destroyInstanceAdapters(instance);
+
   if (api && api->instance.destroyInstance) {
     api->instance.destroyInstance(api, instance);
     return;

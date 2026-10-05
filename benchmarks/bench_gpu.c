@@ -33,15 +33,15 @@ enum {
 };
 
 typedef struct BenchAdapterRequest {
-  GPUAdapter  *adapter;
-  GPUResult    result;
-  atomic_bool  done;
+  GPUAdapter *adapter;
+  GPUResult   result;
+  atomic_bool done;
 } BenchAdapterRequest;
 
 typedef struct BenchDeviceRequest {
-  GPUDevice   *device;
-  GPUResult    result;
-  atomic_bool  done;
+  GPUDevice  *device;
+  GPUResult   result;
+  atomic_bool done;
 } BenchDeviceRequest;
 
 static void
@@ -53,6 +53,7 @@ bench_sleepMillis(uint32_t milliseconds) {
 
   duration.tv_sec  = (time_t)(milliseconds / 1000u);
   duration.tv_nsec = (long)(milliseconds % 1000u) * 1000000l;
+
   nanosleep(&duration, NULL);
 #endif
 }
@@ -65,7 +66,7 @@ bench_wait(atomic_bool *done) {
 }
 
 static void
-bench_adapterReady(GPUResult result,
+bench_adapterReady(GPUResult   result,
                    GPUAdapter *adapter,
                    void       *userData) {
   BenchAdapterRequest *request;
@@ -73,11 +74,12 @@ bench_adapterReady(GPUResult result,
   request          = userData;
   request->adapter = adapter;
   request->result  = result;
+
   atomic_store_explicit(&request->done, true, memory_order_release);
 }
 
 static void
-bench_deviceReady(GPUResult result,
+bench_deviceReady(GPUResult  result,
                   GPUDevice *device,
                   void      *userData) {
   BenchDeviceRequest *request;
@@ -85,10 +87,11 @@ bench_deviceReady(GPUResult result,
   request         = userData;
   request->device = device;
   request->result = result;
+
   atomic_store_explicit(&request->done, true, memory_order_release);
 }
 
-GPUAdapter *
+GPUAdapter*
 bench_createAdapter(GPUInstance *instance) {
   BenchAdapterRequest request;
   GPUAdapter         *adapter;
@@ -102,26 +105,31 @@ bench_createAdapter(GPUInstance *instance) {
   adapter = NULL;
   count   = 1u;
   result  = GPUEnumerateAdapters(instance, &count, &adapter);
-  if ((result == GPU_OK || result == GPU_ERROR_INSUFFICIENT_CAPACITY) &&
-      adapter) {
+
+  if ((result == GPU_OK || result == GPU_ERROR_INSUFFICIENT_CAPACITY) && adapter) {
     return adapter;
   }
 
   request.adapter = NULL;
   request.result  = GPU_ERROR_BACKEND_FAILURE;
+
   atomic_init(&request.done, false);
-  result          = GPURequestAdapter(instance, NULL, bench_adapterReady, &request);
+  result = GPURequestAdapter(instance, NULL, bench_adapterReady, &request);
+
   if (result != GPU_OK) {
     return NULL;
   }
+
   bench_wait(&request.done);
+
   if (request.result != GPU_OK) {
     return NULL;
   }
+
   return request.adapter;
 }
 
-GPUDevice *
+GPUDevice*
 bench_createDevice(GPUAdapter                *adapter,
                    const GPUDeviceCreateInfo *info) {
   BenchDeviceRequest request;
@@ -133,26 +141,33 @@ bench_createDevice(GPUAdapter                *adapter,
   }
 
   device = NULL;
+
   if (info) {
     result = GPUCreateDevice(adapter, info, &device);
   } else {
     device = GPUCreateDeviceWithDefaultQueues(adapter);
     result = device ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
   }
+
   if (result == GPU_OK && device) {
     return device;
   }
 
   request.device = NULL;
   request.result = GPU_ERROR_BACKEND_FAILURE;
+
   atomic_init(&request.done, false);
-  result         = GPURequestDevice(adapter, info, bench_deviceReady, &request);
+  result = GPURequestDevice(adapter, info, bench_deviceReady, &request);
+
   if (result != GPU_OK) {
     return NULL;
   }
+
   bench_wait(&request.done);
+
   if (request.result != GPU_OK) {
     return NULL;
   }
+
   return request.device;
 }

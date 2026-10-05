@@ -24,11 +24,11 @@
 static bool
 gpu_validStageMask(GPUPipelineStageMask stages) {
   const uint32_t knownMask = GPU_STAGE_TOP |
-                             GPU_STAGE_VERTEX |
-                             GPU_STAGE_FRAGMENT |
-                             GPU_STAGE_COMPUTE |
-                             GPU_STAGE_TRANSFER |
-                             GPU_STAGE_BOTTOM;
+                            GPU_STAGE_VERTEX |
+                            GPU_STAGE_FRAGMENT |
+                            GPU_STAGE_COMPUTE |
+                            GPU_STAGE_TRANSFER |
+                            GPU_STAGE_BOTTOM;
 
   return stages != 0u && (((uint32_t)stages & ~knownMask) == 0u);
 }
@@ -36,14 +36,14 @@ gpu_validStageMask(GPUPipelineStageMask stages) {
 static bool
 gpu_validAccessMask(GPUAccessMask access) {
   const uint32_t knownMask = GPU_ACCESS_SHADER_READ |
-                             GPU_ACCESS_SHADER_WRITE |
-                             GPU_ACCESS_COLOR_READ |
-                             GPU_ACCESS_COLOR_WRITE |
-                             GPU_ACCESS_DEPTH_READ |
-                             GPU_ACCESS_DEPTH_WRITE |
-                             GPU_ACCESS_TRANSFER_READ |
-                             GPU_ACCESS_TRANSFER_WRITE |
-                             GPU_ACCESS_INDIRECT_READ;
+                            GPU_ACCESS_SHADER_WRITE |
+                            GPU_ACCESS_COLOR_READ |
+                            GPU_ACCESS_COLOR_WRITE |
+                            GPU_ACCESS_DEPTH_READ |
+                            GPU_ACCESS_DEPTH_WRITE |
+                            GPU_ACCESS_TRANSFER_READ |
+                            GPU_ACCESS_TRANSFER_WRITE |
+                            GPU_ACCESS_INDIRECT_READ;
 
   return (((uint32_t)access & ~knownMask) == 0u);
 }
@@ -52,35 +52,40 @@ static bool
 gpu_validTextureAccess(const GPUTexture *texture, GPUAccessMask access) {
   GPUTextureUsageFlags usage;
 
-  if (!texture || !gpu_validAccessMask(access) ||
-      (access & GPU_ACCESS_INDIRECT_READ) != 0u) {
+  if (!texture || !gpu_validAccessMask(access)
+      || (access & GPU_ACCESS_INDIRECT_READ) != 0u) {
     return false;
   }
 
   usage = texture->usage;
-  if ((access & GPU_ACCESS_SHADER_READ) != 0u &&
-      (usage & (GPU_TEXTURE_USAGE_SAMPLED |
-                GPU_TEXTURE_USAGE_STORAGE)) == 0u) {
+
+  if ((access & GPU_ACCESS_SHADER_READ) != 0u
+      && (usage & (GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_STORAGE)) == 0u) {
     return false;
   }
-  if ((access & GPU_ACCESS_SHADER_WRITE) != 0u &&
-      (usage & GPU_TEXTURE_USAGE_STORAGE) == 0u) {
+
+  if ((access & GPU_ACCESS_SHADER_WRITE) != 0u
+      && (usage & GPU_TEXTURE_USAGE_STORAGE) == 0u) {
     return false;
   }
-  if ((access & (GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE)) != 0u &&
-      (usage & GPU_TEXTURE_USAGE_COLOR_TARGET) == 0u) {
+
+  if ((access & (GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE)) != 0u
+      && (usage & GPU_TEXTURE_USAGE_COLOR_TARGET) == 0u) {
     return false;
   }
-  if ((access & (GPU_ACCESS_DEPTH_READ | GPU_ACCESS_DEPTH_WRITE)) != 0u &&
-      (usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) == 0u) {
+
+  if ((access & (GPU_ACCESS_DEPTH_READ | GPU_ACCESS_DEPTH_WRITE)) != 0u
+      && (usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) == 0u) {
     return false;
   }
-  if ((access & GPU_ACCESS_TRANSFER_READ) != 0u &&
-      (usage & GPU_TEXTURE_USAGE_COPY_SRC) == 0u) {
+
+  if ((access & GPU_ACCESS_TRANSFER_READ) != 0u
+      && (usage & GPU_TEXTURE_USAGE_COPY_SRC) == 0u) {
     return false;
   }
-  if ((access & GPU_ACCESS_TRANSFER_WRITE) != 0u &&
-      (usage & GPU_TEXTURE_USAGE_COPY_DST) == 0u) {
+
+  if ((access & GPU_ACCESS_TRANSFER_WRITE) != 0u
+      && (usage & GPU_TEXTURE_USAGE_COPY_DST) == 0u) {
     return false;
   }
 
@@ -96,15 +101,18 @@ gpu_textureAccessStages(GPUAccessMask access, bool source) {
   }
 
   stages = 0u;
+
   if ((access & (GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE)) != 0u) {
     stages |= GPU_STAGE_VERTEX | GPU_STAGE_FRAGMENT | GPU_STAGE_COMPUTE;
   }
+
   if ((access & (GPU_ACCESS_COLOR_READ |
                  GPU_ACCESS_COLOR_WRITE |
                  GPU_ACCESS_DEPTH_READ |
                  GPU_ACCESS_DEPTH_WRITE)) != 0u) {
     stages |= GPU_STAGE_FRAGMENT;
   }
+
   if ((access & (GPU_ACCESS_TRANSFER_READ |
                  GPU_ACCESS_TRANSFER_WRITE)) != 0u) {
     stages |= GPU_STAGE_TRANSFER;
@@ -114,7 +122,7 @@ gpu_textureAccessStages(GPUAccessMask access, bool source) {
 }
 
 static bool
-gpu_validAliasingBarrier(GPUDevice               *device,
+gpu_validAliasingBarrier(GPUDevice                *device,
                          const GPUAliasingBarrier *barrier) {
   GPUHeap  *beforeHeap;
   GPUHeap  *afterHeap;
@@ -125,10 +133,9 @@ gpu_validAliasingBarrier(GPUDevice               *device,
   uint32_t  beforeCount;
   uint32_t  afterCount;
 
-  beforeCount = (barrier->beforeBuffer != NULL) +
-                (barrier->beforeTexture != NULL);
-  afterCount  = (barrier->afterBuffer != NULL) +
-                (barrier->afterTexture != NULL);
+  beforeCount = (barrier->beforeBuffer != NULL) + (barrier->beforeTexture != NULL);
+  afterCount  = (barrier->afterBuffer != NULL) + (barrier->afterTexture != NULL);
+
   if (beforeCount != 1u || afterCount != 1u) {
     return false;
   }
@@ -137,6 +144,7 @@ gpu_validAliasingBarrier(GPUDevice               *device,
     if (barrier->beforeBuffer->device != device) {
       return false;
     }
+
     beforeHeap   = barrier->beforeBuffer->_heap;
     beforeOffset = barrier->beforeBuffer->_heapOffset;
     beforeSize   = barrier->beforeBuffer->_allocationSize;
@@ -144,14 +152,17 @@ gpu_validAliasingBarrier(GPUDevice               *device,
     if (barrier->beforeTexture->device != device) {
       return false;
     }
+
     beforeHeap   = barrier->beforeTexture->_heap;
     beforeOffset = barrier->beforeTexture->_heapOffset;
     beforeSize   = barrier->beforeTexture->_allocationSize;
   }
+
   if (barrier->afterBuffer) {
     if (barrier->afterBuffer->device != device) {
       return false;
     }
+
     afterHeap   = barrier->afterBuffer->_heap;
     afterOffset = barrier->afterBuffer->_heapOffset;
     afterSize   = barrier->afterBuffer->_allocationSize;
@@ -159,69 +170,76 @@ gpu_validAliasingBarrier(GPUDevice               *device,
     if (barrier->afterTexture->device != device) {
       return false;
     }
+
     afterHeap   = barrier->afterTexture->_heap;
     afterOffset = barrier->afterTexture->_heapOffset;
     afterSize   = barrier->afterTexture->_allocationSize;
   }
 
-  return beforeHeap && beforeHeap == afterHeap &&
-         beforeSize > 0u && afterSize > 0u &&
-         beforeOffset < afterOffset + afterSize &&
-         afterOffset < beforeOffset + beforeSize;
+  return beforeHeap && beforeHeap == afterHeap
+         && beforeSize > 0u && afterSize > 0u
+         && beforeOffset < afterOffset + afterSize
+         && afterOffset < beforeOffset + beforeSize;
 }
 
 static bool
 gpu_validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
+  const GPUTextureBarrier *textureBarrier;
+  const GPUBufferBarrier  *bufferBarrier;
+  uint32_t                 i;
+
   if (!barriers) {
     return false;
   }
-  if (!gpu_validStageMask(barriers->srcStages) ||
-      !gpu_validStageMask(barriers->dstStages)) {
-    return false;
-  }
-  if ((barriers->bufferBarrierCount > 0u && !barriers->pBufferBarriers) ||
-      (barriers->textureBarrierCount > 0u && !barriers->pTextureBarriers) ||
-      (barriers->aliasingBarrierCount > 0u && !barriers->pAliasingBarriers)) {
+
+  if (!gpu_validStageMask(barriers->srcStages)
+      || !gpu_validStageMask(barriers->dstStages)) {
     return false;
   }
 
-  for (uint32_t i = 0; i < barriers->bufferBarrierCount; i++) {
-    const GPUBufferBarrier *barrier = &barriers->pBufferBarriers[i];
+  if ((barriers->bufferBarrierCount > 0u && !barriers->pBufferBarriers)
+      || (barriers->textureBarrierCount > 0u && !barriers->pTextureBarriers)
+      || (barriers->aliasingBarrierCount > 0u && !barriers->pAliasingBarriers)) {
+    return false;
+  }
 
-    if (!barrier->buffer || barrier->buffer->device != device ||
-        !gpuBufferRangeValid(barrier->buffer,
-                             barrier->offset,
-                             barrier->sizeBytes) ||
-        !gpu_validAccessMask(barrier->srcAccess) ||
-        !gpu_validAccessMask(barrier->dstAccess)) {
+  for (i = 0; i < barriers->bufferBarrierCount; i++) {
+    bufferBarrier = &barriers->pBufferBarriers[i];
+
+    if (!bufferBarrier->buffer || bufferBarrier->buffer->device != device
+        || !gpuBufferRangeValid(bufferBarrier->buffer,
+                                bufferBarrier->offset,
+                                bufferBarrier->sizeBytes)
+        || !gpu_validAccessMask(bufferBarrier->srcAccess)
+        || !gpu_validAccessMask(bufferBarrier->dstAccess)) {
       return false;
     }
   }
 
-  for (uint32_t i = 0; i < barriers->textureBarrierCount; i++) {
-    const GPUTextureBarrier *barrier = &barriers->pTextureBarriers[i];
+  for (i = 0; i < barriers->textureBarrierCount; i++) {
+    textureBarrier = &barriers->pTextureBarriers[i];
 
-    if (!barrier->texture || barrier->texture->device != device ||
-        !gpuTextureSubresourceRangeValid(barrier->texture,
-                                         barrier->baseMip,
-                                         barrier->mipCount,
-                                         barrier->baseLayer,
-                                         barrier->layerCount) ||
-        !gpu_validTextureAccess(barrier->texture, barrier->srcAccess) ||
-        !gpu_validTextureAccess(barrier->texture, barrier->dstAccess)) {
+    if (!textureBarrier->texture || textureBarrier->texture->device != device
+        || !gpuTextureSubresourceRangeValid(textureBarrier->texture,
+                                            textureBarrier->baseMip,
+                                            textureBarrier->mipCount,
+                                            textureBarrier->baseLayer,
+                                            textureBarrier->layerCount)
+        || !gpu_validTextureAccess(textureBarrier->texture, textureBarrier->srcAccess)
+        || !gpu_validTextureAccess(textureBarrier->texture, textureBarrier->dstAccess)) {
       return false;
     }
   }
 
-  for (uint32_t i = 0; i < barriers->aliasingBarrierCount; i++) {
+  for (i = 0; i < barriers->aliasingBarrierCount; i++) {
     if (!gpu_validAliasingBarrier(device, &barriers->pAliasingBarriers[i])) {
       return false;
     }
   }
 
-  return barriers->bufferBarrierCount > 0u ||
-         barriers->textureBarrierCount > 0u ||
-         barriers->aliasingBarrierCount > 0u;
+  return barriers->bufferBarrierCount > 0u
+         || barriers->textureBarrierCount > 0u
+         || barriers->aliasingBarrierCount > 0u;
 }
 
 static void
@@ -234,9 +252,10 @@ gpu_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   }
 
   device = cmdb->_queue ? cmdb->_queue->_device : NULL;
-  if (!gpu_validBarrierBatch(device, barriers) ||
-      !(api = gpuDeviceApi(device)) ||
-      !api->renderPass.encodeBarriers) {
+
+  if (!gpu_validBarrierBatch(device, barriers)
+      || !(api = gpuDeviceApi(device))
+      || !api->renderPass.encodeBarriers) {
     return;
   }
 
@@ -256,7 +275,7 @@ GPUTransitionTexture(GPUCommandBuffer *cmdb,
                      GPUAccessMask     srcAccess,
                      GPUAccessMask     dstAccess) {
   GPUTextureBarrier textureBarrier = {0};
-  GPUBarrierBatch   barrierBatch = {0};
+  GPUBarrierBatch   barrierBatch   = {0};
 
   if (!texture) {
     return;
@@ -272,5 +291,6 @@ GPUTransitionTexture(GPUCommandBuffer *cmdb,
   barrierBatch.srcStages           = gpu_textureAccessStages(srcAccess, true);
   barrierBatch.dstStages           = gpu_textureAccessStages(dstAccess, false);
   barrierBatch.textureBarrierCount = 1u;
+
   gpu_encodeBarriers(cmdb, &barrierBatch);
 }

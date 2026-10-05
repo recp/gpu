@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <gpu/gpu.h>
 
 #include <math.h>
@@ -26,30 +42,41 @@ typedef struct SampleCase {
   uint32_t        binding;
 } SampleCase;
 
+static const char * const pipeline_entries[SampleCaseCount] = {
+  "fetch_float",
+  "fetch_unorm",
+  "fetch_snorm",
+  "fetch_uint",
+  "fetch_sint"
+};
+
 int
 validate_ptx_metadata(const void *artifact, uint64_t artifactSize);
 
-static void *
+static void*
 read_file(const char *path, uint64_t *outSize) {
   FILE *file;
   void *data;
   long  size;
 
   file = path ? fopen(path, "rb") : NULL;
-  if (!file || fseek(file, 0, SEEK_END) != 0 ||
-      (size = ftell(file)) <= 0 || fseek(file, 0, SEEK_SET) != 0) {
-    if (file) fclose(file);
+
+  if (!file || fseek(file, 0, SEEK_END) != 0
+      || (size = ftell(file)) <= 0 || fseek(file, 0, SEEK_SET) != 0) {
+    if (file)
+      fclose(file);
     return NULL;
   }
 
-  data = malloc((size_t)size);
-  if (!data || fread(data, 1u, (size_t)size, file) != (size_t)size) {
+  if (!(data = malloc((size_t)size)) || fread(data, 1u, (size_t)size, file) != (size_t)size) {
     free(data);
     fclose(file);
     return NULL;
   }
+
   fclose(file);
   *outSize = (uint64_t)size;
+
   return data;
 }
 
@@ -65,11 +92,11 @@ device_error(GPUDevice                *device,
 }
 
 static int
-create_pipeline(GPUDevice            *device,
-                GPUShaderLibrary     *library,
-                GPUPipelineLayout    *layout,
-                const char           *entryPoint,
-                GPUComputePipeline  **outPipeline) {
+create_pipeline(GPUDevice           *device,
+                GPUShaderLibrary    *library,
+                GPUPipelineLayout   *layout,
+                const char          *entryPoint,
+                GPUComputePipeline **outPipeline) {
   GPUComputePipelineCreateInfo info = {0};
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -78,14 +105,15 @@ create_pipeline(GPUDevice            *device,
   info.layout           = layout;
   info.library          = library;
   info.entryPoint       = entryPoint;
-  return GPUCreateComputePipeline(device, &info, outPipeline) == GPU_OK &&
-         *outPipeline;
+
+  return GPUCreateComputePipeline(device, &info, outPipeline) == GPU_OK
+         && *outPipeline;
 }
 
 static int
 create_sample_case(GPUDevice *device, GPUQueue *queue, SampleCase *test) {
   GPUTextureCreateInfo     textureInfo = {0};
-  GPUTextureViewCreateInfo viewInfo = {0};
+  GPUTextureViewCreateInfo viewInfo    = {0};
   GPUTextureWriteRegion    writeRegion = {0};
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
@@ -100,8 +128,9 @@ create_sample_case(GPUDevice *device, GPUQueue *queue, SampleCase *test) {
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_DST;
-  if (GPUCreateTexture(device, &textureInfo, &test->texture) != GPU_OK ||
-      !test->texture) {
+
+  if (GPUCreateTexture(device, &textureInfo, &test->texture) != GPU_OK
+      || !test->texture) {
     return 0;
   }
 
@@ -112,6 +141,7 @@ create_sample_case(GPUDevice *device, GPUQueue *queue, SampleCase *test) {
   writeRegion.layerCount   = 1u;
   writeRegion.bytesPerRow  = test->bytesPerRow;
   writeRegion.rowsPerImage = TextureHeight;
+
   if (GPUQueueWriteTexture(queue,
                            test->texture,
                            &writeRegion,
@@ -127,10 +157,11 @@ create_sample_case(GPUDevice *device, GPUQueue *queue, SampleCase *test) {
   viewInfo.format           = test->format;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   return GPUCreateTextureView(test->texture,
                               &viewInfo,
-                              &test->view) == GPU_OK &&
-         test->view;
+                              &test->view) == GPU_OK
+         && test->view;
 }
 
 static int
@@ -146,6 +177,7 @@ create_output_buffer(GPUDevice  *device,
   info.sizeBytes        = sizeBytes;
   info.usage            = GPU_BUFFER_USAGE_STORAGE |
                           GPU_BUFFER_USAGE_COPY_SRC;
+
   return GPUCreateBuffer(device, &info, outBuffer) == GPU_OK && *outBuffer;
 }
 
@@ -167,24 +199,27 @@ values_match(const SampleCase cases[SampleCaseCount],
   uintInput  = cases[3].input;
   sintInput  = cases[4].input;
   source     = SampleOffset;
+
   for (uint32_t i = 0u; i < ChannelCount; i++) {
     float unormExpected;
     float snormExpected;
 
     unormExpected = (float)unormInput[source + i] / 255.0f;
     snormExpected = (float)snormInput[source + i] / 127.0f;
+
     if (snormExpected < -1.0f) {
       snormExpected = -1.0f;
     }
-    if (fabsf(floatOutput[i] - floatInput[source + i]) > 0.0001f ||
-        fabsf(floatOutput[ChannelCount + i] - unormExpected) > 0.0001f ||
-        fabsf(floatOutput[2u * ChannelCount + i] - snormExpected) >
-          0.0001f ||
-        uintOutput[i] != (uint32_t)uintInput[source + i] ||
-        sintOutput[i] != (int32_t)sintInput[source + i]) {
+
+    if (fabsf(floatOutput[i] - floatInput[source + i]) > 0.0001f
+        || fabsf(floatOutput[ChannelCount + i] - unormExpected) > 0.0001f
+        || fabsf(floatOutput[2u * ChannelCount + i] - snormExpected) > 0.0001f
+        || uintOutput[i] != (uint32_t)uintInput[source + i]
+        || sintOutput[i] != (int32_t)sintInput[source + i]) {
       return 0;
     }
   }
+
   return 1;
 }
 
@@ -201,21 +236,21 @@ main(int argc, char **argv) {
   GPUCommandBuffer      *cmdb;
   GPUComputePassEncoder *pass;
   void                  *artifact;
-  GPUComputePipeline    *pipelines[SampleCaseCount] = {0};
-  GPUBuffer             *outputBuffers[3] = {0};
-  GPUInstanceCreateInfo  instanceInfo = {0};
+  GPUComputePipeline    *pipelines[SampleCaseCount]      = {0};
+  GPUBuffer             *outputBuffers[3]                = {0};
+  GPUInstanceCreateInfo  instanceInfo                    = {0};
   GPUBindGroupEntry      textureEntries[SampleCaseCount] = {0};
-  GPUBindGroupEntry      outputEntries[3] = {0};
-  GPUBindGroupCreateInfo groupInfo = {0};
-  GPUQueueSubmitInfo     submitInfo = {0};
+  GPUBindGroupEntry      outputEntries[3]                = {0};
+  GPUBindGroupCreateInfo groupInfo                       = {0};
+  GPUQueueSubmitInfo     submitInfo                      = {0};
   float                  floatInput[ValueCount];
   uint8_t                unormInput[ValueCount];
   int8_t                 snormInput[ValueCount];
   uint8_t                uintInput[ValueCount];
   int8_t                 sintInput[ValueCount];
   float                  floatOutput[FloatCaseCount * ChannelCount] = {0};
-  uint32_t               uintOutput[ChannelCount] = {0};
-  int32_t                sintOutput[ChannelCount] = {0};
+  uint32_t               uintOutput[ChannelCount]                   = {0};
+  int32_t                sintOutput[ChannelCount]                   = {0};
   SampleCase             cases[SampleCaseCount] = {
     {
       .label       = "cuda-sampled-float",
@@ -258,40 +293,35 @@ main(int argc, char **argv) {
       .binding     = 4u
     }
   };
-  static const char * const PipelineEntries[SampleCaseCount] = {
-    "fetch_float",
-    "fetch_unorm",
-    "fetch_snorm",
-    "fetch_uint",
-    "fetch_sint"
-  };
-  uint64_t  artifactSize;
-  uint32_t  adapterCount;
-  GPUResult result;
-  int       status;
+  uint64_t               artifactSize;
+  uint32_t               adapterCount;
+  GPUResult              result;
+  int                    status;
 
   if (argc != 2) {
     fprintf(stderr, "usage: gpu-sampled-format-cuda-usl artifact.us\n");
     return 1;
   }
 
-  instance      = NULL;
-  adapter       = NULL;
-  device        = NULL;
-  queue         = NULL;
-  library       = NULL;
-  shaderLayout  = NULL;
-  textureGroup  = NULL;
-  outputGroup   = NULL;
-  cmdb          = NULL;
-  pass          = NULL;
-  artifactSize  = 0u;
-  artifact      = read_file(argv[1], &artifactSize);
-  status        = 1;
+  instance     = NULL;
+  adapter      = NULL;
+  device       = NULL;
+  queue        = NULL;
+  library      = NULL;
+  shaderLayout = NULL;
+  textureGroup = NULL;
+  outputGroup  = NULL;
+  cmdb         = NULL;
+  pass         = NULL;
+  artifactSize = 0u;
+  artifact     = read_file(argv[1], &artifactSize);
+  status       = 1;
+
   if (!artifact) {
     fprintf(stderr, "USL artifact read failed\n");
     goto cleanup;
   }
+
   if (!validate_ptx_metadata(artifact, artifactSize)) {
     goto cleanup;
   }
@@ -303,6 +333,7 @@ main(int argc, char **argv) {
     uintInput[i]  = (uint8_t)((i * 17u + 1u) & 255u);
     sintInput[i]  = (int8_t)((int32_t)(i % 201u) - 100);
   }
+
   floatInput[SampleOffset]      = -2.0f;
   floatInput[SampleOffset + 1u] = -0.5f;
   floatInput[SampleOffset + 2u] = 0.25f;
@@ -328,6 +359,7 @@ main(int argc, char **argv) {
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = GPU_BACKEND_CUDA;
   instanceInfo.enableValidation = true;
+
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
     puts("CUDA Driver backend unavailable");
     status = 77;
@@ -335,24 +367,29 @@ main(int argc, char **argv) {
   }
 
   adapterCount = 1u;
-  result = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
-  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY) ||
-      !adapter) {
+  result       = GPUEnumerateAdapters(instance, &adapterCount, &adapter);
+
+  if ((result != GPU_OK && result != GPU_ERROR_INSUFFICIENT_CAPACITY)
+      || !adapter) {
     puts("CUDA adapter unavailable");
     status = 77;
     goto cleanup;
   }
 
   device = GPUCreateDeviceWithDefaultQueues(adapter);
+
   if (!device) {
     fprintf(stderr, "CUDA compute device creation failed\n");
     goto cleanup;
   }
+
   queue = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
+
   if (!queue) {
     fprintf(stderr, "CUDA compute queue acquisition failed\n");
     goto cleanup;
   }
+
   if (GPUSetDeviceErrorCallback(device, device_error, NULL) != GPU_OK) {
     fprintf(stderr, "CUDA device error callback setup failed\n");
     goto cleanup;
@@ -362,17 +399,20 @@ main(int argc, char **argv) {
                                          artifact,
                                          artifactSize,
                                          &library);
+
   if (result != GPU_OK || !library) {
     fprintf(stderr, "CUDA sampled-format shader creation failed (%d)\n", result);
     goto cleanup;
   }
+
   result = GPUCreateShaderLayout(device, library, &shaderLayout);
-  if (result != GPU_OK || !shaderLayout ||
-      shaderLayout->bindGroupLayoutCount != 2u ||
-      !shaderLayout->bindGroupLayouts ||
-      !shaderLayout->bindGroupLayouts[0] ||
-      !shaderLayout->bindGroupLayouts[1] ||
-      !shaderLayout->pipelineLayout) {
+
+  if (result != GPU_OK || !shaderLayout
+      || shaderLayout->bindGroupLayoutCount != 2u
+      || !shaderLayout->bindGroupLayouts
+      || !shaderLayout->bindGroupLayouts[0]
+      || !shaderLayout->bindGroupLayouts[1]
+      || !shaderLayout->pipelineLayout) {
     fprintf(stderr, "CUDA sampled-format layout creation failed (%d)\n", result);
     goto cleanup;
   }
@@ -381,14 +421,15 @@ main(int argc, char **argv) {
     if (!create_pipeline(device,
                          library,
                          shaderLayout->pipelineLayout,
-                         PipelineEntries[i],
-                         &pipelines[i]) ||
-        !create_sample_case(device, queue, &cases[i])) {
+                         pipeline_entries[i],
+                         &pipelines[i])
+        || !create_sample_case(device, queue, &cases[i])) {
       fprintf(stderr,
               "CUDA sampled-format resource setup failed: %s\n",
               cases[i].label);
       goto cleanup;
     }
+
     textureEntries[i].binding     = cases[i].binding;
     textureEntries[i].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
     textureEntries[i].textureView = cases[i].view;
@@ -397,15 +438,15 @@ main(int argc, char **argv) {
   if (!create_output_buffer(device,
                             "cuda-sampled-float-output",
                             sizeof(floatOutput),
-                            &outputBuffers[0]) ||
-      !create_output_buffer(device,
-                            "cuda-sampled-uint-output",
-                            sizeof(uintOutput),
-                            &outputBuffers[1]) ||
-      !create_output_buffer(device,
-                            "cuda-sampled-sint-output",
-                            sizeof(sintOutput),
-                            &outputBuffers[2])) {
+                            &outputBuffers[0])
+      || !create_output_buffer(device,
+                               "cuda-sampled-uint-output",
+                               sizeof(uintOutput),
+                               &outputBuffers[1])
+      || !create_output_buffer(device,
+                               "cuda-sampled-sint-output",
+                               sizeof(sintOutput),
+                               &outputBuffers[2])) {
     fprintf(stderr, "CUDA sampled-format output setup failed\n");
     goto cleanup;
   }
@@ -416,8 +457,9 @@ main(int argc, char **argv) {
   groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
   groupInfo.pEntries         = textureEntries;
   groupInfo.entryCount       = SampleCaseCount;
-  if (GPUCreateBindGroup(device, &groupInfo, &textureGroup) != GPU_OK ||
-      !textureGroup) {
+
+  if (GPUCreateBindGroup(device, &groupInfo, &textureGroup) != GPU_OK
+      || !textureGroup) {
     fprintf(stderr, "CUDA sampled-format texture group failed\n");
     goto cleanup;
   }
@@ -426,35 +468,36 @@ main(int argc, char **argv) {
     outputEntries[i].binding       = i;
     outputEntries[i].bindingType   = GPU_BINDING_STORAGE_BUFFER;
     outputEntries[i].buffer.buffer = outputBuffers[i];
-    outputEntries[i].buffer.size   = i == 0u
-                                       ? sizeof(floatOutput)
-                                       : i == 1u
-                                           ? sizeof(uintOutput)
-                                           : sizeof(sintOutput);
+    outputEntries[i].buffer.size   = i == 0u ? sizeof(floatOutput) : i == 1u ? sizeof(uintOutput) : sizeof(sintOutput);
   }
+
   groupInfo.label      = "cuda-sampled-format-outputs";
   groupInfo.layout     = shaderLayout->bindGroupLayouts[1];
   groupInfo.pEntries   = outputEntries;
   groupInfo.entryCount = 3u;
-  if (GPUCreateBindGroup(device, &groupInfo, &outputGroup) != GPU_OK ||
-      !outputGroup) {
+
+  if (GPUCreateBindGroup(device, &groupInfo, &outputGroup) != GPU_OK
+      || !outputGroup) {
     fprintf(stderr, "CUDA sampled-format output group failed\n");
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "cuda-sampled-format", &cmdb) != GPU_OK ||
-      !cmdb || !(pass = GPUBeginComputePass(cmdb, "sampled-format-fetch"))) {
+  if (GPUAcquireCommandBuffer(queue, "cuda-sampled-format", &cmdb) != GPU_OK
+      || !cmdb || !(pass = GPUBeginComputePass(cmdb, "sampled-format-fetch"))) {
     fprintf(stderr, "CUDA sampled-format command encoding failed\n");
     goto cleanup;
   }
+
   GPUBindComputePipeline(pass, pipelines[0]);
   GPUBindComputeGroup(pass, 0u, textureGroup, 0u, NULL);
   GPUBindComputeGroup(pass, 1u, outputGroup, 0u, NULL);
   GPUDispatch(pass, 1u, 1u, 1u);
+
   for (uint32_t i = 1u; i < SampleCaseCount; i++) {
     GPUBindComputePipeline(pass, pipelines[i]);
     GPUDispatch(pass, 1u, 1u, 1u);
   }
+
   GPUEndComputePass(pass);
   pass = NULL;
 
@@ -462,46 +505,55 @@ main(int argc, char **argv) {
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
+
   if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
     fprintf(stderr, "CUDA sampled-format submission failed\n");
     goto cleanup;
   }
+
   cmdb = NULL;
 
   if (GPUQueueReadBuffer(queue,
                          outputBuffers[0],
                          0u,
                          floatOutput,
-                         sizeof(floatOutput)) != GPU_OK ||
-      GPUQueueReadBuffer(queue,
-                         outputBuffers[1],
-                         0u,
-                         uintOutput,
-                         sizeof(uintOutput)) != GPU_OK ||
-      GPUQueueReadBuffer(queue,
-                         outputBuffers[2],
-                         0u,
-                         sintOutput,
-                         sizeof(sintOutput)) != GPU_OK ||
-      !values_match(cases, floatOutput, uintOutput, sintOutput)) {
+                         sizeof(floatOutput)) != GPU_OK
+      || GPUQueueReadBuffer(queue,
+                            outputBuffers[1],
+                            0u,
+                            uintOutput,
+                            sizeof(uintOutput)) != GPU_OK
+      || GPUQueueReadBuffer(queue,
+                            outputBuffers[2],
+                            0u,
+                            sintOutput,
+                            sizeof(sintOutput)) != GPU_OK
+      || !values_match(cases, floatOutput, uintOutput, sintOutput)) {
     fprintf(stderr, "CUDA sampled-format readback validation failed\n");
     goto cleanup;
   }
+
   status = 0;
 
 cleanup:
-  if (pass) GPUEndComputePass(pass);
-  if (cmdb) (void)GPUDiscardCommandBuffer(cmdb);
+  if (pass)
+    GPUEndComputePass(pass);
+
+  if (cmdb)
+    (void)GPUDiscardCommandBuffer(cmdb);
   GPUDestroyBindGroup(outputGroup);
   GPUDestroyBindGroup(textureGroup);
+
   for (uint32_t i = 0u; i < 3u; i++) {
     GPUDestroyBuffer(outputBuffers[i]);
   }
+
   for (uint32_t i = 0u; i < SampleCaseCount; i++) {
     GPUDestroyTextureView(cases[i].view);
     GPUDestroyTexture(cases[i].texture);
     GPUDestroyComputePipeline(pipelines[i]);
   }
+
   GPUDestroyShaderLayout(shaderLayout);
   GPUDestroyShaderLibrary(library);
   GPUDestroyDevice(device);
@@ -511,5 +563,6 @@ cleanup:
   if (status == 0) {
     puts("CUDA USL sampled texture format validation passed");
   }
+
   return status;
 }

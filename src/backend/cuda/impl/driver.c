@@ -2,6 +2,16 @@
  * Copyright (C) 2026 Recep Aslantas
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "../common.h"
@@ -11,10 +21,27 @@
 #  include <sched.h>
 #endif
 
+#define CUDA_LOAD_REQUIRED(field, name)                                     \
+  do {                                                                      \
+    cuda.field = (void *)cuda__symbol(library, name);                       \
+    if (!cuda.field) {                                                      \
+      goto fail;                                                            \
+    }                                                                       \
+  } while (0)
+#define CUDA_LOAD_REQUIRED2(field, preferred, fallback)                     \
+  do {                                                                      \
+    cuda.field = (void *)cuda__symbol2(library, preferred, fallback);       \
+    if (!cuda.field) {                                                      \
+      goto fail;                                                            \
+    }                                                                       \
+  } while (0)
+#define CUDA_LOAD_OPTIONAL(field, name)                                     \
+  cuda.field = (void *)cuda__symbol(library, name)
+
 static GPUCUDA  cuda;
 static uint32_t cudaState;
 
-static void *
+static void*
 cuda__open(void) {
 #if defined(_WIN32) || defined(WIN32)
   return LoadLibraryA("nvcuda.dll");
@@ -28,6 +55,7 @@ cuda__close(void *library) {
   if (!library) {
     return;
   }
+
 #if defined(_WIN32) || defined(WIN32)
   FreeLibrary((HMODULE)library);
 #else
@@ -35,7 +63,7 @@ cuda__close(void *library) {
 #endif
 }
 
-static void *
+static void*
 cuda__symbol(void *library, const char *name) {
 #if defined(_WIN32) || defined(WIN32)
   return (void *)GetProcAddress((HMODULE)library, name);
@@ -44,11 +72,12 @@ cuda__symbol(void *library, const char *name) {
 #endif
 }
 
-static void *
+static void*
 cuda__symbol2(void *library, const char *preferred, const char *fallback) {
   void *symbol;
 
   symbol = cuda__symbol(library, preferred);
+
   return symbol ? symbol : cuda__symbol(library, fallback);
 }
 
@@ -57,30 +86,13 @@ cuda__load(void) {
   void *library;
   int   driverVersion;
 
-  library = cuda__open();
-  if (!library) {
+  if (!(library = cuda__open())) {
     return false;
   }
 
-#define CUDA_LOAD_REQUIRED(field, name)                                      \
-  do {                                                                       \
-    cuda.field = (void *)cuda__symbol(library, name);                         \
-    if (!cuda.field) {                                                        \
-      goto fail;                                                              \
-    }                                                                        \
-  } while (0)
-#define CUDA_LOAD_REQUIRED2(field, preferred, fallback)                      \
-  do {                                                                       \
-    cuda.field = (void *)cuda__symbol2(library, preferred, fallback);         \
-    if (!cuda.field) {                                                        \
-      goto fail;                                                              \
-    }                                                                        \
-  } while (0)
-#define CUDA_LOAD_OPTIONAL(field, name)                                      \
-  cuda.field = (void *)cuda__symbol(library, name)
-
   memset(&cuda, 0, sizeof(cuda));
   cuda.library = library;
+
   CUDA_LOAD_REQUIRED(init, "cuInit");
   CUDA_LOAD_REQUIRED(driverGetVersion, "cuDriverGetVersion");
   CUDA_LOAD_REQUIRED(deviceGetCount, "cuDeviceGetCount");
@@ -141,12 +153,15 @@ cuda__load(void) {
 #undef CUDA_LOAD_REQUIRED
 
   driverVersion = 0;
-  if (cuda.init(0u) != CUDA_SUCCESS ||
-      cuda.driverGetVersion(&driverVersion) != CUDA_SUCCESS ||
-      driverVersion < CUDA_MIN_DRIVER_VERSION) {
+
+  if (cuda.init(0u) != CUDA_SUCCESS
+      || cuda.driverGetVersion(&driverVersion) != CUDA_SUCCESS
+      || driverVersion < CUDA_MIN_DRIVER_VERSION) {
     goto fail;
   }
+
   cuda.driverVersion = driverVersion;
+
   return true;
 
 fail:
@@ -155,26 +170,27 @@ fail:
   return false;
 }
 
-GPUCUDA *
+GPUCUDA*
 cuda_driver(void) {
   uint32_t state;
 
 #if defined(_WIN32) || defined(WIN32)
   state = (uint32_t)InterlockedCompareExchange((volatile LONG *)&cudaState,
-                                                1,
-                                                0);
+                                               1,
+                                               0);
+
   if (state == 0u) {
     InterlockedExchange((volatile LONG *)&cudaState, cuda__load() ? 2 : 3);
   } else {
-    while ((state = (uint32_t)InterlockedCompareExchange(
-              (volatile LONG *)&cudaState,
-              0,
-              0)) == 1u) {
+    while ((state = (uint32_t)InterlockedCompareExchange((volatile LONG *)&cudaState,
+                                                         0,
+                                                         0)) == 1u) {
       SwitchToThread();
     }
   }
 #else
   state = 0u;
+
   if (__atomic_compare_exchange_n(&cudaState,
                                   &state,
                                   1u,
@@ -192,20 +208,22 @@ cuda_driver(void) {
 #endif
 #if defined(_WIN32) || defined(WIN32)
   state = (uint32_t)InterlockedCompareExchange((volatile LONG *)&cudaState,
-                                                0,
-                                                0);
+                                               0,
+                                               0);
 #else
   state = __atomic_load_n(&cudaState, __ATOMIC_ACQUIRE);
 #endif
+
   return state == 2u ? &cuda : NULL;
 }
 
 GPUResult
 cuda_push(GPUCUDA *driver, CUcontext context) {
-  if (!driver || !context ||
-      driver->ctxPushCurrent(context) != CUDA_SUCCESS) {
+  if (!driver || !context
+      || driver->ctxPushCurrent(context) != CUDA_SUCCESS) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   return GPU_OK;
 }
 
@@ -221,9 +239,9 @@ cuda_pop(GPUCUDA *driver) {
 
 void
 cuda_report(GPUDevice *device, CUresult result, const char *operation) {
+  char        message[256];
   const char *name;
   const char *detail;
-  char        message[256];
 
   if (!device || result == CUDA_SUCCESS) {
     return;
@@ -231,12 +249,15 @@ cuda_report(GPUDevice *device, CUresult result, const char *operation) {
 
   name   = NULL;
   detail = NULL;
+
   if (cuda.getErrorName) {
     (void)cuda.getErrorName(result, &name);
   }
+
   if (cuda.getErrorString) {
     (void)cuda.getErrorString(result, &detail);
   }
+
   snprintf(message,
            sizeof(message),
            "CUDA %s failed: %s%s%s (%d)",
@@ -245,6 +266,7 @@ cuda_report(GPUDevice *device, CUresult result, const char *operation) {
            detail ? ": " : "",
            detail ? detail : "",
            result);
+
   gpuDeviceReportError(device,
                        result == CUDA_ERROR_OUT_OF_MEMORY
                          ? GPU_DEVICE_ERROR_OUT_OF_MEMORY

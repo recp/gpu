@@ -25,7 +25,8 @@ extern "C" {
 #include "format.h"
 #include "device.h"
 #include "bindgroup.h"
-//#include <us/us.h>
+
+/* #include <us/us.h> */
 
 typedef struct GPUShaderLibrary GPUShaderLibrary;
 
@@ -80,21 +81,21 @@ typedef struct GPUShaderLibraryCreateInfo {
 
 GPU_EXPORT
 GPUResult
-GPUCreateShaderLibrary(GPUDevice *device,
+GPUCreateShaderLibrary(GPUDevice                        *device,
                        const GPUShaderLibraryCreateInfo *info,
-                       GPUShaderLibrary **outLibrary);
+                       GPUShaderLibrary                **outLibrary);
 
 GPU_EXPORT
 GPUResult
-GPUCreateShaderLibraryFromUSL(GPUDevice *device,
-                              const void *artifactData,
-                              uint64_t artifactSize,
+GPUCreateShaderLibraryFromUSL(GPUDevice         *device,
+                              const void        *artifactData,
+                              uint64_t           artifactSize,
                               GPUShaderLibrary **outLibrary);
 
 GPU_EXPORT
 GPUResult
 GPUGetShaderReflection(const GPUShaderLibrary *library,
-                       GPUShaderReflection *outReflection);
+                       GPUShaderReflection    *outReflection);
 
 GPU_EXPORT
 void

@@ -23,10 +23,10 @@ typedef struct GPUQuerySetDX12 {
   ID3D12QueryHeap *heap;
 } GPUQuerySetDX12;
 
-#define DX12__ASSERT_PIPESTAT_FIELD(GPU_FIELD, DX12_FIELD)                   \
-  _Static_assert(offsetof(GPUPipelineStatisticsResult, GPU_FIELD) ==         \
-                   offsetof(D3D12_QUERY_DATA_PIPELINE_STATISTICS,            \
-                            DX12_FIELD),                                     \
+#define DX12__ASSERT_PIPESTAT_FIELD(GPU_FIELD, DX12_FIELD)           \
+  _Static_assert(offsetof(GPUPipelineStatisticsResult, GPU_FIELD) == \
+                   offsetof(D3D12_QUERY_DATA_PIPELINE_STATISTICS,    \
+                            DX12_FIELD),                             \
                  #GPU_FIELD " must match Direct3D 12")
 
 DX12__ASSERT_PIPESTAT_FIELD(inputAssemblyVertices, IAVertices);
@@ -52,13 +52,13 @@ static void
 dx12__setQueryName(ID3D12QueryHeap *heap, const char *label) {
   wchar_t name[256];
 
-  if (!heap || !label || label[0] == '\0' ||
-      MultiByteToWideChar(CP_UTF8,
-                          MB_ERR_INVALID_CHARS,
-                          label,
-                          -1,
-                          name,
-                          (int)GPU_ARRAY_LEN(name)) <= 0) {
+  if (!heap || !label || label[0] == '\0'
+      || MultiByteToWideChar(CP_UTF8,
+                             MB_ERR_INVALID_CHARS,
+                             label,
+                             -1,
+                             name,
+                             (int)GPU_ARRAY_LEN(name)) <= 0) {
     return;
   }
 
@@ -68,27 +68,28 @@ dx12__setQueryName(ID3D12QueryHeap *heap, const char *label) {
 
 GPU_HIDE
 GPUResult
-dx12_createQuerySet(GPUDevice                  *device,
+dx12_createQuerySet(GPUDevice                   *device,
                     const GPUQuerySetCreateInfo *info,
-                    GPUQuerySet                *set) {
-  GPUDeviceDX12         *deviceDX12;
-  GPUQuerySetDX12       *native;
-  D3D12_QUERY_HEAP_DESC  desc = {0};
-  HRESULT                result;
+                    GPUQuerySet                 *set) {
+  D3D12_QUERY_HEAP_DESC desc = {0};
+  GPUDeviceDX12        *deviceDX12;
+  GPUQuerySetDX12      *native;
+  HRESULT               result;
 
   deviceDX12 = device ? device->_priv : NULL;
-  if (!deviceDX12 || !deviceDX12->d3dDevice || !info || !set ||
-      (info->type != GPU_QUERY_TIMESTAMP &&
-       info->type != GPU_QUERY_OCCLUSION &&
-       info->type != GPU_QUERY_PIPELINE_STATISTICS)) {
+
+  if (!deviceDX12 || !deviceDX12->d3dDevice || !info || !set
+      || (info->type != GPU_QUERY_TIMESTAMP
+          && info->type != GPU_QUERY_OCCLUSION
+          && info->type != GPU_QUERY_PIPELINE_STATISTICS)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
   if (!deviceDX12->queryResultsReliable) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  native = calloc(1, sizeof(*native));
-  if (!native) {
+  if (!(native = calloc(1, sizeof(*native)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
@@ -99,14 +100,15 @@ dx12_createQuerySet(GPUDevice                  *device,
   } else {
     desc.Type = D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS;
   }
+
   desc.Count    = info->count;
   desc.NodeMask = 0u;
-  result = deviceDX12->d3dDevice->lpVtbl->CreateQueryHeap(
-    deviceDX12->d3dDevice,
-    &desc,
-    &IID_ID3D12QueryHeap,
-    (void **)&native->heap
-  );
+
+  result = deviceDX12->d3dDevice->lpVtbl->CreateQueryHeap(deviceDX12->d3dDevice,
+                                                          &desc,
+                                                          &IID_ID3D12QueryHeap,
+                                                          (void **)&native->heap);
+
   if (FAILED(result) || !native->heap) {
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
@@ -117,6 +119,7 @@ dx12_createQuerySet(GPUDevice                  *device,
                      gpuDeviceDebugLabel(device, info->label));
 #endif
   set->_priv = native;
+
   return GPU_OK;
 }
 
@@ -132,14 +135,15 @@ dx12_writeTimestamp(GPUCommandBuffer *cmdb,
   GPU__UNUSED(beginningOfPass);
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
+
   if (!command || !command->commandList || !native || !native->heap) {
     return;
   }
 
   command->commandList->lpVtbl->EndQuery(command->commandList,
-                                          native->heap,
-                                          D3D12_QUERY_TYPE_TIMESTAMP,
-                                          queryIndex);
+                                         native->heap,
+                                         D3D12_QUERY_TYPE_TIMESTAMP,
+                                         queryIndex);
 }
 
 GPU_HIDE
@@ -152,16 +156,15 @@ dx12_beginOcclusionQuery(GPURenderPassEncoder *pass,
 
   encoder = pass ? pass->_priv : NULL;
   native  = set ? set->_priv : NULL;
+
   if (!encoder || !encoder->commandList || !native || !native->heap) {
     return;
   }
 
-  encoder->commandList->lpVtbl->BeginQuery(
-    encoder->commandList,
-    native->heap,
-    D3D12_QUERY_TYPE_BINARY_OCCLUSION,
-    queryIndex
-  );
+  encoder->commandList->lpVtbl->BeginQuery(encoder->commandList,
+                                           native->heap,
+                                           D3D12_QUERY_TYPE_BINARY_OCCLUSION,
+                                           queryIndex);
 }
 
 GPU_HIDE
@@ -174,16 +177,15 @@ dx12_endOcclusionQuery(GPURenderPassEncoder *pass,
 
   encoder = pass ? pass->_priv : NULL;
   native  = set ? set->_priv : NULL;
+
   if (!encoder || !encoder->commandList || !native || !native->heap) {
     return;
   }
 
-  encoder->commandList->lpVtbl->EndQuery(
-    encoder->commandList,
-    native->heap,
-    D3D12_QUERY_TYPE_BINARY_OCCLUSION,
-    queryIndex
-  );
+  encoder->commandList->lpVtbl->EndQuery(encoder->commandList,
+                                         native->heap,
+                                         D3D12_QUERY_TYPE_BINARY_OCCLUSION,
+                                         queryIndex);
 }
 
 GPU_HIDE
@@ -192,6 +194,7 @@ dx12_destroyQuerySet(GPUQuerySet *set) {
   GPUQuerySetDX12 *native;
 
   native = set ? set->_priv : NULL;
+
   if (!native) {
     return;
   }
@@ -199,6 +202,7 @@ dx12_destroyQuerySet(GPUQuerySet *set) {
   if (native->heap) {
     native->heap->lpVtbl->Release(native->heap);
   }
+
   free(native);
   set->_priv = NULL;
 }
@@ -213,16 +217,15 @@ dx12_beginPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
 
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
+
   if (!command || !command->commandList || !native || !native->heap) {
     return;
   }
 
-  command->commandList->lpVtbl->BeginQuery(
-    command->commandList,
-    native->heap,
-    D3D12_QUERY_TYPE_PIPELINE_STATISTICS,
-    queryIndex
-  );
+  command->commandList->lpVtbl->BeginQuery(command->commandList,
+                                           native->heap,
+                                           D3D12_QUERY_TYPE_PIPELINE_STATISTICS,
+                                           queryIndex);
 }
 
 GPU_HIDE
@@ -235,16 +238,15 @@ dx12_endPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
 
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
+
   if (!command || !command->commandList || !native || !native->heap) {
     return;
   }
 
-  command->commandList->lpVtbl->EndQuery(
-    command->commandList,
-    native->heap,
-    D3D12_QUERY_TYPE_PIPELINE_STATISTICS,
-    queryIndex
-  );
+  command->commandList->lpVtbl->EndQuery(command->commandList,
+                                         native->heap,
+                                         D3D12_QUERY_TYPE_PIPELINE_STATISTICS,
+                                         queryIndex);
 }
 
 GPU_HIDE
@@ -263,16 +265,16 @@ dx12_resolveQuerySet(GPUCommandBuffer *cmdb,
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
   buffer  = dstBuffer ? dstBuffer->_priv : NULL;
-  if (!command || !command->commandList || !native || !native->heap ||
-      !buffer || !buffer->resource || !buffer->defaultHeap) {
+
+  if (!command || !command->commandList || !native || !native->heap
+      || !buffer || !buffer->resource || !buffer->defaultHeap) {
     if (dstBuffer && dstBuffer->device) {
-      gpuDeviceRecordValidationError(
-        dstBuffer->device,
-        "Direct3D 12 query resolve requires a GPU-local destination buffer"
-      );
+      gpuDeviceRecordValidationError(dstBuffer->device,
+                                     "Direct3D 12 query resolve requires a GPU-local destination buffer");
     }
     return;
   }
+
   if (set->type == GPU_QUERY_TIMESTAMP) {
     queryType = D3D12_QUERY_TYPE_TIMESTAMP;
   } else if (set->type == GPU_QUERY_OCCLUSION) {
@@ -288,15 +290,14 @@ dx12_resolveQuerySet(GPUCommandBuffer *cmdb,
                              D3D12_RESOURCE_STATE_COPY_DEST)) {
     return;
   }
-  command->commandList->lpVtbl->ResolveQueryData(
-    command->commandList,
-    native->heap,
-    queryType,
-    firstQuery,
-    queryCount,
-    buffer->resource,
-    dstOffset
-  );
+
+  command->commandList->lpVtbl->ResolveQueryData(command->commandList,
+                                                 native->heap,
+                                                 queryType,
+                                                 firstQuery,
+                                                 queryCount,
+                                                 buffer->resource,
+                                                 dstOffset);
 }
 
 GPU_HIDE

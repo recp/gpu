@@ -24,7 +24,7 @@
 
 enum {
   UPLOAD_FRAMES_IN_FLIGHT = 3,
-  UPLOAD_ALIGNMENT        = 256
+  UPLOAD_ALIGNMENT       = 256
 };
 
 typedef struct UploadUniforms {
@@ -57,36 +57,37 @@ upload_createLayout(UploadHeavy *upload) {
   upload->bench->pipelineLayout = NULL;
 
   layoutCount = 0u;
+
   if (GPUCreateBindGroupLayoutsFromReflection(upload->bench->device,
-                                               upload->bench->library,
-                                               &layoutCount,
-                                               NULL) != GPU_OK ||
-      layoutCount != 1u) {
-    return false;
-  }
-  if (GPUCreateBindGroupLayoutsFromReflection(upload->bench->device,
-                                               upload->bench->library,
-                                               &layoutCount,
-                                               &upload->layout) != GPU_OK ||
-      layoutCount != 1u || !upload->layout) {
+                                              upload->bench->library,
+                                              &layoutCount,
+                                              NULL) != GPU_OK
+      || layoutCount != 1u) {
     return false;
   }
 
-  entries = GPUGetBindGroupLayoutEntries(upload->layout, &entryCount);
-  if (!entries || entryCount != 1u || entries[0].binding != 0u ||
-      entries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER ||
-      entries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      entries[0].arrayCount != 1u || !entries[0].hasDynamicOffset) {
+  if (GPUCreateBindGroupLayoutsFromReflection(upload->bench->device,
+                                              upload->bench->library,
+                                              &layoutCount,
+                                              &upload->layout) != GPU_OK
+      || layoutCount != 1u || !upload->layout) {
+    return false;
+  }
+
+  if (!(entries = GPUGetBindGroupLayoutEntries(upload->layout, &entryCount))
+      || entryCount != 1u || entries[0].binding != 0u
+      || entries[0].bindingType != GPU_BINDING_UNIFORM_BUFFER
+      || entries[0].visibility != GPU_SHADER_STAGE_FRAGMENT_BIT
+      || entries[0].arrayCount != 1u || !entries[0].hasDynamicOffset) {
     return false;
   }
 
   return GPUCreatePipelineLayoutFromReflection(upload->bench->device,
-                                                upload->bench->library,
-                                                1u,
-                                                &upload->layout,
-                                                &upload->bench->pipelineLayout)
-           == GPU_OK &&
-         upload->bench->pipelineLayout != NULL;
+                                               upload->bench->library,
+                                               1u,
+                                               &upload->layout,
+                                               &upload->bench->pipelineLayout) == GPU_OK
+         && upload->bench->pipelineLayout != NULL;
 }
 
 static bool
@@ -102,70 +103,77 @@ upload_createResources(UploadHeavy *upload, uint32_t drawCount) {
   memset(&entry, 0, sizeof(entry));
 
   upload->ringBytesPerFrame = (uint64_t)drawCount * UPLOAD_ALIGNMENT;
-  if (upload->ringBytesPerFrame == 0u ||
-      upload->ringBytesPerFrame > UINT32_MAX / UPLOAD_FRAMES_IN_FLIGHT) {
+
+  if (upload->ringBytesPerFrame == 0u
+      || upload->ringBytesPerFrame > UINT32_MAX / UPLOAD_FRAMES_IN_FLIGHT) {
     return false;
   }
-  allocatorInfo.chain.sType = GPU_STRUCTURE_TYPE_TRANSIENT_ALLOCATOR_CONFIG;
-  allocatorInfo.chain.structSize = sizeof(allocatorInfo);
-  allocatorInfo.ringBytesPerFrame = upload->ringBytesPerFrame;
-  allocatorInfo.framesInFlight    = UPLOAD_FRAMES_IN_FLIGHT;
-  allocatorInfo.chunkBytes        = 64u * 1024u;
+
+  allocatorInfo.chain.sType        = GPU_STRUCTURE_TYPE_TRANSIENT_ALLOCATOR_CONFIG;
+  allocatorInfo.chain.structSize   = sizeof(allocatorInfo);
+  allocatorInfo.ringBytesPerFrame  = upload->ringBytesPerFrame;
+  allocatorInfo.framesInFlight     = UPLOAD_FRAMES_IN_FLIGHT;
+  allocatorInfo.chunkBytes         = 64u * 1024u;
   allocatorInfo.allowChunkFallback = false;
+
   if (GPUConfigureTransientAllocator(upload->bench->device,
-                                     &allocatorInfo) != GPU_OK ||
-      GPUAllocateTransientBuffer(upload->bench->device,
-                                 GPU_BUFFER_USAGE_UNIFORM,
-                                 sizeof(UploadUniforms),
-                                 UPLOAD_ALIGNMENT,
-                                 &initialSlice) != GPU_OK ||
-      !initialSlice.buffer) {
+                                     &allocatorInfo) != GPU_OK
+      || GPUAllocateTransientBuffer(upload->bench->device,
+                                    GPU_BUFFER_USAGE_UNIFORM,
+                                    sizeof(UploadUniforms),
+                                    UPLOAD_ALIGNMENT,
+                                    &initialSlice) != GPU_OK
+      || !initialSlice.buffer) {
     return false;
   }
+
   upload->transientBuffer = initialSlice.buffer;
 
-  entry.binding       = 0u;
-  entry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
-  entry.buffer.buffer = upload->transientBuffer;
-  entry.buffer.size   = sizeof(UploadUniforms);
+  entry.binding              = 0u;
+  entry.bindingType          = GPU_BINDING_UNIFORM_BUFFER;
+  entry.buffer.buffer        = upload->transientBuffer;
+  entry.buffer.size          = sizeof(UploadUniforms);
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
   groupInfo.label            = "upload-heavy-group";
   groupInfo.layout           = upload->layout;
   groupInfo.entryCount       = 1u;
   groupInfo.pEntries         = &entry;
+
   return GPUCreateBindGroup(upload->bench->device,
                             &groupInfo,
-                            &upload->group) == GPU_OK &&
-         upload->group != NULL;
+                            &upload->group) == GPU_OK
+         && upload->group != NULL;
 }
 
 static bool
 upload_encode(GPURenderPassEncoder *pass,
               uint32_t              drawCount,
               void                 *userData) {
-  UploadHeavy *upload;
+  GPUTransientBufferSlice slice;
+  GPUBufferBinding        vertexBinding;
+  UploadUniforms          uniforms;
+  UploadHeavy            *upload;
+  uint64_t                vertexOffset;
+  uint32_t                dynamicOffset;
+  uint32_t                draw;
 
   upload = userData;
+
   if (gpuDeviceAdvanceFrameSlot(upload->bench->device) != GPU_OK) {
     return false;
   }
-  GPUBindRenderPipeline(pass, upload->pipeline);
-  for (uint32_t draw = 0u; draw < drawCount; draw++) {
-    GPUTransientBufferSlice slice;
-    GPUBufferBinding        vertexBinding;
-    UploadUniforms          uniforms;
-    uint64_t                vertexOffset;
-    uint32_t                dynamicOffset;
 
+  GPUBindRenderPipeline(pass, upload->pipeline);
+
+  for (draw = 0u; draw < drawCount; draw++) {
     if (GPUAllocateTransientBuffer(upload->bench->device,
-                                   GPU_BUFFER_USAGE_UNIFORM |
-                                     GPU_BUFFER_USAGE_VERTEX,
+                                   GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_VERTEX,
                                    sizeof(uniforms) + sizeof(uploadVertices),
                                    UPLOAD_ALIGNMENT,
-                                   &slice) != GPU_OK ||
-        slice.buffer != upload->transientBuffer ||
-        slice.offset > UINT32_MAX) {
+                                   &slice) != GPU_OK
+        || slice.buffer != upload->transientBuffer
+        || slice.offset > UINT32_MAX) {
       return false;
     }
 
@@ -173,7 +181,7 @@ upload_encode(GPURenderPassEncoder *pass,
     uniforms.tint[1] = (draw & 2u) ? 1.0f : 0.3f;
     uniforms.tint[2] = (draw & 4u) ? 0.4f : 1.0f;
     uniforms.tint[3] = 1.0f;
-    vertexOffset = slice.offset + sizeof(uniforms);
+    vertexOffset     = slice.offset + sizeof(uniforms);
     memcpy(slice.cpuPtr, &uniforms, sizeof(uniforms));
     memcpy((uint8_t *)slice.cpuPtr + sizeof(uniforms),
            uploadVertices,
@@ -186,9 +194,10 @@ upload_encode(GPURenderPassEncoder *pass,
     GPUBindRenderGroup(pass, 0u, upload->group, 1u, &dynamicOffset);
     GPUDraw(pass, 3u, 1u, 0u, 0u);
   }
-  upload->expectedUsedBytes =
-    ((uint64_t)drawCount - 1u) * UPLOAD_ALIGNMENT +
-    sizeof(UploadUniforms) + sizeof(uploadVertices);
+
+  upload->expectedUsedBytes = ((uint64_t)drawCount - 1u) * UPLOAD_ALIGNMENT
+                             + sizeof(UploadUniforms) + sizeof(uploadVertices);
+
   return true;
 }
 
@@ -219,10 +228,11 @@ main(int argc, char *argv[]) {
   memset(&allocatorStats, 0, sizeof(allocatorStats));
   memset(&upload, 0, sizeof(upload));
   upload.bench = &bench;
-  if (!bench_renderConfig(argc, argv, &config) ||
-      !bench_renderInit(&bench, &config, 1u, 1u) ||
-      !upload_createLayout(&upload) ||
-      !upload_createResources(&upload, config.drawCount)) {
+
+  if (!bench_renderConfig(argc, argv, &config)
+      || !bench_renderInit(&bench, &config, 1u, 1u)
+      || !upload_createLayout(&upload)
+      || !upload_createResources(&upload, config.drawCount)) {
     upload_cleanup(&upload);
     return EXIT_FAILURE;
   }
@@ -232,6 +242,7 @@ main(int argc, char *argv[]) {
   pipelineInfo.fragmentEntry = "tri_fs";
   pipelineInfo.frontFace     = GPU_FRONT_FACE_CCW;
   pipelineInfo.vertexInput   = true;
+
   if (!bench_renderPipeline(&bench, &pipelineInfo, &upload.pipeline)) {
     fprintf(stderr, "failed to create upload-heavy pipeline\n");
     upload_cleanup(&upload);
@@ -243,12 +254,13 @@ main(int argc, char *argv[]) {
                        upload_encode,
                        &upload,
                        &metrics);
+
   if (ok) {
     ok = GPUGetAllocatorStats(bench.device, &allocatorStats) == GPU_OK;
   }
+
   if (ok) {
-    bytesPerFrame = (uint64_t)config.drawCount *
-                    (sizeof(UploadUniforms) + sizeof(uploadVertices));
+    bytesPerFrame = (uint64_t)config.drawCount * (sizeof(UploadUniforms) + sizeof(uploadVertices));
     bench_renderPrint("upload heavy", &bench, &config, &metrics);
     printf("upload/frame: %" PRIu64 " bytes, ring used: %" PRIu64
            "/%" PRIu64 ", high-water: %" PRIu64 ", fallbacks: %" PRIu64
@@ -258,17 +270,19 @@ main(int argc, char *argv[]) {
            upload.ringBytesPerFrame,
            allocatorStats.ringHighWaterBytes,
            allocatorStats.uploadStallCount);
-    ok = bench_renderMetricsPass(&metrics) &&
-         allocatorStats.ringUsedBytes == upload.expectedUsedBytes &&
-         allocatorStats.ringHighWaterBytes == upload.expectedUsedBytes &&
-         allocatorStats.uploadStallCount == 0u;
+    ok = bench_renderMetricsPass(&metrics)
+         && allocatorStats.ringUsedBytes == upload.expectedUsedBytes
+         && allocatorStats.ringHighWaterBytes == upload.expectedUsedBytes
+         && allocatorStats.uploadStallCount == 0u;
   }
 
   bench_renderFreeMetrics(&metrics);
   upload_cleanup(&upload);
+
   if (!ok) {
     fprintf(stderr, "upload-heavy benchmark failed\n");
     return EXIT_FAILURE;
   }
+
   return EXIT_SUCCESS;
 }

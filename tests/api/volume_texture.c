@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "test.h"
 #include "../../src/api/device_internal.h"
 
@@ -11,8 +27,7 @@ enum {
                               GPU_VOLUME_VIEW_SIZE * GPU_VOLUME_PIXEL_BYTES,
   GPU_VOLUME_ROW_PITCH      = 256u,
   GPU_VOLUME_ROWS_PER_IMAGE = GPU_VOLUME_VIEW_SIZE,
-  GPU_VOLUME_IMAGE_BYTES    = GPU_VOLUME_ROW_PITCH *
-                              GPU_VOLUME_ROWS_PER_IMAGE,
+  GPU_VOLUME_IMAGE_BYTES    = GPU_VOLUME_ROW_PITCH * GPU_VOLUME_ROWS_PER_IMAGE,
   GPU_VOLUME_READBACK_BYTES = GPU_VOLUME_IMAGE_BYTES * GPU_VOLUME_VIEW_SIZE
 };
 
@@ -22,7 +37,9 @@ fill_volume(uint8_t *pixels,
             uint8_t  red,
             uint8_t  green,
             uint8_t  blue) {
-  for (uint32_t i = 0u; i < size * size * size; i++) {
+  uint32_t i;
+
+  for (i = 0u; i < size * size * size; i++) {
     pixels[i * GPU_VOLUME_PIXEL_BYTES + 0u] = red;
     pixels[i * GPU_VOLUME_PIXEL_BYTES + 1u] = green;
     pixels[i * GPU_VOLUME_PIXEL_BYTES + 2u] = blue;
@@ -38,10 +55,13 @@ fill_volume_slice(uint8_t *pixels,
                   uint8_t  green,
                   uint8_t  blue) {
   uint32_t sliceOffset;
+  uint32_t i;
+  uint32_t offset;
 
   sliceOffset = z * size * size * GPU_VOLUME_PIXEL_BYTES;
-  for (uint32_t i = 0u; i < size * size; i++) {
-    uint32_t offset = sliceOffset + i * GPU_VOLUME_PIXEL_BYTES;
+
+  for (i = 0u; i < size * size; i++) {
+    offset = sliceOffset + i * GPU_VOLUME_PIXEL_BYTES;
 
     pixels[offset + 0u] = red;
     pixels[offset + 1u] = green;
@@ -55,73 +75,81 @@ check_volume_layout(GPUShaderLayout *shaderLayout, bool webgpu) {
   const GPUBindGroupLayoutEntry *entries;
   uint32_t                       count;
   uint32_t                       seen;
+  uint32_t                       i;
   bool                           foundImmutableSampler;
 
-  if (!shaderLayout || shaderLayout->bindGroupLayoutCount != 1u ||
-      !shaderLayout->bindGroupLayouts ||
-      !shaderLayout->bindGroupLayouts[0] ||
-      !shaderLayout->pipelineLayout) {
+  if (!shaderLayout || shaderLayout->bindGroupLayoutCount != 1u
+      || !shaderLayout->bindGroupLayouts
+      || !shaderLayout->bindGroupLayouts[0]
+      || !shaderLayout->pipelineLayout) {
     return 0;
   }
 
-  entries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[0],
-                                          &count);
-  if (!entries || count != (webgpu ? 3u : 2u)) {
+  if (!(entries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[0],
+                                               &count)) || count != (webgpu ? 3u : 2u)) {
     return 0;
   }
 
   seen                  = 0u;
   foundImmutableSampler = false;
-  for (uint32_t i = 0u; i < count; i++) {
-    if (entries[i].visibility != GPU_SHADER_STAGE_COMPUTE_BIT ||
-        entries[i].binding > (webgpu ? 2u : 1u) ||
-        (entries[i].binding == 0u &&
-         (entries[i].bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-          entries[i].sampledTexture.viewType != GPU_TEXTURE_VIEW_3D ||
-          entries[i].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
-          entries[i].sampledTexture.multisampled)) ||
-        (entries[i].binding == 1u &&
-         (entries[i].bindingType != GPU_BINDING_STORAGE_TEXTURE ||
-          entries[i].storageTexture.viewType != GPU_TEXTURE_VIEW_3D ||
-          entries[i].storageTexture.access !=
-            GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY))) {
+
+  for (i = 0u; i < count; i++) {
+    if (entries[i].visibility != GPU_SHADER_STAGE_COMPUTE_BIT
+        || entries[i].binding > (webgpu ? 2u : 1u)
+        || (entries[i].binding == 0u
+            && (entries[i].bindingType != GPU_BINDING_SAMPLED_TEXTURE
+                || entries[i].sampledTexture.viewType != GPU_TEXTURE_VIEW_3D
+                || entries[i].sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT
+                || entries[i].sampledTexture.multisampled))
+        || (entries[i].binding == 1u
+            && (entries[i].bindingType != GPU_BINDING_STORAGE_TEXTURE
+                || entries[i].storageTexture.viewType != GPU_TEXTURE_VIEW_3D
+                || entries[i].storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY))) {
       return 0;
     }
+
     if (entries[i].binding == 2u) {
-      if (!webgpu ||
-          entries[i].bindingType != GPU_BINDING_SAMPLER ||
-          !entries[i].immutableSampler ||
-          entries[i].arrayCount != 1u) {
+      if (!webgpu
+          || entries[i].bindingType != GPU_BINDING_SAMPLER
+          || !entries[i].immutableSampler
+          || entries[i].arrayCount != 1u) {
         return 0;
       }
+
       foundImmutableSampler = true;
     }
+
     seen |= 1u << entries[i].binding;
   }
-  return seen == (webgpu ? 0x7u : 0x3u) &&
-         foundImmutableSampler == webgpu;
+
+  return seen == (webgpu ? 0x7u : 0x3u)
+         && foundImmutableSampler == webgpu;
 }
 
 static int
 check_volume_pixels(const uint8_t *pixels) {
-  for (uint32_t z = 0u; z < GPU_VOLUME_VIEW_SIZE; z++) {
-    for (uint32_t y = 0u; y < GPU_VOLUME_VIEW_SIZE; y++) {
-      for (uint32_t x = 0u; x < GPU_VOLUME_VIEW_SIZE; x++) {
-        uint32_t offset;
-        uint8_t  red;
-        uint8_t  green;
-        uint8_t  blue;
+  uint32_t z;
+  uint32_t y;
+  uint32_t x;
+  uint32_t offset;
+  uint8_t  red;
+  uint8_t  green;
+  uint8_t  blue;
 
+  for (z = 0u; z < GPU_VOLUME_VIEW_SIZE; z++) {
+    for (y = 0u; y < GPU_VOLUME_VIEW_SIZE; y++) {
+      for (x = 0u; x < GPU_VOLUME_VIEW_SIZE; x++) {
         offset = z * GPU_VOLUME_IMAGE_BYTES +
                  y * GPU_VOLUME_ROW_PITCH +
                  x * GPU_VOLUME_PIXEL_BYTES;
         red    = x == 1u && y == 1u && z == 3u ? 255u : 0u;
         green  = x == 1u && y == 1u && z == 2u ? 255u : 0u;
         blue   = 0u;
-        if (pixels[offset + 0u] != red ||
-            pixels[offset + 1u] != green ||
-            pixels[offset + 2u] != blue ||
-            pixels[offset + 3u] != 255u) {
+
+        if (pixels[offset + 0u] != red
+            || pixels[offset + 1u] != green
+            || pixels[offset + 2u] != blue
+            || pixels[offset + 3u] != 255u) {
           fprintf(stderr,
                   "volume texture pixel mismatch at %u,%u,%u: %u %u %u %u\n",
                   x,
@@ -136,45 +164,46 @@ check_volume_pixels(const uint8_t *pixels) {
       }
     }
   }
+
   return 1;
 }
 
 int
 gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
-  GPUQueue                      *queue;
-  GPUShaderLibrary              *library;
-  GPUShaderLayout               *shaderLayout;
-  GPUComputePipeline            *pipeline;
-  GPUTexture                    *inputTexture;
-  GPUTexture                    *outputTexture;
-  GPUTextureView                *inputView;
-  GPUTextureView                *outputView;
-  GPUBuffer                     *readback;
-  GPUBindGroup                  *group;
-  GPUCommandBuffer              *cmdb;
-  GPUComputePassEncoder         *computePass;
-  GPUTransferPassEncoder            *copyPass;
-  GPUFence                      *fence;
-  void                          *bytecode;
-  GPUCommandBuffer              *submitBuffers[1];
-  GPUComputePipelineCreateInfo   pipelineInfo    = {0};
-  GPUTextureCreateInfo           textureInfo     = {0};
-  GPUTextureViewCreateInfo       viewInfo        = {0};
-  GPUTextureWriteRegion          writeRegion     = {0};
-  GPUBufferCreateInfo            bufferInfo      = {0};
-  GPUBindGroupEntry              groupEntries[2] = {0};
-  GPUBindGroupCreateInfo         groupInfo       = {0};
-  GPUTextureBarrier              textureBarrier  = {0};
-  GPUBarrierBatch                barrierBatch    = {0};
-  GPUBufferTextureCopyRegion     copyRegion      = {0};
-  GPUQueueSubmitInfo             submitInfo      = {0};
-  uint8_t                        inputMip0[GPU_VOLUME_MIP0_BYTES];
-  uint8_t                        inputMip1[GPU_VOLUME_MIP1_BYTES];
-  uint8_t                        outputMip1[GPU_VOLUME_MIP1_BYTES];
-  uint8_t                        pixels[GPU_VOLUME_READBACK_BYTES];
-  uint64_t                       bytecodeSize;
-  bool                           webgpu;
-  int                            ok;
+  GPUQueue                    *queue;
+  GPUShaderLibrary            *library;
+  GPUShaderLayout             *shaderLayout;
+  GPUComputePipeline          *pipeline;
+  GPUTexture                  *inputTexture;
+  GPUTexture                  *outputTexture;
+  GPUTextureView              *inputView;
+  GPUTextureView              *outputView;
+  GPUBuffer                   *readback;
+  GPUBindGroup                *group;
+  GPUCommandBuffer            *cmdb;
+  GPUComputePassEncoder       *computePass;
+  GPUTransferPassEncoder      *copyPass;
+  GPUFence                    *fence;
+  void                        *bytecode;
+  GPUCommandBuffer            *submitBuffers[1];
+  GPUComputePipelineCreateInfo pipelineInfo    = {0};
+  GPUTextureCreateInfo         textureInfo     = {0};
+  GPUTextureViewCreateInfo     viewInfo        = {0};
+  GPUTextureWriteRegion        writeRegion     = {0};
+  GPUBufferCreateInfo          bufferInfo      = {0};
+  GPUBindGroupEntry            groupEntries[2] = {0};
+  GPUBindGroupCreateInfo       groupInfo       = {0};
+  GPUTextureBarrier            textureBarrier  = {0};
+  GPUBarrierBatch              barrierBatch    = {0};
+  GPUBufferTextureCopyRegion   copyRegion      = {0};
+  GPUQueueSubmitInfo           submitInfo      = {0};
+  uint8_t                      inputMip0[GPU_VOLUME_MIP0_BYTES];
+  uint8_t                      inputMip1[GPU_VOLUME_MIP1_BYTES];
+  uint8_t                      outputMip1[GPU_VOLUME_MIP1_BYTES];
+  uint8_t                      pixels[GPU_VOLUME_READBACK_BYTES];
+  uint64_t                     bytecodeSize;
+  bool                         webgpu;
+  int                          ok;
 
   if (!device || !bytecodePath) {
     return 0;
@@ -198,6 +227,7 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   bytecode      = gpu_test_read_file(bytecodePath, &bytecodeSize);
   webgpu        = device->_api && device->_api->backend == GPU_BACKEND_WEBGPU;
   ok            = queue && bytecode;
+
   if (!ok) {
     fprintf(stderr, "volume texture fixture setup failed\n");
     goto cleanup;
@@ -223,10 +253,10 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   if (GPUCreateShaderLibraryFromUSL(device,
                                     bytecode,
                                     bytecodeSize,
-                                    &library) != GPU_OK ||
-      !library ||
-      GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !check_volume_layout(shaderLayout, webgpu)) {
+                                    &library) != GPU_OK
+      || !library
+      || GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK
+      || !check_volume_layout(shaderLayout, webgpu)) {
     fprintf(stderr, "volume texture shader layout creation failed\n");
     ok = 0;
     goto cleanup;
@@ -238,8 +268,9 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   pipelineInfo.layout           = shaderLayout->pipelineLayout;
   pipelineInfo.library          = library;
   pipelineInfo.entryPoint       = "volume_view_cs";
-  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
+
+  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipeline) != GPU_OK
+      || !pipeline) {
     fprintf(stderr, "volume texture compute pipeline creation failed\n");
     ok = 0;
     goto cleanup;
@@ -263,8 +294,9 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   textureInfo.label            = "api-volume-input";
   textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED |
                                  GPU_TEXTURE_USAGE_COPY_DST;
-  if (GPUCreateTexture(device, &textureInfo, &inputTexture) != GPU_OK ||
-      !inputTexture) {
+
+  if (GPUCreateTexture(device, &textureInfo, &inputTexture) != GPU_OK
+      || !inputTexture) {
     fprintf(stderr, "volume input texture creation failed\n");
     ok = 0;
     goto cleanup;
@@ -274,8 +306,9 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   textureInfo.usage = GPU_TEXTURE_USAGE_STORAGE |
                       GPU_TEXTURE_USAGE_COPY_SRC |
                       GPU_TEXTURE_USAGE_COPY_DST;
-  if (GPUCreateTexture(device, &textureInfo, &outputTexture) != GPU_OK ||
-      !outputTexture) {
+
+  if (GPUCreateTexture(device, &textureInfo, &outputTexture) != GPU_OK
+      || !outputTexture) {
     fprintf(stderr, "volume output texture creation failed\n");
     ok = 0;
     goto cleanup;
@@ -287,6 +320,7 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   writeRegion.layerCount   = 1u;
   writeRegion.bytesPerRow  = GPU_VOLUME_BASE_SIZE * GPU_VOLUME_PIXEL_BYTES;
   writeRegion.rowsPerImage = GPU_VOLUME_BASE_SIZE;
+
   if (GPUQueueWriteTexture(queue,
                            inputTexture,
                            &writeRegion,
@@ -303,16 +337,17 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   writeRegion.mipLevel     = 1u;
   writeRegion.bytesPerRow  = GPU_VOLUME_VIEW_SIZE * GPU_VOLUME_PIXEL_BYTES;
   writeRegion.rowsPerImage = GPU_VOLUME_VIEW_SIZE;
+
   if (GPUQueueWriteTexture(queue,
                            inputTexture,
                            &writeRegion,
                            inputMip1,
-                           sizeof(inputMip1)) != GPU_OK ||
-      GPUQueueWriteTexture(queue,
-                           outputTexture,
-                           &writeRegion,
-                           outputMip1,
-                           sizeof(outputMip1)) != GPU_OK) {
+                           sizeof(inputMip1)) != GPU_OK
+      || GPUQueueWriteTexture(queue,
+                              outputTexture,
+                              &writeRegion,
+                              outputMip1,
+                              sizeof(outputMip1)) != GPU_OK) {
     fprintf(stderr, "volume view mip upload failed\n");
     ok = 0;
     goto cleanup;
@@ -326,16 +361,18 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
   viewInfo.label            = "api-volume-input-view";
-  if (GPUCreateTextureView(inputTexture, &viewInfo, &inputView) != GPU_OK ||
-      !inputView) {
+
+  if (GPUCreateTextureView(inputTexture, &viewInfo, &inputView) != GPU_OK
+      || !inputView) {
     fprintf(stderr, "volume input view creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
   viewInfo.label = "api-volume-output-view";
-  if (GPUCreateTextureView(outputTexture, &viewInfo, &outputView) != GPU_OK ||
-      !outputView) {
+
+  if (GPUCreateTextureView(outputTexture, &viewInfo, &outputView) != GPU_OK
+      || !outputView) {
     fprintf(stderr, "volume output view creation failed\n");
     ok = 0;
     goto cleanup;
@@ -347,18 +384,19 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   bufferInfo.sizeBytes        = GPU_VOLUME_READBACK_BYTES;
   bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_DST |
                                 GPU_BUFFER_USAGE_COPY_SRC;
+
   if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK || !readback) {
     fprintf(stderr, "volume readback buffer creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
-  groupEntries[0].binding       = 0u;
-  groupEntries[0].bindingType   = GPU_BINDING_SAMPLED_TEXTURE;
-  groupEntries[0].textureView   = inputView;
-  groupEntries[1].binding       = 1u;
-  groupEntries[1].bindingType   = GPU_BINDING_STORAGE_TEXTURE;
-  groupEntries[1].textureView   = outputView;
+  groupEntries[0].binding     = 0u;
+  groupEntries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  groupEntries[0].textureView = inputView;
+  groupEntries[1].binding     = 1u;
+  groupEntries[1].bindingType = GPU_BINDING_STORAGE_TEXTURE;
+  groupEntries[1].textureView = outputView;
 
   groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   groupInfo.chain.structSize = sizeof(groupInfo);
@@ -366,19 +404,21 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
   groupInfo.entryCount       = 2u;
   groupInfo.pEntries         = groupEntries;
+
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "volume bind group creation failed\n");
     ok = 0;
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "api-volume-texture", &cmdb) != GPU_OK ||
-      !cmdb || !(computePass = GPUBeginComputePass(cmdb,
-                                                   "api-volume-texture"))) {
+  if (GPUAcquireCommandBuffer(queue, "api-volume-texture", &cmdb) != GPU_OK
+      || !cmdb || !(computePass = GPUBeginComputePass(cmdb,
+                                                      "api-volume-texture"))) {
     fprintf(stderr, "volume compute pass creation failed\n");
     ok = 0;
     goto cleanup;
   }
+
   GPUBindComputePipeline(computePass, pipeline);
   GPUBindComputeGroup(computePass, 0u, group, 0u, NULL);
   GPUDispatch(computePass, 1u, 1u, 1u);
@@ -399,8 +439,7 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginTransferPass(cmdb, "api-volume-readback");
-  if (!copyPass) {
+  if (!(copyPass = GPUBeginTransferPass(cmdb, "api-volume-readback"))) {
     fprintf(stderr, "volume copy pass creation failed\n");
     ok = 0;
     goto cleanup;
@@ -409,10 +448,10 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   copyRegion.bytesPerRow              = GPU_VOLUME_ROW_PITCH;
   copyRegion.rowsPerImage             = GPU_VOLUME_ROWS_PER_IMAGE;
   copyRegion.texture.texture.mipLevel = 1u;
-  copyRegion.texture.width           = GPU_VOLUME_VIEW_SIZE;
-  copyRegion.texture.height          = GPU_VOLUME_VIEW_SIZE;
-  copyRegion.texture.depth           = GPU_VOLUME_VIEW_SIZE;
-  copyRegion.texture.layerCount      = 1u;
+  copyRegion.texture.width            = GPU_VOLUME_VIEW_SIZE;
+  copyRegion.texture.height           = GPU_VOLUME_VIEW_SIZE;
+  copyRegion.texture.depth            = GPU_VOLUME_VIEW_SIZE;
+  copyRegion.texture.layerCount       = 1u;
   GPUCopyTextureToBuffer(copyPass, outputTexture, readback, &copyRegion);
   GPUEndTransferPass(copyPass);
   copyPass = NULL;
@@ -429,21 +468,23 @@ gpu_test_volume_texture_view(GPUDevice *device, const char *bytecodePath) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = submitBuffers;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "volume texture submission failed\n");
     cmdb = NULL;
-    ok = 0;
+    ok   = 0;
     goto cleanup;
   }
+
   cmdb = NULL;
 
   if (GPUQueueReadBuffer(queue,
                          readback,
                          0u,
                          pixels,
-                         sizeof(pixels)) != GPU_OK ||
-      !check_volume_pixels(pixels)) {
+                         sizeof(pixels)) != GPU_OK
+      || !check_volume_pixels(pixels)) {
     fprintf(stderr, "volume texture readback failed\n");
     ok = 0;
     goto cleanup;

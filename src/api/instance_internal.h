@@ -20,16 +20,16 @@
 #include "../common.h"
 
 struct GPUInstance {
-  GPUAdapter             *_adapters;
-  GPUApi                *_api;
-  void                  *_priv;
-  GPUInstanceCreateInfo  createInfo;
-  uint32_t               _adapterCount;
-  uint32_t               validationError;
-  bool                   _adaptersEnumerated;
+  GPUAdapter           *_adapters;
+  GPUApi               *_api;
+  void                 *_priv;
+  GPUInstanceCreateInfo createInfo;
+  uint32_t              _adapterCount;
+  uint32_t              validationError;
+  bool                  _adaptersEnumerated;
 };
 
-static inline GPUApi *
+static inline GPUApi*
 gpuInstanceApi(const GPUInstance *instance) {
   return instance ? instance->_api : NULL;
 }

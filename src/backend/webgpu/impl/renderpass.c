@@ -3,10 +3,25 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "../common.h"
 #include "../impl.h"
+
+static const WGPUTextureAspect webgpu_copyAspects[] = {
+  [GPU_TEXTURE_ASPECT_ALL]          = WGPUTextureAspect_All,
+  [GPU_TEXTURE_ASPECT_DEPTH_ONLY]   = WGPUTextureAspect_DepthOnly,
+  [GPU_TEXTURE_ASPECT_STENCIL_ONLY] = WGPUTextureAspect_StencilOnly
+};
 
 static WGPULoadOp
 webgpu_loadOp(GPULoadOp op) {
@@ -23,9 +38,7 @@ webgpu_loadOp(GPULoadOp op) {
 
 static WGPUStoreOp
 webgpu_storeOp(GPUStoreOp op) {
-  return op == GPU_STORE_OP_DONT_CARE
-           ? WGPUStoreOp_Discard
-           : WGPUStoreOp_Store;
+  return op == GPU_STORE_OP_DONT_CARE ? WGPUStoreOp_Discard : WGPUStoreOp_Store;
 }
 
 static WGPUColor
@@ -53,34 +66,29 @@ webgpu_clearColor(const GPURenderPassColorAttachment *attachment) {
       color.a = attachment->clearColor.float32[3];
       break;
   }
+
   return color;
 }
 
 static bool
 webgpu_formatHasDepth(GPUFormat format) {
-  return format == GPU_FORMAT_DEPTH16_UNORM ||
-         format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
-         format == GPU_FORMAT_DEPTH32_FLOAT ||
-         format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  return format == GPU_FORMAT_DEPTH16_UNORM
+         || format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8
+         || format == GPU_FORMAT_DEPTH32_FLOAT
+         || format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
 }
 
 static bool
 webgpu_formatHasStencil(GPUFormat format) {
-  return format == GPU_FORMAT_STENCIL8 ||
-         format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
-         format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  return format == GPU_FORMAT_STENCIL8
+         || format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8
+         || format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
 }
 
 static WGPUTextureAspect
 webgpu_copyAspect(GPUTextureAspect aspect) {
-  static const WGPUTextureAspect aspects[] = {
-    [GPU_TEXTURE_ASPECT_ALL]          = WGPUTextureAspect_All,
-    [GPU_TEXTURE_ASPECT_DEPTH_ONLY]   = WGPUTextureAspect_DepthOnly,
-    [GPU_TEXTURE_ASPECT_STENCIL_ONLY] = WGPUTextureAspect_StencilOnly
-  };
-
-  return (uint32_t)aspect < GPU_ARRAY_LEN(aspects)
-           ? aspects[aspect]
+  return (uint32_t)aspect < GPU_ARRAY_LEN(webgpu_copyAspects)
+           ? webgpu_copyAspects[aspect]
            : WGPUTextureAspect_Undefined;
 }
 
@@ -90,18 +98,18 @@ webgpu_setRenderExtent(GPUCommandWebGPU *command, GPUTextureView *view) {
   uint32_t    width;
   uint32_t    height;
 
-  if (!command || command->renderWidth != 0u || !view ||
-      !(texture = view->_texture)) {
+  if (!command || command->renderWidth != 0u || !view
+      || !(texture = view->_texture)) {
     return;
   }
 
-  width  = texture->width >> view->baseMipLevel;
-  height = texture->height >> view->baseMipLevel;
+  width                 = texture->width >> view->baseMipLevel;
+  height                = texture->height >> view->baseMipLevel;
   command->renderWidth  = width  ? width  : 1u;
   command->renderHeight = height ? height : 1u;
 }
 
-static GPUCommandWebGPU *
+static GPUCommandWebGPU*
 webgpu_copyCommand(GPUTransferPassEncoder *pass) {
   return pass ? pass->_priv : NULL;
 }
@@ -110,7 +118,7 @@ static void
 webgpu_fillTextureCopy(WGPUTexelCopyTextureInfo *copy,
                        GPUTexture               *texture,
                        const GPUTextureLocation *location) {
-  *copy = (WGPUTexelCopyTextureInfo)WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
+  *copy          = (WGPUTexelCopyTextureInfo)WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
   copy->texture  = texture->_priv;
   copy->mipLevel = location->mipLevel;
   copy->origin.x = location->x;
@@ -122,45 +130,50 @@ webgpu_fillTextureCopy(WGPUTexelCopyTextureInfo *copy,
 }
 
 static void
-webgpu_copyBufferTexture(GPUTransferPassEncoder          *pass,
-                         GPUBuffer                       *buffer,
-                         GPUTexture                      *texture,
+webgpu_copyBufferTexture(GPUTransferPassEncoder           *pass,
+                         GPUBuffer                        *buffer,
+                         GPUTexture                       *texture,
                          const GPUBufferTextureCopyRegion *region,
                          bool                              bufferToTexture) {
-  WGPUTexelCopyBufferInfo  bufferCopy = WGPU_TEXEL_COPY_BUFFER_INFO_INIT;
-  WGPUTexelCopyTextureInfo textureCopy = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
-  WGPUExtent3D             extent = WGPU_EXTENT_3D_INIT;
+  WGPUTexelCopyBufferInfo            bufferCopy  = WGPU_TEXEL_COPY_BUFFER_INFO_INIT;
+  WGPUTexelCopyTextureInfo           textureCopy = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
+  WGPUExtent3D                       extent      = WGPU_EXTENT_3D_INIT;
+  GPUFormatDataLayout                dataLayout;
+  GPUFormatLayout                    formatLayout;
   const GPUTextureSubresourceRegion *textureRegion;
-  GPUCommandWebGPU                 *command;
-  GPUFormatDataLayout               dataLayout;
-  GPUFormatLayout                   formatLayout;
-  uint32_t                          imageCount;
+  GPUCommandWebGPU                  *command;
+  uint32_t                           imageCount;
+  uint32_t                           image;
+  uint32_t                           row;
+  uint32_t                           copiedHeight;
 
   command = webgpu_copyCommand(pass);
-  if (!command || !command->encoder || !buffer || !buffer->_priv ||
-      !texture || !texture->_priv || !region) {
+
+  if (!command || !command->encoder || !buffer || !buffer->_priv
+      || !texture || !texture->_priv || !region) {
     return;
   }
 
   textureRegion = &region->texture;
+
   if (!gpuFormatAspectLayout(texture->format,
                              textureRegion->texture.aspect,
-                             &formatLayout) ||
-      !gpuFormatAspectDataLayout(texture->format,
-                                 textureRegion->texture.aspect,
-                                 textureRegion->width,
-                                 textureRegion->height,
-                                 textureRegion->depth,
-                                 textureRegion->layerCount,
-                                 region->bytesPerRow,
-                                 region->rowsPerImage,
-                                 &dataLayout)) {
+                             &formatLayout)
+      || !gpuFormatAspectDataLayout(texture->format,
+                                    textureRegion->texture.aspect,
+                                    textureRegion->width,
+                                    textureRegion->height,
+                                    textureRegion->depth,
+                                    textureRegion->layerCount,
+                                    region->bytesPerRow,
+                                    region->rowsPerImage,
+                                    &dataLayout)) {
     return;
   }
 
-  imageCount = texture->dimension == GPU_TEXTURE_DIMENSION_3D
-                 ? textureRegion->depth
-                 : textureRegion->layerCount;
+  imageCount                     = texture->dimension == GPU_TEXTURE_DIMENSION_3D
+                                     ? textureRegion->depth
+                                     : textureRegion->layerCount;
   bufferCopy.buffer              = buffer->_priv;
   bufferCopy.layout.offset       = region->bufferOffset;
   bufferCopy.layout.bytesPerRow  = region->bytesPerRow;
@@ -186,29 +199,30 @@ webgpu_copyBufferTexture(GPUTransferPassEncoder          *pass,
                                             &bufferCopy,
                                             &extent);
     }
+
     return;
   }
 
-  /* WebGPU requires 256-byte row pitches for multi-row encoder copies. */
-  for (uint32_t image = 0u; image < imageCount; image++) {
-    for (uint32_t row = 0u; row < dataLayout.blockRows; row++) {
-      uint32_t copiedHeight;
+  /* encoder copies require 256-byte row pitches for multiple rows. */
 
-      bufferCopy.layout.offset = region->bufferOffset +
-                                 (uint64_t)image * dataLayout.bytesPerImage +
-                                 (uint64_t)row * region->bytesPerRow;
+  for (image = 0u; image < imageCount; image++) {
+    for (row = 0u; row < dataLayout.blockRows; row++) {
+      bufferCopy.layout.offset       = region->bufferOffset +
+                                       (uint64_t)image * dataLayout.bytesPerImage +
+                                       (uint64_t)row * region->bytesPerRow;
       bufferCopy.layout.bytesPerRow  = WGPU_COPY_STRIDE_UNDEFINED;
       bufferCopy.layout.rowsPerImage = WGPU_COPY_STRIDE_UNDEFINED;
-      textureCopy.origin.y = textureRegion->texture.y +
-                             row * formatLayout.blockHeight;
-      textureCopy.origin.z = (texture->dimension == GPU_TEXTURE_DIMENSION_3D
-                                ? textureRegion->texture.z
-                                : textureRegion->texture.baseArrayLayer) + image;
-      copiedHeight = textureRegion->height - row * formatLayout.blockHeight;
-      extent.height = copiedHeight < formatLayout.blockHeight
-                        ? copiedHeight
-                        : formatLayout.blockHeight;
-      extent.depthOrArrayLayers = 1u;
+      textureCopy.origin.y           = textureRegion->texture.y +
+                                       row * formatLayout.blockHeight;
+      textureCopy.origin.z           = (texture->dimension == GPU_TEXTURE_DIMENSION_3D
+                                          ? textureRegion->texture.z
+                                          : textureRegion->texture.baseArrayLayer) + image;
+      copiedHeight                   = textureRegion->height - row * formatLayout.blockHeight;
+      extent.height                  = copiedHeight < formatLayout.blockHeight
+                                         ? copiedHeight
+                                         : formatLayout.blockHeight;
+      extent.depthOrArrayLayers      = 1u;
+
       if (bufferToTexture) {
         wgpuCommandEncoderCopyBufferToTexture(command->encoder,
                                               &bufferCopy,
@@ -224,83 +238,86 @@ webgpu_copyBufferTexture(GPUTransferPassEncoder          *pass,
   }
 }
 
-static GPURenderPassDesc *
+static GPURenderPassDesc*
 webgpu_beginRenderPass(GPUCommandBuffer              *cmdb,
                        const GPURenderPassCreateInfo *info) {
-  GPUCommandWebGPU *command;
+  GPUCommandWebGPU                          *command;
+  const GPURenderPassColorAttachment        *colorSource;
+  WGPURenderPassColorAttachment             *colorTarget;
+  const GPURenderPassDepthStencilAttachment *depthSource;
+  WGPURenderPassDepthStencilAttachment      *depthTarget;
+  uint32_t                                   i;
+  GPUFormat                                  format;
 
   command = gpu_webgpuCommand(cmdb);
-  if (!command || !command->encoder ||
-      info->colorAttachmentCount > GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS) {
+
+  if (!command || !command->encoder
+      || info->colorAttachmentCount > GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS) {
     return NULL;
   }
 
-  command->renderPassDesc =
-    (WGPURenderPassDescriptor)WGPU_RENDER_PASS_DESCRIPTOR_INIT;
-  command->renderWidth  = 0u;
-  command->renderHeight = 0u;
+  command->renderPassDesc = (WGPURenderPassDescriptor)WGPU_RENDER_PASS_DESCRIPTOR_INIT;
+  command->renderWidth    = 0u;
+  command->renderHeight   = 0u;
   memset(command->colorAttachments, 0, sizeof(command->colorAttachments));
-  for (uint32_t i = 0u; i < info->colorAttachmentCount; i++) {
-    const GPURenderPassColorAttachment *source;
-    WGPURenderPassColorAttachment      *target;
 
-    source  = &info->pColorAttachments[i];
-    target  = &command->colorAttachments[i];
-    *target = (WGPURenderPassColorAttachment)
-      WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
-    target->view          = source->view->_priv;
-    target->resolveTarget = source->resolveView
-                              ? source->resolveView->_priv
-                              : NULL;
-    target->loadOp        = webgpu_loadOp(source->loadOp);
-    target->storeOp       = webgpu_storeOp(source->storeOp);
-    target->clearValue    = webgpu_clearColor(source);
-    webgpu_setRenderExtent(command, source->view);
+  for (i = 0u; i < info->colorAttachmentCount; i++) {
+    colorSource                = &info->pColorAttachments[i];
+    colorTarget                = &command->colorAttachments[i];
+    *colorTarget               = (WGPURenderPassColorAttachment)WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+    colorTarget->view          = colorSource->view->_priv;
+    colorTarget->resolveTarget = colorSource->resolveView
+                                   ? colorSource->resolveView->_priv
+                                   : NULL;
+    colorTarget->loadOp        = webgpu_loadOp(colorSource->loadOp);
+    colorTarget->storeOp       = webgpu_storeOp(colorSource->storeOp);
+    colorTarget->clearValue    = webgpu_clearColor(colorSource);
+    webgpu_setRenderExtent(command, colorSource->view);
   }
 
-  command->renderPassDesc.label = gpu_webgpuString(info->label);
+  command->renderPassDesc.label                = gpu_webgpuString(info->label);
   command->renderPassDesc.colorAttachmentCount = info->colorAttachmentCount;
-  command->renderPassDesc.colorAttachments = command->colorAttachments;
-  command->renderPassDesc.occlusionQuerySet = info->occlusionQuerySet
-                                                ? info->occlusionQuerySet->_priv
-                                                : NULL;
+  command->renderPassDesc.colorAttachments     = command->colorAttachments;
+  command->renderPassDesc.occlusionQuerySet    = info->occlusionQuerySet
+                                                   ? info->occlusionQuerySet->_priv
+                                                   : NULL;
+
   if (info->timestampWrites) {
-    command->timestampWrites =
-      (WGPUPassTimestampWrites)WGPU_PASS_TIMESTAMP_WRITES_INIT;
-    command->timestampWrites.querySet =
-      info->timestampWrites->querySet->_priv;
-    command->timestampWrites.beginningOfPassWriteIndex =
-      info->timestampWrites->beginIndex;
-    command->timestampWrites.endOfPassWriteIndex =
-      info->timestampWrites->endIndex;
+    command->timestampWrites          = (WGPUPassTimestampWrites)WGPU_PASS_TIMESTAMP_WRITES_INIT;
+    command->timestampWrites.querySet = info->timestampWrites->querySet->_priv;
+
+    command->timestampWrites.beginningOfPassWriteIndex = info->timestampWrites->beginIndex;
+    command->timestampWrites.endOfPassWriteIndex       = info->timestampWrites->endIndex;
+
     command->renderPassDesc.timestampWrites = &command->timestampWrites;
   }
-  if (info->pDepthStencilAttachment) {
-    const GPURenderPassDepthStencilAttachment *source;
-    WGPURenderPassDepthStencilAttachment      *target;
-    GPUFormat                                  format;
 
-    source  = info->pDepthStencilAttachment;
-    target  = &command->depthStencilAttachment;
-    format  = source->view->format;
-    *target = (WGPURenderPassDepthStencilAttachment)
-      WGPU_RENDER_PASS_DEPTH_STENCIL_ATTACHMENT_INIT;
-    target->view = source->view->_priv;
+  if (info->pDepthStencilAttachment) {
+    depthSource       = info->pDepthStencilAttachment;
+    depthTarget       = &command->depthStencilAttachment;
+    format            = depthSource->view->format;
+    *depthTarget      = (WGPURenderPassDepthStencilAttachment)WGPU_RENDER_PASS_DEPTH_STENCIL_ATTACHMENT_INIT;
+    depthTarget->view = depthSource->view->_priv;
+
     if (webgpu_formatHasDepth(format)) {
-      target->depthLoadOp     = webgpu_loadOp(source->depthLoadOp);
-      target->depthStoreOp    = webgpu_storeOp(source->depthStoreOp);
-      target->depthClearValue = source->clearDepth;
+      depthTarget->depthLoadOp     = webgpu_loadOp(depthSource->depthLoadOp);
+      depthTarget->depthStoreOp    = webgpu_storeOp(depthSource->depthStoreOp);
+      depthTarget->depthClearValue = depthSource->clearDepth;
     }
+
     if (webgpu_formatHasStencil(format)) {
-      target->stencilLoadOp     = webgpu_loadOp(source->stencilLoadOp);
-      target->stencilStoreOp    = webgpu_storeOp(source->stencilStoreOp);
-      target->stencilClearValue = source->clearStencil;
+      depthTarget->stencilLoadOp     = webgpu_loadOp(depthSource->stencilLoadOp);
+      depthTarget->stencilStoreOp    = webgpu_storeOp(depthSource->stencilStoreOp);
+      depthTarget->stencilClearValue = depthSource->clearStencil;
     }
-    command->renderPassDesc.depthStencilAttachment = target;
-    webgpu_setRenderExtent(command, source->view);
+
+    command->renderPassDesc.depthStencilAttachment = depthTarget;
+    webgpu_setRenderExtent(command, depthSource->view);
   }
+
   command->renderPass._priv = command;
   command->renderPass.label = info->label;
+
   return &command->renderPass;
 }
 
@@ -309,17 +326,18 @@ webgpu_destroyRenderPass(GPURenderPassDesc *pass) {
   GPU__UNUSED(pass);
 }
 
-static GPUTransferPassEncoder *
+static GPUTransferPassEncoder*
 webgpu_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
   GPUCommandWebGPU *command;
 
   command = gpu_webgpuCommand(cmdb);
+
   if (!command || !command->encoder) {
     return NULL;
   }
 
   memset(&command->copy, 0, sizeof(command->copy));
-  command->copy._priv      = command;
+  command->copy._priv     = command;
   command->copyDebugGroup = false;
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   if (label && label[0] != '\0') {
@@ -330,21 +348,24 @@ webgpu_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
 #else
   GPU__UNUSED(label);
 #endif
+
   return &command->copy;
 }
 
 static void
-webgpu_copyBufferToBuffer(GPUTransferPassEncoder   *pass,
-                          GPUBuffer                *src,
-                          GPUBuffer                *dst,
+webgpu_copyBufferToBuffer(GPUTransferPassEncoder    *pass,
+                          GPUBuffer                 *src,
+                          GPUBuffer                 *dst,
                           const GPUBufferCopyRegion *region) {
   GPUCommandWebGPU *command;
 
   command = webgpu_copyCommand(pass);
-  if (!command || !command->encoder || !src || !src->_priv ||
-      !dst || !dst->_priv || !region) {
+
+  if (!command || !command->encoder || !src || !src->_priv
+      || !dst || !dst->_priv || !region) {
     return;
   }
+
   wgpuCommandEncoderCopyBufferToBuffer(command->encoder,
                                        src->_priv,
                                        region->srcOffset,
@@ -354,47 +375,48 @@ webgpu_copyBufferToBuffer(GPUTransferPassEncoder   *pass,
 }
 
 static void
-webgpu_copyBufferToTexture(GPUTransferPassEncoder          *pass,
-                           GPUBuffer                       *src,
-                           GPUTexture                      *dst,
+webgpu_copyBufferToTexture(GPUTransferPassEncoder           *pass,
+                           GPUBuffer                        *src,
+                           GPUTexture                       *dst,
                            const GPUBufferTextureCopyRegion *region) {
   webgpu_copyBufferTexture(pass, src, dst, region, true);
 }
 
 static void
-webgpu_copyTextureToBuffer(GPUTransferPassEncoder          *pass,
-                           GPUTexture                      *src,
-                           GPUBuffer                       *dst,
+webgpu_copyTextureToBuffer(GPUTransferPassEncoder           *pass,
+                           GPUTexture                       *src,
+                           GPUBuffer                        *dst,
                            const GPUBufferTextureCopyRegion *region) {
   webgpu_copyBufferTexture(pass, dst, src, region, false);
 }
 
 static void
-webgpu_copyTextureToTexture(
-  GPUTransferPassEncoder             *pass,
-  GPUTexture                          *src,
-  GPUTexture                          *dst,
-  const GPUTextureToTextureCopyRegion *region) {
-  WGPUTexelCopyTextureInfo source = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
+webgpu_copyTextureToTexture(GPUTransferPassEncoder              *pass,
+                            GPUTexture                          *src,
+                            GPUTexture                          *dst,
+                            const GPUTextureToTextureCopyRegion *region) {
+  WGPUTexelCopyTextureInfo source      = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
   WGPUTexelCopyTextureInfo destination = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
-  WGPUExtent3D             extent = WGPU_EXTENT_3D_INIT;
+  WGPUExtent3D             extent      = WGPU_EXTENT_3D_INIT;
   GPUCommandWebGPU        *command;
 
   command = webgpu_copyCommand(pass);
-  if (!command || !command->encoder || !src || !src->_priv ||
-      !dst || !dst->_priv || !region) {
+
+  if (!command || !command->encoder || !src || !src->_priv
+      || !dst || !dst->_priv || !region) {
     return;
   }
-  if (webgpu_formatHasDepth(src->format) &&
-      webgpu_formatHasStencil(src->format) &&
-      region->src.aspect != GPU_TEXTURE_ASPECT_ALL) {
+
+  if (webgpu_formatHasDepth(src->format)
+      && webgpu_formatHasStencil(src->format)
+      && region->src.aspect != GPU_TEXTURE_ASPECT_ALL) {
     return;
   }
 
   webgpu_fillTextureCopy(&source, src, &region->src);
   webgpu_fillTextureCopy(&destination, dst, &region->dst);
-  extent.width  = region->width;
-  extent.height = region->height;
+  extent.width              = region->width;
+  extent.height             = region->height;
   extent.depthOrArrayLayers = src->dimension == GPU_TEXTURE_DIMENSION_3D
                                 ? region->depth
                                 : region->layerCount;

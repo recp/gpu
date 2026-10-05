@@ -2,6 +2,16 @@
  * Copyright (C) 2026 Recep Aslantas
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "../common.h"
@@ -9,76 +19,80 @@
 static bool
 cuda__validComputeInterface(const GPUDevice                    *device,
                             const GPUComputePipelineCreateInfo *info,
-                            GPUShaderPTXEntryView               *outPTX) {
-  GPUShaderReflection   reflection;
-  GPUShaderPTXEntryView ptx;
-  GPUShaderStageFlags   stage;
+                            GPUShaderPTXEntryView              *outPTX) {
+  GPUShaderReflection                reflection;
+  GPUShaderPTXEntryView              ptx;
+  const GPUShaderResourceReflection *resource;
+  const GPUShaderPTXParamInfo       *param;
+  GPUShaderStageFlags                stage;
+  uint32_t                           i;
+  uint32_t                           size;
+  bool                               supported;
 
   memset(&ptx, 0, sizeof(ptx));
-  if (!info || !info->library || !info->entryPoint || !info->entryPoint[0] ||
-      !gpuShaderEntryView(info->library,
-                          info->entryPoint,
-                          &stage,
-                          &reflection) ||
-      !gpuGetShaderLibraryPTXEntry(info->library, info->entryPoint, &ptx) ||
-      stage != GPU_SHADER_STAGE_COMPUTE_BIT ||
-      reflection.pushConstantSizeBytes != 0u ||
-      reflection.pushConstantStages != 0u ||
-      ptx.paramCount > GPU_SHADER_PTX_MAX_PARAM_COUNT ||
-      ptx.paramDataSize > GPU_SHADER_PTX_MAX_PARAM_BYTES) {
+
+  if (!info || !info->library || !info->entryPoint || !info->entryPoint[0]
+      || !gpuShaderEntryView(info->library,
+                             info->entryPoint,
+                             &stage,
+                             &reflection)
+      || !gpuGetShaderLibraryPTXEntry(info->library, info->entryPoint, &ptx)
+      || stage != GPU_SHADER_STAGE_COMPUTE_BIT
+      || reflection.pushConstantSizeBytes != 0u
+      || reflection.pushConstantStages != 0u
+      || ptx.paramCount > GPU_SHADER_PTX_MAX_PARAM_COUNT
+      || ptx.paramDataSize > GPU_SHADER_PTX_MAX_PARAM_BYTES) {
     return false;
   }
 
-  for (uint32_t i = 0u; i < reflection.resourceCount; i++) {
-    const GPUShaderResourceReflection *resource;
-    GPUCudaFormatInfo                  format;
-    bool                               supported;
+  for (i = 0u; i < reflection.resourceCount; i++) {
+    GPUCudaFormatInfo format;
 
-    resource = &reflection.pResources[i];
-    supported = resource->bindingType == GPU_BINDING_UNIFORM_BUFFER ||
-                resource->bindingType == GPU_BINDING_STORAGE_BUFFER ||
-                resource->bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER ||
-                resource->bindingType == GPU_BINDING_SAMPLED_TEXTURE ||
-                resource->bindingType == GPU_BINDING_SAMPLER;
+    resource  = &reflection.pResources[i];
+    supported = resource->bindingType == GPU_BINDING_UNIFORM_BUFFER
+                || resource->bindingType == GPU_BINDING_STORAGE_BUFFER
+                || resource->bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER
+                || resource->bindingType == GPU_BINDING_SAMPLED_TEXTURE
+                || resource->bindingType == GPU_BINDING_SAMPLER;
+
     if (resource->bindingType == GPU_BINDING_STORAGE_TEXTURE) {
-      supported = cuda_textureStorageViewSupported(
-                    resource->storageTexture.viewType) &&
-                  cuda_formatInfo(resource->storageTexture.format, &format) &&
-                  (format.flags & GPU_CUDA_FORMAT_STORAGE_BIT) != 0u;
+      supported = cuda_textureStorageViewSupported(resource->storageTexture.viewType)
+                  && cuda_formatInfo(resource->storageTexture.format, &format)
+                  && (format.flags & GPU_CUDA_FORMAT_STORAGE_BIT) != 0u;
     }
-    if (!supported || resource->arrayCount == 0u ||
-        (resource->visibility & GPU_SHADER_STAGE_COMPUTE_BIT) == 0u ||
-        (resource->arrayCount > 1u &&
-         !GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING))) {
+
+    if (!supported || resource->arrayCount == 0u
+        || (resource->visibility & GPU_SHADER_STAGE_COMPUTE_BIT) == 0u
+        || (resource->arrayCount > 1u
+            && !GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING))) {
       return false;
     }
   }
-  for (uint32_t i = 0u; i < ptx.paramCount; i++) {
-    const GPUShaderPTXParamInfo *param;
-    uint32_t                     size;
 
+  for (i = 0u; i < ptx.paramCount; i++) {
     param = &ptx.params[i];
     size  = cuda_ptxParamSize(param->kind);
-    if ((param->kind != GPUShaderPTXParamBuffer &&
-         param->kind != GPUShaderPTXParamSurface &&
-         param->kind != GPUShaderPTXParamTexture &&
-         param->kind != GPUShaderPTXParamSampledTexture &&
-         param->kind != GPUShaderPTXParamTextureMetadata) ||
-        (param->kind == GPUShaderPTXParamBuffer &&
-         param->bindingType != GPU_BINDING_UNIFORM_BUFFER &&
-         param->bindingType != GPU_BINDING_STORAGE_BUFFER &&
-         param->bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER) ||
-        (param->kind == GPUShaderPTXParamSurface &&
-         param->bindingType != GPU_BINDING_STORAGE_TEXTURE) ||
-        (param->kind == GPUShaderPTXParamTexture &&
-         param->bindingType != GPU_BINDING_SAMPLED_TEXTURE) ||
-        (param->kind == GPUShaderPTXParamSampledTexture &&
-         param->bindingType != GPU_BINDING_SAMPLED_TEXTURE) ||
-        (param->kind == GPUShaderPTXParamTextureMetadata &&
-         param->bindingType != GPU_BINDING_STORAGE_TEXTURE &&
-         param->bindingType != GPU_BINDING_SAMPLED_TEXTURE) ||
-        size == 0u || ptx.paramDataSize < size ||
-        param->dataOffset > ptx.paramDataSize - size) {
+
+    if ((param->kind != GPUShaderPTXParamBuffer
+         && param->kind != GPUShaderPTXParamSurface
+         && param->kind != GPUShaderPTXParamTexture
+         && param->kind != GPUShaderPTXParamSampledTexture
+         && param->kind != GPUShaderPTXParamTextureMetadata)
+        || (param->kind == GPUShaderPTXParamBuffer
+            && param->bindingType != GPU_BINDING_UNIFORM_BUFFER
+            && param->bindingType != GPU_BINDING_STORAGE_BUFFER
+            && param->bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER)
+        || (param->kind == GPUShaderPTXParamSurface
+            && param->bindingType != GPU_BINDING_STORAGE_TEXTURE)
+        || (param->kind == GPUShaderPTXParamTexture
+            && param->bindingType != GPU_BINDING_SAMPLED_TEXTURE)
+        || (param->kind == GPUShaderPTXParamSampledTexture
+            && param->bindingType != GPU_BINDING_SAMPLED_TEXTURE)
+        || (param->kind == GPUShaderPTXParamTextureMetadata
+            && param->bindingType != GPU_BINDING_STORAGE_TEXTURE
+            && param->bindingType != GPU_BINDING_SAMPLED_TEXTURE)
+        || size == 0u || ptx.paramDataSize < size
+        || param->dataOffset > ptx.paramDataSize - size) {
       return false;
     }
   }
@@ -86,6 +100,7 @@ cuda__validComputeInterface(const GPUDevice                    *device,
   if (outPTX) {
     *outPTX = ptx;
   }
+
   return true;
 }
 
@@ -93,135 +108,158 @@ static GPUResult
 cuda_createComputePipeline(GPUDevice                          *device,
                            const GPUComputePipelineCreateInfo *info,
                            GPUComputePipeline                 *pipeline) {
+  GPUShaderPTXEntryView             ptx;
+  uint32_t                          block[3];
   GPUComputePipelineCuda           *native;
   GPUDeviceCuda                    *deviceNative;
   GPUShaderLibraryCuda             *library;
   GPUCudaModule                    *module;
   const GPUShaderStaticSamplerInfo *staticSamplers;
-  GPUShaderPTXEntryView             ptx;
+  GPUShaderPTXParamInfo            *param;
   uint64_t                          entryBit;
-  uint32_t                          block[3];
   uint64_t                          threadCount;
   size_t                            nativeSize;
   size_t                            paramBytes;
   size_t                            samplerBytes;
   uint32_t                          entryStaticSamplerCount;
   uint32_t                          staticSamplerCount;
+  uint32_t                          i;
+  uint32_t                          j;
+  uint32_t                          samplerIndex;
+  uint32_t                          sourceIndex;
   CUresult                          result;
 
   deviceNative = cuda_device(device);
   library      = info && info->library ? info->library->_priv : NULL;
   module       = library ? library->module : NULL;
-  if (!deviceNative || !pipeline || !module ||
-      !cuda__validComputeInterface(device, info, &ptx)) {
+
+  if (!deviceNative || !pipeline || !module
+      || !cuda__validComputeInterface(device, info, &ptx)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
   if (!gpuGetShaderLibraryComputeWorkgroupSize(info->library,
-                                                info->entryPoint,
-                                                block)) {
+                                               info->entryPoint,
+                                               block)) {
     block[0] = block[1] = block[2] = 1u;
   }
+
   threadCount = (uint64_t)block[0] * block[1] * block[2];
-  if (block[0] == 0u || block[1] == 0u || block[2] == 0u ||
-      block[0] > deviceNative->maxBlockDim[0] ||
-      block[1] > deviceNative->maxBlockDim[1] ||
-      block[2] > deviceNative->maxBlockDim[2] ||
-      threadCount > deviceNative->maxThreadsPerBlock) {
+
+  if (block[0] == 0u || block[1] == 0u || block[2] == 0u
+      || block[0] > deviceNative->maxBlockDim[0]
+      || block[1] > deviceNative->maxBlockDim[1]
+      || block[2] > deviceNative->maxBlockDim[2]
+      || threadCount > deviceNative->maxThreadsPerBlock) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   staticSamplers = gpuGetShaderLibraryStaticSamplers(info->library,
-                                                      &staticSamplerCount);
+                                                     &staticSamplerCount);
   entryBit       = gpuShaderEntryBit(info->library, info->entryPoint);
+
   if (staticSamplerCount > 0u && (!staticSamplers || entryBit == 0u)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
   entryStaticSamplerCount = 0u;
-  for (uint32_t i = 0u; i < staticSamplerCount; i++) {
-    entryStaticSamplerCount +=
-      (staticSamplers[i].entryMask & entryBit) != 0u;
+
+  for (i = 0u; i < staticSamplerCount; i++) {
+    entryStaticSamplerCount += (staticSamplers[i].entryMask & entryBit) != 0u;
   }
-  paramBytes     = (size_t)ptx.paramCount * sizeof(native->params[0]);
-  samplerBytes   = (size_t)entryStaticSamplerCount * sizeof(CUDA_TEXTURE_DESC);
-  if ((ptx.paramCount > 0u && paramBytes / sizeof(native->params[0]) !=
-                              ptx.paramCount) ||
-      (entryStaticSamplerCount > 0u &&
-       samplerBytes / sizeof(CUDA_TEXTURE_DESC) != entryStaticSamplerCount) ||
-      paramBytes > SIZE_MAX - sizeof(*native) ||
-      samplerBytes > SIZE_MAX - sizeof(*native) - paramBytes) {
+
+  paramBytes   = (size_t)ptx.paramCount * sizeof(native->params[0]);
+  samplerBytes = (size_t)entryStaticSamplerCount * sizeof(CUDA_TEXTURE_DESC);
+
+  if ((ptx.paramCount > 0u && paramBytes / sizeof(native->params[0]) != ptx.paramCount)
+      || (entryStaticSamplerCount > 0u
+          && samplerBytes / sizeof(CUDA_TEXTURE_DESC) != entryStaticSamplerCount)
+      || paramBytes > SIZE_MAX - sizeof(*native)
+      || samplerBytes > SIZE_MAX - sizeof(*native) - paramBytes) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+
   nativeSize = sizeof(*native) + paramBytes + samplerBytes;
-  native = calloc(1, nativeSize);
-  if (!native) {
+
+  if (!(native = calloc(1, nativeSize))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+
   native->pipeline = pipeline;
-  result = cuda_getModuleFunction(module, info->entryPoint, &native->function);
+  result           = cuda_getModuleFunction(module, info->entryPoint, &native->function);
+
   if (result != CUDA_SUCCESS) {
     cuda_report(device, result, "PTX entry lookup");
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   cuda_retainModule(module);
-  native->module        = module;
-  native->paramCount    = ptx.paramCount;
-  native->paramDataSize = ptx.paramDataSize;
-  native->staticSamplers = (CUDA_TEXTURE_DESC *)
-    ((uint8_t *)native->params + paramBytes);
+  native->module         = module;
+  native->paramCount     = ptx.paramCount;
+  native->paramDataSize  = ptx.paramDataSize;
+  native->staticSamplers = (CUDA_TEXTURE_DESC *)((uint8_t *)native->params + paramBytes);
+
   if (ptx.paramCount > 0u) {
     memcpy(native->params,
            ptx.params,
            (size_t)ptx.paramCount * sizeof(native->params[0]));
   }
-  for (uint32_t i = 0u; i < staticSamplerCount; i++) {
+
+  for (i = 0u; i < staticSamplerCount; i++) {
     if ((staticSamplers[i].entryMask & entryBit) == 0u) {
       continue;
     }
-    if (!cuda_staticSamplerTextureDesc(
-          &staticSamplers[i].desc,
-          &native->staticSamplers[native->staticSamplerCount])) {
+
+    if (!cuda_staticSamplerTextureDesc(&staticSamplers[i].desc,
+                                       &native->staticSamplers[native->staticSamplerCount])) {
       cuda_releaseModule(native->module);
       free(native);
       return GPU_ERROR_UNSUPPORTED;
     }
+
     native->staticSamplerCount++;
   }
-  for (uint32_t i = 0u; i < ptx.paramCount; i++) {
-    GPUShaderPTXParamInfo *param;
-    uint32_t               samplerIndex;
-    uint32_t               sourceIndex;
 
+  for (i = 0u; i < ptx.paramCount; i++) {
     param = &native->params[i];
-    if (param->kind != GPUShaderPTXParamSampledTexture ||
-        param->staticSamplerId == UINT32_MAX) {
+
+    if (param->kind != GPUShaderPTXParamSampledTexture
+        || param->staticSamplerId == UINT32_MAX) {
       continue;
     }
+
     sourceIndex = param->staticSamplerId;
-    if (sourceIndex >= staticSamplerCount ||
-        (staticSamplers[sourceIndex].entryMask & entryBit) == 0u) {
+
+    if (sourceIndex >= staticSamplerCount
+        || (staticSamplers[sourceIndex].entryMask & entryBit) == 0u) {
       cuda_releaseModule(native->module);
       free(native);
       return GPU_ERROR_UNSUPPORTED;
     }
+
     samplerIndex = 0u;
-    for (uint32_t j = 0u; j < sourceIndex; j++) {
+
+    for (j = 0u; j < sourceIndex; j++) {
       samplerIndex += (staticSamplers[j].entryMask & entryBit) != 0u;
     }
+
     if (samplerIndex >= native->staticSamplerCount) {
       cuda_releaseModule(native->module);
       free(native);
       return GPU_ERROR_UNSUPPORTED;
     }
+
     param->staticSamplerId = samplerIndex;
   }
 
-  native->base._priv = native;
+  native->base._priv            = native;
   native->base.workgroupSize[0] = block[0];
   native->base.workgroupSize[1] = block[1];
   native->base.workgroupSize[2] = block[2];
-  pipeline->_priv    = native;
-  pipeline->_state   = &native->base;
+  pipeline->_priv               = native;
+  pipeline->_state              = &native->base;
+
   return GPU_OK;
 }
 
@@ -230,18 +268,22 @@ cuda_destroyComputePipeline(GPUComputePipeline *pipeline) {
   GPUComputePipelineCuda *native;
 
   native = pipeline ? pipeline->_state : NULL;
-  if (native) cuda_releaseModule(native->module);
+
+  if (native)
+    cuda_releaseModule(native->module);
+
   free(native);
   free(pipeline);
 }
 
-static GPUComputePassEncoder *
+static GPUComputePassEncoder*
 cuda_computeCommandEncoder(GPUCommandBuffer               *cmdb,
                            const GPUComputePassCreateInfo *info) {
   GPUCommandCuda *command;
 
   GPU__UNUSED(info);
   command = cuda_command(cmdb);
+
   if (!command || command->recordResult != GPU_OK) {
     return NULL;
   }
@@ -251,8 +293,9 @@ cuda_computeCommandEncoder(GPUCommandBuffer               *cmdb,
   command->compute._workgroupSize[0] = 1u;
   command->compute._workgroupSize[1] = 1u;
   command->compute._workgroupSize[2] = 1u;
-  command->pipeline = NULL;
+  command->pipeline                  = NULL;
   memset(command->boundParamMask, 0, sizeof(command->boundParamMask));
+
   return &command->compute;
 }
 
@@ -264,15 +307,18 @@ cuda_setComputePipeline(GPUComputePassEncoder   *encoder,
 
   command = encoder ? encoder->_priv : NULL;
   native  = state ? state->_priv : NULL;
+
   if (!command || !native || !native->function) {
     if (command) {
       command->recordResult = GPU_ERROR_INVALID_ARGUMENT;
     }
     return;
   }
+
   if (command->pipeline != native) {
     memset(command->boundParamMask, 0, sizeof(command->boundParamMask));
   }
+
   command->pipeline          = native;
   encoder->_workgroupSize[0] = state->workgroupSize[0];
   encoder->_workgroupSize[1] = state->workgroupSize[1];
@@ -283,21 +329,24 @@ cuda_setComputePipeline(GPUComputePassEncoder   *encoder,
 static bool
 cuda__paramsBound(const GPUCommandCuda *command) {
   const GPUComputePipelineCuda *pipeline;
+  uint32_t                      i;
 
   pipeline = command ? command->pipeline : NULL;
+
   if (!pipeline) {
     return false;
   }
-  for (uint32_t i = 0u; i < pipeline->paramCount; i++) {
-    if ((command->boundParamMask[i / 64u] &
-         (UINT64_C(1) << (i % 64u))) == 0u) {
+
+  for (i = 0u; i < pipeline->paramCount; i++) {
+    if ((command->boundParamMask[i / 64u] & (UINT64_C(1) << (i % 64u))) == 0u) {
       return false;
     }
   }
+
   return true;
 }
 
-static uint8_t *
+static uint8_t*
 cuda__reserveParamData(GPUComputePassEncoder *encoder,
                        GPUCommandCuda        *command,
                        uint32_t               size) {
@@ -305,35 +354,39 @@ cuda__reserveParamData(GPUComputePassEncoder *encoder,
   uint32_t capacity;
   uint32_t oldCapacity;
 
-  if (!encoder || !command || size == 0u ||
-      command->paramDataCount > UINT32_MAX - size) {
+  if (!encoder || !command || size == 0u
+      || command->paramDataCount > UINT32_MAX - size) {
     return NULL;
   }
+
   if (command->paramDataCount + size <= command->paramDataCapacity) {
     data = command->paramData + command->paramDataCount;
     command->paramDataCount += size;
     return data;
   }
 
-  capacity = command->paramDataCapacity
-               ? command->paramDataCapacity
-               : GPU_SHADER_PTX_MAX_PARAM_BYTES;
+  capacity = command->paramDataCapacity ? command->paramDataCapacity : GPU_SHADER_PTX_MAX_PARAM_BYTES;
+
   while (capacity < command->paramDataCount + size) {
     if (capacity > UINT32_MAX / 2u) {
       return NULL;
     }
+
     capacity *= 2u;
   }
+
   oldCapacity = command->paramDataCapacity;
-  data = realloc(command->paramData, capacity);
-  if (!data) {
+
+  if (!(data = realloc(command->paramData, capacity))) {
     return NULL;
   }
+
   command->paramData         = data;
   command->paramDataCapacity = capacity;
   data += command->paramDataCount;
   command->paramDataCount += size;
   gpuDeviceRecordHotPathAlloc(encoder->_device, capacity - oldCapacity);
+
   return data;
 }
 
@@ -347,18 +400,19 @@ cuda_dispatch(GPUComputePassEncoder *encoder,
   GPUDispatchCuda *dispatch;
   GPUDispatchCuda *dispatches;
   uint8_t         *paramData;
-  uint32_t         capacity;
   size_t           size;
+  uint32_t         capacity;
 
   command = encoder ? encoder->_priv : NULL;
   device  = encoder ? cuda_device(encoder->_device) : NULL;
-  if (!command || command->recordResult != GPU_OK || !command->pipeline ||
-      !cuda__paramsBound(command) || !device ||
-      encoder->_workgroupSize[0] == 0u ||
-      encoder->_workgroupSize[1] == 0u ||
-      encoder->_workgroupSize[2] == 0u ||
-      x > device->maxGridDim[0] || y > device->maxGridDim[1] ||
-      z > device->maxGridDim[2]) {
+
+  if (!command || command->recordResult != GPU_OK || !command->pipeline
+      || !cuda__paramsBound(command) || !device
+      || encoder->_workgroupSize[0] == 0u
+      || encoder->_workgroupSize[1] == 0u
+      || encoder->_workgroupSize[2] == 0u
+      || x > device->maxGridDim[0] || y > device->maxGridDim[1]
+      || z > device->maxGridDim[2]) {
     if (command) {
       command->recordResult = GPU_ERROR_INVALID_ARGUMENT;
     }
@@ -370,17 +424,21 @@ cuda_dispatch(GPUComputePassEncoder *encoder,
       command->recordResult = GPU_ERROR_OUT_OF_MEMORY;
       return;
     }
+
     capacity = command->dispatchCapacity * 2u;
+
     if ((size_t)capacity > SIZE_MAX / sizeof(*dispatches)) {
       command->recordResult = GPU_ERROR_OUT_OF_MEMORY;
       return;
     }
-    size       = (size_t)capacity * sizeof(*dispatches);
-    dispatches = realloc(command->dispatches, size);
-    if (!dispatches) {
+
+    size = (size_t)capacity * sizeof(*dispatches);
+
+    if (!(dispatches = realloc(command->dispatches, size))) {
       command->recordResult = GPU_ERROR_OUT_OF_MEMORY;
       return;
     }
+
     command->dispatches       = dispatches;
     command->dispatchCapacity = capacity;
     gpuDeviceRecordHotPathAlloc(encoder->_device, size);
@@ -389,18 +447,20 @@ cuda_dispatch(GPUComputePassEncoder *encoder,
   dispatch = &command->dispatches[command->dispatchCount];
   memset(dispatch, 0, sizeof(*dispatch));
   dispatch->paramDataSize = command->pipeline->paramDataSize;
+
   if (dispatch->paramDataSize <= sizeof(dispatch->inlineParams)) {
     paramData = dispatch->inlineParams;
   } else {
     dispatch->paramDataOffset = command->paramDataCount;
-    paramData = cuda__reserveParamData(encoder,
-                                       command,
-                                       dispatch->paramDataSize);
-    if (!paramData) {
+
+    if (!(paramData = cuda__reserveParamData(encoder,
+                                             command,
+                                             dispatch->paramDataSize))) {
       command->recordResult = GPU_ERROR_OUT_OF_MEMORY;
       return;
     }
   }
+
   if (dispatch->paramDataSize > 0u) {
     memcpy(paramData, command->boundParams, dispatch->paramDataSize);
   }
@@ -424,7 +484,7 @@ cuda_endComputePass(GPUComputePassEncoder *encoder) {
 void
 cuda_initCompute(GPUApiCompute *api) {
   api->createPipeline          = cuda_createComputePipeline;
-  api->destroyComputePipeline = cuda_destroyComputePipeline;
+  api->destroyComputePipeline  = cuda_destroyComputePipeline;
   api->computeCommandEncoder   = cuda_computeCommandEncoder;
   api->setComputePipelineState = cuda_setComputePipeline;
   api->buffer                  = cuda_setComputeBuffer;

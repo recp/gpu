@@ -58,14 +58,12 @@ typedef struct GPUSubgroupMatrixPropertiesEXT {
   bool                              saturatingAccumulation;
 } GPUSubgroupMatrixPropertiesEXT;
 
-/* Enumerates exact supported profiles; pass NULL to query the count. */
+/* enumerates exact supported profiles; pass NULL to query the count. */
 GPU_EXPORT
 GPUResult
-GPUGetSubgroupMatrixPropertiesEXT(
-  const GPUAdapter                   *adapter,
-  uint32_t                           *inoutPropertyCount,
-  GPUSubgroupMatrixPropertiesEXT     *outProperties
-);
+GPUGetSubgroupMatrixPropertiesEXT(const GPUAdapter               *adapter,
+                                  uint32_t                       *inoutPropertyCount,
+                                  GPUSubgroupMatrixPropertiesEXT *outProperties);
 
 #ifdef __cplusplus
 }

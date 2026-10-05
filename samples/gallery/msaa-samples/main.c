@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "../../common/sample_platform.h"
 
 #include <stdio.h>
@@ -44,9 +60,11 @@ device_error(GPUDevice                *device,
 
   (void)device;
   state = userData;
+
   if (!state || !error || state->failed) {
     return;
   }
+
   state->failed = true;
   set_status(error->message ? error->message : "GPU: unknown device error", 1);
   emscripten_cancel_main_loop();
@@ -67,6 +85,7 @@ create_color_targets(WebGPUMSAASamples *state,
   resolveTexture = NULL;
   colorView      = NULL;
   resolveView    = NULL;
+
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   textureInfo.chain.structSize = sizeof(textureInfo);
   textureInfo.label            = "msaa-samples-webgpu-color";
@@ -77,8 +96,8 @@ create_color_targets(WebGPUMSAASamples *state,
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = SAMPLE_COUNT;
-  textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET |
-                                 GPU_TEXTURE_USAGE_SAMPLED;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET | GPU_TEXTURE_USAGE_SAMPLED;
+
   if (GPUCreateTexture(state->device,
                        &textureInfo,
                        &colorTexture) != GPU_OK) {
@@ -93,6 +112,7 @@ create_color_targets(WebGPUMSAASamples *state,
   viewInfo.format           = textureInfo.format;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
+
   if (GPUCreateTextureView(colorTexture, &viewInfo, &colorView) != GPU_OK) {
     GPUDestroyTexture(colorTexture);
     set_status("GPU: failed to create the sampled 4x color view", 1);
@@ -101,6 +121,7 @@ create_color_targets(WebGPUMSAASamples *state,
 
   textureInfo.label       = "msaa-samples-webgpu-resolve";
   textureInfo.sampleCount = 1u;
+
   if (GPUCreateTexture(state->device,
                        &textureInfo,
                        &resolveTexture) != GPU_OK) {
@@ -111,6 +132,7 @@ create_color_targets(WebGPUMSAASamples *state,
   }
 
   viewInfo.label = "msaa-samples-webgpu-resolve-view";
+
   if (GPUCreateTextureView(resolveTexture, &viewInfo, &resolveView) != GPU_OK) {
     GPUDestroyTexture(resolveTexture);
     GPUDestroyTextureView(colorView);
@@ -124,11 +146,13 @@ create_color_targets(WebGPUMSAASamples *state,
   GPUDestroyTextureView(state->resolveView);
   GPUDestroyTexture(state->colorTexture);
   GPUDestroyTexture(state->resolveTexture);
-  state->previewGroup   = NULL;
+  state->previewGroup = NULL;
+
   state->colorTexture   = colorTexture;
   state->resolveTexture = resolveTexture;
   state->colorView      = colorView;
   state->resolveView    = resolveView;
+
   return 1;
 }
 
@@ -139,22 +163,26 @@ resize_canvas(WebGPUMSAASamples *state) {
 
   oldWidth  = state->width;
   oldHeight = state->height;
+
   if (!resize_webgpu_canvas(state->swapchain,
                             &state->width,
                             &state->height)) {
     return 0;
   }
+
   if (oldWidth == state->width && oldHeight == state->height) {
     return 1;
   }
+
   if (state->swapchain) {
-    if (!create_color_targets(state, state->width, state->height) ||
-        (state->shaderLayout && !create_group(state))) {
+    if (!create_color_targets(state, state->width, state->height)
+        || (state->shaderLayout && !create_group(state))) {
       state->width  = 0u;
       state->height = 0u;
       return 0;
     }
   }
+
   return 1;
 }
 
@@ -166,71 +194,75 @@ create_shader(WebGPUMSAASamples *state) {
   void                          *artifact;
   uint64_t                       artifactSize;
   uint32_t                       entryCount;
+  uint32_t                       i;
   GPUResult                      result;
 
   artifact     = NULL;
   artifactSize = 0u;
+
   if (!read_file("/msaa_samples.us", &artifact, &artifactSize)) {
     set_status("GPU: failed to read /msaa_samples.us", 1);
     return 0;
   }
+
   result = GPUCreateShaderLibraryFromUSL(state->device,
                                          artifact,
                                          artifactSize,
                                          &state->library);
   free(artifact);
-  if (result != GPU_OK || !state->library ||
-      GPUCreateShaderLayout(state->device,
-                            state->library,
-                            &state->shaderLayout) != GPU_OK ||
-      !state->shaderLayout ||
-      state->shaderLayout->bindGroupLayoutCount != 1u ||
-      !state->shaderLayout->bindGroupLayouts ||
-      !state->shaderLayout->bindGroupLayouts[0]) {
+
+  if (result != GPU_OK || !state->library
+      || GPUCreateShaderLayout(state->device,
+                               state->library,
+                               &state->shaderLayout) != GPU_OK
+      || !state->shaderLayout
+      || state->shaderLayout->bindGroupLayoutCount != 1u
+      || !state->shaderLayout->bindGroupLayouts
+      || !state->shaderLayout->bindGroupLayouts[0]) {
     set_status("GPU: unexpected MSAA sample reflection", 1);
     return 0;
   }
 
-  entries = GPUGetBindGroupLayoutEntries(
-    state->shaderLayout->bindGroupLayouts[0],
-    &entryCount
-  );
+  entries      = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[0], &entryCount);
   msaaEntry    = NULL;
   resolveEntry = NULL;
-  for (uint32_t i = 0u; entries && i < entryCount; i++) {
+
+  for (i = 0u; entries && i < entryCount; i++) {
     if (entries[i].binding == 0u) {
       msaaEntry = &entries[i];
     } else if (entries[i].binding == 1u) {
       resolveEntry = &entries[i];
     }
   }
-  if (entryCount != 2u || !msaaEntry || !resolveEntry ||
-      msaaEntry->bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      msaaEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      msaaEntry->sampledTexture.viewType != GPU_TEXTURE_VIEW_2D ||
-      msaaEntry->sampledTexture.sampleType !=
-        GPU_TEXTURE_SAMPLE_TYPE_UNFILTERABLE_FLOAT ||
-      !msaaEntry->sampledTexture.multisampled ||
-      resolveEntry->bindingType != GPU_BINDING_SAMPLED_TEXTURE ||
-      resolveEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT ||
-      resolveEntry->sampledTexture.viewType != GPU_TEXTURE_VIEW_2D ||
-      resolveEntry->sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT ||
-      resolveEntry->sampledTexture.multisampled) {
+
+  if (entryCount != 2u || !msaaEntry || !resolveEntry
+      || msaaEntry->bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || msaaEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT
+      || msaaEntry->sampledTexture.viewType != GPU_TEXTURE_VIEW_2D
+      || msaaEntry->sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_UNFILTERABLE_FLOAT
+      || !msaaEntry->sampledTexture.multisampled
+      || resolveEntry->bindingType != GPU_BINDING_SAMPLED_TEXTURE
+      || resolveEntry->visibility != GPU_SHADER_STAGE_FRAGMENT_BIT
+      || resolveEntry->sampledTexture.viewType != GPU_TEXTURE_VIEW_2D
+      || resolveEntry->sampledTexture.sampleType != GPU_TEXTURE_SAMPLE_TYPE_FLOAT
+      || resolveEntry->sampledTexture.multisampled) {
     set_status("GPU: missing reflected MSAA or resolve texture binding", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_pipelines(WebGPUMSAASamples *state) {
-  GPURenderPipelineCreateInfo sourceInfo  = {0};
-  GPURenderPipelineCreateInfo previewInfo = {0};
+  GPURenderPipelineCreateInfo sourceInfo   = {0};
+  GPURenderPipelineCreateInfo previewInfo  = {0};
   GPUColorTargetState         sourceColor  = {0};
   GPUColorTargetState         previewColor = {0};
 
   sourceColor.format          = GPU_FORMAT_RGBA8_UNORM;
   sourceColor.blend.writeMask = GPU_COLOR_WRITE_ALL;
+
   previewColor.format          = GPUGetSwapchainFormat(state->swapchain);
   previewColor.blend.writeMask = GPU_COLOR_WRITE_ALL;
 
@@ -248,93 +280,108 @@ create_pipelines(WebGPUMSAASamples *state) {
   sourceInfo.frontFace               = GPU_FRONT_FACE_CCW;
   sourceInfo.multisample.sampleCount = SAMPLE_COUNT;
   sourceInfo.multisample.sampleMask  = UINT32_MAX;
+
   if (GPUCreateRenderPipeline(state->device,
                               &sourceInfo,
-                              &state->sourcePipeline) != GPU_OK ||
-      !state->sourcePipeline) {
+                              &state->sourcePipeline) != GPU_OK
+      || !state->sourcePipeline) {
     set_status("GPU: failed to create the multisampled source pipeline", 1);
     return 0;
   }
 
-  previewInfo                           = sourceInfo;
-  previewInfo.label                     = "msaa-samples-webgpu-preview";
-  previewInfo.vertexEntry               = "sample_preview_vs";
-  previewInfo.fragmentEntry             = "resolve_preview_fs";
-  previewInfo.pColorTargets             = &previewColor;
-  previewInfo.multisample.sampleCount   = 1u;
+  previewInfo                         = sourceInfo;
+  previewInfo.label                   = "msaa-samples-webgpu-preview";
+  previewInfo.vertexEntry             = "sample_preview_vs";
+  previewInfo.fragmentEntry           = "resolve_preview_fs";
+  previewInfo.pColorTargets           = &previewColor;
+  previewInfo.multisample.sampleCount = 1u;
+
   if (GPUCreateRenderPipeline(state->device,
                               &previewInfo,
-                              &state->resolvePipeline) != GPU_OK ||
-      !state->resolvePipeline) {
+                              &state->resolvePipeline) != GPU_OK
+      || !state->resolvePipeline) {
     set_status("GPU: failed to create the MSAA resolve preview pipeline", 1);
     return 0;
   }
 
   previewInfo.label         = "msaa-samples-webgpu-sample-preview";
   previewInfo.fragmentEntry = "sample_preview_fs";
+
   if (GPUCreateRenderPipeline(state->device,
                               &previewInfo,
-                              &state->samplePipeline) != GPU_OK ||
-      !state->samplePipeline) {
+                              &state->samplePipeline) != GPU_OK
+      || !state->samplePipeline) {
     set_status("GPU: failed to create the per-sample preview pipeline", 1);
     return 0;
   }
+
   return 1;
 }
 
 static int
 create_group(WebGPUMSAASamples *state) {
-  GPUBindGroup          *group;
   GPUBindGroupEntry      entries[2] = {0};
   GPUBindGroupCreateInfo info       = {0};
+  GPUBindGroup          *group;
 
-  group                  = NULL;
+  group = NULL;
+
   entries[0].textureView = state->colorView;
   entries[0].binding     = 0u;
   entries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
   entries[1].textureView = state->resolveView;
   entries[1].binding     = 1u;
   entries[1].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+
   info.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
   info.chain.structSize = sizeof(info);
   info.label            = "msaa-samples-webgpu-group";
   info.layout           = state->shaderLayout->bindGroupLayouts[0];
   info.pEntries         = entries;
   info.entryCount       = 2u;
+
   if (GPUCreateBindGroup(state->device,
                          &info,
-                         &group) != GPU_OK ||
-      !group) {
+                         &group) != GPU_OK
+      || !group) {
     set_status("GPU: failed to create the MSAA sample bind group", 1);
     return 0;
   }
+
   state->previewGroup = group;
+
   return 1;
 }
 
 static void
 render_frame(void *userData) {
-  WebGPUMSAASamples            *state;
-  GPUFrame                     *frame;
-  GPUCommandBuffer             *cmdb;
-  GPURenderPassEncoder         *pass;
-  GPUTextureBarrier             textureBarriers[2] = {0};
-  GPUBarrierBatch               barrier            = {0};
-  GPURenderPassColorAttachment  color              = {0};
-  GPURenderPassCreateInfo       passInfo           = {0};
-  GPUViewport                   viewport           = {0};
+  GPUTextureBarrier            textureBarriers[2] = {0};
+  GPUFrameStats                stats;
+  GPURenderPassCreateInfo      passInfo           = {0};
+  GPUBarrierBatch              barrier            = {0};
+  GPURenderPassColorAttachment color              = {0};
+  GPUViewport                  viewport           = {0};
+  WebGPUMSAASamples           *state;
+  GPUFrame                    *frame;
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassEncoder        *pass;
 
   state = userData;
-  if (!resize_canvas(state)) return;
 
-  frame = GPUBeginFrame(state->swapchain);
-  if (!frame) return;
+  if (!resize_canvas(state)) {
+    return;
+  }
+
+  if (!(frame = GPUBeginFrame(state->swapchain))) {
+    return;
+  }
 
   cmdb = NULL;
+
   if (GPUAcquireCommandBuffer(state->queue,
                               "msaa-samples-webgpu-frame",
-                              &cmdb) != GPU_OK ||
-      !cmdb) {
+                              &cmdb) != GPU_OK
+      || !cmdb) {
     GPUEndFrame(frame);
     return;
   }
@@ -347,15 +394,17 @@ render_frame(void *userData) {
   color.clearColor.float32[1] = 0.025f;
   color.clearColor.float32[2] = 0.065f;
   color.clearColor.float32[3] = 1.0f;
+
   passInfo.label                = "msaa-samples-webgpu-source-pass";
   passInfo.pColorAttachments    = &color;
   passInfo.colorAttachmentCount = 1u;
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
   }
+
   GPUBindRenderPipeline(pass, state->sourcePipeline);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
@@ -365,12 +414,14 @@ render_frame(void *userData) {
   textureBarriers[0].dstAccess  = GPU_ACCESS_SHADER_READ;
   textureBarriers[0].mipCount   = 1u;
   textureBarriers[0].layerCount = 1u;
-  textureBarriers[1]             = textureBarriers[0];
-  textureBarriers[1].texture     = state->resolveTexture;
+  textureBarriers[1]            = textureBarriers[0];
+  textureBarriers[1].texture    = state->resolveTexture;
+
   barrier.pTextureBarriers    = textureBarriers;
   barrier.srcStages           = GPU_STAGE_FRAGMENT;
   barrier.dstStages           = GPU_STAGE_FRAGMENT;
   barrier.textureBarrierCount = 2u;
+
   GPUEncodeBarriers(cmdb, &barrier);
 
   color.view                  = GPUFrameGetTargetView(frame);
@@ -380,23 +431,27 @@ render_frame(void *userData) {
   color.clearColor.float32[0] = 0.006f;
   color.clearColor.float32[1] = 0.012f;
   color.clearColor.float32[2] = 0.034f;
-  passInfo.label              = "msaa-samples-webgpu-preview-pass";
-  pass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!pass) {
+
+  passInfo.label = "msaa-samples-webgpu-preview-pass";
+
+  if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
     return;
   }
+
   viewport.width    = (float)state->width;
   viewport.height   = (float)state->height * 0.5f;
   viewport.minDepth = 0.0f;
   viewport.maxDepth = 1.0f;
+
   GPUBindRenderPipeline(pass, state->resolvePipeline);
   GPUBindRenderGroup(pass, 0u, state->previewGroup, 0u, NULL);
   GPUSetViewport(pass, &viewport);
   GPUDraw(pass, 6u, 1u, 0u, 0u);
 
   viewport.y = viewport.height;
+
   GPUBindRenderPipeline(pass, state->samplePipeline);
   GPUBindRenderGroup(pass, 0u, state->previewGroup, 0u, NULL);
   GPUSetViewport(pass, &viewport);
@@ -409,12 +464,11 @@ render_frame(void *userData) {
   }
 
   state->frameCount++;
-  if (state->frameCount > WARM_FRAME_COUNT) {
-    GPUFrameStats stats;
 
-    if (GPUGetLastFrameStats(state->device, &stats) == GPU_OK &&
-        (stats.drawCalls != 3u || stats.hotPathAllocCount != 0u ||
-         stats.hotPathFreeCount != 0u)) {
+  if (state->frameCount > WARM_FRAME_COUNT) {
+    if (GPUGetLastFrameStats(state->device, &stats) == GPU_OK
+        && (stats.drawCalls != 3u || stats.hotPathAllocCount != 0u
+            || stats.hotPathFreeCount != 0u)) {
       set_status("GPU: invalid warm MSAA sample frame stats", 1);
       emscripten_cancel_main_loop();
     }
@@ -422,14 +476,15 @@ render_frame(void *userData) {
 }
 
 static void
-webgpu_ready(GPUResult  result,
+webgpu_ready(GPUResult   result,
              GPUAdapter *adapter,
              GPUDevice  *device,
              void       *userData) {
-  WebGPUMSAASamples *state;
   GPURuntimeConfig   runtime = {0};
+  WebGPUMSAASamples *state;
 
   state = userData;
+
   if (result != GPU_OK || !adapter || !device) {
     set_status(!adapter ? "GPU: failed to request WebGPU adapter"
                         : "GPU: failed to request WebGPU device",
@@ -440,40 +495,44 @@ webgpu_ready(GPUResult  result,
   state->adapter = adapter;
   state->device  = device;
   state->queue   = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (!state->queue || GPUConfigureRuntime(device, &runtime) != GPU_OK) {
     set_status("GPU: failed to configure the WebGPU runtime", 1);
     return;
   }
+
   if (GPUSetDeviceErrorCallback(device, device_error, state) != GPU_OK) {
     set_status("GPU: failed to install the WebGPU error callback", 1);
     return;
   }
 
-  state->surface = GPUCreateSurfaceFromNative(state->instance,
-                                               state->adapter,
-                                               (void *)"#canvas",
-                                               GPU_SURFACE_WEB_CANVAS,
-                                               1.0f);
-  if (!state->surface || !resize_canvas(state)) {
+  if (!(state->surface = GPUCreateSurfaceFromNative(state->instance,
+                                                    state->adapter,
+                                                    (void *)"#canvas",
+                                                    GPU_SURFACE_WEB_CANVAS,
+                                                    1.0f))
+      || !resize_canvas(state)) {
     set_status("GPU: failed to create the WebGPU canvas surface", 1);
     return;
   }
-  state->swapchain = GPUCreateSwapchainDefault(device,
-                                                state->surface,
-                                                state->width,
-                                                state->height);
-  if (!state->swapchain) {
+
+  if (!(state->swapchain = GPUCreateSwapchainDefault(device,
+                                                     state->surface,
+                                                     state->width,
+                                                     state->height))) {
     set_status("GPU: failed to create the WebGPU swapchain", 1);
     return;
   }
-  if (!create_color_targets(state, state->width, state->height) ||
-      !create_shader(state) ||
-      !create_pipelines(state) ||
-      !create_group(state)) {
+
+  if (!create_color_targets(state, state->width, state->height)
+      || !create_shader(state)
+      || !create_pipelines(state)
+      || !create_group(state)) {
     return;
   }
 
@@ -491,7 +550,9 @@ main(void) {
   info.label            = "msaa-samples-webgpu-usl";
   info.preferredBackend = GPU_BACKEND_WEBGPU;
   info.enableValidation = true;
+
   result = GPUCreateInstance(&info, &app.instance);
+
   if (result != GPU_OK || !app.instance) {
     set_status("GPU: failed to create the WebGPU instance", 1);
     return 1;
@@ -502,5 +563,6 @@ main(void) {
                                  &app.request,
                                  webgpu_ready,
                                  &app);
+
   return result == GPU_OK ? 0 : 1;
 }

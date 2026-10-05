@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <gpu/gpu.h>
 
 #include <stdint.h>
@@ -19,21 +35,20 @@ typedef struct TaskParams {
   float    tint[4];
 } TaskParams;
 
-static void *
+static void*
 read_file(const char *path, uint64_t *outSize) {
   FILE *file;
   void *data;
   long  size;
 
-  file = fopen(path, "rb");
-  if (!file || fseek(file, 0, SEEK_END) != 0 ||
-      (size = ftell(file)) <= 0 || fseek(file, 0, SEEK_SET) != 0) {
-    if (file) fclose(file);
+  if (!(file = fopen(path, "rb")) || fseek(file, 0, SEEK_END) != 0
+      || (size = ftell(file)) <= 0 || fseek(file, 0, SEEK_SET) != 0) {
+    if (file)
+      fclose(file);
     return NULL;
   }
 
-  data = malloc((size_t)size);
-  if (!data || fread(data, 1u, (size_t)size, file) != (size_t)size) {
+  if (!(data = malloc((size_t)size)) || fread(data, 1u, (size_t)size, file) != (size_t)size) {
     free(data);
     fclose(file);
     return NULL;
@@ -41,6 +56,7 @@ read_file(const char *path, uint64_t *outSize) {
 
   fclose(file);
   *outSize = (uint64_t)size;
+
   return data;
 }
 
@@ -48,46 +64,56 @@ static int
 mesh_layout_matches(GPUShaderLayout *layout, int meshOnly) {
   const GPUBindGroupLayoutEntry *entries;
   uint32_t                       entryCount;
+  uint32_t                       i;
 
   if (!layout || !layout->pipelineLayout) {
     return 0;
   }
-  if (meshOnly) return layout->bindGroupLayoutCount == 0u;
-  if (layout->bindGroupLayoutCount != 1u || !layout->bindGroupLayouts ||
-      !layout->bindGroupLayouts[0]) return 0;
+
+  if (meshOnly)
+    return layout->bindGroupLayoutCount == 0u;
+
+  if (layout->bindGroupLayoutCount != 1u || !layout->bindGroupLayouts
+      || !layout->bindGroupLayouts[0])
+    return 0;
 
   entryCount = 0u;
-  entries = GPUGetBindGroupLayoutEntries(layout->bindGroupLayouts[0],
-                                         &entryCount);
-  for (uint32_t i = 0u; entries && i < entryCount; i++) {
-    if (entries[i].binding == 0u &&
-        entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
-        entries[i].visibility == GPU_SHADER_STAGE_TASK_BIT) {
+  entries    = GPUGetBindGroupLayoutEntries(layout->bindGroupLayouts[0],
+                                            &entryCount);
+
+  for (i = 0u; entries && i < entryCount; i++) {
+    if (entries[i].binding == 0u
+        && entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER
+        && entries[i].visibility == GPU_SHADER_STAGE_TASK_BIT) {
       return 1;
     }
   }
+
   return 0;
 }
 
 static int
 mesh_pixels_match(const uint8_t pixels[MESH_PIXEL_BYTES], int meshOnly) {
-  uint32_t coloredPixels;
-  uint32_t leftPixels;
-  uint32_t rightPixels;
+  const uint8_t *pixel;
+  uint32_t       coloredPixels;
+  uint32_t       leftPixels;
+  uint32_t       rightPixels;
+  uint32_t       i;
+  uint32_t       rgb;
+  uint32_t       x;
 
   coloredPixels = 0u;
   leftPixels    = 0u;
   rightPixels   = 0u;
-  for (uint32_t i = 0u; i < MESH_TARGET_WIDTH * MESH_TARGET_HEIGHT; i++) {
-    const uint8_t *pixel;
-    uint32_t       rgb;
-    uint32_t       x;
 
+  for (i = 0u; i < MESH_TARGET_WIDTH * MESH_TARGET_HEIGHT; i++) {
     pixel = &pixels[i * 4u];
     rgb   = (uint32_t)pixel[0] + pixel[1] + pixel[2];
+
     if (rgb > 48u && pixel[3] > 240u) {
       coloredPixels++;
       x = i % MESH_TARGET_WIDTH;
+
       if (x < MESH_TARGET_WIDTH / 2u) {
         leftPixels++;
       } else {
@@ -95,10 +121,12 @@ mesh_pixels_match(const uint8_t pixels[MESH_PIXEL_BYTES], int meshOnly) {
       }
     }
   }
-  if (coloredPixels >= 2u && leftPixels > 0u &&
-      (meshOnly ? rightPixels > 0u : rightPixels == 0u)) {
+
+  if (coloredPixels >= 2u && leftPixels > 0u
+      && (meshOnly ? rightPixels > 0u : rightPixels == 0u)) {
     return 1;
   }
+
   fprintf(stderr,
           "mesh pixels colored=%u left=%u right=%u\n",
           coloredPixels,
@@ -112,49 +140,50 @@ test_mesh_draw(GPUDevice  *device,
                const void *artifact,
                uint64_t    artifactSize,
                int         meshOnly) {
-  const TaskParams taskParams = {
+  const TaskParams             taskParams = {
     .meshGroups = {1u, 1u, 1u, 0u},
     .offset     = {0.0f, 0.0f, 0.0f, 0.0f},
     .tint       = {1.0f, 0.75f, 0.5f, 1.0f}
   };
-  GPUQueue                     *queue;
-  GPUShaderLibrary             *library;
-  GPUShaderLayout              *shaderLayout;
-  GPUPipelineCache             *pipelineCache;
-  GPURenderPipeline            *pipeline;
-  GPURenderPipeline            *asyncPipeline;
-  GPURenderPipeline            *cachedPipeline;
-  GPUBuffer                    *taskBuffer;
-  GPUBuffer                    *readbackBuffer;
-  GPUBindGroup                 *taskGroup;
-  GPUTexture                   *target;
-  GPUTextureView               *targetView;
-  GPUCommandBuffer             *cmdb;
-  GPURenderPassEncoder         *renderPass;
-  GPUTransferPassEncoder           *copyPass;
-  GPUFence                     *fence;
-  GPUMeshPipelineEXT            meshInfo      = {0};
-  GPUPipelineCacheCreateInfo    cacheInfo     = {0};
-  GPUPipelineCompileHandle      compileHandle = {0};
-  GPUPipelineCompileStatus      compileStatus = GPU_PIPELINE_COMPILE_PENDING;
-  GPUCacheStats                 cacheStats     = {0};
-  GPUColorTargetState           colorTarget   = {0};
-  GPURenderPipelineCreateInfo   pipelineInfo  = {0};
-  GPUBufferCreateInfo           bufferInfo    = {0};
-  GPUBindGroupEntry             taskEntry     = {0};
-  GPUBindGroupCreateInfo        groupInfo     = {0};
-  GPUTextureCreateInfo          textureInfo   = {0};
-  GPUTextureViewCreateInfo      viewInfo      = {0};
-  GPURenderPassColorAttachment  color         = {0};
-  GPURenderPassCreateInfo       passInfo      = {0};
-  GPUViewport                   viewport      = {0};
-  GPUScissorRect                scissor       = {0};
-  GPUTextureBarrier             textureBarrier = {0};
-  GPUBarrierBatch               barrierBatch  = {0};
-  GPUBufferTextureCopyRegion    copyRegion    = {0};
-  GPUQueueSubmitInfo            submitInfo    = {0};
-  uint8_t                       pixels[MESH_PIXEL_BYTES] = {0};
-  int                           ok;
+  GPUQueue                    *queue;
+  GPUShaderLibrary            *library;
+  GPUShaderLayout             *shaderLayout;
+  GPUPipelineCache            *pipelineCache;
+  GPURenderPipeline           *pipeline;
+  GPURenderPipeline           *asyncPipeline;
+  GPURenderPipeline           *cachedPipeline;
+  GPUBuffer                   *taskBuffer;
+  GPUBuffer                   *readbackBuffer;
+  GPUBindGroup                *taskGroup;
+  GPUTexture                  *target;
+  GPUTextureView              *targetView;
+  GPUCommandBuffer            *cmdb;
+  GPURenderPassEncoder        *renderPass;
+  GPUTransferPassEncoder      *copyPass;
+  GPUFence                    *fence;
+  GPUMeshPipelineEXT           meshInfo                 = {0};
+  GPUPipelineCacheCreateInfo   cacheInfo                = {0};
+  GPUPipelineCompileHandle     compileHandle            = {0};
+  GPUPipelineCompileStatus     compileStatus = GPU_PIPELINE_COMPILE_PENDING;
+  GPUCacheStats                cacheStats               = {0};
+  GPUColorTargetState          colorTarget              = {0};
+  GPURenderPipelineCreateInfo  pipelineInfo             = {0};
+  GPUBufferCreateInfo          bufferInfo               = {0};
+  GPUBindGroupEntry            taskEntry                = {0};
+  GPUBindGroupCreateInfo       groupInfo                = {0};
+  GPUTextureCreateInfo         textureInfo              = {0};
+  GPUTextureViewCreateInfo     viewInfo                 = {0};
+  GPURenderPassColorAttachment color                    = {0};
+  GPURenderPassCreateInfo      passInfo                 = {0};
+  GPUViewport                  viewport                 = {0};
+  GPUScissorRect               scissor                  = {0};
+  GPUTextureBarrier            textureBarrier           = {0};
+  GPUBarrierBatch              barrierBatch             = {0};
+  GPUBufferTextureCopyRegion   copyRegion               = {0};
+  GPUQueueSubmitInfo           submitInfo               = {0};
+  uint8_t                      pixels[MESH_PIXEL_BYTES] = {0};
+  int                          ok;
+  uint32_t                     i;
 
   queue          = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   library        = NULL;
@@ -174,47 +203,49 @@ test_mesh_draw(GPUDevice  *device,
   fence          = NULL;
   ok             = 0;
 
-  if (!queue ||
-      GPUCreateShaderLibraryFromUSL(device,
-                                    artifact,
-                                    artifactSize,
-                                    &library) != GPU_OK ||
-      !library ||
-      GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK ||
-      !mesh_layout_matches(shaderLayout, meshOnly)) {
+  if (!queue
+      || GPUCreateShaderLibraryFromUSL(device,
+                                       artifact,
+                                       artifactSize,
+                                       &library) != GPU_OK
+      || !library
+      || GPUCreateShaderLayout(device, library, &shaderLayout) != GPU_OK
+      || !mesh_layout_matches(shaderLayout, meshOnly)) {
     fprintf(stderr, "failed to create mesh shader layout\n");
     goto cleanup;
   }
 
-  meshInfo.chain.sType      = GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT;
-  meshInfo.chain.structSize = sizeof(meshInfo);
-  meshInfo.taskEntry        = meshOnly ? NULL : "task_main";
-  meshInfo.meshEntry        = "mesh_main";
-  colorTarget.format        = GPU_FORMAT_RGBA8_UNORM;
-  colorTarget.blend.writeMask = GPU_COLOR_WRITE_ALL;
-  pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
-  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
-  pipelineInfo.chain.pNext      = &meshInfo.chain;
-  pipelineInfo.label            = "usl-mesh";
-  pipelineInfo.layout           = shaderLayout->pipelineLayout;
-  pipelineInfo.library          = library;
-  pipelineInfo.fragmentEntry    = "fragment_main";
-  pipelineInfo.colorTargetCount = 1u;
-  pipelineInfo.pColorTargets    = &colorTarget;
-  pipelineInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  pipelineInfo.cullMode          = GPU_CULL_MODE_NONE;
-  pipelineInfo.frontFace         = GPU_FRONT_FACE_CCW;
+  meshInfo.chain.sType                 = GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT;
+  meshInfo.chain.structSize            = sizeof(meshInfo);
+  meshInfo.taskEntry                   = meshOnly ? NULL : "task_main";
+  meshInfo.meshEntry                   = "mesh_main";
+  colorTarget.format                   = GPU_FORMAT_RGBA8_UNORM;
+  colorTarget.blend.writeMask          = GPU_COLOR_WRITE_ALL;
+  pipelineInfo.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize        = sizeof(pipelineInfo);
+  pipelineInfo.chain.pNext             = &meshInfo.chain;
+  pipelineInfo.label                   = "usl-mesh";
+  pipelineInfo.layout                  = shaderLayout->pipelineLayout;
+  pipelineInfo.library                 = library;
+  pipelineInfo.fragmentEntry           = "fragment_main";
+  pipelineInfo.colorTargetCount        = 1u;
+  pipelineInfo.pColorTargets           = &colorTarget;
+  pipelineInfo.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipelineInfo.cullMode                = GPU_CULL_MODE_NONE;
+  pipelineInfo.frontFace               = GPU_FRONT_FACE_CCW;
   pipelineInfo.multisample.sampleCount = 1u;
   pipelineInfo.multisample.sampleMask  = UINT32_MAX;
-  pipelineInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_LINE_LIST;
-  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) !=
-        GPU_ERROR_INVALID_ARGUMENT || pipeline) {
+  pipelineInfo.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_LINE_LIST;
+
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_ERROR_INVALID_ARGUMENT || pipeline) {
     fprintf(stderr, "mesh pipeline accepted mismatched output topology\n");
     goto cleanup;
   }
+
   pipelineInfo.primitiveTopology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK ||
-      !pipeline) {
+
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &pipeline) != GPU_OK
+      || !pipeline) {
     fprintf(stderr, "failed to create mesh pipeline\n");
     goto cleanup;
   }
@@ -223,17 +254,19 @@ test_mesh_draw(GPUDevice  *device,
   cacheInfo.chain.structSize = sizeof(cacheInfo);
   cacheInfo.label            = "usl-mesh-async";
   GPUResetStats(device);
-  if (GPUCreatePipelineCache(device, &cacheInfo, &pipelineCache) != GPU_OK ||
-      !pipelineCache ||
-      GPUCompileRenderPipelineAsync(device,
-                                    pipelineCache,
-                                    &pipelineInfo,
-                                    &compileHandle) != GPU_OK ||
-      compileHandle.id == 0u) {
+
+  if (GPUCreatePipelineCache(device, &cacheInfo, &pipelineCache) != GPU_OK
+      || !pipelineCache
+      || GPUCompileRenderPipelineAsync(device,
+                                       pipelineCache,
+                                       &pipelineInfo,
+                                       &compileHandle) != GPU_OK
+      || compileHandle.id == 0u) {
     fprintf(stderr, "failed to enqueue async mesh pipeline\n");
     goto cleanup;
   }
-  for (uint32_t i = 0u; i < 1000000u; i++) {
+
+  for (i = 0u; i < 1000000u; i++) {
     if (GPUPollRenderPipelineCompile(device,
                                      compileHandle,
                                      &compileStatus,
@@ -241,22 +274,27 @@ test_mesh_draw(GPUDevice  *device,
       fprintf(stderr, "failed to poll async mesh pipeline\n");
       goto cleanup;
     }
+
     if (compileStatus != GPU_PIPELINE_COMPILE_PENDING) {
       break;
     }
   }
+
   if (compileStatus != GPU_PIPELINE_COMPILE_READY || !asyncPipeline) {
     fprintf(stderr, "async mesh pipeline did not become ready\n");
     goto cleanup;
   }
+
   pipelineInfo.cache = pipelineCache;
-  if (GPUCreateRenderPipeline(device, &pipelineInfo, &cachedPipeline) != GPU_OK ||
-      !cachedPipeline ||
-      GPUGetCacheStats(device, &cacheStats) != GPU_OK ||
-      cacheStats.pipelineMisses != 1u || cacheStats.pipelineHits != 1u) {
+
+  if (GPUCreateRenderPipeline(device, &pipelineInfo, &cachedPipeline) != GPU_OK
+      || !cachedPipeline
+      || GPUGetCacheStats(device, &cacheStats) != GPU_OK
+      || cacheStats.pipelineMisses != 1u || cacheStats.pipelineHits != 1u) {
     fprintf(stderr, "mesh pipeline cache did not produce a hit\n");
     goto cleanup;
   }
+
   GPUDestroyRenderPipeline(cachedPipeline);
   cachedPipeline     = NULL;
   pipelineInfo.cache = NULL;
@@ -270,14 +308,15 @@ test_mesh_draw(GPUDevice  *device,
   bufferInfo.sizeBytes        = sizeof(taskParams);
   bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM |
                                 GPU_BUFFER_USAGE_COPY_DST;
-  if (!meshOnly &&
-      (GPUCreateBuffer(device, &bufferInfo, &taskBuffer) != GPU_OK ||
-      !taskBuffer ||
-      GPUQueueWriteBuffer(queue,
-                          taskBuffer,
-                          0u,
-                          &taskParams,
-                          sizeof(taskParams)) != GPU_OK)) {
+
+  if (!meshOnly
+      && (GPUCreateBuffer(device, &bufferInfo, &taskBuffer) != GPU_OK
+          || !taskBuffer
+          || GPUQueueWriteBuffer(queue,
+                                 taskBuffer,
+                                 0u,
+                                 &taskParams,
+                                 sizeof(taskParams)) != GPU_OK)) {
     fprintf(stderr, "failed to create mesh task buffer\n");
     goto cleanup;
   }
@@ -286,25 +325,27 @@ test_mesh_draw(GPUDevice  *device,
   bufferInfo.sizeBytes = sizeof(pixels);
   bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_DST |
                          GPU_BUFFER_USAGE_COPY_SRC;
-  if (GPUCreateBuffer(device, &bufferInfo, &readbackBuffer) != GPU_OK ||
-      !readbackBuffer) {
+
+  if (GPUCreateBuffer(device, &bufferInfo, &readbackBuffer) != GPU_OK
+      || !readbackBuffer) {
     fprintf(stderr, "failed to create mesh readback buffer\n");
     goto cleanup;
   }
 
   if (!meshOnly) {
-    taskEntry.binding       = 0u;
-    taskEntry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
-    taskEntry.buffer.buffer = taskBuffer;
-    taskEntry.buffer.size   = sizeof(taskParams);
+    taskEntry.binding          = 0u;
+    taskEntry.bindingType      = GPU_BINDING_UNIFORM_BUFFER;
+    taskEntry.buffer.buffer    = taskBuffer;
+    taskEntry.buffer.size      = sizeof(taskParams);
     groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
     groupInfo.chain.structSize = sizeof(groupInfo);
     groupInfo.label            = "mesh-task-group";
     groupInfo.layout           = shaderLayout->bindGroupLayouts[0];
     groupInfo.entryCount       = 1u;
     groupInfo.pEntries         = &taskEntry;
-    if (GPUCreateBindGroup(device, &groupInfo, &taskGroup) != GPU_OK ||
-        !taskGroup) {
+
+    if (GPUCreateBindGroup(device, &groupInfo, &taskGroup) != GPU_OK
+        || !taskGroup) {
       fprintf(stderr, "failed to create mesh task group\n");
       goto cleanup;
     }
@@ -322,6 +363,7 @@ test_mesh_draw(GPUDevice  *device,
   textureInfo.sampleCount      = 1u;
   textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET |
                                  GPU_TEXTURE_USAGE_COPY_SRC;
+
   if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target) {
     fprintf(stderr, "failed to create mesh target\n");
     goto cleanup;
@@ -334,29 +376,30 @@ test_mesh_draw(GPUDevice  *device,
   viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
   viewInfo.mipLevelCount    = 1u;
   viewInfo.arrayLayerCount  = 1u;
-  if (GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK ||
-      !targetView) {
+
+  if (GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK
+      || !targetView) {
     fprintf(stderr, "failed to create mesh target view\n");
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "usl-mesh", &cmdb) != GPU_OK ||
-      !cmdb) {
+  if (GPUAcquireCommandBuffer(queue, "usl-mesh", &cmdb) != GPU_OK
+      || !cmdb) {
     fprintf(stderr, "failed to acquire mesh command buffer\n");
     goto cleanup;
   }
 
-  color.view                  = targetView;
-  color.loadOp                = GPU_LOAD_OP_CLEAR;
-  color.storeOp               = GPU_STORE_OP_STORE;
-  color.clearColor.float32[3] = 1.0f;
+  color.view                    = targetView;
+  color.loadOp                  = GPU_LOAD_OP_CLEAR;
+  color.storeOp                 = GPU_STORE_OP_STORE;
+  color.clearColor.float32[3]   = 1.0f;
   passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   passInfo.chain.structSize     = sizeof(passInfo);
   passInfo.label                = "usl-mesh";
   passInfo.colorAttachmentCount = 1u;
   passInfo.pColorAttachments    = &color;
-  renderPass = GPUBeginRenderPass(cmdb, &passInfo);
-  if (!renderPass) {
+
+  if (!(renderPass = GPUBeginRenderPass(cmdb, &passInfo))) {
     fprintf(stderr, "failed to begin mesh render pass\n");
     goto cleanup;
   }
@@ -367,29 +410,32 @@ test_mesh_draw(GPUDevice  *device,
   scissor.width     = MESH_TARGET_WIDTH;
   scissor.height    = MESH_TARGET_HEIGHT;
   GPUBindRenderPipeline(renderPass, pipeline);
-  if (!meshOnly) GPUBindRenderGroup(renderPass, 0u, taskGroup, 0u, NULL);
+
+  if (!meshOnly)
+    GPUBindRenderGroup(renderPass, 0u, taskGroup, 0u, NULL);
+
   GPUSetViewport(renderPass, &viewport);
   GPUSetScissor(renderPass, &scissor);
   GPUDrawMeshEXT(renderPass, 1u, 1u, 1u);
   GPUEndRenderPass(renderPass);
   renderPass = NULL;
 
-  textureBarrier.texture    = target;
-  textureBarrier.srcAccess  = GPU_ACCESS_COLOR_WRITE;
-  textureBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
-  textureBarrier.mipCount   = 1u;
-  textureBarrier.layerCount = 1u;
+  textureBarrier.texture           = target;
+  textureBarrier.srcAccess         = GPU_ACCESS_COLOR_WRITE;
+  textureBarrier.dstAccess         = GPU_ACCESS_TRANSFER_READ;
+  textureBarrier.mipCount          = 1u;
+  textureBarrier.layerCount        = 1u;
   barrierBatch.srcStages           = GPU_STAGE_FRAGMENT;
   barrierBatch.dstStages           = GPU_STAGE_TRANSFER;
   barrierBatch.textureBarrierCount = 1u;
   barrierBatch.pTextureBarriers    = &textureBarrier;
   GPUEncodeBarriers(cmdb, &barrierBatch);
 
-  copyPass = GPUBeginTransferPass(cmdb, "mesh-readback");
-  if (!copyPass) {
+  if (!(copyPass = GPUBeginTransferPass(cmdb, "mesh-readback"))) {
     fprintf(stderr, "failed to begin mesh copy pass\n");
     goto cleanup;
   }
+
   copyRegion.bytesPerRow        = MESH_TARGET_WIDTH * 4u;
   copyRegion.rowsPerImage       = MESH_TARGET_HEIGHT;
   copyRegion.texture.width      = MESH_TARGET_WIDTH;
@@ -404,33 +450,39 @@ test_mesh_draw(GPUDevice  *device,
     fprintf(stderr, "failed to create mesh fence\n");
     goto cleanup;
   }
+
   submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
   submitInfo.chain.structSize   = sizeof(submitInfo);
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK ||
-      GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
     fprintf(stderr, "mesh submit failed\n");
     cmdb = NULL;
     goto cleanup;
   }
+
   cmdb = NULL;
 
   if (GPUQueueReadBuffer(queue,
                          readbackBuffer,
                          0u,
                          pixels,
-                         sizeof(pixels)) != GPU_OK ||
-      !mesh_pixels_match(pixels, meshOnly)) {
+                         sizeof(pixels)) != GPU_OK
+      || !mesh_pixels_match(pixels, meshOnly)) {
     fprintf(stderr, "mesh readback mismatch\n");
     goto cleanup;
   }
+
   ok = 1;
 
 cleanup:
-  if (copyPass) GPUEndTransferPass(copyPass);
-  if (renderPass) GPUEndRenderPass(renderPass);
+  if (copyPass)
+    GPUEndTransferPass(copyPass);
+  if (renderPass)
+    GPUEndRenderPass(renderPass);
   GPUDestroyFence(fence);
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(target);
@@ -458,15 +510,19 @@ main(int argc, char **argv) {
   GPUResult             result;
   void                 *artifact;
   uint64_t              artifactSize;
-  int                   meshOnly, ok;
+  int                   meshOnly;
+  int                   ok;
 
   if (argc != 3 && argc != 4) {
     fprintf(stderr,
             "usage: mesh <metal|vulkan|dx12> mesh_triangle.us [mesh-only]\n");
     return 1;
   }
+
   meshOnly = argc == 4 && strcmp(argv[3], "mesh-only") == 0;
-  if (argc == 4 && !meshOnly) return 1;
+
+  if (argc == 4 && !meshOnly)
+    return 1;
 
   if (strcmp(argv[1], "metal") == 0) {
     backend = GPU_BACKEND_METAL;
@@ -480,8 +536,8 @@ main(int argc, char **argv) {
   }
 
   artifactSize = 0u;
-  artifact     = read_file(argv[2], &artifactSize);
-  if (!artifact) {
+
+  if (!(artifact = read_file(argv[2], &artifactSize))) {
     fprintf(stderr, "mesh artifact read failed\n");
     return 1;
   }
@@ -490,7 +546,8 @@ main(int argc, char **argv) {
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.preferredBackend = backend;
   instanceInfo.enableValidation = true;
-  instance = NULL;
+  instance                      = NULL;
+
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
     fprintf(stderr, "mesh instance failed\n");
     free(artifact);
@@ -499,12 +556,14 @@ main(int argc, char **argv) {
 
   adapter = NULL;
   result  = gpu_test_request_adapter(instance, &adapter);
+
   if (result != GPU_OK || !adapter) {
     fprintf(stderr, "mesh adapter failed\n");
     GPUDestroyInstance(instance);
     free(artifact);
     return 1;
   }
+
   if (!GPUIsFeatureSupported(adapter, GPU_FEATURE_MESH_SHADER)) {
     puts("mesh shader test skipped: unsupported adapter");
     GPUDestroyInstance(instance);
@@ -513,18 +572,20 @@ main(int argc, char **argv) {
   }
 
   requiredFeature = GPU_FEATURE_MESH_SHADER;
-  deviceInfo.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  deviceInfo.chain.structSize = sizeof(deviceInfo);
-  deviceInfo.label            = "mesh-test-device";
+  deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize      = sizeof(deviceInfo);
+  deviceInfo.label                 = "mesh-test-device";
   deviceInfo.required.featureCount = 1u;
   deviceInfo.required.pFeatures    = &requiredFeature;
   device = NULL;
+
   if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device) {
     fprintf(stderr, "mesh device failed\n");
     GPUDestroyInstance(instance);
     free(artifact);
     return 1;
   }
+
   if (!GPUGetProcAddr(device, "GPUDrawMeshEXT")) {
     fprintf(stderr, "mesh extension lookup failed\n");
     GPUDestroyDevice(device);
@@ -544,5 +605,6 @@ main(int argc, char **argv) {
   }
 
   puts("mesh shader validation passed");
+
   return 0;
 }

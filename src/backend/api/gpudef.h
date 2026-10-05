@@ -77,7 +77,7 @@ typedef struct GPUApi {
   GPUApiRayTracing      rayTracing;
   GPUApiExecutionGraph  executionGraph;
   GPUApiSamplerFeedback samplerFeedback;
-  void                  *reserved;
+  void                 *reserved;
 } GPUApi;
 
 #ifdef __cplusplus

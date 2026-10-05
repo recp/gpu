@@ -61,68 +61,36 @@ typedef struct GPUApiCompute {
                     const GPUComputePipelineCreateInfo *info,
                     GPUComputePipeline                 *pipeline);
 
-  GPUComputePipeline*
-  (*newComputePipeline)(void);
+  GPUComputePipeline * (*newComputePipeline)(void);
 
-  void
-  (*setFunction)(GPUComputePipeline *pipeline, GPUShaderFunction *func);
+  void (*setFunction)(GPUComputePipeline *pipeline, GPUShaderFunction *func);
 
   GPUResult
-  (*setIntersectionFunctions)(
-    GPUComputePipeline            *pipeline,
-    GPUShaderFunction *const      *functions,
-    uint32_t                       functionCount);
+  (*setIntersectionFunctions)(GPUComputePipeline       *pipeline,
+                              GPUShaderFunction *const *functions,
+                              uint32_t                  functionCount);
 
-  GPUComputePipelineState*
-  (*newComputeState)(GPUDevice *device, GPUComputePipeline *pipeline);
+  GPUComputePipelineState * (*newComputeState)(GPUDevice *device, GPUComputePipeline *pipeline);
 
-  void
-  (*destroyComputePipeline)(GPUComputePipeline *pipeline);
+  void (*destroyComputePipeline)(GPUComputePipeline *pipeline);
 
-  GPUComputePassEncoder*
-  (*computeCommandEncoder)(GPUCommandBuffer               *cmdb,
-                           const GPUComputePassCreateInfo *info);
+  GPUComputePassEncoder * (*computeCommandEncoder)(GPUCommandBuffer *cmdb, const GPUComputePassCreateInfo *info);
 
-  void
-  (*setComputePipelineState)(GPUComputePassEncoder *enc,
-                             GPUComputePipelineState *state);
+  void (*setComputePipelineState)(GPUComputePassEncoder *enc, GPUComputePipelineState *state);
 
-  void
-  (*buffer)(GPUComputePassEncoder *enc,
-            GPUBuffer             *buf,
-            uint64_t               off,
-            uint32_t               index);
+  void (*buffer)(GPUComputePassEncoder *enc, GPUBuffer *buf, uint64_t off, uint32_t index);
 
-  void
-  (*texture)(GPUComputePassEncoder *enc,
-             GPUTextureView        *view,
-             uint32_t               index);
+  void (*texture)(GPUComputePassEncoder *enc, GPUTextureView *view, uint32_t index);
 
-  void
-  (*sampler)(GPUComputePassEncoder *enc,
-             GPUSampler            *sampler,
-             uint32_t               index);
+  void (*sampler)(GPUComputePassEncoder *enc, GPUSampler *sampler, uint32_t index);
 
-  void
-  (*accelerationStructure)(GPUComputePassEncoder      *enc,
-                           GPUAccelerationStructureEXT *structure,
-                           uint32_t                     index);
+  void (*accelerationStructure)(GPUComputePassEncoder *enc, GPUAccelerationStructureEXT *structure, uint32_t index);
 
-  void
-  (*pushConstants)(GPUComputePassEncoder *enc,
-                   const void            *data,
-                   uint32_t               sizeBytes);
+  void (*pushConstants)(GPUComputePassEncoder *enc, const void *data, uint32_t sizeBytes);
 
-  void
-  (*dispatch)(GPUComputePassEncoder *enc,
-              uint32_t               x,
-              uint32_t               y,
-              uint32_t               z);
+  void (*dispatch)(GPUComputePassEncoder *enc, uint32_t x, uint32_t y, uint32_t z);
 
-  void
-  (*dispatchIndirect)(GPUComputePassEncoder *enc,
-                      GPUBuffer             *argsBuffer,
-                      uint64_t               argsOffset);
+  void (*dispatchIndirect)(GPUComputePassEncoder *enc, GPUBuffer *argsBuffer, uint64_t argsOffset);
 
   bool
   (*multiDispatchIndirect)(GPUComputePassEncoder *enc,
@@ -131,8 +99,7 @@ typedef struct GPUApiCompute {
                            uint32_t               dispatchCount,
                            uint32_t               strideBytes);
 
-  void
-  (*endEncoding)(GPUComputePassEncoder *enc);
+  void (*endEncoding)(GPUComputePassEncoder *enc);
 } GPUApiCompute;
 
 #ifdef __cplusplus

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "sample_orbit.h"
 
 #include <string.h>
@@ -8,83 +24,104 @@
 
 static SampleOrbit *activeOrbit;
 
+#if defined(__EMSCRIPTEN__)
+static float pinchSpan;
+static bool  installed;
+#endif
+
 static float
 wrap_angle(float angle) {
-  const float pi    = 3.14159265358979323846f;
-  const float tau   = pi * 2.0f;
+  const float pi  = 3.14159265358979323846f;
+  const float tau = pi * 2.0f;
 
   while (angle > pi) {
     angle -= tau;
   }
+
   while (angle < -pi) {
     angle += tau;
   }
+
   return angle;
 }
 
 #if defined(__EMSCRIPTEN__)
 static bool
-mouse_down(int eventType,
+mouse_down(int                         eventType,
            const EmscriptenMouseEvent *event,
            void                       *userData) {
   (void)eventType;
   (void)userData;
+
   if (!event || event->button != 0u) {
     return false;
   }
+
   sample_orbit_pointer_begin((float)event->clientX,
                              (float)event->clientY);
+
   return sample_orbit_active();
 }
 
 static bool
-mouse_move(int eventType,
+mouse_move(int                         eventType,
            const EmscriptenMouseEvent *event,
            void                       *userData) {
   (void)eventType;
   (void)userData;
+
   if (!event || !activeOrbit || !activeOrbit->dragging) {
     return false;
   }
+
   sample_orbit_pointer_move((float)event->clientX,
                             (float)event->clientY);
+
   return true;
 }
 
 static bool
-mouse_up(int eventType,
+mouse_up(int                         eventType,
          const EmscriptenMouseEvent *event,
          void                       *userData) {
   (void)eventType;
   (void)event;
   (void)userData;
+
   if (!activeOrbit || !activeOrbit->dragging) {
     return false;
   }
+
   sample_orbit_pointer_end();
+
   return true;
 }
 
 static bool
-mouse_wheel(int eventType,
+mouse_wheel(int                         eventType,
             const EmscriptenWheelEvent *event,
             void                       *userData) {
   (void)eventType;
   (void)userData;
+
   if (!event || !activeOrbit) {
     return false;
   }
+
   sample_orbit_zoom((float)-event->deltaY * 0.01f);
+
   return true;
 }
 
 static bool
-touch_event(int eventType,
+touch_event(int                         eventType,
             const EmscriptenTouchEvent *event,
             void                       *userData) {
-  static float pinchSpan;
+  float beginDeltaX, beginDeltaY;
+  float moveDeltaX, moveDeltaY, nextSpan;
 
   (void)userData;
+
   if (!event || !activeOrbit) {
     return false;
   }
@@ -92,52 +129,51 @@ touch_event(int eventType,
   switch (eventType) {
     case EMSCRIPTEN_EVENT_TOUCHSTART:
       if (event->numTouches >= 2) {
-        float deltaX, deltaY;
+        beginDeltaX = (float)(event->touches[1].clientX - event->touches[0].clientX);
+        beginDeltaY = (float)(event->touches[1].clientY - event->touches[0].clientY);
+        pinchSpan   = beginDeltaX * beginDeltaX + beginDeltaY * beginDeltaY;
 
-        deltaX = (float)(event->touches[1].clientX -
-                         event->touches[0].clientX);
-        deltaY = (float)(event->touches[1].clientY -
-                         event->touches[0].clientY);
-        pinchSpan = deltaX * deltaX + deltaY * deltaY;
         sample_orbit_pointer_end();
       } else if (event->numTouches > 0) {
         sample_orbit_pointer_begin((float)event->touches[0].clientX,
                                    (float)event->touches[0].clientY);
       }
+
       break;
+
     case EMSCRIPTEN_EVENT_TOUCHMOVE:
       if (event->numTouches >= 2) {
-        float deltaX, deltaY, nextSpan;
+        moveDeltaX = (float)(event->touches[1].clientX - event->touches[0].clientX);
+        moveDeltaY = (float)(event->touches[1].clientY - event->touches[0].clientY);
+        nextSpan   = moveDeltaX * moveDeltaX + moveDeltaY * moveDeltaY;
 
-        deltaX   = (float)(event->touches[1].clientX -
-                           event->touches[0].clientX);
-        deltaY   = (float)(event->touches[1].clientY -
-                           event->touches[0].clientY);
-        nextSpan = deltaX * deltaX + deltaY * deltaY;
         if (pinchSpan > 1.0f) {
           sample_orbit_zoom((nextSpan - pinchSpan) / pinchSpan * 2.0f);
         }
+
         pinchSpan = nextSpan;
       } else if (event->numTouches > 0 && activeOrbit->dragging) {
         sample_orbit_pointer_move((float)event->touches[0].clientX,
                                   (float)event->touches[0].clientY);
       }
+
       break;
+
     case EMSCRIPTEN_EVENT_TOUCHEND:
     case EMSCRIPTEN_EVENT_TOUCHCANCEL:
       pinchSpan = 0.0f;
       sample_orbit_pointer_end();
       break;
+
     default:
       return false;
   }
+
   return true;
 }
 
 static void
 install_web_callbacks(void) {
-  static bool installed;
-
   if (installed) {
     return;
   }
@@ -201,6 +237,7 @@ sample_orbit_update(SampleOrbit *orbit, double time) {
   if (!orbit) {
     return;
   }
+
   if (!orbit->hasTime) {
     orbit->lastTime = time;
     orbit->hasTime  = true;
@@ -209,19 +246,19 @@ sample_orbit_update(SampleOrbit *orbit, double time) {
 
   delta           = time - orbit->lastTime;
   orbit->lastTime = time;
+
   if (delta < 0.0) {
     delta = 0.0;
   } else if (delta > 0.1) {
     delta = 0.1;
   }
+
   if (orbit->dragging) {
     return;
   }
 
-  orbit->yaw   = wrap_angle(orbit->yaw +
-                            orbit->yawSpeed * (float)delta);
-  orbit->pitch = wrap_angle(orbit->pitch +
-                            orbit->pitchSpeed * (float)delta);
+  orbit->yaw   = wrap_angle(orbit->yaw + orbit->yawSpeed * (float)delta);
+  orbit->pitch = wrap_angle(orbit->pitch + orbit->pitchSpeed * (float)delta);
 }
 
 bool
@@ -250,12 +287,11 @@ sample_orbit_pointer_move(float x, float y) {
 
   deltaX = x - activeOrbit->pointerX;
   deltaY = y - activeOrbit->pointerY;
+
   activeOrbit->pointerX = x;
   activeOrbit->pointerY = y;
-  activeOrbit->yaw      = wrap_angle(activeOrbit->yaw +
-                                     deltaX * activeOrbit->sensitivity);
-  activeOrbit->pitch    = wrap_angle(activeOrbit->pitch +
-                                     deltaY * activeOrbit->sensitivity);
+  activeOrbit->yaw      = wrap_angle(activeOrbit->yaw + deltaX * activeOrbit->sensitivity);
+  activeOrbit->pitch    = wrap_angle(activeOrbit->pitch + deltaY * activeOrbit->sensitivity);
 }
 
 void
@@ -272,13 +308,16 @@ sample_orbit_zoom(float amount) {
   if (!activeOrbit || amount == 0.0f) {
     return;
   }
+
   if (amount < -4.0f) {
     amount = -4.0f;
   } else if (amount > 4.0f) {
     amount = 4.0f;
   }
+
   factor            = 1.0f + amount * 0.08f;
   activeOrbit->zoom = activeOrbit->zoom * factor;
+
   if (activeOrbit->zoom < 0.45f) {
     activeOrbit->zoom = 0.45f;
   } else if (activeOrbit->zoom > 2.2f) {

@@ -26,13 +26,8 @@ extern "C" {
 struct GPUApi;
 struct GPUInstance;
 
-typedef void (*GPUBackendAdapterRequestCallback)(GPUResult  result,
-                                                 GPUAdapter *adapter,
-                                                 void       *userData);
-
-typedef void (*GPUBackendDeviceRequestCallback)(GPUResult result,
-                                                GPUDevice *device,
-                                                void      *userData);
+typedef void (*GPUBackendAdapterRequestCallback)(GPUResult result, GPUAdapter *adapter, void *userData);
+typedef void (*GPUBackendDeviceRequestCallback)(GPUResult result, GPUDevice *device, void *userData);
 
 typedef struct GPUQueueCreateInfo {
   GPUQueueFlagBits flags;
@@ -41,9 +36,9 @@ typedef struct GPUQueueCreateInfo {
 } GPUQueueCreateInfo;
 
 typedef enum GPUBackendSubgroupOperationFlagBits {
-  GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT                  = 1u << 0,
-  GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT                = 1u << 1,
-  GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT       = 1u << 2,
+  GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT                   = 1u << 0,
+  GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT                 = 1u << 1,
+  GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT        = 1u << 2,
   GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_NATIVE_BIT = 1u << 3
 } GPUBackendSubgroupOperationFlagBits;
 
@@ -51,62 +46,48 @@ typedef uint32_t GPUBackendSubgroupOperationFlags;
 
 typedef struct GPUApiDevice {
   GPUResult
-  (*requestAdapter)(GPUInstance                      *inst,
-                    GPUPowerPreference                powerPreference,
-                    GPUBackendAdapterRequestCallback  callback,
-                    void                             *userData);
+  (*requestAdapter)(GPUInstance                     *inst,
+                    GPUPowerPreference               powerPreference,
+                    GPUBackendAdapterRequestCallback callback,
+                    void                            *userData);
 
-  GPUAdapter*
-  (*getAvailableAdapters)(GPUInstance   * __restrict inst,
-                          uint32_t maxNumberOfItems);
+  GPUAdapter * (*getAvailableAdapters)(GPUInstance *__restrict inst, uint32_t maxNumberOfItems);
 
-  GPUAdapter*
-  (*selectAdapter)(GPUInstance        * __restrict inst,
-                   GPUAdapter         * __restrict adapters,
-                   GPUPowerPreference              powerPreference);
+  GPUAdapter *
+  (*selectAdapter)(GPUInstance *__restrict inst,
+                   GPUAdapter  *__restrict adapters,
+                   GPUPowerPreference      powerPreference);
 
-  void
-  (*destroyAdapter)(GPUAdapter * __restrict adapter);
+  void (*destroyAdapter)(GPUAdapter *__restrict adapter);
 
-  GPUResult
-  (*getAdapterProperties)(const GPUAdapter     * __restrict adapter,
-                          GPUAdapterProperties * __restrict outProps);
+  GPUResult (*getAdapterProperties)(const GPUAdapter *__restrict adapter, GPUAdapterProperties *__restrict outProps);
 
-  GPUResult
-  (*getAdapterIdentity)(const GPUAdapter   * __restrict adapter,
-                        GPUAdapterIdentity * __restrict outIdentity);
+  GPUResult (*getAdapterIdentity)(const GPUAdapter *__restrict adapter, GPUAdapterIdentity *__restrict outIdentity);
+
+  bool (*supportsFeature)(const GPUAdapter *__restrict adapter, GPUFeature feature);
 
   bool
-  (*supportsFeature)(const GPUAdapter * __restrict adapter,
-                     GPUFeature feature);
+  (*supportsSubgroupOperations)(const GPUAdapter     *__restrict adapter,
+                                GPUShaderStageFlags              stage,
+                                GPUBackendSubgroupOperationFlags operations);
 
-  bool
-  (*supportsSubgroupOperations)(
-    const GPUAdapter                 * __restrict adapter,
-    GPUShaderStageFlags                           stage,
-    GPUBackendSubgroupOperationFlags              operations
-  );
+  void (*getLimits)(const GPUAdapter *__restrict adapter, GPULimits *__restrict outLimits);
 
   void
-  (*getLimits)(const GPUAdapter * __restrict adapter,
-               GPULimits       * __restrict outLimits);
-
-  void
-  (*getFormatCapabilities)(const GPUAdapter      * __restrict adapter,
-                           GPUFormat              format,
-                           GPUFormatCapabilities * __restrict outCaps);
+  (*getFormatCapabilities)(const GPUAdapter      *__restrict adapter,
+                           GPUFormat                         format,
+                           GPUFormatCapabilities *__restrict outCaps);
 
   GPUResult
-  (*getSubgroupMatrixProperties)(
-    const GPUAdapter               * __restrict adapter,
-    uint32_t                       * __restrict inoutPropertyCount,
-    GPUSubgroupMatrixPropertiesEXT * __restrict outProperties
-  );
+  (*getSubgroupMatrixProperties)(const GPUAdapter               *__restrict adapter,
+                                 uint32_t                       *__restrict inoutPropertyCount,
+                                 GPUSubgroupMatrixPropertiesEXT *__restrict outProperties);
 
-  GPUDevice* (*createDevice)(GPUAdapter               * __restrict adapter,
-                             const GPUQueueCreateInfo   queCI[],
-                             uint32_t                   nQueCI,
-                             uint64_t                   enabledFeatureMask);
+  GPUDevice *
+  (*createDevice)(GPUAdapter   *__restrict adapter,
+                  const GPUQueueCreateInfo queCI[],
+                  uint32_t                 nQueCI,
+                  uint64_t                 enabledFeatureMask);
 
   GPUResult
   (*requestDevice)(GPUAdapter                     *adapter,
@@ -116,8 +97,9 @@ typedef struct GPUApiDevice {
                    GPUBackendDeviceRequestCallback callback,
                    void                           *userData);
 
-  GPUResult (*waitIdle)(GPUDevice * __restrict device);
-  void (*destroyDevice)(GPUDevice * __restrict device);
+  GPUResult (*waitIdle)(GPUDevice *__restrict device);
+
+  void (*destroyDevice)(GPUDevice *__restrict device);
 } GPUApiDevice;
 
 #ifdef __cplusplus

@@ -18,7 +18,68 @@
 #include "pipeline_cache.h"
 #include "texture_view_pool.h"
 
-static GPUAdapterMT *
+enum {
+  MT_SUBGROUP_MATRIX_F16_F16_F16 = 1u << 0,
+  MT_SUBGROUP_MATRIX_F16_F16_F32 = 1u << 1,
+  MT_SUBGROUP_MATRIX_F32_F32_F32 = 1u << 2
+};
+
+typedef struct MTSubgroupMatrixProfile {
+  uint32_t                          bit;
+  GPUSubgroupMatrixComponentTypeEXT abType;
+  GPUSubgroupMatrixComponentTypeEXT cType;
+} MTSubgroupMatrixProfile;
+
+static NSString *mt_subgroupSource =
+  @"#include <metal_stdlib>\n"
+   "using namespace metal;\n"
+   "kernel void gpu_subgroup_probe(device uint *output [[buffer(0)]],\n"
+   "                               uint tid [[thread_position_in_grid]]) {\n"
+   "  uint x = simd_shuffle_xor(tid, 1u);\n"
+   "  uint y = simd_shuffle_down(tid, 1u);\n"
+   "  uint z = simd_shuffle_up(tid, 1u);\n"
+   "  output[tid] = x + y + z;\n"
+   "}\n"
+   "kernel void gpu_subgroup_reduction_probe(\n"
+   "    device uint *output [[buffer(0)]],\n"
+   "    uint tid [[thread_position_in_grid]]) {\n"
+   "  uint lane = simd_prefix_exclusive_sum(1u);\n"
+   "  uint width = simd_sum(1u);\n"
+   "  uint remaining = width - lane;\n"
+   "  bool valid = 1u < remaining;\n"
+   "  uint value_lane = valid ? lane + 1u : lane;\n"
+   "  uint fill_lane = valid ? lane : 1u - remaining;\n"
+   "  uint shifted = simd_shuffle(tid, value_lane);\n"
+   "  uint filled = simd_shuffle(tid + 1u, fill_lane);\n"
+   "  output[tid] = valid ? shifted : filled;\n"
+   "}\n";
+
+static const MTSubgroupMatrixProfile mt_subgroupMatrixProfiles[] = {
+  {MT_SUBGROUP_MATRIX_F16_F16_F16,
+   GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
+   GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT},
+  {MT_SUBGROUP_MATRIX_F16_F16_F32,
+   GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
+   GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT},
+  {MT_SUBGROUP_MATRIX_F32_F32_F32,
+   GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT,
+   GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT}
+};
+
+extern
+GPU_HIDE
+GPUQueue*
+mt_newCommandQueue(GPUDevice *__restrict device);
+
+GPU_HIDE
+void
+mt_destroyCommandQueue(GPUQueue *__restrict queue);
+
+GPU_HIDE
+bool
+mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature);
+
+static GPUAdapterMT*
 mt_adapter(const GPUAdapter *adapter) {
   return adapter ? adapter->_priv : NULL;
 }
@@ -28,6 +89,7 @@ mt_adapterDevice(const GPUAdapter *adapter) {
   GPUAdapterMT *adapterMT;
 
   adapterMT = mt_adapter(adapter);
+
   return adapterMT ? adapterMT->device : nil;
 }
 
@@ -40,15 +102,19 @@ mt_initFormatSupport(GPUAdapterMT *adapterMT) {
   }
 
   adapterMT->storageTier = MTLReadWriteTextureTierNone;
+
   if ([device supportsTextureSampleCount:1u]) {
     adapterMT->sampleCounts |= GPU_SAMPLE_COUNT_1_BIT;
   }
+
   if ([device supportsTextureSampleCount:2u]) {
     adapterMT->sampleCounts |= GPU_SAMPLE_COUNT_2_BIT;
   }
+
   if ([device supportsTextureSampleCount:4u]) {
     adapterMT->sampleCounts |= GPU_SAMPLE_COUNT_4_BIT;
   }
+
   if ([device supportsTextureSampleCount:8u]) {
     adapterMT->sampleCounts |= GPU_SAMPLE_COUNT_8_BIT;
   }
@@ -60,200 +126,42 @@ mt_initFormatSupport(GPUAdapterMT *adapterMT) {
   if (@available(macOS 10.13, iOS 11.0, *)) {
     adapterMT->storageTier = device.readWriteTextureSupport;
   }
+
   if (@available(macOS 11.0, iOS 14.0, *)) {
     adapterMT->float32Filterable = device.supports32BitFloatFiltering;
   }
+
   if (@available(macOS 11.0, iOS 16.4, *)) {
     adapterMT->bcSupported = device.supportsBCTextureCompression;
   }
+
   if (@available(macOS 10.15, iOS 13.0, *)) {
     adapterMT->appleFamily1 = [device supportsFamily:MTLGPUFamilyApple1];
     adapterMT->appleFamily2 = [device supportsFamily:MTLGPUFamilyApple2];
   }
+
   if (@available(macOS 13.0, iOS 16.0, *)) {
-    adapterMT->subgroupRelative =
-      [device supportsFamily:MTLGPUFamilyApple8];
+    adapterMT->subgroupRelative = [device supportsFamily:MTLGPUFamilyApple8];
   }
 #if TARGET_OS_OSX
   if (@available(macOS 11.0, *)) {
-    adapterMT->sparseTextures =
-      [device supportsFamily:MTLGPUFamilyApple6] ||
-      ([device supportsFamily:MTLGPUFamilyMac2] &&
-       !device.hasUnifiedMemory);
+    adapterMT->sparseTextures = [device supportsFamily:MTLGPUFamilyApple6]
+      || ([device supportsFamily:MTLGPUFamilyMac2]
+          && !device.hasUnifiedMemory);
   }
 #endif
-}
-
-GPU_HIDE
-GPUAdapter *
-mt_getAvailableAdapters(GPUInstance * __restrict inst,
-                        uint32_t                 maxNumberOfItems) {
-  NSArray<id<MTLDevice>> *devices;
-  GPUAdapterMT           *adapterMT;
-  GPUAdapter             *firstAdapter, *lastAdapter, *adapter;
-#if TARGET_OS_IOS
-  id<MTLDevice>           defaultDevice;
-#endif
-  uint32_t                i;
-
-  i            = 0;
-  firstAdapter = lastAdapter = NULL;
-#if TARGET_OS_IOS
-  defaultDevice = MTLCreateSystemDefaultDevice();
-  devices       = defaultDevice
-                    ? [[NSArray alloc] initWithObjects:defaultDevice, nil]
-                    : nil;
-  [defaultDevice release];
-#else
-  devices = MTLCopyAllDevices();
-  if (devices.count == 0u) {
-    id<MTLDevice> defaultDevice;
-
-    [devices release];
-    defaultDevice = MTLCreateSystemDefaultDevice();
-    devices       = defaultDevice
-                      ? [[NSArray alloc] initWithObjects:defaultDevice, nil]
-                      : nil;
-    [defaultDevice release];
-  }
-#endif
-
-  for (id<MTLDevice> device in devices) {
-    adapter   = calloc(1, sizeof(*adapter));
-    adapterMT = calloc(1, sizeof(*adapterMT));
-    if (!adapter || !adapterMT) {
-      free(adapterMT);
-      free(adapter);
-      break;
-    }
-    adapterMT->device       = [device retain];
-    adapterMT->subgroupLock = OS_UNFAIR_LOCK_INIT;
-    mt_initFormatSupport(adapterMT);
-    adapter->separatePresentQueue       = 1;
-    adapter->supportsDisplayTiming      = 1;
-    adapter->supportsIncrementalPresent = 1; /* TODO: */
-    adapter->supportsSwapchain          = 1;
-    adapter->inst                       = inst;
-    adapter->_priv                      = adapterMT;
-
-    if (lastAdapter) { lastAdapter->next = adapter; }
-    else             { firstAdapter      = adapter; }
-    lastAdapter = adapter;
-
-    if (++i >= maxNumberOfItems) { break; }
-  }
-
-  [devices release];
-
-  return firstAdapter;
-}
-
-GPU_HIDE
-GPUAdapter *
-mt_selectAdapter(GPUInstance        * __restrict inst,
-                 GPUAdapter         * __restrict adapters,
-                 GPUPowerPreference              powerPreference) {
-  id<MTLDevice> preferred;
-  GPUAdapter   *adapter;
-
-  GPU__UNUSED(inst);
-  if (powerPreference == GPU_POWER_PREFERENCE_DEFAULT) {
-    preferred = MTLCreateSystemDefaultDevice();
-    adapter   = adapters;
-    while (preferred && adapter) {
-      if (mt_adapterDevice(adapter).registryID == preferred.registryID) {
-        [preferred release];
-        return adapter;
-      }
-      adapter = adapter->next;
-    }
-    [preferred release];
-    return adapters;
-  }
-
-  adapter = adapters;
-  while (adapter) {
-    bool lowPower;
-
-    lowPower = mt_adapterDevice(adapter).isLowPower;
-    if ((powerPreference == GPU_POWER_PREFERENCE_LOW_POWER && lowPower) ||
-        (powerPreference == GPU_POWER_PREFERENCE_HIGH_PERFORMANCE &&
-         !lowPower)) {
-      return adapter;
-    }
-    adapter = adapter->next;
-  }
-  return adapters;
-}
-
-GPU_HIDE
-void
-mt_destroyAdapter(GPUAdapter * __restrict adapter) {
-  GPUAdapterMT *adapterMT;
-
-  if (!adapter) {
-    return;
-  }
-
-  adapterMT = mt_adapter(adapter);
-  if (adapterMT) {
-    [adapterMT->device release];
-    free(adapterMT);
-  }
-  free(adapter);
-}
-
-GPU_HIDE
-GPUResult
-mt_getAdapterProperties(const GPUAdapter     * __restrict adapter,
-                        GPUAdapterProperties * __restrict outProps) {
-  id<MTLDevice> device;
-
-  if (!adapter || !outProps || !adapter->_priv) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  device = mt_adapterDevice(adapter);
-  memset(outProps, 0, sizeof(*outProps));
-  outProps->backend        = GPU_BACKEND_METAL;
-  outProps->name           = device.name.UTF8String;
-  outProps->type           = device.isLowPower ?
-    GPU_ADAPTER_TYPE_INTEGRATED :
-    GPU_ADAPTER_TYPE_DISCRETE;
-  outProps->executionFlags = GPU_EXECUTION_GRAPHICS_BIT |
-                             GPU_EXECUTION_COMPUTE_BIT;
-
-  return GPU_OK;
-}
-
-GPU_HIDE
-GPUResult
-mt_getAdapterIdentity(const GPUAdapter   * __restrict adapter,
-                      GPUAdapterIdentity * __restrict outIdentity) {
-  id<MTLDevice> device;
-
-  if (!adapter || !outIdentity || !adapter->_priv) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  device = mt_adapterDevice(adapter);
-  memset(outIdentity, 0, sizeof(*outIdentity));
-  outIdentity->registryID = device.registryID;
-  if (outIdentity->registryID == 0u) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
-  outIdentity->validFlags = GPU_ADAPTER_IDENTITY_REGISTRY_ID_BIT;
-  return GPU_OK;
 }
 
 static bool
 mt_hasCounterSet(id<MTLDevice> device, MTLCommonCounterSet name) {
+  id<MTLCounterSet> counterSet;
+
   if (!device || !name) {
     return false;
   }
 
   if (@available(macOS 10.15, iOS 14.0, *)) {
-    for (id<MTLCounterSet> counterSet in device.counterSets) {
+    for (counterSet in device.counterSets) {
       if ([counterSet.name isEqualToString:name]) {
         return true;
       }
@@ -279,9 +187,9 @@ mt_supportsBlitCounterSampling(id<MTLDevice> device) {
 static bool
 mt_supportsSubgroupFamily(id<MTLDevice> device) {
   if (@available(macOS 10.15, iOS 13.0, *)) {
-    return device &&
-           ([device supportsFamily:MTLGPUFamilyApple6] ||
-            [device supportsFamily:MTLGPUFamilyMac2]);
+    return device
+           && ([device supportsFamily:MTLGPUFamilyApple6]
+               || [device supportsFamily:MTLGPUFamilyMac2]);
   }
 
   return false;
@@ -289,44 +197,24 @@ mt_supportsSubgroupFamily(id<MTLDevice> device) {
 
 static void
 mt_probeSubgroups(GPUAdapterMT *adapterMT) {
-  static NSString *source =
-    @"#include <metal_stdlib>\n"
-     "using namespace metal;\n"
-     "kernel void gpu_subgroup_probe(device uint *output [[buffer(0)]],\n"
-     "                               uint tid [[thread_position_in_grid]]) {\n"
-     "  uint x = simd_shuffle_xor(tid, 1u);\n"
-     "  uint y = simd_shuffle_down(tid, 1u);\n"
-     "  uint z = simd_shuffle_up(tid, 1u);\n"
-     "  output[tid] = x + y + z;\n"
-     "}\n"
-     "kernel void gpu_subgroup_reduction_probe(\n"
-     "    device uint *output [[buffer(0)]],\n"
-     "    uint tid [[thread_position_in_grid]]) {\n"
-     "  uint lane = simd_prefix_exclusive_sum(1u);\n"
-     "  uint width = simd_sum(1u);\n"
-     "  uint remaining = width - lane;\n"
-     "  bool valid = 1u < remaining;\n"
-     "  uint value_lane = valid ? lane + 1u : lane;\n"
-     "  uint fill_lane = valid ? lane : 1u - remaining;\n"
-     "  uint shifted = simd_shuffle(tid, value_lane);\n"
-     "  uint filled = simd_shuffle(tid + 1u, fill_lane);\n"
-     "  output[tid] = valid ? shifted : filled;\n"
-     "}\n";
   id<MTLComputePipelineState> basicPipeline;
   id<MTLComputePipelineState> reductionPipeline;
   id<MTLFunction>             basicFunction;
   id<MTLFunction>             reductionFunction;
   id<MTLLibrary>              library;
+  uint32_t                    width;
 
   if (!adapterMT) {
     return;
   }
 
   os_unfair_lock_lock(&adapterMT->subgroupLock);
+
   if (adapterMT->subgroupProbed) {
     os_unfair_lock_unlock(&adapterMT->subgroupLock);
     return;
   }
+
   adapterMT->subgroupProbed = true;
 
   if (!mt_supportsSubgroupFamily(adapterMT->device)) {
@@ -334,44 +222,45 @@ mt_probeSubgroups(GPUAdapterMT *adapterMT) {
     return;
   }
 
-  library = [adapterMT->device newLibraryWithSource:source
-                                             options:nil
-                                               error:nil];
-  basicFunction = [library newFunctionWithName:@"gpu_subgroup_probe"];
-  basicPipeline = basicFunction
+  library           = [adapterMT->device newLibraryWithSource:mt_subgroupSource
+                                                      options:nil
+                                                        error:nil];
+  basicFunction     = [library newFunctionWithName:@"gpu_subgroup_probe"];
+  basicPipeline     = basicFunction
     ? [adapterMT->device newComputePipelineStateWithFunction:basicFunction
                                                        error:nil]
     : nil;
-  reductionFunction =
-    [library newFunctionWithName:@"gpu_subgroup_reduction_probe"];
+  reductionFunction = [library newFunctionWithName:@"gpu_subgroup_reduction_probe"];
   reductionPipeline = reductionFunction
     ? [adapterMT->device newComputePipelineStateWithFunction:reductionFunction
                                                        error:nil]
     : nil;
+
   if (basicPipeline && basicPipeline.threadExecutionWidth > 0u) {
-    adapterMT->minSubgroupSize =
-      (uint32_t)basicPipeline.threadExecutionWidth;
+    adapterMT->minSubgroupSize = (uint32_t)basicPipeline.threadExecutionWidth;
     adapterMT->maxSubgroupSize = adapterMT->minSubgroupSize;
     adapterMT->subgroups       = true;
   }
-  if (reductionPipeline && reductionPipeline.threadExecutionWidth > 0u) {
-    uint32_t width;
 
+  if (reductionPipeline && reductionPipeline.threadExecutionWidth > 0u) {
     width = (uint32_t)reductionPipeline.threadExecutionWidth;
-    if (adapterMT->minSubgroupSize == 0u ||
-        width < adapterMT->minSubgroupSize) {
+
+    if (adapterMT->minSubgroupSize == 0u
+        || width < adapterMT->minSubgroupSize) {
       adapterMT->minSubgroupSize = width;
     }
+
     if (width > adapterMT->maxSubgroupSize) {
       adapterMT->maxSubgroupSize = width;
     }
+
     adapterMT->subgroupReductions = true;
   }
 #if TARGET_OS_OSX
   /* Intel Metal may execute reduction-heavy SIMD-group code at SIMD8 even
    * when a lightweight pipeline reports a wider threadExecutionWidth. */
-  if (!adapterMT->appleFamily1 && adapterMT->device.isLowPower &&
-      adapterMT->minSubgroupSize > 8u) {
+  if (!adapterMT->appleFamily1 && adapterMT->device.isLowPower
+      && adapterMT->minSubgroupSize > 8u) {
     adapterMT->minSubgroupSize = 8u;
   }
 #endif
@@ -385,53 +274,47 @@ mt_probeSubgroups(GPUAdapterMT *adapterMT) {
 }
 
 static bool
-mt_supportsSubgroupOperations(
-  const GPUAdapter                 * __restrict adapter,
-  GPUShaderStageFlags                           stage,
-  GPUBackendSubgroupOperationFlags              operations) {
-  const GPUShaderStageFlags supportedStages =
-    GPU_SHADER_STAGE_VERTEX_BIT |
-    GPU_SHADER_STAGE_FRAGMENT_BIT |
-    GPU_SHADER_STAGE_COMPUTE_BIT |
-    GPU_SHADER_STAGE_TASK_BIT |
-    GPU_SHADER_STAGE_MESH_BIT;
-  GPUBackendSubgroupOperationFlags supportedOperations =
-    GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
-    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT;
-  GPUAdapterMT *adapterMT;
+mt_supportsSubgroupOperations(const GPUAdapter     *__restrict adapter,
+                              GPUShaderStageFlags              stage,
+                              GPUBackendSubgroupOperationFlags operations) {
+  GPUAdapterMT                    *adapterMT;
+  const GPUShaderStageFlags        supportedStages     = GPU_SHADER_STAGE_VERTEX_BIT |
+                                                         GPU_SHADER_STAGE_FRAGMENT_BIT |
+                                                         GPU_SHADER_STAGE_COMPUTE_BIT |
+                                                         GPU_SHADER_STAGE_TASK_BIT |
+                                                         GPU_SHADER_STAGE_MESH_BIT;
+  GPUBackendSubgroupOperationFlags supportedOperations = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
+                                                         GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT;
 
   adapterMT = mt_adapter(adapter);
   mt_probeSubgroups(adapterMT);
+
   if (adapterMT && adapterMT->subgroupReductions) {
     supportedOperations |=
       GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
   }
+
   if (adapterMT && adapterMT->subgroupRelative) {
     supportedOperations |=
       GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_NATIVE_BIT;
   }
-  return adapterMT && adapterMT->subgroups &&
-         (supportedStages & stage) == stage &&
-         (supportedOperations & operations) == operations;
-}
 
-enum {
-  MT_SUBGROUP_MATRIX_F16_F16_F16 = 1u << 0,
-  MT_SUBGROUP_MATRIX_F16_F16_F32 = 1u << 1,
-  MT_SUBGROUP_MATRIX_F32_F32_F32 = 1u << 2
-};
+  return adapterMT && adapterMT->subgroups
+         && (supportedStages & stage) == stage
+         && (supportedOperations & operations) == operations;
+}
 
 static bool
 mt_probeSubgroupMatrixProfile(id<MTLDevice> device,
                               NSString     *name,
                               NSString     *abType,
                               NSString     *cType) {
-  NSString                    *source;
-  id<MTLComputePipelineState>  pipeline;
-  id<MTLFunction>              function;
-  id<MTLLibrary>               library;
+  NSString                   *source;
+  id<MTLComputePipelineState> pipeline;
+  id<MTLFunction>             function;
+  id<MTLLibrary>              library;
 
-  source = [NSString stringWithFormat:
+  source   = [NSString stringWithFormat:
     @"#include <metal_stdlib>\n"
      "using namespace metal;\n"
      "kernel void %@(device %@ *ab [[buffer(0)]], "
@@ -464,6 +347,7 @@ mt_probeSubgroupMatrixProfile(id<MTLDevice> device,
   [pipeline release];
   [function release];
   [library release];
+
   return pipeline != nil;
 }
 
@@ -477,12 +361,15 @@ mt_probeSubgroupMatrices(GPUAdapterMT *adapterMT) {
 
   mt_probeSubgroups(adapterMT);
   os_unfair_lock_lock(&adapterMT->subgroupLock);
+
   if (adapterMT->subgroupMatrixProbed) {
     os_unfair_lock_unlock(&adapterMT->subgroupLock);
     return;
   }
+
   adapterMT->subgroupMatrixProbed = true;
-  device = adapterMT->device;
+  device                          = adapterMT->device;
+
   if (!adapterMT->subgroups || !device) {
     os_unfair_lock_unlock(&adapterMT->subgroupLock);
     return;
@@ -494,48 +381,37 @@ mt_probeSubgroupMatrices(GPUAdapterMT *adapterMT) {
                                     @"half")) {
     adapterMT->subgroupMatrixProfiles |= MT_SUBGROUP_MATRIX_F16_F16_F16;
   }
+
   if (mt_probeSubgroupMatrixProfile(device,
                                     @"gpu_matrix_hh_f",
                                     @"half",
                                     @"float")) {
     adapterMT->subgroupMatrixProfiles |= MT_SUBGROUP_MATRIX_F16_F16_F32;
   }
+
   if (mt_probeSubgroupMatrixProfile(device,
                                     @"gpu_matrix_ff_f",
                                     @"float",
                                     @"float")) {
     adapterMT->subgroupMatrixProfiles |= MT_SUBGROUP_MATRIX_F32_F32_F32;
   }
+
   os_unfair_lock_unlock(&adapterMT->subgroupLock);
 }
 
 static GPUResult
-mt_getSubgroupMatrixProperties(
-  const GPUAdapter               * __restrict adapter,
-  uint32_t                       * __restrict inoutPropertyCount,
-  GPUSubgroupMatrixPropertiesEXT * __restrict outProperties) {
-  static const struct {
-    uint32_t                          bit;
-    GPUSubgroupMatrixComponentTypeEXT abType;
-    GPUSubgroupMatrixComponentTypeEXT cType;
-  } profiles[] = {
-    {MT_SUBGROUP_MATRIX_F16_F16_F16,
-     GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
-     GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT},
-    {MT_SUBGROUP_MATRIX_F16_F16_F32,
-     GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
-     GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT},
-    {MT_SUBGROUP_MATRIX_F32_F32_F32,
-     GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT,
-     GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT}
-  };
-  GPUAdapterMT *adapterMT;
-  uint32_t      capacity;
-  uint32_t      count;
-  uint32_t      written;
+mt_getSubgroupMatrixProperties(const GPUAdapter               *__restrict adapter,
+                               uint32_t                       *__restrict inoutPropertyCount,
+                               GPUSubgroupMatrixPropertiesEXT *__restrict outProperties) {
+  GPUSubgroupMatrixPropertiesEXT property;
+  GPUAdapterMT                  *adapterMT;
+  uint32_t                       capacity;
+  uint32_t                       count;
+  uint32_t                       written;
+  uint32_t                       i;
 
-  if (!adapter || !inoutPropertyCount ||
-      !(adapterMT = mt_adapter(adapter))) {
+  if (!adapter || !inoutPropertyCount
+      || !(adapterMT = mt_adapter(adapter))) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -543,25 +419,27 @@ mt_getSubgroupMatrixProperties(
   capacity = *inoutPropertyCount;
   count    = 0u;
   written  = 0u;
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(profiles); i++) {
-    GPUSubgroupMatrixPropertiesEXT property;
 
-    if ((adapterMT->subgroupMatrixProfiles & profiles[i].bit) == 0u) {
+  for (i = 0u; i < GPU_ARRAY_LEN(mt_subgroupMatrixProfiles); i++) {
+    if ((adapterMT->subgroupMatrixProfiles & mt_subgroupMatrixProfiles[i].bit) == 0u) {
       continue;
     }
+
     memset(&property, 0, sizeof(property));
     property.m          = 8u;
     property.n          = 8u;
     property.k          = 8u;
-    property.aType      = profiles[i].abType;
-    property.bType      = profiles[i].abType;
-    property.cType      = profiles[i].cType;
-    property.resultType = profiles[i].cType;
+    property.aType      = mt_subgroupMatrixProfiles[i].abType;
+    property.bType      = mt_subgroupMatrixProfiles[i].abType;
+    property.cType      = mt_subgroupMatrixProfiles[i].cType;
+    property.resultType = mt_subgroupMatrixProfiles[i].cType;
     property.stages     = GPU_SHADER_STAGE_COMPUTE_BIT;
     property.scope      = GPU_SUBGROUP_MATRIX_SCOPE_SUBGROUP_EXT;
+
     if (outProperties && written < capacity) {
       outProperties[written++] = property;
     }
+
     count++;
   }
 
@@ -569,159 +447,47 @@ mt_getSubgroupMatrixProperties(
   if (count == 0u) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  return outProperties && capacity < count
-           ? GPU_ERROR_INSUFFICIENT_CAPACITY
-           : GPU_OK;
-}
 
-GPU_HIDE
-bool
-mt_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
-  GPUAdapterMT *adapterMT;
-  id<MTLDevice> device;
-  const char   *mode;
-
-  if (!(adapterMT = mt_adapter(adapter))) {
-    return false;
-  }
-
-  switch (feature) {
-    case GPU_FEATURE_COMPUTE:
-    case GPU_FEATURE_INDIRECT_DRAW:
-    case GPU_FEATURE_SHADER_F16:
-      return true;
-    case GPU_FEATURE_DESCRIPTOR_INDEXING:
-    case GPU_FEATURE_BINDLESS:
-      device = adapterMT->device;
-      if (@available(macOS 13.0, iOS 16.0, *)) {
-        return device.argumentBuffersSupport == MTLArgumentBuffersTier2;
-      }
-      return false;
-    case GPU_FEATURE_BUFFER_DEVICE_ADDRESS:
-      if (@available(macOS 13.0, iOS 16.0, *)) {
-        return true;
-      }
-      return false;
-    case GPU_FEATURE_PLACED_RESOURCES:
-      if (@available(macOS 10.15, iOS 13.0, *)) {
-        return true;
-      }
-      return false;
-    case GPU_FEATURE_SPARSE_TEXTURES:
-#if TARGET_OS_OSX
-      if (adapterMT->sparseTextures) {
-        return true;
-      }
-#endif
-#if MT_HAS_METAL4
-      device = adapterMT->device;
-      if (@available(macOS 26.0, iOS 26.0, *)) {
-        return [device respondsToSelector:@selector(newMTL4CommandQueue)];
-      }
-#endif
-      return false;
-    case GPU_FEATURE_SPARSE_BUFFERS:
-    case GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT:
-#if MT_HAS_METAL4
-      mode = getenv("GPU_METAL_MODE");
-      if (mode && strcmp(mode, "classic") == 0) {
-        return false;
-      }
-      device = adapterMT->device;
-      if (@available(macOS 26.0, iOS 26.0, *)) {
-        return [device respondsToSelector:@selector(newMTL4CommandQueue)] &&
-               [device respondsToSelector:@selector(newCommandAllocator)];
-      }
-#endif
-      return false;
-    case GPU_FEATURE_MESH_SHADER:
-      device = adapterMT->device;
-      if (@available(macOS 13.0, iOS 16.0, *)) {
-        return [device supportsFamily:MTLGPUFamilyApple7] ||
-               [device supportsFamily:MTLGPUFamilyMac2];
-      }
-      return false;
-    case GPU_FEATURE_VARIABLE_RATE_SHADING:
-      device = adapterMT->device;
-      if (@available(macOS 10.15.4, iOS 13.0, *)) {
-        return [device supportsRasterizationRateMapWithLayerCount:1u];
-      }
-      return false;
-    case GPU_FEATURE_RAY_QUERY:
-      device = adapterMT->device;
-      mode   = getenv("GPU_METAL_MODE");
-      if (mode && strcmp(mode, "metal4") == 0) {
-        if (@available(macOS 14.0, iOS 17.0, *)) {
-          return [device supportsFamily:MTLGPUFamilyApple9];
-        }
-        return false;
-      }
-      if (@available(macOS 12.0, iOS 15.0, *)) {
-        return device.supportsRaytracing &&
-               device.supportsRaytracingFromRender;
-      }
-      return false;
-    case GPU_FEATURE_INTERSECTION_FUNCTION_TABLE:
-      device = adapterMT->device;
-      if (!mt_supportsFeature(adapter, GPU_FEATURE_RAY_QUERY)) {
-        return false;
-      }
-      if (@available(macOS 12.0, iOS 15.0, *)) {
-        return device.supportsFunctionPointers &&
-               device.supportsFunctionPointersFromRender;
-      }
-      return false;
-    case GPU_FEATURE_SUBGROUPS:
-      mt_probeSubgroups(adapterMT);
-      return adapterMT->subgroups;
-    case GPU_FEATURE_SUBGROUP_MATRIX:
-      mt_probeSubgroupMatrices(adapterMT);
-      return adapterMT->subgroupMatrixProfiles != 0u;
-    case GPU_FEATURE_TIMESTAMPS:
-      device = adapterMT->device;
-      return mt_hasCounterSet(device, MTLCommonCounterSetTimestamp) &&
-             mt_supportsBlitCounterSampling(device);
-    default:
-      return false;
-  }
+  return outProperties && capacity < count ? GPU_ERROR_INSUFFICIENT_CAPACITY : GPU_OK;
 }
 
 static void
-mt_getLimits(const GPUAdapter * __restrict adapter,
-             GPULimits       * __restrict outLimits) {
+mt_getLimits(const GPUAdapter *__restrict adapter,
+             GPULimits        *__restrict outLimits) {
+  MTLSize       threads;
   GPUAdapterMT *adapterMT;
   id<MTLDevice> device;
-  MTLSize       threads;
 
   adapterMT = mt_adapter(adapter);
   device    = adapterMT ? adapterMT->device : nil;
+
   if (!adapterMT || !device || !outLimits) {
     return;
   }
 
   mt_probeSubgroups(adapterMT);
-  threads = device.maxThreadsPerThreadgroup;
+  threads                             = device.maxThreadsPerThreadgroup;
   outLimits->maxComputeWorkgroupSizeX = (uint32_t)threads.width;
   outLimits->maxComputeWorkgroupSizeY = (uint32_t)threads.height;
   outLimits->maxComputeWorkgroupSizeZ = (uint32_t)threads.depth;
-  outLimits->maxPushConstantSizeBytes  = 4096u;
-  outLimits->maxSamplerAnisotropy      = 16u;
-  outLimits->minSubgroupSize           = adapterMT->minSubgroupSize;
-  outLimits->maxSubgroupSize           = adapterMT->maxSubgroupSize;
+  outLimits->maxPushConstantSizeBytes = 4096u;
+  outLimits->maxSamplerAnisotropy     = 16u;
+  outLimits->minSubgroupSize          = adapterMT->minSubgroupSize;
+  outLimits->maxSubgroupSize          = adapterMT->maxSubgroupSize;
 }
 
 static bool
 mt_isFloat32Format(GPUFormat format) {
-  return format == GPU_FORMAT_R32_FLOAT ||
-         format == GPU_FORMAT_RG32_FLOAT ||
-         format == GPU_FORMAT_RGBA32_FLOAT;
+  return format == GPU_FORMAT_R32_FLOAT
+         || format == GPU_FORMAT_RG32_FLOAT
+         || format == GPU_FORMAT_RGBA32_FLOAT;
 }
 
 static bool
 mt_isTier1StorageFormat(GPUFormat format) {
-  return format == GPU_FORMAT_R32_UINT ||
-         format == GPU_FORMAT_R32_SINT ||
-         format == GPU_FORMAT_R32_FLOAT;
+  return format == GPU_FORMAT_R32_UINT
+         || format == GPU_FORMAT_R32_SINT
+         || format == GPU_FORMAT_R32_FLOAT;
 }
 
 static bool
@@ -750,30 +516,30 @@ mt_isTier2StorageFormat(GPUFormat format) {
 
 static bool
 mt_isBCFormat(GPUFormat format) {
-  return format >= GPU_FORMAT_BC1_RGBA_UNORM &&
-         format <= GPU_FORMAT_BC7_RGBA_UNORM_SRGB;
+  return format >= GPU_FORMAT_BC1_RGBA_UNORM
+         && format <= GPU_FORMAT_BC7_RGBA_UNORM_SRGB;
 }
 
 static bool
 mt_isETCFormat(GPUFormat format) {
-  return format >= GPU_FORMAT_EAC_R11_UNORM &&
-         format <= GPU_FORMAT_ETC2_RGB8A1_UNORM_SRGB;
+  return format >= GPU_FORMAT_EAC_R11_UNORM
+         && format <= GPU_FORMAT_ETC2_RGB8A1_UNORM_SRGB;
 }
 
 static bool
 mt_isASTCFormat(GPUFormat format) {
-  return format >= GPU_FORMAT_ASTC_4X4_UNORM &&
-         format <= GPU_FORMAT_ASTC_12X12_UNORM_SRGB;
+  return format >= GPU_FORMAT_ASTC_4X4_UNORM
+         && format <= GPU_FORMAT_ASTC_12X12_UNORM_SRGB;
 }
 
 static void
-mt_getFormatCapabilities(
-  const GPUAdapter      * __restrict adapter,
-  GPUFormat              format,
-  GPUFormatCapabilities * __restrict outCaps) {
+mt_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
+                         GPUFormat                         format,
+                         GPUFormatCapabilities *__restrict outCaps) {
   GPUAdapterMT *adapterMT;
 
   adapterMT = mt_adapter(adapter);
+
   if (!adapterMT || !outCaps) {
     return;
   }
@@ -784,12 +550,14 @@ mt_getFormatCapabilities(
     outCaps->filterable = adapterMT->bcSupported;
     return;
   }
+
   if (mt_isETCFormat(format)) {
     memset(outCaps, 0, sizeof(*outCaps));
     outCaps->sampled    = adapterMT->appleFamily1;
     outCaps->filterable = adapterMT->appleFamily1;
     return;
   }
+
   if (mt_isASTCFormat(format)) {
     memset(outCaps, 0, sizeof(*outCaps));
     outCaps->sampled    = adapterMT->appleFamily2;
@@ -798,49 +566,42 @@ mt_getFormatCapabilities(
   }
 
   if (outCaps->depthStencil) {
-    if (format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 &&
-        !adapterMT->depth24Supported) {
+    if (format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8
+        && !adapterMT->depth24Supported) {
       memset(outCaps, 0, sizeof(*outCaps));
       return;
     }
+
     outCaps->supportedSampleCounts = adapterMT->sampleCounts;
     outCaps->sampled               = true;
     outCaps->filterable            = false;
     return;
   }
 
-  outCaps->storage =
-    (adapterMT->storageTier >= MTLReadWriteTextureTier1 &&
-     mt_isTier1StorageFormat(format)) ||
-    (adapterMT->storageTier >= MTLReadWriteTextureTier2 &&
-     mt_isTier2StorageFormat(format));
+  outCaps->storage = (adapterMT->storageTier >= MTLReadWriteTextureTier1
+     && mt_isTier1StorageFormat(format))
+    || (adapterMT->storageTier >= MTLReadWriteTextureTier2
+        && mt_isTier2StorageFormat(format));
+
   if (mt_isFloat32Format(format)) {
     outCaps->filterable = adapterMT->float32Filterable;
     outCaps->blendable  = false;
   }
+
   if (outCaps->colorAttachment) {
     outCaps->supportedSampleCounts = adapterMT->sampleCounts;
   }
 }
 
-extern
-GPU_HIDE
-GPUQueue*
-mt_newCommandQueue(GPUDevice * __restrict device);
-
-GPU_HIDE
-void
-mt_destroyCommandQueue(GPUQueue * __restrict queue);
-
 static bool
 mt_supportsMetal4(id<MTLDevice> device) {
 #if MT_HAS_METAL4
   if (@available(macOS 26.0, iOS 26.0, *)) {
-    return device &&
-           [device respondsToSelector:@selector(newMTL4CommandQueue)] &&
-           [device respondsToSelector:@selector(newCommandAllocator)] &&
-           [device respondsToSelector:@selector(newArgumentTableWithDescriptor:error:)] &&
-           [device respondsToSelector:@selector(newCompilerWithDescriptor:error:)];
+    return device
+           && [device respondsToSelector:@selector(newMTL4CommandQueue)]
+           && [device respondsToSelector:@selector(newCommandAllocator)]
+           && [device respondsToSelector:@selector(newArgumentTableWithDescriptor:error:)]
+           && [device respondsToSelector:@selector(newCompilerWithDescriptor:error:)];
   }
 
   return false;
@@ -879,86 +640,443 @@ mt_selectCommandMode(id<MTLDevice>  device,
   rayQuery       = (enabledFeatureMask &
                     (UINT64_C(1) << GPU_FEATURE_RAY_QUERY)) != 0u;
   supportsMetal4 = mt_supportsMetal4(device);
+
   if (mode && strcmp(mode, "classic") == 0) {
     if (explicitSparse) {
       return false;
     }
+
     *outMode = MTCommandModeClassic;
+
     return true;
   }
+
   if (mode && strcmp(mode, "metal4") == 0) {
     if (!supportsMetal4) {
       NSLog(@"GPU_METAL_MODE=metal4 requested on an unsupported device or OS");
       return false;
     }
+
     if (rayQuery && !mt_supportsMetal4RayQuery(device)) {
       NSLog(@"GPU_METAL_MODE=metal4 does not support software ray tracing");
       return false;
     }
+
     *outMode = MTCommandMode4;
+
     return true;
   }
+
   if (mode && strcmp(mode, "auto") != 0) {
     NSLog(@"Unknown GPU_METAL_MODE '%s'; expected auto, classic, or metal4", mode);
     return false;
   }
 
-  *outMode = supportsMetal4 &&
-             (!rayQuery || mt_supportsMetal4RayQuery(device))
+  *outMode = supportsMetal4
+             && (!rayQuery || mt_supportsMetal4RayQuery(device))
                ? MTCommandMode4
                : MTCommandModeClassic;
+
   return true;
 }
 
+static GPUResult
+mt_waitDeviceIdle(GPUDevice *__restrict device) {
+  GPUDeviceMT *deviceMT;
+  GPUQueue    *commandQueue;
+  uint32_t     i;
+
+  if (!device || !(deviceMT = device->_priv)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  for (i = 0u; i < deviceMT->nCreatedQueues; i++) {
+    commandQueue = deviceMT->createdQueues[i];
+
+    if (mt_waitCommandQueueIdle(commandQueue) != GPU_OK) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
+  return GPU_OK;
+}
+
 GPU_HIDE
-GPUDevice *
-mt_createDevice(GPUAdapter              * __restrict adapter,
+GPUAdapter*
+mt_getAvailableAdapters(GPUInstance *__restrict inst,
+                        uint32_t                maxNumberOfItems) {
+  NSArray<id<MTLDevice>> *devices;
+  GPUAdapterMT           *adapterMT;
+  GPUAdapter             *firstAdapter;
+  GPUAdapter             *lastAdapter;
+  GPUAdapter             *adapter;
+  id<MTLDevice>           defaultDevice;
+  id<MTLDevice>           device;
+  uint32_t                i;
+
+  i            = 0;
+  firstAdapter = lastAdapter = NULL;
+#if TARGET_OS_IOS
+  defaultDevice = MTLCreateSystemDefaultDevice();
+  devices       = defaultDevice
+                    ? [[NSArray alloc] initWithObjects:defaultDevice, nil]
+                    : nil;
+  [defaultDevice release];
+#else
+  devices = MTLCopyAllDevices();
+
+  if (devices.count == 0u) {
+    [devices release];
+    defaultDevice = MTLCreateSystemDefaultDevice();
+    devices       = defaultDevice
+                      ? [[NSArray alloc] initWithObjects:defaultDevice, nil]
+                      : nil;
+    [defaultDevice release];
+  }
+#endif
+
+  for (device in devices) {
+    adapter   = calloc(1, sizeof(*adapter));
+    adapterMT = calloc(1, sizeof(*adapterMT));
+
+    if (!adapter || !adapterMT) {
+      free(adapterMT);
+      free(adapter);
+      break;
+    }
+
+    adapterMT->device       = [device retain];
+    adapterMT->subgroupLock = OS_UNFAIR_LOCK_INIT;
+    mt_initFormatSupport(adapterMT);
+    adapter->separatePresentQueue       = 1;
+    adapter->supportsDisplayTiming      = 1;
+    adapter->supportsIncrementalPresent = 1; /* todo: */
+    adapter->supportsSwapchain          = 1;
+    adapter->inst                       = inst;
+    adapter->_priv                      = adapterMT;
+
+    if (lastAdapter) {
+      lastAdapter->next = adapter;
+    }
+    else {
+      firstAdapter = adapter;
+    }
+
+    lastAdapter = adapter;
+
+    if (++i >= maxNumberOfItems) {
+      break;
+    }
+  }
+
+  [devices release];
+
+  return firstAdapter;
+}
+
+GPU_HIDE
+GPUAdapter*
+mt_selectAdapter(GPUInstance *__restrict inst,
+                 GPUAdapter  *__restrict adapters,
+                 GPUPowerPreference      powerPreference) {
+  id<MTLDevice> preferred;
+  GPUAdapter   *adapter;
+  bool          lowPower;
+
+  GPU__UNUSED(inst);
+
+  if (powerPreference == GPU_POWER_PREFERENCE_DEFAULT) {
+    preferred = MTLCreateSystemDefaultDevice();
+    adapter   = adapters;
+
+    while (preferred && adapter) {
+      if (mt_adapterDevice(adapter).registryID == preferred.registryID) {
+        [preferred release];
+        return adapter;
+      }
+
+      adapter = adapter->next;
+    }
+
+    [preferred release];
+    return adapters;
+  }
+
+  adapter = adapters;
+
+  while (adapter) {
+    lowPower = mt_adapterDevice(adapter).isLowPower;
+
+    if ((powerPreference == GPU_POWER_PREFERENCE_LOW_POWER && lowPower)
+        || (powerPreference == GPU_POWER_PREFERENCE_HIGH_PERFORMANCE
+            && !lowPower)) {
+      return adapter;
+    }
+
+    adapter = adapter->next;
+  }
+
+  return adapters;
+}
+
+GPU_HIDE
+void
+mt_destroyAdapter(GPUAdapter *__restrict adapter) {
+  GPUAdapterMT *adapterMT;
+
+  if (!adapter) {
+    return;
+  }
+
+  adapterMT = mt_adapter(adapter);
+
+  if (adapterMT) {
+    [adapterMT->device release];
+    free(adapterMT);
+  }
+
+  free(adapter);
+}
+
+GPU_HIDE
+GPUResult
+mt_getAdapterProperties(const GPUAdapter     *__restrict adapter,
+                        GPUAdapterProperties *__restrict outProps) {
+  id<MTLDevice> device;
+
+  if (!adapter || !outProps || !adapter->_priv) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  device = mt_adapterDevice(adapter);
+  memset(outProps, 0, sizeof(*outProps));
+  outProps->backend        = GPU_BACKEND_METAL;
+  outProps->name           = device.name.UTF8String;
+  outProps->type           = device.isLowPower ?
+    GPU_ADAPTER_TYPE_INTEGRATED :
+    GPU_ADAPTER_TYPE_DISCRETE;
+  outProps->executionFlags = GPU_EXECUTION_GRAPHICS_BIT |
+                             GPU_EXECUTION_COMPUTE_BIT;
+
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+mt_getAdapterIdentity(const GPUAdapter   *__restrict adapter,
+                      GPUAdapterIdentity *__restrict outIdentity) {
+  id<MTLDevice> device;
+
+  if (!adapter || !outIdentity || !adapter->_priv) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  device = mt_adapterDevice(adapter);
+  memset(outIdentity, 0, sizeof(*outIdentity));
+  outIdentity->registryID = device.registryID;
+
+  if (outIdentity->registryID == 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  outIdentity->validFlags = GPU_ADAPTER_IDENTITY_REGISTRY_ID_BIT;
+
+  return GPU_OK;
+}
+
+GPU_HIDE
+bool
+mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
+  GPUAdapterMT *adapterMT;
+  id<MTLDevice> device;
+  const char   *mode;
+
+  if (!(adapterMT = mt_adapter(adapter))) {
+    return false;
+  }
+
+  switch (feature) {
+    case GPU_FEATURE_COMPUTE:
+    case GPU_FEATURE_INDIRECT_DRAW:
+    case GPU_FEATURE_SHADER_F16:
+      return true;
+    case GPU_FEATURE_DESCRIPTOR_INDEXING:
+    case GPU_FEATURE_BINDLESS:
+      device = adapterMT->device;
+
+      if (@available(macOS 13.0, iOS 16.0, *)) {
+        return device.argumentBuffersSupport == MTLArgumentBuffersTier2;
+      }
+
+      return false;
+    case GPU_FEATURE_BUFFER_DEVICE_ADDRESS:
+      if (@available(macOS 13.0, iOS 16.0, *)) {
+        return true;
+      }
+
+      return false;
+    case GPU_FEATURE_PLACED_RESOURCES:
+      if (@available(macOS 10.15, iOS 13.0, *)) {
+        return true;
+      }
+
+      return false;
+    case GPU_FEATURE_SPARSE_TEXTURES:
+#if TARGET_OS_OSX
+      if (adapterMT->sparseTextures) {
+        return true;
+      }
+#endif
+#if MT_HAS_METAL4
+      device = adapterMT->device;
+
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        return [device respondsToSelector:@selector(newMTL4CommandQueue)];
+      }
+#endif
+      return false;
+    case GPU_FEATURE_SPARSE_BUFFERS:
+    case GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT:
+#if MT_HAS_METAL4
+      mode = getenv("GPU_METAL_MODE");
+
+      if (mode && strcmp(mode, "classic") == 0) {
+        return false;
+      }
+
+      device = adapterMT->device;
+
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        return [device respondsToSelector:@selector(newMTL4CommandQueue)]
+               && [device respondsToSelector:@selector(newCommandAllocator)];
+      }
+#endif
+      return false;
+    case GPU_FEATURE_MESH_SHADER:
+      device = adapterMT->device;
+
+      if (@available(macOS 13.0, iOS 16.0, *)) {
+        return [device supportsFamily:MTLGPUFamilyApple7]
+               || [device supportsFamily:MTLGPUFamilyMac2];
+      }
+
+      return false;
+    case GPU_FEATURE_VARIABLE_RATE_SHADING:
+      device = adapterMT->device;
+
+      if (@available(macOS 10.15.4, iOS 13.0, *)) {
+        return [device supportsRasterizationRateMapWithLayerCount:1u];
+      }
+
+      return false;
+    case GPU_FEATURE_RAY_QUERY:
+      device = adapterMT->device;
+      mode   = getenv("GPU_METAL_MODE");
+
+      if (mode && strcmp(mode, "metal4") == 0) {
+        if (@available(macOS 14.0, iOS 17.0, *)) {
+          return [device supportsFamily:MTLGPUFamilyApple9];
+        }
+
+        return false;
+      }
+
+      if (@available(macOS 12.0, iOS 15.0, *)) {
+        return device.supportsRaytracing
+               && device.supportsRaytracingFromRender;
+      }
+
+      return false;
+    case GPU_FEATURE_INTERSECTION_FUNCTION_TABLE:
+      device = adapterMT->device;
+
+      if (!mt_supportsFeature(adapter, GPU_FEATURE_RAY_QUERY)) {
+        return false;
+      }
+
+      if (@available(macOS 12.0, iOS 15.0, *)) {
+        return device.supportsFunctionPointers
+               && device.supportsFunctionPointersFromRender;
+      }
+
+      return false;
+    case GPU_FEATURE_SUBGROUPS:
+      mt_probeSubgroups(adapterMT);
+      return adapterMT->subgroups;
+    case GPU_FEATURE_SUBGROUP_MATRIX:
+      mt_probeSubgroupMatrices(adapterMT);
+      return adapterMT->subgroupMatrixProfiles != 0u;
+    case GPU_FEATURE_TIMESTAMPS:
+      device = adapterMT->device;
+      return mt_hasCounterSet(device, MTLCommonCounterSetTimestamp)
+             && mt_supportsBlitCounterSampling(device);
+    default:
+      return false;
+  }
+}
+
+GPU_HIDE
+GPUDevice*
+mt_createDevice(GPUAdapter   *__restrict adapter,
                 const GPUQueueCreateInfo queCI[],
                 uint32_t                 nQueCI,
                 uint64_t                 enabledFeatureMask) {
+  MTLSize       workgroupSize;
   GPUAdapterMT *adapterMT;
-  GPUDevice     *device;
-  GPUDeviceMT   *deviceMT;
-  MTCommandMode  commandMode;
-  uint32_t       i, j, queueIndex, queueCount;
+  GPUDevice    *device;
+  GPUDeviceMT  *deviceMT;
+  MTCommandMode commandMode;
+  uint32_t      i;
+  uint32_t      j;
+  uint32_t      queueIndex;
+  uint32_t      queueCount;
+  uint32_t      k;
+  bool          apple7;
 
   GPU__DEFINE_DEFAULT_QUEUES_IF_NEEDED(nQueCI, queCI)
 
   adapterMT = mt_adapter(adapter);
-  if (!adapterMT ||
-      ((enabledFeatureMask &
-        (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u &&
-       !mt_supportsFeature(adapter, GPU_FEATURE_SUBGROUP_MATRIX)) ||
-      !mt_selectCommandMode(adapterMT->device,
-                            enabledFeatureMask,
-                            &commandMode)) {
+
+  if (!adapterMT
+      || ((enabledFeatureMask &
+        (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u
+          && !mt_supportsFeature(adapter, GPU_FEATURE_SUBGROUP_MATRIX))
+      || !mt_selectCommandMode(adapterMT->device,
+                               enabledFeatureMask,
+                               &commandMode)) {
     return NULL;
   }
 
   device   = calloc(1, sizeof(*device));
   deviceMT = calloc(1, sizeof(*deviceMT));
+
   if (!device || !deviceMT) {
     free(deviceMT);
     free(device);
     return NULL;
   }
 
-  deviceMT->device      = adapterMT->device;
-  deviceMT->commandMode = commandMode;
+  deviceMT->device              = adapterMT->device;
+  deviceMT->commandMode         = commandMode;
   deviceMT->textureViewPoolLock = OS_UNFAIR_LOCK_INIT;
+
   if (mt_initPipelineCompiler(deviceMT) != GPU_OK) {
     free(deviceMT);
     free(device);
     return NULL;
   }
-  queueCount            = 0;
+
+  queueCount = 0;
+
   for (i = 0; i < nQueCI; i++) {
     queueCount += queCI[i].count;
   }
+
   deviceMT->nCreatedQueues = queueCount;
 
   if (queueCount) {
     deviceMT->createdQueues = calloc(queueCount, sizeof(void*));
+
     if (!deviceMT->createdQueues) {
       mt_destroyPipelineCompiler(deviceMT);
       free(deviceMT);
@@ -967,11 +1085,12 @@ mt_createDevice(GPUAdapter              * __restrict adapter,
     }
   }
 
-  device->_priv            = deviceMT;
-  device->inst             = adapter->inst;
-  device->adapter          = adapter;
+  device->_priv   = deviceMT;
+  device->inst    = adapter->inst;
+  device->adapter = adapter;
+
   if (@available(macOS 13.0, iOS 16.0, *)) {
-    bool apple7 = [adapterMT->device supportsFamily:MTLGPUFamilyApple7];
+    apple7 = [adapterMT->device supportsFamily:MTLGPUFamilyApple7];
 
     if (apple7 || [adapterMT->device supportsFamily:MTLGPUFamilyMac2]) {
       device->uslFloatAtomicAdd = 1u;
@@ -985,37 +1104,40 @@ mt_createDevice(GPUAdapter              * __restrict adapter,
     }
 #endif
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u) {
-    MTLSize workgroupSize;
 
-    workgroupSize = adapterMT->device.maxThreadsPerThreadgroup;
-    device->meshLimits.taskWorkgroupSize[0] = (uint32_t)workgroupSize.width;
-    device->meshLimits.taskWorkgroupSize[1] = (uint32_t)workgroupSize.height;
-    device->meshLimits.taskWorkgroupSize[2] = (uint32_t)workgroupSize.depth;
-    device->meshLimits.meshWorkgroupSize[0] = (uint32_t)workgroupSize.width;
-    device->meshLimits.meshWorkgroupSize[1] = (uint32_t)workgroupSize.height;
-    device->meshLimits.meshWorkgroupSize[2] = (uint32_t)workgroupSize.depth;
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u) {
+    workgroupSize                                  = adapterMT->device.maxThreadsPerThreadgroup;
+    device->meshLimits.taskWorkgroupSize[0]        = (uint32_t)workgroupSize.width;
+    device->meshLimits.taskWorkgroupSize[1]        = (uint32_t)workgroupSize.height;
+    device->meshLimits.taskWorkgroupSize[2]        = (uint32_t)workgroupSize.depth;
+    device->meshLimits.meshWorkgroupSize[0]        = (uint32_t)workgroupSize.width;
+    device->meshLimits.meshWorkgroupSize[1]        = (uint32_t)workgroupSize.height;
+    device->meshLimits.meshWorkgroupSize[2]        = (uint32_t)workgroupSize.depth;
     device->meshLimits.maxTaskWorkgroupInvocations = 1024u;
     device->meshLimits.maxMeshWorkgroupInvocations = 1024u;
-    device->meshLimits.maxPayloadSizeBytes          = 16u * 1024u;
-    device->meshLimits.maxOutputVertices            = 256u;
-    device->meshLimits.maxOutputPrimitives          = 512u;
+    device->meshLimits.maxPayloadSizeBytes         = 16u * 1024u;
+    device->meshLimits.maxOutputVertices           = 256u;
+    device->meshLimits.maxOutputPrimitives         = 512u;
   }
 
   queueIndex = 0;
+
   for (i = 0; i < nQueCI; i++) {
     for (j = 0; j < queCI[i].count; j++) {
       deviceMT->createdQueues[queueIndex] = mt_newCommandQueue(device);
+
       if (!deviceMT->createdQueues[queueIndex]) {
-        for (uint32_t k = 0; k < queueIndex; k++) {
+        for (k = 0; k < queueIndex; k++) {
           mt_destroyCommandQueue(deviceMT->createdQueues[k]);
         }
+
         free(deviceMT->createdQueues);
         mt_destroyPipelineCompiler(deviceMT);
         free(deviceMT);
         free(device);
         return NULL;
       }
+
       deviceMT->createdQueues[queueIndex]->bits = queCI[i].flags;
       device->queueFamilies |= queCI[i].flags;
       queueIndex++;
@@ -1025,42 +1147,27 @@ mt_createDevice(GPUAdapter              * __restrict adapter,
   return device;
 }
 
-static GPUResult
-mt_waitDeviceIdle(GPUDevice * __restrict device) {
-  GPUDeviceMT *deviceMT;
-
-  if (!device || !(deviceMT = device->_priv)) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  for (uint32_t i = 0u; i < deviceMT->nCreatedQueues; i++) {
-    GPUQueue *commandQueue;
-
-    commandQueue = deviceMT->createdQueues[i];
-    if (mt_waitCommandQueueIdle(commandQueue) != GPU_OK) {
-      return GPU_ERROR_BACKEND_FAILURE;
-    }
-  }
-  return GPU_OK;
-}
-
 GPU_HIDE
 void
-mt_destroyDevice(GPUDevice * __restrict device) {
+mt_destroyDevice(GPUDevice *__restrict device) {
   GPUDeviceMT *deviceMT;
+  uint32_t     i;
 
   if (!device) {
     return;
   }
 
   deviceMT = device->_priv;
+
   if (deviceMT) {
     if (deviceMT->createdQueues) {
-      for (uint32_t i = 0; i < deviceMT->nCreatedQueues; i++) {
+      for (i = 0; i < deviceMT->nCreatedQueues; i++) {
         mt_destroyCommandQueue(deviceMT->createdQueues[i]);
       }
+
       free(deviceMT->createdQueues);
     }
+
     mt_destroyTextureViewPools(deviceMT);
     mt_destroyPipelineCompiler(deviceMT);
     free(deviceMT);

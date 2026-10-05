@@ -24,22 +24,26 @@ mt_textureUsage(GPUTextureUsageFlags usage) {
   MTLTextureUsage mtUsage;
 
   mtUsage = MTLTextureUsageUnknown;
+
   if ((usage & GPU_TEXTURE_USAGE_SAMPLED) != 0) {
     mtUsage |= MTLTextureUsageShaderRead;
   }
+
   if ((usage & GPU_TEXTURE_USAGE_STORAGE) != 0) {
     mtUsage |= MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
   }
+
   if ((usage & (GPU_TEXTURE_USAGE_COLOR_TARGET | GPU_TEXTURE_USAGE_DEPTH_STENCIL)) != 0) {
     mtUsage |= MTLTextureUsageRenderTarget;
   }
+
   return mtUsage;
 }
 
 static bool
 mt_formatIsDepthStencil(GPUFormat format) {
-  return format >= GPU_FORMAT_DEPTH16_UNORM &&
-         format <= GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
+  return format >= GPU_FORMAT_DEPTH16_UNORM
+         && format <= GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
 }
 
 static MTLPixelFormat
@@ -54,64 +58,6 @@ mt_stencilCopyFormat(GPUFormat format) {
     default:
       return MTLPixelFormatInvalid;
   }
-}
-
-GPU_HIDE
-id<MTLTexture>
-mt_nativeTexture(GPUTexture *texture) {
-  GPUTextureMT *native;
-
-  if (!texture || !texture->_priv) {
-    return nil;
-  }
-  if (!texture->_ownsNative) {
-    return (id<MTLTexture>)texture->_priv;
-  }
-
-  native = texture->_priv;
-  return native->texture;
-}
-
-GPU_HIDE
-id<MTLTexture>
-mt_copyTexture(GPUTexture *texture, GPUTextureAspect aspect) {
-  GPUTextureAspect resolved;
-  GPUTextureMT    *native;
-
-  if (!texture || !texture->_priv ||
-      !gpuFormatResolveCopyAspect(texture->format, aspect, &resolved)) {
-    return nil;
-  }
-  if (resolved == GPU_TEXTURE_ASPECT_ALL ||
-      texture->format == GPU_FORMAT_DEPTH16_UNORM ||
-      texture->format == GPU_FORMAT_DEPTH32_FLOAT ||
-      texture->format == GPU_FORMAT_STENCIL8) {
-    return mt_nativeTexture(texture);
-  }
-  if (!texture->_ownsNative) {
-    return nil;
-  }
-
-  native = texture->_priv;
-  if (resolved == GPU_TEXTURE_ASPECT_DEPTH_ONLY) {
-    return native->texture;
-  }
-  return native->stencilCopyView;
-}
-
-GPU_HIDE
-MTLBlitOption
-mt_copyOption(GPUFormat format, GPUTextureAspect aspect) {
-  GPUTextureAspect resolved;
-
-  if ((format != GPU_FORMAT_DEPTH24_UNORM_STENCIL8 &&
-       format != GPU_FORMAT_DEPTH32_FLOAT_STENCIL8) ||
-      !gpuFormatResolveCopyAspect(format, aspect, &resolved)) {
-    return MTLBlitOptionNone;
-  }
-  return resolved == GPU_TEXTURE_ASPECT_DEPTH_ONLY
-           ? MTLBlitOptionDepthFromDepthStencil
-           : MTLBlitOptionStencilFromDepthStencil;
 }
 
 GPU_INLINE
@@ -137,9 +83,7 @@ mt_textureViewType(GPUTextureViewType viewType, uint32_t sampleCount) {
     case GPU_TEXTURE_VIEW_1D_ARRAY:
       return MTLTextureType1DArray;
     case GPU_TEXTURE_VIEW_2D_ARRAY:
-      return sampleCount > 1u
-               ? MTLTextureType2DMultisampleArray
-               : MTLTextureType2DArray;
+      return sampleCount > 1u ? MTLTextureType2DMultisampleArray : MTLTextureType2DArray;
     case GPU_TEXTURE_VIEW_CUBE:
       return MTLTextureTypeCube;
     case GPU_TEXTURE_VIEW_CUBE_ARRAY:
@@ -148,10 +92,258 @@ mt_textureViewType(GPUTextureViewType viewType, uint32_t sampleCount) {
       return MTLTextureType3D;
     case GPU_TEXTURE_VIEW_2D:
     default:
-      return sampleCount > 1u
-               ? MTLTextureType2DMultisample
-               : MTLTextureType2D;
+      return sampleCount > 1u ? MTLTextureType2DMultisample : MTLTextureType2D;
   }
+}
+
+static GPUResult
+mt_writeTextureBlit(GPUQueue                    *queue,
+                    GPUTexture                  *texture,
+                    const GPUTextureWriteRegion *region,
+                    const void                  *data,
+                    const GPUFormatDataLayout   *dataLayout,
+                    MTLBlitOption                option) {
+  MTLSize                   size;
+  id<MTLBlitCommandEncoder> blit;
+  id<MTLBuffer>             upload;
+  id<MTLTexture>            nativeTexture;
+  uint8_t                  *contents;
+  uint64_t                  uploadOffset;
+  GPUResult                 result;
+  uint32_t                  i;
+
+  nativeTexture = mt_nativeTexture(texture);
+
+  if (!nativeTexture || dataLayout->requiredBytes > NSUIntegerMax) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  result = mt_beginTransfer(queue,
+                            dataLayout->requiredBytes,
+                            &blit,
+                            &upload,
+                            &uploadOffset);
+
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  contents = (uint8_t *)[upload contents];
+
+  if (!contents) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  memcpy(contents + uploadOffset,
+         data,
+         (size_t)dataLayout->requiredBytes);
+
+  size = MTLSizeMake(region->width,
+                     region->height,
+                     texture->dimension == GPU_TEXTURE_DIMENSION_3D ? region->depth : 1u);
+
+  if (texture->dimension == GPU_TEXTURE_DIMENSION_3D) {
+    [blit copyFromBuffer:upload
+            sourceOffset:(NSUInteger)uploadOffset
+       sourceBytesPerRow:region->bytesPerRow
+     sourceBytesPerImage:(NSUInteger)dataLayout->bytesPerImage
+              sourceSize:size
+               toTexture:nativeTexture
+        destinationSlice:0u
+        destinationLevel:region->mipLevel
+       destinationOrigin:MTLOriginMake(0u, 0u, 0u)
+                 options:option];
+
+    return GPU_OK;
+  }
+
+  for (i = 0u; i < region->layerCount; i++) {
+    [blit copyFromBuffer:upload
+            sourceOffset:(NSUInteger)(uploadOffset +
+                                      (uint64_t)i * dataLayout->bytesPerImage)
+       sourceBytesPerRow:region->bytesPerRow
+     sourceBytesPerImage:(NSUInteger)dataLayout->bytesPerImage
+              sourceSize:size
+               toTexture:nativeTexture
+        destinationSlice:region->baseArrayLayer + i
+        destinationLevel:region->mipLevel
+       destinationOrigin:MTLOriginMake(0u, 0u, 0u)
+                 options:option];
+  }
+
+  return GPU_OK;
+}
+
+#if MT_HAS_METAL4
+static GPUResult
+mt_writeSparseTexture4(GPUQueue                    *queue,
+                       GPUTexture                  *texture,
+                       const GPUTextureWriteRegion *region,
+                       const void                  *data,
+                       const GPUFormatDataLayout   *dataLayout) {
+  GPUCommandBuffer             *submitList[1];
+  GPUQueueSubmitInfo            submitInfo = {0};
+  MTLSize                       size;
+  GPUCommandBuffer             *cmdb;
+  MTCommandQueue               *nativeQueue;
+  GPUHeapMT                    *nativeHeap;
+  id<MTL4ComputeCommandEncoder> encoder;
+  id<MTLTexture>                nativeTexture;
+  id<MTLBuffer>                 upload;
+  uint64_t                      uploadOffset;
+  GPUResult                     result;
+  uint32_t                      i;
+
+  nativeQueue   = mt_commandQueue(queue);
+  nativeHeap    = texture && texture->_heap ? texture->_heap->_priv : NULL;
+  nativeTexture = mt_nativeTexture(texture);
+  cmdb          = NULL;
+
+  if (!nativeQueue || nativeQueue->mode != MTCommandMode4
+      || !nativeTexture || !nativeHeap || !nativeHeap->heap) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  result = GPUAcquireCommandBuffer(queue, "sparse texture upload", &cmdb);
+
+  if (result != GPU_OK || !cmdb
+      || !mt_reserveUpload(cmdb,
+                           dataLayout->requiredBytes,
+                           256u,
+                           &upload,
+                           &uploadOffset)) {
+    if (cmdb) {
+      GPUCommit(cmdb);
+    }
+
+    return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  memcpy((uint8_t *)upload.contents + uploadOffset,
+         data,
+         (size_t)dataLayout->requiredBytes);
+
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    if (!(encoder = [(id<MTL4CommandBuffer>)mt_modernCommandBuffer(cmdb) computeCommandEncoder])) {
+      GPUCommit(cmdb);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
+    mt_applyPendingBarrier(cmdb, encoder);
+    mt_useAllocation(cmdb, nativeHeap->heap);
+    mt_useAllocation(cmdb, nativeTexture);
+    size = MTLSizeMake(region->width,
+                       region->height,
+                       texture->dimension == GPU_TEXTURE_DIMENSION_3D ? region->depth : 1u);
+
+    if (texture->dimension == GPU_TEXTURE_DIMENSION_3D) {
+      [encoder copyFromBuffer:upload
+                 sourceOffset:(NSUInteger)uploadOffset
+            sourceBytesPerRow:region->bytesPerRow
+          sourceBytesPerImage:(NSUInteger)dataLayout->bytesPerImage
+                   sourceSize:size
+                    toTexture:nativeTexture
+             destinationSlice:0u
+             destinationLevel:region->mipLevel
+            destinationOrigin:MTLOriginMake(0u, 0u, 0u)
+                      options:MTLBlitOptionNone];
+    } else {
+      for (i = 0u; i < region->layerCount; i++) {
+        [encoder copyFromBuffer:upload
+                   sourceOffset:(NSUInteger)(uploadOffset +
+                                               (uint64_t)i *
+                                                 dataLayout->bytesPerImage)
+              sourceBytesPerRow:region->bytesPerRow
+            sourceBytesPerImage:(NSUInteger)dataLayout->bytesPerImage
+                     sourceSize:size
+                      toTexture:nativeTexture
+               destinationSlice:region->baseArrayLayer + i
+               destinationLevel:region->mipLevel
+              destinationOrigin:MTLOriginMake(0u, 0u, 0u)
+                        options:MTLBlitOptionNone];
+      }
+    }
+
+    [encoder endEncoding];
+
+    submitList[0]                 = cmdb;
+    submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+    submitInfo.chain.structSize   = sizeof(submitInfo);
+    submitInfo.ppCommandBuffers   = submitList;
+    submitInfo.commandBufferCount = 1u;
+
+    return GPUQueueSubmit(queue, &submitInfo);
+  }
+
+  GPUCommit(cmdb);
+
+  return GPU_ERROR_UNSUPPORTED;
+}
+#endif
+
+GPU_HIDE
+id<MTLTexture>
+mt_nativeTexture(GPUTexture *texture) {
+  GPUTextureMT *native;
+
+  if (!texture || !texture->_priv) {
+    return nil;
+  }
+
+  if (!texture->_ownsNative) {
+    return (id<MTLTexture>)texture->_priv;
+  }
+
+  native = texture->_priv;
+
+  return native->texture;
+}
+
+GPU_HIDE
+id<MTLTexture>
+mt_copyTexture(GPUTexture *texture, GPUTextureAspect aspect) {
+  GPUTextureMT    *native;
+  GPUTextureAspect resolved;
+
+  if (!texture || !texture->_priv
+      || !gpuFormatResolveCopyAspect(texture->format, aspect, &resolved)) {
+    return nil;
+  }
+
+  if (resolved == GPU_TEXTURE_ASPECT_ALL
+      || texture->format == GPU_FORMAT_DEPTH16_UNORM
+      || texture->format == GPU_FORMAT_DEPTH32_FLOAT
+      || texture->format == GPU_FORMAT_STENCIL8) {
+    return mt_nativeTexture(texture);
+  }
+
+  if (!texture->_ownsNative) {
+    return nil;
+  }
+
+  native = texture->_priv;
+
+  if (resolved == GPU_TEXTURE_ASPECT_DEPTH_ONLY) {
+    return native->texture;
+  }
+
+  return native->stencilCopyView;
+}
+
+GPU_HIDE
+MTLBlitOption
+mt_copyOption(GPUFormat format, GPUTextureAspect aspect) {
+  GPUTextureAspect resolved;
+
+  if ((format != GPU_FORMAT_DEPTH24_UNORM_STENCIL8
+       && format != GPU_FORMAT_DEPTH32_FLOAT_STENCIL8)
+      || !gpuFormatResolveCopyAspect(format, aspect, &resolved)) {
+    return MTLBlitOptionNone;
+  }
+
+  return resolved == GPU_TEXTURE_ASPECT_DEPTH_ONLY
+           ? MTLBlitOptionDepthFromDepthStencil
+           : MTLBlitOptionStencilFromDepthStencil;
 }
 
 GPU_HIDE
@@ -166,20 +358,23 @@ mt_createTextureDescriptor(GPUDevice                  *device,
   MTLPixelFormat        stencilCopyFormat;
   uint32_t              sampleCount;
 
-  if (!device || !device->_priv || !info || !outDesc ||
-      !outStencilCopyFormat) {
+  if (!device || !device->_priv || !info || !outDesc
+      || !outStencilCopyFormat) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outDesc              = nil;
   *outStencilCopyFormat = MTLPixelFormatInvalid;
 
   deviceMT    = device->_priv;
   sampleCount = info->sampleCount ? info->sampleCount : 1u;
+
   if ((info->usage & GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT) != 0u) {
     return GPU_ERROR_UNSUPPORTED;
   }
-  if (sampleCount > 1u &&
-      ![deviceMT->device supportsTextureSampleCount:sampleCount]) {
+
+  if (sampleCount > 1u
+      && ![deviceMT->device supportsTextureSampleCount:sampleCount]) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -203,14 +398,16 @@ mt_createTextureDescriptor(GPUDevice                  *device,
   desc.storageMode      = storageMode;
 
   stencilCopyFormat = mt_stencilCopyFormat(info->format);
-  if (stencilCopyFormat != MTLPixelFormatInvalid &&
-      (info->usage & (GPU_TEXTURE_USAGE_COPY_SRC |
+
+  if (stencilCopyFormat != MTLPixelFormatInvalid
+      && (info->usage & (GPU_TEXTURE_USAGE_COPY_SRC |
                       GPU_TEXTURE_USAGE_COPY_DST)) != 0u) {
     desc.usage |= MTLTextureUsagePixelFormatView;
   }
 
   *outDesc              = desc;
   *outStencilCopyFormat = stencilCopyFormat;
+
   return GPU_OK;
 }
 
@@ -230,25 +427,23 @@ mt_wrapTexture(GPUDevice                  *device,
   }
 
   stencilCopyView = nil;
-  if (stencilCopyFormat != MTLPixelFormatInvalid &&
-      (info->usage & (GPU_TEXTURE_USAGE_COPY_SRC |
+
+  if (stencilCopyFormat != MTLPixelFormatInvalid
+      && (info->usage & (GPU_TEXTURE_USAGE_COPY_SRC |
                       GPU_TEXTURE_USAGE_COPY_DST)) != 0u) {
-    stencilCopyView = [nativeTexture
-      newTextureViewWithPixelFormat:stencilCopyFormat];
-    if (!stencilCopyView) {
+    if (!(stencilCopyView = [nativeTexture newTextureViewWithPixelFormat:stencilCopyFormat])) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-  if (gpuDeviceDebugMarkersEnabled(device) &&
-      info->label && info->label[0] != '\0') {
+  if (gpuDeviceDebugMarkersEnabled(device)
+      && info->label && info->label[0] != '\0') {
     nativeTexture.label = [NSString stringWithUTF8String:info->label];
   }
 #endif
 
-  texture = calloc(1, sizeof(*texture) + sizeof(*native));
-  if (!texture) {
+  if (!(texture = calloc(1, sizeof(*texture) + sizeof(*native)))) {
     [stencilCopyView release];
     return GPU_ERROR_OUT_OF_MEMORY;
   }
@@ -268,14 +463,15 @@ mt_wrapTexture(GPUDevice                  *device,
   texture->usage          = info->usage;
   texture->_ownsNative    = true;
   *outTexture             = texture;
+
   return GPU_OK;
 }
 
 GPU_HIDE
 GPUResult
-mt_createTexture(GPUDevice                  * __restrict device,
-                 const GPUTextureCreateInfo * __restrict info,
-                 GPUTexture                ** __restrict outTexture) {
+mt_createTexture(GPUDevice                  *__restrict device,
+                 const GPUTextureCreateInfo *__restrict info,
+                 GPUTexture                **__restrict outTexture) {
   GPUDeviceMT          *deviceMT;
   MTLTextureDescriptor *desc;
   id<MTLTexture>        nativeTexture;
@@ -286,12 +482,14 @@ mt_createTexture(GPUDevice                  * __restrict device,
   if (!device || !info || !outTexture) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outTexture = NULL;
 
   deviceMT    = device->_priv;
   storageMode = MTLStorageModePrivate;
-  if ((info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0 &&
-      !mt_formatIsDepthStencil(info->format)) {
+
+  if ((info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0
+      && !mt_formatIsDepthStencil(info->format)) {
 #if TARGET_OS_OSX
     storageMode = MTLStorageModeManaged;
 #else
@@ -304,12 +502,14 @@ mt_createTexture(GPUDevice                  * __restrict device,
                                       storageMode,
                                       &desc,
                                       &stencilCopyFormat);
+
   if (result != GPU_OK) {
     return result;
   }
 
   nativeTexture = [deviceMT->device newTextureWithDescriptor:desc];
   [desc release];
+
   if (!nativeTexture) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -319,16 +519,18 @@ mt_createTexture(GPUDevice                  * __restrict device,
                           nativeTexture,
                           stencilCopyFormat,
                           outTexture);
+
   if (result != GPU_OK) {
     [nativeTexture release];
     return result;
   }
+
   return GPU_OK;
 }
 
 GPU_HIDE
 void
-mt_destroyTexture(GPUTexture * __restrict texture) {
+mt_destroyTexture(GPUTexture *__restrict texture) {
   GPUTextureMT *native;
 
   if (!texture) {
@@ -340,222 +542,58 @@ mt_destroyTexture(GPUTexture * __restrict texture) {
     [native->stencilCopyView release];
     [native->texture release];
   }
+
   free(texture);
 }
 
-static GPUResult
-mt_writeTextureBlit(GPUQueue                    *queue,
-                    GPUTexture                  *texture,
-                    const GPUTextureWriteRegion *region,
-                    const void                  *data,
-                    const GPUFormatDataLayout   *dataLayout,
-                    MTLBlitOption                 option) {
-  id<MTLBlitCommandEncoder> blit;
-  id<MTLBuffer>             upload;
-  id<MTLTexture>            nativeTexture;
-  uint8_t                  *contents;
-  MTLSize                   size;
-  uint64_t                  uploadOffset;
-  GPUResult                 result;
-
-  nativeTexture = mt_nativeTexture(texture);
-  if (!nativeTexture || dataLayout->requiredBytes > NSUIntegerMax) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
-
-  result = mt_beginTransfer(queue,
-                            dataLayout->requiredBytes,
-                            &blit,
-                            &upload,
-                            &uploadOffset);
-  if (result != GPU_OK) {
-    return result;
-  }
-  contents = (uint8_t *)[upload contents];
-  if (!contents) {
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-  memcpy(contents + uploadOffset,
-         data,
-         (size_t)dataLayout->requiredBytes);
-
-  size = MTLSizeMake(region->width,
-                     region->height,
-                     texture->dimension == GPU_TEXTURE_DIMENSION_3D
-                       ? region->depth
-                       : 1u);
-  if (texture->dimension == GPU_TEXTURE_DIMENSION_3D) {
-    [blit copyFromBuffer:upload
-            sourceOffset:(NSUInteger)uploadOffset
-       sourceBytesPerRow:region->bytesPerRow
-     sourceBytesPerImage:(NSUInteger)dataLayout->bytesPerImage
-              sourceSize:size
-               toTexture:nativeTexture
-        destinationSlice:0u
-        destinationLevel:region->mipLevel
-       destinationOrigin:MTLOriginMake(0u, 0u, 0u)
-                 options:option];
-    return GPU_OK;
-  }
-  for (uint32_t i = 0u; i < region->layerCount; i++) {
-    [blit copyFromBuffer:upload
-            sourceOffset:(NSUInteger)(uploadOffset +
-                                      (uint64_t)i * dataLayout->bytesPerImage)
-       sourceBytesPerRow:region->bytesPerRow
-     sourceBytesPerImage:(NSUInteger)dataLayout->bytesPerImage
-              sourceSize:size
-               toTexture:nativeTexture
-        destinationSlice:region->baseArrayLayer + i
-        destinationLevel:region->mipLevel
-       destinationOrigin:MTLOriginMake(0u, 0u, 0u)
-                 options:option];
-  }
-  return GPU_OK;
-}
-
-#if MT_HAS_METAL4
-static GPUResult
-mt_writeSparseTexture4(GPUQueue                    *queue,
-                       GPUTexture                  *texture,
-                       const GPUTextureWriteRegion *region,
-                       const void                  *data,
-                       const GPUFormatDataLayout   *dataLayout) {
-  GPUCommandBuffer             *cmdb;
-  GPUCommandBuffer             *submitList[1];
-  GPUQueueSubmitInfo            submitInfo = {0};
-  MTCommandQueue               *nativeQueue;
-  GPUHeapMT                    *nativeHeap;
-  id<MTL4ComputeCommandEncoder> encoder;
-  id<MTLTexture>                nativeTexture;
-  id<MTLBuffer>                 upload;
-  MTLSize                       size;
-  uint64_t                      uploadOffset;
-  GPUResult                     result;
-
-  nativeQueue   = mt_commandQueue(queue);
-  nativeHeap    = texture && texture->_heap ? texture->_heap->_priv : NULL;
-  nativeTexture = mt_nativeTexture(texture);
-  cmdb          = NULL;
-  if (!nativeQueue || nativeQueue->mode != MTCommandMode4 ||
-      !nativeTexture || !nativeHeap || !nativeHeap->heap) {
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-
-  result = GPUAcquireCommandBuffer(queue, "sparse texture upload", &cmdb);
-  if (result != GPU_OK || !cmdb ||
-      !mt_reserveUpload(cmdb,
-                        dataLayout->requiredBytes,
-                        256u,
-                        &upload,
-                        &uploadOffset)) {
-    if (cmdb) {
-      GPUCommit(cmdb);
-    }
-    return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
-  }
-  memcpy((uint8_t *)upload.contents + uploadOffset,
-         data,
-         (size_t)dataLayout->requiredBytes);
-
-  if (@available(macOS 26.0, iOS 26.0, *)) {
-    encoder = [(id<MTL4CommandBuffer>)mt_modernCommandBuffer(cmdb)
-      computeCommandEncoder];
-    if (!encoder) {
-      GPUCommit(cmdb);
-      return GPU_ERROR_BACKEND_FAILURE;
-    }
-    mt_applyPendingBarrier(cmdb, encoder);
-    mt_useAllocation(cmdb, nativeHeap->heap);
-    mt_useAllocation(cmdb, nativeTexture);
-    size = MTLSizeMake(region->width,
-                       region->height,
-                       texture->dimension == GPU_TEXTURE_DIMENSION_3D
-                         ? region->depth
-                         : 1u);
-    if (texture->dimension == GPU_TEXTURE_DIMENSION_3D) {
-      [encoder copyFromBuffer:upload
-                  sourceOffset:(NSUInteger)uploadOffset
-             sourceBytesPerRow:region->bytesPerRow
-           sourceBytesPerImage:(NSUInteger)dataLayout->bytesPerImage
-                  sourceSize:size
-                   toTexture:nativeTexture
-            destinationSlice:0u
-            destinationLevel:region->mipLevel
-           destinationOrigin:MTLOriginMake(0u, 0u, 0u)
-                     options:MTLBlitOptionNone];
-    } else {
-      for (uint32_t i = 0u; i < region->layerCount; i++) {
-        [encoder copyFromBuffer:upload
-                    sourceOffset:(NSUInteger)(uploadOffset +
-                                               (uint64_t)i *
-                                                 dataLayout->bytesPerImage)
-               sourceBytesPerRow:region->bytesPerRow
-             sourceBytesPerImage:(NSUInteger)dataLayout->bytesPerImage
-                    sourceSize:size
-                     toTexture:nativeTexture
-              destinationSlice:region->baseArrayLayer + i
-              destinationLevel:region->mipLevel
-             destinationOrigin:MTLOriginMake(0u, 0u, 0u)
-                       options:MTLBlitOptionNone];
-      }
-    }
-    [encoder endEncoding];
-
-    submitList[0]                  = cmdb;
-    submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
-    submitInfo.chain.structSize   = sizeof(submitInfo);
-    submitInfo.ppCommandBuffers   = submitList;
-    submitInfo.commandBufferCount = 1u;
-    return GPUQueueSubmit(queue, &submitInfo);
-  }
-
-  GPUCommit(cmdb);
-  return GPU_ERROR_UNSUPPORTED;
-}
-#endif
-
 GPU_HIDE
 GPUResult
-mt_createTextureView(GPUTexture                      * __restrict texture,
-                     const GPUTextureViewCreateInfo  * __restrict info,
-                     GPUTextureView                 ** __restrict outView) {
-  id<MTLTexture> nativeTexture;
-  id<MTLTexture> nativeView;
-  MTTextureViewSlot *slot;
-  GPUTextureView *view;
-  MTLTextureType nativeViewType;
-  NSRange levels;
-  NSRange slices;
-  bool fullView;
+mt_createTextureView(GPUTexture                     *__restrict texture,
+                     const GPUTextureViewCreateInfo *__restrict info,
+                     GPUTextureView                **__restrict outView) {
+  NSRange                   levels;
+  NSRange                   slices;
+  id<MTLTexture>            nativeTexture;
+  id<MTLTexture>            nativeView;
+  MTTextureViewSlot        *slot;
+  GPUTextureView           *view;
+#if MT_HAS_METAL4
+  GPUDeviceMT              *deviceMT;
+  MTLTextureViewDescriptor *descriptor;
+#endif
+  MTLTextureType            nativeViewType;
+#if MT_HAS_METAL4
+  GPUResult                 result;
+#endif
+  bool                      fullView;
 
-  if (!texture || !texture->_priv || !info || !outView ||
-      info->format != texture->format) {
+  if (!texture || !texture->_priv || !info || !outView
+      || info->format != texture->format) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outView = NULL;
 
-  nativeTexture = mt_nativeTexture(texture);
+  nativeTexture  = mt_nativeTexture(texture);
   nativeViewType = mt_textureViewType(info->viewType, texture->sampleCount);
   nativeView     = nil;
-  fullView = info->format == texture->format &&
-             nativeTexture.textureType == nativeViewType &&
-             info->baseMipLevel == 0 &&
-             info->mipLevelCount == texture->mipLevelCount &&
-             info->baseArrayLayer == 0 &&
-             info->arrayLayerCount == gpuTextureArrayLayerCount(texture);
-  view = calloc(1, sizeof(*view) + sizeof(*slot));
-  if (!view) {
+  fullView       = info->format == texture->format
+                   && nativeTexture.textureType == nativeViewType
+                   && info->baseMipLevel == 0
+                   && info->mipLevelCount == texture->mipLevelCount
+                   && info->baseArrayLayer == 0
+                   && info->arrayLayerCount == gpuTextureArrayLayerCount(texture);
+
+  if (!(view = calloc(1, sizeof(*view) + sizeof(*slot)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+
   slot = (MTTextureViewSlot *)(view + 1);
 
 #if MT_HAS_METAL4
   if (!fullView) {
-    GPUDeviceMT             *deviceMT;
-    MTLTextureViewDescriptor *descriptor;
-    GPUResult                result;
-
     deviceMT = texture->device->_priv;
+
     if (deviceMT && deviceMT->commandMode == MTCommandMode4) {
       if (@available(macOS 26.0, iOS 26.0, *)) {
         descriptor             = [MTLTextureViewDescriptor new];
@@ -565,16 +603,18 @@ mt_createTextureView(GPUTexture                      * __restrict texture,
                                              info->mipLevelCount);
         descriptor.sliceRange  = NSMakeRange(info->baseArrayLayer,
                                              info->arrayLayerCount);
-        result = mt_acquireTextureView(deviceMT,
-                                       nativeTexture,
-                                       descriptor,
-                                       slot,
-                                       &view->_gpuResourceID);
+        result                 = mt_acquireTextureView(deviceMT,
+                                                       nativeTexture,
+                                                       descriptor,
+                                                       slot,
+                                                       &view->_gpuResourceID);
         [descriptor release];
+
         if (result != GPU_OK) {
           free(view);
           return result;
         }
+
         if ((texture->usage &
              (GPU_TEXTURE_USAGE_COLOR_TARGET |
               GPU_TEXTURE_USAGE_DEPTH_STENCIL |
@@ -590,17 +630,19 @@ mt_createTextureView(GPUTexture                      * __restrict texture,
     nativeView = nativeTexture;
     [nativeView retain];
   } else if (!nativeView) {
-    levels = NSMakeRange(info->baseMipLevel, info->mipLevelCount);
-    slices = NSMakeRange(info->baseArrayLayer, info->arrayLayerCount);
+    levels     = NSMakeRange(info->baseMipLevel, info->mipLevelCount);
+    slices     = NSMakeRange(info->baseArrayLayer, info->arrayLayerCount);
     nativeView = [nativeTexture newTextureViewWithPixelFormat:mt_format(info->format)
                                                   textureType:nativeViewType
                                                        levels:levels
                                                        slices:slices];
   }
+
   if (!nativeView) {
     if (slot->page) {
       mt_releaseTextureView(texture->device->_priv, slot);
     }
+
     free(view);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -608,18 +650,21 @@ mt_createTextureView(GPUTexture                      * __restrict texture,
   view->_priv       = nativeView;
   view->_texture    = texture;
   view->_ownsNative = true;
+
   if (view->_gpuResourceID == 0u) {
     if (@available(macOS 13.0, iOS 16.0, *)) {
       view->_gpuResourceID = nativeView.gpuResourceID._impl;
     }
   }
+
   *outView = view;
+
   return GPU_OK;
 }
 
 GPU_HIDE
 void
-mt_destroyTextureView(GPUTextureView * __restrict view) {
+mt_destroyTextureView(GPUTextureView *__restrict view) {
   MTTextureViewSlot *slot;
 
   if (!view) {
@@ -627,34 +672,43 @@ mt_destroyTextureView(GPUTextureView * __restrict view) {
   }
 
   slot = (MTTextureViewSlot *)(view + 1);
+
   if (slot->page && view->_texture && view->_texture->device) {
     mt_releaseTextureView(view->_texture->device->_priv, slot);
   }
+
   if (view->_ownsNative && view->_priv) {
     [(id<MTLTexture>)view->_priv release];
   }
+
   free(view);
 }
 
 GPU_HIDE
 GPUResult
-mt_writeTexture(GPUQueue                    * __restrict queue,
-                GPUTexture                  * __restrict texture,
-                const GPUTextureWriteRegion * __restrict region,
-                const void                  * __restrict data,
-                uint64_t                                 sizeBytes) {
-  id<MTLTexture>      nativeTexture;
-  const uint8_t      *bytes;
+mt_writeTexture(GPUQueue                    *__restrict queue,
+                GPUTexture                  *__restrict texture,
+                const GPUTextureWriteRegion *__restrict region,
+                const void                  *__restrict data,
+                uint64_t                                sizeBytes) {
   GPUFormatDataLayout dataLayout;
   MTLRegion           mtRegion;
+  id<MTLTexture>      nativeTexture;
+  const uint8_t      *bytes;
+#if MT_HAS_METAL4
+  MTCommandQueue     *nativeQueue;
+#endif
+  MTLBlitOption       option;
   GPUTextureAspect    resolved;
+  uint32_t            i;
 
-  if (!texture || !texture->_priv || !region || !data ||
-      !gpuFormatResolveCopyAspect(texture->format,
-                                  region->aspect,
-                                  &resolved)) {
+  if (!texture || !texture->_priv || !region || !data
+      || !gpuFormatResolveCopyAspect(texture->format,
+                                     region->aspect,
+                                     &resolved)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (!gpuFormatAspectDataLayout(texture->format,
                                  region->aspect,
                                  region->width,
@@ -663,20 +717,20 @@ mt_writeTexture(GPUQueue                    * __restrict queue,
                                  region->layerCount,
                                  region->bytesPerRow,
                                  region->rowsPerImage,
-                                 &dataLayout) ||
-      sizeBytes < dataLayout.requiredBytes ||
-      dataLayout.bytesPerImage > NSUIntegerMax) {
+                                 &dataLayout)
+      || sizeBytes < dataLayout.requiredBytes
+      || dataLayout.bytesPerImage > NSUIntegerMax) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (texture->format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8 ||
-      texture->format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8) {
-    MTLBlitOption option;
-
+  if (texture->format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8
+      || texture->format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8) {
     option = mt_copyOption(texture->format, region->aspect);
+
     if (option == MTLBlitOptionNone) {
       return GPU_ERROR_UNSUPPORTED;
     }
+
     return mt_writeTextureBlit(queue,
                                texture,
                                region,
@@ -684,11 +738,11 @@ mt_writeTexture(GPUQueue                    * __restrict queue,
                                &dataLayout,
                                option);
   }
+
   if (texture->_sparse) {
 #if MT_HAS_METAL4
-    MTCommandQueue *nativeQueue;
-
     nativeQueue = mt_commandQueue(queue);
+
     if (nativeQueue && nativeQueue->mode == MTCommandMode4) {
       return mt_writeSparseTexture4(queue,
                                     texture,
@@ -706,32 +760,37 @@ mt_writeTexture(GPUQueue                    * __restrict queue,
   }
 
   nativeTexture = mt_copyTexture(texture, region->aspect);
+
   if (!nativeTexture) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
   bytes = data;
+
   if (nativeTexture.textureType == MTLTextureType3D) {
     mtRegion = MTLRegionMake3D(0, 0, 0, region->width, region->height, region->depth);
     [nativeTexture replaceRegion:mtRegion
-                      mipmapLevel:region->mipLevel
-                            slice:0
-                        withBytes:bytes
-                      bytesPerRow:region->bytesPerRow
-                    bytesPerImage:(NSUInteger)dataLayout.bytesPerImage];
+                     mipmapLevel:region->mipLevel
+                           slice:0
+                       withBytes:bytes
+                     bytesPerRow:region->bytesPerRow
+                   bytesPerImage:(NSUInteger)dataLayout.bytesPerImage];
     return GPU_OK;
   }
 
   mtRegion = MTLRegionMake2D(0, 0, region->width, region->height);
-  for (uint32_t i = 0; i < region->layerCount; i++) {
+
+  for (i = 0; i < region->layerCount; i++) {
     [nativeTexture replaceRegion:mtRegion
-                      mipmapLevel:region->mipLevel
-                            slice:region->baseArrayLayer + i
-                        withBytes:bytes +
+                     mipmapLevel:region->mipLevel
+                           slice:region->baseArrayLayer + i
+                       withBytes:bytes +
                                   ((NSUInteger)i *
                                    (NSUInteger)dataLayout.bytesPerImage)
-                      bytesPerRow:region->bytesPerRow
-                    bytesPerImage:(NSUInteger)dataLayout.bytesPerImage];
+                     bytesPerRow:region->bytesPerRow
+                   bytesPerImage:(NSUInteger)dataLayout.bytesPerImage];
   }
+
   return GPU_OK;
 }
 
@@ -744,9 +803,9 @@ mt_initDepthStencil(GPUApiDepthStencil *api) {
 GPU_HIDE
 void
 mt_initTexture(GPUApiTexture *api) {
-  api->create = mt_createTexture;
-  api->destroy = mt_destroyTexture;
-  api->createView = mt_createTextureView;
+  api->create      = mt_createTexture;
+  api->destroy     = mt_destroyTexture;
+  api->createView  = mt_createTextureView;
   api->destroyView = mt_destroyTextureView;
-  api->write = mt_writeTexture;
+  api->write       = mt_writeTexture;
 }

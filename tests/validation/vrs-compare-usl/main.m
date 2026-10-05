@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <AppKit/AppKit.h>
 #import <dispatch/dispatch.h>
 
@@ -19,7 +35,35 @@
 #  define GPU_SAMPLE_VRS_ATTACHMENT 0
 #endif
 
-static NSString *
+@interface VRSCompareApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
+@private
+  NSWindow           *_window;
+  NSView             *_view;
+  GPUInstance        *_instance;
+  GPUAdapter         *_adapter;
+  GPUDevice          *_device;
+  GPUQueue           *_queue;
+  GPUSurface         *_surface;
+  GPUSwapchain       *_swapchain;
+  NSTimer            *_timer;
+  GPUSampleVRSCompare _renderer;
+  NSInteger           _exitAfterFrames;
+  NSInteger           _submittedFrames;
+  NSInteger           _completedFrames;
+  BOOL                _assertZeroAlloc;
+  BOOL                _failed;
+  BOOL                _skipped;
+  BOOL                _terminating;
+}
+
+- (void)frameCompleted;
+- (void)fail;
+- (void)stopApplication;
+- (BOOL)failed;
+- (BOOL)skipped;
+@end
+
+static NSString*
 VRSCompareWindowTitle(void) {
 #if GPU_SAMPLE_VRS_ATTACHMENT
   return @"GPU Vulkan USL VRS Attachment Compare";
@@ -28,7 +72,7 @@ VRSCompareWindowTitle(void) {
 #endif
 }
 
-static const char *
+static const char*
 VRSCompareStatsLabel(void) {
 #if GPU_SAMPLE_VRS_ATTACHMENT
   return "GPU Vulkan VRS attachment compare";
@@ -36,33 +80,6 @@ VRSCompareStatsLabel(void) {
   return "GPU Vulkan VRS compare";
 #endif
 }
-
-@interface VRSCompareApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
-@private
-  NSWindow            *_window;
-  NSView              *_view;
-  GPUInstance         *_instance;
-  GPUAdapter          *_adapter;
-  GPUDevice           *_device;
-  GPUQueue            *_queue;
-  GPUSurface          *_surface;
-  GPUSwapchain        *_swapchain;
-  NSTimer             *_timer;
-  GPUSampleVRSCompare  _renderer;
-  NSInteger            _exitAfterFrames;
-  NSInteger            _submittedFrames;
-  NSInteger            _completedFrames;
-  BOOL                 _assertZeroAlloc;
-  BOOL                 _failed;
-  BOOL                 _skipped;
-  BOOL                 _terminating;
-}
-- (void)frameCompleted;
-- (void)fail;
-- (void)stopApplication;
-- (BOOL)failed;
-- (BOOL)skipped;
-@end
 
 static void
 VRSCompareFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
@@ -83,6 +100,7 @@ VRSCompareDeviceError(GPUDevice                *device,
   app = (__bridge VRSCompareApp *)userData;
   NSLog(@"GPU VRS compare error: %s",
         error && error->message ? error->message : "unknown error");
+
   if (app) {
     [app fail];
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -99,9 +117,11 @@ VRSCompareDeviceError(GPUDevice                *device,
   if (!outWidth || !outHeight) {
     return NO;
   }
+
   scale      = _window.backingScaleFactor ?: 1.0f;
   *outWidth  = (uint32_t)(_view.bounds.size.width * scale);
   *outHeight = (uint32_t)(_view.bounds.size.height * scale);
+
   return *outWidth > 0u && *outHeight > 0u;
 }
 
@@ -109,10 +129,10 @@ VRSCompareDeviceError(GPUDevice                *device,
   GPUInstanceCreateInfo instanceInfo = {0};
   GPUDeviceCreateInfo   deviceInfo   = {0};
   GPURuntimeConfig      runtime      = {0};
+  GPUExtent2D           attachmentTexelSize;
   GPUShaderLibrary     *library;
   GPUShaderLayout      *shaderLayout;
   GPUShadingRateEXT     coarseRate;
-  GPUExtent2D           attachmentTexelSize;
   GPUVRSModeFlagsEXT    mode;
   GPUFeature            feature;
   uint32_t              width;
@@ -125,17 +145,21 @@ VRSCompareDeviceError(GPUDevice                *device,
                                     : "vrs-compare-native-usl";
   instanceInfo.preferredBackend = GPU_SAMPLE_BACKEND;
   instanceInfo.enableValidation = true;
+
   if (GPUCreateInstance(&instanceInfo, &_instance) != GPU_OK || !_instance) {
     return NO;
   }
 
   _adapter = GPUSampleSelectAdapter(_instance);
+
   if (!_adapter) {
     return NO;
   }
+
   memset(&attachmentTexelSize, 0, sizeof(attachmentTexelSize));
 #if GPU_SAMPLE_VRS_ATTACHMENT
   mode = GPU_VRS_ATTACHMENT_BIT_EXT;
+
   if (GPUSampleChooseVRSAttachment(_adapter,
                                    &coarseRate,
                                    &attachmentTexelSize) != GPU_OK) {
@@ -146,6 +170,7 @@ VRSCompareDeviceError(GPUDevice                *device,
   }
 #else
   mode = GPU_VRS_DRAW_RATE_BIT_EXT;
+
   if (GPUSampleChooseVRSRate(_adapter, &coarseRate) != GPU_OK) {
     fprintf(stderr,
             "GPU Vulkan VRS compare: draw-rate VRS unavailable\n");
@@ -154,25 +179,31 @@ VRSCompareDeviceError(GPUDevice                *device,
   }
 #endif
 
-  feature                          = GPU_FEATURE_VARIABLE_RATE_SHADING;
+  feature = GPU_FEATURE_VARIABLE_RATE_SHADING;
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.chain.structSize      = sizeof(deviceInfo);
   deviceInfo.required.pFeatures    = &feature;
   deviceInfo.required.featureCount = 1u;
+
   if (GPUCreateDevice(_adapter, &deviceInfo, &_device) != GPU_OK || !_device) {
     return NO;
   }
+
   runtime.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
   runtime.chain.structSize = sizeof(runtime);
   runtime.validationMode   = GPU_VALIDATION_FULL;
   runtime.enableStats      = true;
+
   if (GPUConfigureRuntime(_device, &runtime) != GPU_OK) {
     return NO;
   }
+
   _queue = GPUGetQueue(_device, GPU_QUEUE_GRAPHICS, 0u);
+
   if (!_queue) {
     return NO;
   }
+
   if (GPUSetDeviceErrorCallback(_device,
                                 VRSCompareDeviceError,
                                 (__bridge void *)self) != GPU_OK) {
@@ -184,19 +215,23 @@ VRSCompareDeviceError(GPUDevice                *device,
                                         (__bridge void *)_view,
                                         GPU_SURFACE_APPLE_NSVIEW,
                                         _window.backingScaleFactor ?: 1.0f);
+
   if (!_surface) {
     return NO;
   }
+
   _swapchain = GPUCreateSwapchainDefault(_device,
                                          _surface,
                                          (uint32_t)_view.bounds.size.width,
                                          (uint32_t)_view.bounds.size.height);
+
   if (!_swapchain || ![self drawableSizeWidth:&width height:&height]) {
     return NO;
   }
 
   library      = NULL;
   shaderLayout = NULL;
+
   if (!GPUSampleLoadUSL(_device,
                         @"vrs_compare.us",
                         1u,
@@ -204,6 +239,7 @@ VRSCompareDeviceError(GPUDevice                *device,
                         &shaderLayout)) {
     return NO;
   }
+
   return GPUSampleVRSCompareInit(&_renderer,
                                  _device,
                                  _queue,
@@ -223,20 +259,22 @@ VRSCompareDeviceError(GPUDevice                *device,
   uint32_t                     width;
   uint32_t                     height;
 
-  if (_terminating ||
-      (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) ||
-      !GPUSampleRecoverSwapchain(_swapchain, _view) ||
-      ![self drawableSizeWidth:&width height:&height]) {
+  if (_terminating
+      || (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames)
+      || !GPUSampleRecoverSwapchain(_swapchain, _view)
+      || ![self drawableSizeWidth:&width height:&height]) {
     return;
   }
+
   if (GPUSampleVRSCompareResize(&_renderer, width, height) != GPU_OK) {
     return;
   }
 
   completion = _exitAfterFrames > 0 ? VRSCompareFrameComplete : NULL;
-  result = GPUSampleVRSCompareRender(&_renderer,
-                                     (__bridge void *)self,
-                                     completion);
+  result     = GPUSampleVRSCompareRender(&_renderer,
+                                         (__bridge void *)self,
+                                         completion);
+
   if (result != GPU_OK) {
     NSLog(@"GPU VRS compare frame failed: %d", result);
     _failed      = YES;
@@ -246,6 +284,7 @@ VRSCompareDeviceError(GPUDevice                *device,
   }
 
   _submittedFrames++;
+
   if (!GPUSampleCheckZeroAlloc(_device,
                                (uint32_t)_submittedFrames,
                                _assertZeroAlloc,
@@ -253,8 +292,8 @@ VRSCompareDeviceError(GPUDevice                *device,
     _failed      = YES;
     _terminating = YES;
     [self stopApplication];
-  } else if (_exitAfterFrames > 0 &&
-             _submittedFrames >= _exitAfterFrames) {
+  } else if (_exitAfterFrames > 0
+             && _submittedFrames >= _exitAfterFrames) {
     [_timer invalidate];
     _timer = nil;
   }
@@ -263,9 +302,10 @@ VRSCompareDeviceError(GPUDevice                *device,
 - (void)frameCompleted {
   dispatch_async(dispatch_get_main_queue(), ^{
     self->_completedFrames++;
-    if (self->_exitAfterFrames > 0 &&
-        self->_completedFrames >= self->_exitAfterFrames &&
-        !self->_terminating) {
+
+    if (self->_exitAfterFrames > 0
+        && self->_completedFrames >= self->_exitAfterFrames
+        && !self->_terminating) {
       self->_terminating = YES;
       [NSApp terminate:nil];
     }
@@ -297,6 +337,7 @@ VRSCompareDeviceError(GPUDevice                *device,
   if (!_terminating) {
     _terminating = YES;
   }
+
   [self cleanupGPU];
   [NSApp stop:nil];
   event = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
@@ -315,21 +356,25 @@ VRSCompareDeviceError(GPUDevice                *device,
   const char *exitAfterFrames;
 
   (void)notification;
-  if (!GPUSampleCreateWindow(VRSCompareWindowTitle(), self, &_window, &_view) ||
-      ![self setupGPU]) {
+
+  if (!GPUSampleCreateWindow(VRSCompareWindowTitle(), self, &_window, &_view)
+      || ![self setupGPU]) {
     if (!_skipped) {
       _failed = YES;
     }
+
     [self stopApplication];
     return;
   }
 
   exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+
   if (exitAfterFrames) {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
   }
+
   _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
-  _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
+  _timer           = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
                                    target:self
                                  selector:@selector(tick:)
                                  userInfo:nil
@@ -381,5 +426,6 @@ main(int argc, const char *argv[]) {
     [NSApp run];
     result = [delegate skipped] ? 77 : ([delegate failed] ? 1 : 0);
   }
+
   return result;
 }

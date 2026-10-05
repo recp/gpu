@@ -17,59 +17,64 @@
 #include "../common.h"
 
 static GPUShaderLibrary*
-dx12__newLibrary(GPUDevice *device,
+dx12__newLibrary(GPUDevice  *device,
                  const void *source,
-                 uint64_t sourceSize,
-                 bool binary) {
+                 uint64_t    sourceSize,
+                 bool        binary) {
   GPUShaderLibraryDX12 *native;
   GPUShaderLibrary     *library;
 
-  if (!device || !source || sourceSize == 0u ||
-      sourceSize > (uint64_t)SIZE_MAX - (binary ? 0u : 1u)) {
+  if (!device || !source || sourceSize == 0u
+      || sourceSize > (uint64_t)SIZE_MAX - (binary ? 0u : 1u)) {
     return NULL;
   }
 
   library = calloc(1, sizeof(*library));
   native  = calloc(1, sizeof(*native));
+
   if (!library || !native) {
     free(native);
     free(library);
     return NULL;
   }
 
-  native->source = malloc((size_t)sourceSize + (binary ? 0u : 1u));
-  if (!native->source) {
+  if (!(native->source = malloc((size_t)sourceSize + (binary ? 0u : 1u)))) {
     free(native);
     free(library);
     return NULL;
   }
 
   memcpy(native->source, source, (size_t)sourceSize);
+
   if (!binary) {
     native->source[sourceSize] = '\0';
   }
-  native->sourceSize         = sourceSize;
-  native->binary             = binary;
+
+  native->sourceSize = sourceSize;
+  native->binary     = binary;
+
   InitializeSRWLock(&native->cacheLock);
-  library->_priv             = native;
+  library->_priv = native;
+
   return library;
 }
 
 GPU_HIDE
 GPUShaderLibrary*
-dx12_newLibraryWithSource(GPUDevice *device,
+dx12_newLibraryWithSource(GPUDevice  *device,
                           const char *source,
-                          uint64_t sourceSize,
-                          uint32_t compileFlags) {
+                          uint64_t    sourceSize,
+                          uint32_t    compileFlags) {
   (void)compileFlags;
+
   return dx12__newLibrary(device, source, sourceSize, false);
 }
 
 GPU_HIDE
 GPUShaderLibrary*
-dx12_newLibraryWithBinary(GPUDevice *device,
+dx12_newLibraryWithBinary(GPUDevice  *device,
                           const void *source,
-                          uint64_t sourceSize) {
+                          uint64_t    sourceSize) {
   return dx12__newLibrary(device, source, sourceSize, true);
 }
 
@@ -85,6 +90,7 @@ dx12_destroyLibrary(GPUShaderLibrary *library) {
   }
 
   native = library->_priv;
+
   if (native) {
     for (entry = native->cache; entry; entry = next) {
       next = entry->next;
@@ -92,9 +98,11 @@ dx12_destroyLibrary(GPUShaderLibrary *library) {
       free(entry->entry);
       free(entry);
     }
+
     free(native->source);
     free(native);
   }
+
   free(library);
 }
 

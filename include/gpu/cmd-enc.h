@@ -52,16 +52,33 @@ typedef struct GPUBufferBinding {
   uint64_t   offset;
 } GPUBufferBinding;
 
+typedef uint64_t GPUDynamicStateMask;
+enum {
+  GPU_DYNAMIC_STATE_VIEWPORT_BIT          = 1ull << 0,
+  GPU_DYNAMIC_STATE_SCISSOR_BIT           = 1ull << 1,
+  GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT    = 1ull << 2,
+  GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT = 1ull << 3
+};
+
+typedef struct GPUDynamicStateApplyInfo {
+  GPUChainedStruct    chain;
+  GPUDynamicStateMask mask;
+  GPUViewport         viewport;
+  GPUScissorRect      scissor;
+  float               blendConstant[4];
+  uint32_t            stencilReference;
+} GPUDynamicStateApplyInfo;
+
 GPU_EXPORT
 void
 GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline);
 
 GPU_EXPORT
 void
-GPUBindVertexBuffers(GPURenderPassEncoder     *pass,
-                     uint32_t                  firstSlot,
-                     uint32_t                  count,
-                     const GPUBufferBinding   *bindings);
+GPUBindVertexBuffers(GPURenderPassEncoder   *pass,
+                     uint32_t                firstSlot,
+                     uint32_t                count,
+                     const GPUBufferBinding *bindings);
 
 GPU_EXPORT
 void
@@ -138,26 +155,9 @@ GPUMultiDrawIndexedIndirect(GPURenderPassEncoder *pass,
                             uint32_t              drawCount,
                             uint32_t              strideBytes);
 
-typedef uint64_t GPUDynamicStateMask;
-enum {
-  GPU_DYNAMIC_STATE_VIEWPORT_BIT          = 1ull << 0,
-  GPU_DYNAMIC_STATE_SCISSOR_BIT           = 1ull << 1,
-  GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT    = 1ull << 2,
-  GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT = 1ull << 3
-};
-
-typedef struct GPUDynamicStateApplyInfo {
-  GPUChainedStruct    chain;
-  GPUDynamicStateMask mask;
-  GPUViewport         viewport;
-  GPUScissorRect      scissor;
-  float               blendConstant[4];
-  uint32_t            stencilReference;
-} GPUDynamicStateApplyInfo;
-
 GPU_EXPORT
 void
-GPUApplyDynamicState(GPURenderPassEncoder *pass,
+GPUApplyDynamicState(GPURenderPassEncoder           *pass,
                      const GPUDynamicStateApplyInfo *info);
 
 #ifdef __cplusplus

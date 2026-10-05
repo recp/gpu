@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #import <AppKit/AppKit.h>
 #import <dispatch/dispatch.h>
 #include <math.h>
@@ -19,47 +35,50 @@ typedef struct FragmentUniforms {
   float tint[4];
 } FragmentUniforms;
 
+@interface TriangleApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
+@private
+  NSWindow *_window;
+  NSView   *_view;
+
+  GPUInstance       *_instance;
+  GPUAdapter        *_adapter;
+  GPUDevice         *_device;
+  GPUQueue          *_queue;
+  GPUSurface        *_surface;
+  GPUSwapchain      *_swapchain;
+  GPUShaderLibrary  *_library;
+  GPUShaderLayout   *_shaderLayout;
+  GPURenderPipeline *_pipeline;
+  GPUBuffer         *_vertexBuffer;
+  GPUBuffer         *_fragmentUniformBuffer;
+  GPUBindGroup      *_fragmentGroup;
+  uint32_t           _fragmentUniformOffset;
+  NSTimer           *_timer;
+  NSTimeInterval     _animationStart;
+  NSInteger          _exitAfterFrames;
+  NSInteger          _submittedFrames;
+  NSInteger          _completedFrames;
+  BOOL               _assertZeroAlloc;
+  BOOL               _statsFailed;
+  BOOL               _terminating;
+}
+
+- (void)frameCompleted;
+- (BOOL)statsFailed;
+@end
+
 static const TriangleVertex kTriangleVertices[] = {
   { {  0.0f,  0.65f } },
   { { -0.7f, -0.65f } },
   { {  0.7f, -0.65f } },
 };
 
-@interface TriangleApp : NSObject <NSApplicationDelegate, NSWindowDelegate> {
-@private
-  NSWindow *_window;
-  NSView *_view;
-
-  GPUInstance *_instance;
-  GPUAdapter *_adapter;
-  GPUDevice *_device;
-  GPUQueue        *_queue;
-  GPUSurface *_surface;
-  GPUSwapchain *_swapchain;
-  GPUShaderLibrary *_library;
-  GPUShaderLayout *_shaderLayout;
-  GPURenderPipeline *_pipeline;
-  GPUBuffer *_vertexBuffer;
-  GPUBuffer *_fragmentUniformBuffer;
-  GPUBindGroup *_fragmentGroup;
-  uint32_t _fragmentUniformOffset;
-  NSTimer *_timer;
-  NSTimeInterval _animationStart;
-  NSInteger _exitAfterFrames;
-  NSInteger _submittedFrames;
-  NSInteger _completedFrames;
-  BOOL _assertZeroAlloc;
-  BOOL _statsFailed;
-  BOOL _terminating;
-}
-- (void)frameCompleted;
-- (BOOL)statsFailed;
-@end
-
 static void
 TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
+  TriangleApp *app;
+
   (void)cmdb;
-  TriangleApp *app = (__bridge TriangleApp *)sender;
+  app = (__bridge TriangleApp *)sender;
   [app frameCompleted];
 }
 
@@ -73,6 +92,11 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (BOOL)setupGPU {
+  const GPUBindGroupLayoutEntry *entries;
+  uint32_t                       entryCount = 0u;
+  uint32_t                       i;
+  BOOL                           sawDynamicUniform = NO;
+
   if (!GPUSampleCreateDefaultSurfaceGPU(_window,
                                         _view,
                                         &_instance,
@@ -91,28 +115,28 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
                         &_shaderLayout)) {
     return NO;
   }
-  if (!_shaderLayout ||
-      _shaderLayout->bindGroupLayoutCount != 1u ||
-      !_shaderLayout->bindGroupLayouts ||
-      !_shaderLayout->bindGroupLayouts[0]) {
+
+  if (!_shaderLayout
+      || _shaderLayout->bindGroupLayoutCount != 1u
+      || !_shaderLayout->bindGroupLayouts
+      || !_shaderLayout->bindGroupLayouts[0]) {
     NSLog(@"GPU: unexpected triangle shader layout");
     return NO;
   }
-  {
-    const GPUBindGroupLayoutEntry *entries;
-    uint32_t entryCount = 0u;
-    BOOL sawDynamicUniform = NO;
 
+  {
     entries = GPUGetBindGroupLayoutEntries(_shaderLayout->bindGroupLayouts[0],
                                            &entryCount);
-    for (uint32_t i = 0; entries && i < entryCount; i++) {
-      if (entries[i].binding == 0u &&
-          entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER &&
-          entries[i].hasDynamicOffset) {
+
+    for (i = 0; entries && i < entryCount; i++) {
+      if (entries[i].binding == 0u
+          && entries[i].bindingType == GPU_BINDING_UNIFORM_BUFFER
+          && entries[i].hasDynamicOffset) {
         sawDynamicUniform = YES;
         break;
       }
     }
+
     if (!sawDynamicUniform) {
       NSLog(@"GPU: triangle uniform reflection is not dynamic-offset capable");
       return NO;
@@ -166,6 +190,7 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .frontFace = GPU_FRONT_FACE_CCW,
     .multisample = multisample
   };
+
   if (GPUCreateRenderPipeline(_device, &pipelineInfo, &_pipeline) != GPU_OK) {
     NSLog(@"GPU: failed to create render pipeline");
     return NO;
@@ -178,6 +203,7 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .sizeBytes = sizeof(kTriangleVertices),
     .usage = GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_COPY_DST
   };
+
   if (GPUCreateBuffer(_device, &vertexBufferInfo, &_vertexBuffer) != GPU_OK) {
     NSLog(@"GPU: failed to create vertex buffer");
     return NO;
@@ -200,21 +226,24 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .chunkBytes = 256,
     .allowChunkFallback = true
   };
+
   if (GPUConfigureTransientAllocator(_device, &transientInfo) != GPU_OK) {
     NSLog(@"GPU: failed to configure transient uniforms");
     return NO;
   }
 
   GPUTransientBufferSlice initialUniformSlice = {0};
+
   if (GPUAllocateTransientBuffer(_device,
                                  GPU_BUFFER_USAGE_UNIFORM,
                                  sizeof(FragmentUniforms),
                                  256,
-                                 &initialUniformSlice) != GPU_OK ||
-      !initialUniformSlice.buffer) {
+                                 &initialUniformSlice) != GPU_OK
+      || !initialUniformSlice.buffer) {
     NSLog(@"GPU: failed to allocate transient uniform slice");
     return NO;
   }
+
   _fragmentUniformBuffer = initialUniformSlice.buffer;
 
   GPUBindGroupEntry group0Bindings[] = {
@@ -235,6 +264,7 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
     .entryCount = 1,
     .pEntries = group0Bindings
   };
+
   if (GPUCreateBindGroup(_device, &group0Info, &_fragmentGroup) != GPU_OK) {
     NSLog(@"GPU: failed to create fragment bind group");
     return NO;
@@ -244,23 +274,24 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (BOOL)updateFragmentUniforms {
-  FragmentUniforms uniforms;
+  FragmentUniforms        uniforms;
   GPUTransientBufferSlice slice = {0};
-  float time;
+  float                   time;
 
-  time = (float)(CACurrentMediaTime() - _animationStart);
+  time             = (float)(CACurrentMediaTime() - _animationStart);
   uniforms.tint[0] = 0.6f + 0.4f * sinf(time * 1.1f);
   uniforms.tint[1] = 0.6f + 0.4f * sinf(time * 1.7f + 2.1f);
   uniforms.tint[2] = 0.6f + 0.4f * sinf(time * 1.3f + 4.2f);
   uniforms.tint[3] = 1.0f;
+
   if (GPUAllocateTransientBuffer(_device,
                                  GPU_BUFFER_USAGE_UNIFORM,
                                  sizeof(uniforms),
                                  256,
-                                 &slice) != GPU_OK ||
-      slice.buffer != _fragmentUniformBuffer ||
-      !slice.cpuPtr ||
-      slice.offset > UINT32_MAX) {
+                                 &slice) != GPU_OK
+      || slice.buffer != _fragmentUniformBuffer
+      || !slice.cpuPtr
+      || slice.offset > UINT32_MAX) {
     NSLog(@"GPU: failed to allocate frame uniform slice");
     return NO;
   }
@@ -271,22 +302,24 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
 }
 
 - (void)renderFrame {
-  GPUFrame *frame = NULL;
-  GPUCommandBuffer *cmdb = NULL;
-  GPUResult submitResult = GPU_OK;
-  GPURenderPassEncoder *encoder = NULL;
-  GPURenderPassColorAttachment color = {0};
-  GPURenderPassCreateInfo rp = {0};
-  GPUBufferBinding vertexBuffer = {0};
+  GPURenderPassColorAttachment color        = {0};
+  GPURenderPassCreateInfo      rp           = {0};
+  GPUBufferBinding             vertexBuffer = {0};
+  GPUFrame                    *frame        = NULL;
+  GPUCommandBuffer            *cmdb         = NULL;
+  GPURenderPassEncoder        *encoder      = NULL;
+  GPUResult                    submitResult = GPU_OK;
 
   if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
     return;
   }
+
   if (!GPUSampleRecoverSwapchain(_swapchain, _view)) {
     return;
   }
 
   frame = GPUBeginFrame(_swapchain);
+
   if (!frame) {
     (void)GPUSampleRecoverSwapchain(_swapchain, _view);
     return;
@@ -295,25 +328,27 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   if (GPUAcquireCommandBuffer(_queue, "main-frame", &cmdb) != GPU_OK || !cmdb) {
     goto cleanup;
   }
+
   if (_exitAfterFrames > 0) {
     GPUSetCommandBufferCompletionHandler(cmdb,
                                          (__bridge void *)self,
                                          TriangleUSLFrameComplete);
   }
 
-  color.view = GPUFrameGetTargetView(frame);
-  color.loadOp = GPU_LOAD_OP_CLEAR;
-  color.storeOp = GPU_STORE_OP_STORE;
+  color.view                  = GPUFrameGetTargetView(frame);
+  color.loadOp                = GPU_LOAD_OP_CLEAR;
+  color.storeOp               = GPU_STORE_OP_STORE;
   color.clearColor.float32[0] = 0.0f;
   color.clearColor.float32[1] = 0.0f;
   color.clearColor.float32[2] = 0.0f;
   color.clearColor.float32[3] = 1.0f;
 
-  rp.label = "triangle-usl-pass";
+  rp.label                = "triangle-usl-pass";
   rp.colorAttachmentCount = 1;
-  rp.pColorAttachments = &color;
+  rp.pColorAttachments    = &color;
 
   encoder = GPUBeginRenderPass(cmdb, &rp);
+
   if (!encoder) {
     goto cleanup;
   }
@@ -330,13 +365,15 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
   GPUBindRenderGroup(encoder, 0, _fragmentGroup, 1, &_fragmentUniformOffset);
   GPUDraw(encoder, 3, 1, 0, 0);
   GPUEndRenderPass(encoder);
-  encoder = NULL;
+  encoder      = NULL;
   submitResult = GPUFinishFrame(_queue, cmdb, frame);
-  frame = NULL;
+  frame        = NULL;
+
   if (submitResult != GPU_OK) {
     NSLog(@"GPUFinishFrame failed: %d", submitResult);
   } else {
     _submittedFrames++;
+
     if (!GPUSampleCheckZeroAlloc(_device,
                                  (uint32_t)_submittedFrames,
                                  _assertZeroAlloc,
@@ -348,6 +385,7 @@ TriangleUSLFrameComplete(void *sender, GPUCommandBuffer *cmdb) {
       [NSApp terminate:nil];
       return;
     }
+
     if (_exitAfterFrames > 0 && _submittedFrames >= _exitAfterFrames) {
       [_timer invalidate];
       _timer = nil;
@@ -358,15 +396,17 @@ cleanup:
   if (encoder) {
     GPUEndRenderPass(encoder);
   }
+
   GPUEndFrame(frame);
 }
 
 - (void)frameCompleted {
   dispatch_async(dispatch_get_main_queue(), ^{
     self->_completedFrames++;
-    if (self->_exitAfterFrames > 0 &&
-        self->_completedFrames >= self->_exitAfterFrames &&
-        !self->_terminating) {
+
+    if (self->_exitAfterFrames > 0
+        && self->_completedFrames >= self->_exitAfterFrames
+        && !self->_terminating) {
       self->_terminating = YES;
       [self->_timer invalidate];
       self->_timer = nil;
@@ -377,9 +417,11 @@ cleanup:
 
 - (void)tick:(NSTimer *)timer {
   (void)timer;
+
   if (_terminating) {
     return;
   }
+
   [self renderFrame];
 }
 
@@ -388,44 +430,55 @@ cleanup:
     GPUDestroyBindGroup(_fragmentGroup);
     _fragmentGroup = NULL;
   }
+
   if (_pipeline) {
     GPUDestroyRenderPipeline(_pipeline);
     _pipeline = NULL;
   }
+
   _fragmentUniformBuffer = NULL;
+
   if (_vertexBuffer) {
     GPUDestroyBuffer(_vertexBuffer);
     _vertexBuffer = NULL;
   }
+
   if (_shaderLayout) {
     GPUDestroyShaderLayout(_shaderLayout);
     _shaderLayout = NULL;
   }
+
   if (_library) {
     GPUDestroyShaderLibrary(_library);
     _library = NULL;
   }
+
   if (_swapchain) {
     GPUDestroySwapchain(_swapchain);
     _swapchain = NULL;
   }
+
   if (_surface) {
     GPUDestroySurface(_surface);
     _surface = NULL;
   }
+
   if (_device) {
     GPUDestroyDevice(_device);
     _device = NULL;
-    _queue = NULL;
+    _queue  = NULL;
   }
+
   if (_instance) {
     GPUDestroyInstance(_instance);
     _instance = NULL;
-    _adapter = NULL;
+    _adapter  = NULL;
   }
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
+  const char *exitAfterFrames;
+
   (void)notification;
 
   if (![self setupWindow]) {
@@ -438,17 +491,20 @@ cleanup:
     return;
   }
 
-  const char *exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+  exitAfterFrames = getenv("GPU_SAMPLE_EXIT_AFTER_FRAMES");
+
   if (exitAfterFrames && exitAfterFrames[0] != '\0') {
     _exitAfterFrames = strtol(exitAfterFrames, NULL, 10);
+
     if (_exitAfterFrames < 1) {
       _exitAfterFrames = 1;
     }
   }
+
   _assertZeroAlloc = GPUSampleEnvEnabled("GPU_SAMPLE_ASSERT_ZERO_ALLOC");
 
   _animationStart = CACurrentMediaTime();
-  _timer = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
+  _timer          = [NSTimer timerWithTimeInterval:(1.0 / 60.0)
                                    target:self
                                  selector:@selector(tick:)
                                  userInfo:nil
@@ -479,14 +535,16 @@ cleanup:
   uint32_t height;
 
   (void)notification;
+
   if (!_swapchain || _terminating) {
     return;
   }
 
   width  = (uint32_t)_view.bounds.size.width;
   height = (uint32_t)_view.bounds.size.height;
-  if (width > 0u && height > 0u &&
-      GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
+
+  if (width > 0u && height > 0u
+      && GPUResizeSwapchain(_swapchain, width, height) == GPU_OK) {
     [self renderFrame];
   }
 }
@@ -500,10 +558,12 @@ cleanup:
 
 @end
 
-int main(int argc, const char * argv[]) {
+int
+main(int argc, const char * argv[]) {
   int result;
 
   result = 0;
+
   @autoreleasepool {
     TriangleApp *delegate;
 
@@ -517,5 +577,6 @@ int main(int argc, const char * argv[]) {
     [NSApp run];
     result = [delegate statsFailed] ? 1 : 0;
   }
+
   return result;
 }

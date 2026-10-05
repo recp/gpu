@@ -37,36 +37,46 @@ struct GPUTransferPassEncoder {
 };
 
 typedef struct GPUApiRenderPass {
-  GPURenderPassDesc* (*beginRenderPass)  (GPUCommandBuffer *cmdb,
-                                          const GPURenderPassCreateInfo *info);
-  void               (*destroyRenderPass)(GPURenderPassDesc *pass);
+  GPURenderPassDesc * (*beginRenderPass)(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info);
 
-  GPUTransferPassEncoder* (*beginTransferPass)(GPUCommandBuffer *cmdb,
-                                               const char       *label);
-  void (*copyBufferToBuffer)(GPUTransferPassEncoder   *pass,
-                             GPUBuffer                *src,
-                             GPUBuffer                *dst,
-                             const GPUBufferCopyRegion *region);
-  void (*copyBufferToTexture)(GPUTransferPassEncoder          *pass,
-                              GPUBuffer                       *src,
-                              GPUTexture                      *dst,
-                              const GPUBufferTextureCopyRegion *region);
-  void (*copyTextureToBuffer)(GPUTransferPassEncoder          *pass,
-                              GPUTexture                      *src,
-                              GPUBuffer                       *dst,
-                              const GPUBufferTextureCopyRegion *region);
-  void (*copyTextureToTexture)(GPUTransferPassEncoder             *pass,
-                               GPUTexture                         *src,
-                               GPUTexture                         *dst,
-                               const GPUTextureToTextureCopyRegion *region);
-  void (*copyMemoryIndirect)(GPUTransferPassEncoder             *pass,
-                             const GPUIndirectMemoryCopyInfoEXT *info);
-  void (*copyMemoryToTextureIndirect)(GPUTransferPassEncoder                     *pass,
-                                      const GPUIndirectMemoryToTextureCopyInfoEXT *info);
+  void (*destroyRenderPass)(GPURenderPassDesc *pass);
+
+  GPUTransferPassEncoder * (*beginTransferPass)(GPUCommandBuffer *cmdb, const char *label);
+
+  void
+  (*copyBufferToBuffer)(GPUTransferPassEncoder    *pass,
+                        GPUBuffer                 *src,
+                        GPUBuffer                 *dst,
+                        const GPUBufferCopyRegion *region);
+
+  void
+  (*copyBufferToTexture)(GPUTransferPassEncoder           *pass,
+                         GPUBuffer                        *src,
+                         GPUTexture                       *dst,
+                         const GPUBufferTextureCopyRegion *region);
+
+  void
+  (*copyTextureToBuffer)(GPUTransferPassEncoder           *pass,
+                         GPUTexture                       *src,
+                         GPUBuffer                        *dst,
+                         const GPUBufferTextureCopyRegion *region);
+
+  void
+  (*copyTextureToTexture)(GPUTransferPassEncoder              *pass,
+                          GPUTexture                          *src,
+                          GPUTexture                          *dst,
+                          const GPUTextureToTextureCopyRegion *region);
+
+  void (*copyMemoryIndirect)(GPUTransferPassEncoder *pass, const GPUIndirectMemoryCopyInfoEXT *info);
+
+  void (*copyMemoryToTextureIndirect)(GPUTransferPassEncoder *pass, const GPUIndirectMemoryToTextureCopyInfoEXT *info);
+
   void (*endTransferPass)(GPUTransferPassEncoder *pass);
-  void (*blitTexture)(GPUCommandBuffer         *cmdb,
-                      const GPUTextureBlitInfo *info);
+
+  void (*blitTexture)(GPUCommandBuffer *cmdb, const GPUTextureBlitInfo *info);
+
   void (*generateMipmaps)(GPUCommandBuffer *cmdb, GPUTexture *texture);
+
   void (*encodeBarriers)(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers);
 } GPUApiRenderPass;
 

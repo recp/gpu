@@ -27,15 +27,17 @@ mt_beginFrame(GPUApi       *__restrict api,
   id<CAMetalDrawable> drawable;
 
   swapchainMtl = swapchain->_priv;
+
   if (!swapchainMtl || !swapchainMtl->layer) {
     gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
     return NULL;
   }
+
   if (swapchainMtl->frameActive) {
     return NULL;
   }
-  drawable     = [swapchainMtl->layer nextDrawable];
-  if (!drawable) {
+
+  if (!(drawable = [swapchainMtl->layer nextDrawable])) {
     gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
     return NULL;
   }
@@ -43,38 +45,38 @@ mt_beginFrame(GPUApi       *__restrict api,
   gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_READY);
 
   [drawable retain];
-  frame = &swapchainMtl->frame;
-  target = &swapchainMtl->target;
+  frame      = &swapchainMtl->frame;
+  target     = &swapchainMtl->target;
   targetView = &swapchainMtl->targetView;
   memset(frame, 0, sizeof(*frame));
   memset(target, 0, sizeof(*target));
   memset(targetView, 0, sizeof(*targetView));
 
-  target->_priv = drawable.texture;
-  target->format = mt_formatFromNative(drawable.texture.pixelFormat);
-  target->dimension = GPU_TEXTURE_DIMENSION_2D;
-  target->width = (uint32_t)drawable.texture.width;
-  target->height = (uint32_t)drawable.texture.height;
+  target->_priv         = drawable.texture;
+  target->format        = mt_formatFromNative(drawable.texture.pixelFormat);
+  target->dimension     = GPU_TEXTURE_DIMENSION_2D;
+  target->width         = (uint32_t)drawable.texture.width;
+  target->height        = (uint32_t)drawable.texture.height;
   target->depthOrLayers = 1;
   target->mipLevelCount = 1;
-  target->sampleCount = 1;
-  target->usage = GPU_TEXTURE_USAGE_COLOR_TARGET;
-  target->_ownsNative = false;
+  target->sampleCount   = 1;
+  target->usage         = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  target->_ownsNative   = false;
 
-  targetView->_priv = drawable.texture;
-  targetView->_texture = target;
-  targetView->format = target->format;
-  targetView->viewType = GPU_TEXTURE_VIEW_2D;
-  targetView->baseMipLevel = 0;
-  targetView->mipLevelCount = 1;
-  targetView->baseArrayLayer = 0;
+  targetView->_priv           = drawable.texture;
+  targetView->_texture        = target;
+  targetView->format          = target->format;
+  targetView->viewType        = GPU_TEXTURE_VIEW_2D;
+  targetView->baseMipLevel    = 0;
+  targetView->mipLevelCount   = 1;
+  targetView->baseArrayLayer  = 0;
   targetView->arrayLayerCount = 1;
-  targetView->_ownsNative = false;
+  targetView->_ownsNative     = false;
 
-  frame->_priv      = swapchainMtl;
-  frame->target     = target;
-  frame->targetView = targetView;
-  frame->drawable   = drawable;
+  frame->_priv              = swapchainMtl;
+  frame->target             = target;
+  frame->targetView         = targetView;
+  frame->drawable           = drawable;
   swapchainMtl->frameActive = true;
 
   return frame;
@@ -94,6 +96,7 @@ mt_endFrame(GPUApi   *__restrict api,
   swapchainMtl = frame->_priv;
   [(id<CAMetalDrawable>)frame->drawable release];
   frame->drawable = NULL;
+
   if (swapchainMtl) {
     swapchainMtl->frameActive = false;
   }

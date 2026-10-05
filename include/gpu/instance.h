@@ -33,8 +33,8 @@ typedef struct GPUInstanceCreateInfo {
 
 GPU_EXPORT
 GPUResult
-GPUCreateInstance(const GPUInstanceCreateInfo * __restrict info,
-                  GPUInstance                ** __restrict outInstance);
+GPUCreateInstance(const GPUInstanceCreateInfo *__restrict info,
+                  GPUInstance                **__restrict outInstance);
 
 GPU_EXPORT
 void

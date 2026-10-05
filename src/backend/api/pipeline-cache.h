@@ -23,13 +23,9 @@ extern "C" {
 #include <gpu/gpu.h>
 
 typedef struct GPUApiPipelineCache {
-  GPUResult
-  (*create)(GPUDevice                        *device,
-            const GPUPipelineCacheCreateInfo *info,
-            GPUPipelineCache                 *cache);
+  GPUResult (*create)(GPUDevice *device, const GPUPipelineCacheCreateInfo *info, GPUPipelineCache *cache);
 
-  void
-  (*destroy)(GPUPipelineCache *cache);
+  void (*destroy)(GPUPipelineCache *cache);
 } GPUApiPipelineCache;
 
 #ifdef __cplusplus

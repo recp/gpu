@@ -33,7 +33,7 @@ void
 gpuCacheFileEnd(GPUCacheFileGuard *guard);
 
 GPU_HIDE
-char *
+char*
 gpuCacheFileTemporaryPath(const char *path, const void *identity);
 
 GPU_HIDE

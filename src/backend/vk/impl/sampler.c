@@ -19,6 +19,17 @@
 
 #include <us/compiler.h>
 
+static const VkCompareOp vk_compareOps[] = {
+  [GPU_COMPARE_NEVER]         = VK_COMPARE_OP_NEVER,
+  [GPU_COMPARE_LESS]          = VK_COMPARE_OP_LESS,
+  [GPU_COMPARE_EQUAL]         = VK_COMPARE_OP_EQUAL,
+  [GPU_COMPARE_LESS_EQUAL]    = VK_COMPARE_OP_LESS_OR_EQUAL,
+  [GPU_COMPARE_GREATER]       = VK_COMPARE_OP_GREATER,
+  [GPU_COMPARE_NOT_EQUAL]     = VK_COMPARE_OP_NOT_EQUAL,
+  [GPU_COMPARE_GREATER_EQUAL] = VK_COMPARE_OP_GREATER_OR_EQUAL,
+  [GPU_COMPARE_ALWAYS]        = VK_COMPARE_OP_ALWAYS
+};
+
 static VkFilter
 vk__samplerFilter(GPUFilter filter) {
   return filter == GPU_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
@@ -26,9 +37,7 @@ vk__samplerFilter(GPUFilter filter) {
 
 static VkSamplerMipmapMode
 vk__mipFilter(GPUMipFilter filter) {
-  return filter == GPU_MIP_FILTER_LINEAR
-           ? VK_SAMPLER_MIPMAP_MODE_LINEAR
-           : VK_SAMPLER_MIPMAP_MODE_NEAREST;
+  return filter == GPU_MIP_FILTER_LINEAR ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
 }
 
 static VkSamplerAddressMode
@@ -46,40 +55,7 @@ vk__addressMode(GPUAddressMode mode) {
 
 static VkCompareOp
 vk__gpuCompareOp(GPUCompareOp op) {
-  static const VkCompareOp operations[] = {
-    [GPU_COMPARE_NEVER]         = VK_COMPARE_OP_NEVER,
-    [GPU_COMPARE_LESS]          = VK_COMPARE_OP_LESS,
-    [GPU_COMPARE_EQUAL]         = VK_COMPARE_OP_EQUAL,
-    [GPU_COMPARE_LESS_EQUAL]    = VK_COMPARE_OP_LESS_OR_EQUAL,
-    [GPU_COMPARE_GREATER]       = VK_COMPARE_OP_GREATER,
-    [GPU_COMPARE_NOT_EQUAL]     = VK_COMPARE_OP_NOT_EQUAL,
-    [GPU_COMPARE_GREATER_EQUAL] = VK_COMPARE_OP_GREATER_OR_EQUAL,
-    [GPU_COMPARE_ALWAYS]        = VK_COMPARE_OP_ALWAYS
-  };
-
-  return (uint32_t)op < GPU_ARRAY_LEN(operations)
-           ? operations[op]
-           : VK_COMPARE_OP_NEVER;
-}
-
-GPU_HIDE
-void
-vk_fillSamplerInfo(const GPUSamplerDesc *desc, VkSamplerCreateInfo *outInfo) {
-  memset(outInfo, 0, sizeof(*outInfo));
-  outInfo->sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  outInfo->magFilter    = vk__samplerFilter(desc->magFilter);
-  outInfo->minFilter    = vk__samplerFilter(desc->minFilter);
-  outInfo->mipmapMode   = vk__mipFilter(desc->mipFilter);
-  outInfo->addressModeU = vk__addressMode(desc->addressU);
-  outInfo->addressModeV = vk__addressMode(desc->addressV);
-  outInfo->addressModeW = vk__addressMode(desc->addressW);
-  outInfo->compareEnable = desc->compareEnable ? VK_TRUE : VK_FALSE;
-  outInfo->compareOp     = vk__gpuCompareOp(desc->compare);
-  outInfo->anisotropyEnable = desc->maxAnisotropy > 1u ? VK_TRUE : VK_FALSE;
-  outInfo->maxAnisotropy    = desc->maxAnisotropy > 1u
-                                ? (float)desc->maxAnisotropy
-                                : 1.0f;
-  outInfo->maxLod       = VK_LOD_CLAMP_NONE;
+  return (uint32_t)op < GPU_ARRAY_LEN(vk_compareOps) ? vk_compareOps[op] : VK_COMPARE_OP_NEVER;
 }
 
 static VkCompareOp
@@ -121,24 +97,70 @@ vk__staticSamplerAddressMode(uint32_t mode) {
   }
 }
 
+static GPUResult
+vk__createSampler(GPUDevice *device, const VkSamplerCreateInfo *info, GPUSampler **outSampler) {
+  GPUDeviceVk  *deviceVk;
+  GPUSampler   *sampler;
+  GPUSamplerVk *native;
+
+  if (!device || !device->_priv || !info || !outSampler) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outSampler = NULL;
+  deviceVk    = device->_priv;
+
+  if (!(sampler = calloc(1, sizeof(*sampler) + sizeof(*native)))) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  native         = (GPUSamplerVk *)(sampler + 1);
+  native->device = deviceVk->device;
+
+  if (vkCreateSampler(native->device,
+                      info,
+                      NULL,
+                      &native->sampler) != VK_SUCCESS) {
+    free(sampler);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  sampler->_priv = native;
+  *outSampler    = sampler;
+
+  return GPU_OK;
+}
+
 GPU_HIDE
 void
-vk_fillStaticSamplerInfo(const GPUStaticSamplerDesc *desc,
-                         VkSamplerCreateInfo        *outInfo) {
-  VkFilter            minFilter;
-  VkFilter            magFilter;
+vk_fillSamplerInfo(const GPUSamplerDesc *desc, VkSamplerCreateInfo *outInfo) {
+  memset(outInfo, 0, sizeof(*outInfo));
+  outInfo->sType            = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  outInfo->magFilter        = vk__samplerFilter(desc->magFilter);
+  outInfo->minFilter        = vk__samplerFilter(desc->minFilter);
+  outInfo->mipmapMode       = vk__mipFilter(desc->mipFilter);
+  outInfo->addressModeU     = vk__addressMode(desc->addressU);
+  outInfo->addressModeV     = vk__addressMode(desc->addressV);
+  outInfo->addressModeW     = vk__addressMode(desc->addressW);
+  outInfo->compareEnable    = desc->compareEnable ? VK_TRUE : VK_FALSE;
+  outInfo->compareOp        = vk__gpuCompareOp(desc->compare);
+  outInfo->anisotropyEnable = desc->maxAnisotropy > 1u ? VK_TRUE : VK_FALSE;
+  outInfo->maxAnisotropy    = desc->maxAnisotropy > 1u ? (float)desc->maxAnisotropy : 1.0f;
+  outInfo->maxLod           = VK_LOD_CLAMP_NONE;
+}
+
+GPU_HIDE
+void
+vk_fillStaticSamplerInfo(const GPUStaticSamplerDesc *desc, VkSamplerCreateInfo *outInfo) {
+  VkFilter             minFilter;
+  VkFilter             magFilter;
   VkSamplerMipmapMode  mipFilter;
   VkSamplerAddressMode addressMode;
 
-  minFilter   = desc->minFilter == USL_RUNTIME_FILTER_LINEAR
-                  ? VK_FILTER_LINEAR
-                  : VK_FILTER_NEAREST;
-  magFilter   = desc->magFilter == USL_RUNTIME_FILTER_LINEAR
-                  ? VK_FILTER_LINEAR
-                  : VK_FILTER_NEAREST;
-  mipFilter   = desc->mipFilter == USL_RUNTIME_FILTER_LINEAR
-                  ? VK_SAMPLER_MIPMAP_MODE_LINEAR
-                  : VK_SAMPLER_MIPMAP_MODE_NEAREST;
+  minFilter   = desc->minFilter == USL_RUNTIME_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+  magFilter   = desc->magFilter == USL_RUNTIME_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+  mipFilter   =
+        desc->mipFilter == USL_RUNTIME_FILTER_LINEAR ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
   addressMode = vk__staticSamplerAddressMode(desc->addressMode);
 
   memset(outInfo, 0, sizeof(*outInfo));
@@ -151,76 +173,39 @@ vk_fillStaticSamplerInfo(const GPUStaticSamplerDesc *desc,
   outInfo->addressModeW            = addressMode;
   outInfo->compareEnable           = desc->hasCompare ? VK_TRUE : VK_FALSE;
   outInfo->compareOp               = vk__compareOp(desc->compareFunc);
-  outInfo->anisotropyEnable        =
-    desc->maxAnisotropy > 1u ? VK_TRUE : VK_FALSE;
-  outInfo->maxAnisotropy           = desc->maxAnisotropy > 1u
-                                       ? (float)desc->maxAnisotropy
-                                       : 1.0f;
-  outInfo->unnormalizedCoordinates =
-    desc->coordSpace == USL_RUNTIME_COORD_PIXEL ? VK_TRUE : VK_FALSE;
-  outInfo->borderColor             =
-    VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
-  outInfo->maxLod                  = outInfo->unnormalizedCoordinates
-                                      ? 0.0f
-                                      : VK_LOD_CLAMP_NONE;
-}
-
-static GPUResult
-vk__createSampler(GPUDevice *device,
-                  const VkSamplerCreateInfo *info,
-                  GPUSampler **outSampler) {
-  GPUDeviceVk  *deviceVk;
-  GPUSampler   *sampler;
-  GPUSamplerVk *native;
-
-  if (!device || !device->_priv || !info || !outSampler) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  *outSampler = NULL;
-  deviceVk    = device->_priv;
-  sampler     = calloc(1, sizeof(*sampler) + sizeof(*native));
-  if (!sampler) {
-    return GPU_ERROR_OUT_OF_MEMORY;
-  }
-
-  native         = (GPUSamplerVk *)(sampler + 1);
-  native->device = deviceVk->device;
-  if (vkCreateSampler(native->device,
-                      info,
-                      NULL,
-                      &native->sampler) != VK_SUCCESS) {
-    free(sampler);
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-
-  sampler->_priv = native;
-  *outSampler    = sampler;
-  return GPU_OK;
+  outInfo->anisotropyEnable        = desc->maxAnisotropy > 1u ? VK_TRUE : VK_FALSE;
+  outInfo->maxAnisotropy           = desc->maxAnisotropy > 1u ? (float)desc->maxAnisotropy : 1.0f;
+  outInfo->unnormalizedCoordinates = desc->coordSpace == USL_RUNTIME_COORD_PIXEL ? VK_TRUE : VK_FALSE;
+  outInfo->borderColor             = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+  outInfo->maxLod                  = outInfo->unnormalizedCoordinates ? 0.0f : VK_LOD_CLAMP_NONE;
 }
 
 GPU_HIDE
 GPUResult
-vk_createSampler(GPUApi                    * __restrict api,
-                 GPUDevice                 * __restrict device,
+vk_createSampler(GPUApi          *__restrict api,
+                 GPUDevice       *__restrict device,
                  const GPUSamplerCreateInfo *info,
-                 bool                       staticIfSupported,
-                 GPUSampler               **outSampler) {
+                 bool                        staticIfSupported,
+                 GPUSampler                **outSampler) {
   VkSamplerCreateInfo samplerInfo = {0};
 
   GPU__UNUSED(api);
   GPU__UNUSED(staticIfSupported);
+
   if (!info) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   vk_fillSamplerInfo(&info->desc, &samplerInfo);
-  return vk__createSampler(device, &samplerInfo, outSampler);
+
+  return vk__createSampler(device,
+                           &samplerInfo,
+                           outSampler);
 }
 
 GPU_HIDE
 void
-vk_destroySampler(GPUSampler * __restrict sampler) {
+vk_destroySampler(GPUSampler *__restrict sampler) {
   GPUSamplerVk *native;
 
   if (!sampler) {
@@ -228,9 +213,11 @@ vk_destroySampler(GPUSampler * __restrict sampler) {
   }
 
   native = sampler->_priv;
+
   if (native && native->device && native->sampler) {
     vkDestroySampler(native->device, native->sampler, NULL);
   }
+
   free(sampler);
 }
 

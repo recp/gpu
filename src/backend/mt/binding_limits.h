@@ -30,9 +30,7 @@ enum {
 
 static inline uint32_t
 mt_vertexBufferIndex(uint32_t slot) {
-  return slot < MT_VERTEX_BUFFER_COUNT
-           ? MT_PUSH_CONSTANT_INDEX - 1u - slot
-           : UINT32_MAX;
+  return slot < MT_VERTEX_BUFFER_COUNT ? MT_PUSH_CONSTANT_INDEX - 1u - slot : UINT32_MAX;
 }
 
 #endif /* metal_binding_limits_h */

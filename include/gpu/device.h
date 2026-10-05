@@ -27,6 +27,7 @@ extern "C" {
 #include "buffer.h"
 
 typedef struct GPUAdapter GPUAdapter;
+typedef struct GPUDevice  GPUDevice;
 
 typedef enum GPUAdapterType {
   GPU_ADAPTER_TYPE_UNKNOWN    = 0,
@@ -42,10 +43,10 @@ enum {
 };
 
 typedef struct GPUAdapterProperties {
-  const char        *name;
-  GPUBackend         backend;
-  GPUAdapterType     type;
-  GPUExecutionFlags  executionFlags;
+  const char       *name;
+  GPUBackend        backend;
+  GPUAdapterType    type;
+  GPUExecutionFlags executionFlags;
 } GPUAdapterProperties;
 
 typedef uint32_t GPUAdapterIdentityFlags;
@@ -76,13 +77,11 @@ typedef enum GPUWorkload {
   GPU_WORKLOAD_HYBRID   = 3
 } GPUWorkload;
 
-typedef struct GPUDevice GPUDevice;
-
-typedef void (*GPUAdapterRequestCallback)(GPUResult  result,
+typedef void (*GPUAdapterRequestCallback)(GPUResult   result,
                                           GPUAdapter *adapter,
                                           void       *userData);
 
-typedef void (*GPUDeviceRequestCallback)(GPUResult result,
+typedef void (*GPUDeviceRequestCallback)(GPUResult  result,
                                          GPUDevice *device,
                                          void      *userData);
 
@@ -102,10 +101,10 @@ typedef enum GPUDeviceLostReason {
 } GPUDeviceLostReason;
 
 typedef struct GPUDeviceErrorInfo {
-  const char          *message;
-  GPUResult            result;
-  GPUDeviceErrorType   type;
-  GPUDeviceLostReason  lostReason;
+  const char         *message;
+  GPUResult           result;
+  GPUDeviceErrorType  type;
+  GPUDeviceLostReason lostReason;
 } GPUDeviceErrorInfo;
 
 typedef void (*GPUDeviceErrorCallback)(GPUDevice                *device,
@@ -115,36 +114,39 @@ typedef void (*GPUDeviceErrorCallback)(GPUDevice                *device,
 typedef void (*GPUProc)(void);
 
 typedef enum GPUFeature {
-  GPU_FEATURE_COMPUTE                   = 0,
-  GPU_FEATURE_TIMESTAMPS                = 1,
-  GPU_FEATURE_PIPELINE_STATISTICS       = 2,
-  GPU_FEATURE_INDIRECT_DRAW             = 3,
-  GPU_FEATURE_MULTI_DRAW                = 4,
-  GPU_FEATURE_SUBGROUPS                 = 5,
-  GPU_FEATURE_SHADER_F16                = 6,
+  GPU_FEATURE_COMPUTE             = 0,
+  GPU_FEATURE_TIMESTAMPS          = 1,
+  GPU_FEATURE_PIPELINE_STATISTICS = 2,
+  GPU_FEATURE_INDIRECT_DRAW       = 3,
+  GPU_FEATURE_MULTI_DRAW          = 4,
+  GPU_FEATURE_SUBGROUPS           = 5,
+  GPU_FEATURE_SHADER_F16          = 6,
 
   /* non-uniform indexing of fixed-size resource arrays. */
-  GPU_FEATURE_DESCRIPTOR_INDEXING       = 7,
-  GPU_FEATURE_MESH_SHADER               = 8,
-  GPU_FEATURE_RAY_QUERY                 = 9,
-  GPU_FEATURE_VARIABLE_RATE_SHADING     = 10,
-  GPU_FEATURE_BINDLESS                  = 11,
-  GPU_FEATURE_SUBGROUP_MATRIX           = 12,
+  GPU_FEATURE_DESCRIPTOR_INDEXING   = 7,
+  GPU_FEATURE_MESH_SHADER           = 8,
+  GPU_FEATURE_RAY_QUERY             = 9,
+  GPU_FEATURE_VARIABLE_RATE_SHADING = 10,
+  GPU_FEATURE_BINDLESS              = 11,
+  GPU_FEATURE_SUBGROUP_MATRIX       = 12,
+
   /* 64-bit storage-buffer add/min/max atomics. */
-  GPU_FEATURE_ATOMIC64                  = 13,
-  GPU_FEATURE_RAY_TRACING_PIPELINE      = 14,
-  GPU_FEATURE_PLACED_RESOURCES          = 15,
-  GPU_FEATURE_SPARSE_TEXTURES           = 16,
-  GPU_FEATURE_SPARSE_BUFFERS            = 17,
-  GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT = 18,
+  GPU_FEATURE_ATOMIC64                   = 13,
+  GPU_FEATURE_RAY_TRACING_PIPELINE       = 14,
+  GPU_FEATURE_PLACED_RESOURCES           = 15,
+  GPU_FEATURE_SPARSE_TEXTURES            = 16,
+  GPU_FEATURE_SPARSE_BUFFERS             = 17,
+  GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT  = 18,
   GPU_FEATURE_SHADER_SUBGROUP_CLOCK      = 19,
   GPU_FEATURE_SHADER_DEVICE_CLOCK        = 20,
   GPU_FEATURE_COMPUTE_DERIVATIVES_QUADS  = 21,
   GPU_FEATURE_COMPUTE_DERIVATIVES_LINEAR = 22,
   GPU_FEATURE_BUFFER_DEVICE_ADDRESS      = 23,
   GPU_FEATURE_INDIRECT_MEMORY_COPY       = 24,
+
   GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY = 25,
-  GPU_FEATURE_EXECUTION_GRAPH            = 26,
+
+  GPU_FEATURE_EXECUTION_GRAPH             = 26,
   GPU_FEATURE_SAMPLER_FEEDBACK            = 27,
   GPU_FEATURE_INTERSECTION_FUNCTION_TABLE = 28
 } GPUFeature;
@@ -174,11 +176,11 @@ typedef struct GPUDeviceQueueCreateInfo {
 } GPUDeviceQueueCreateInfo;
 
 typedef struct GPUDeviceCreateInfo {
-  GPUChainedStruct          chain;
-  const char               *label;
-  GPUFeatureSet             required;
-  GPUFeatureSet             optional;
-  GPUDeviceQueueCreateInfo  queues;
+  GPUChainedStruct         chain;
+  const char              *label;
+  GPUFeatureSet            required;
+  GPUFeatureSet            optional;
+  GPUDeviceQueueCreateInfo queues;
 } GPUDeviceCreateInfo;
 
 typedef struct GPULimits {
@@ -341,21 +343,21 @@ GPUConfigureRuntime(GPUDevice *device, const GPURuntimeConfig *config);
 
 GPU_EXPORT
 GPUResult
-GPUSetDeviceErrorCallback(GPUDevice              *device,
-                          GPUDeviceErrorCallback  callback,
-                          void                   *userData);
+GPUSetDeviceErrorCallback(GPUDevice             *device,
+                          GPUDeviceErrorCallback callback,
+                          void                  *userData);
 
 GPU_EXPORT
 GPUResult
-GPUConfigureTransientAllocator(GPUDevice *device,
+GPUConfigureTransientAllocator(GPUDevice                         *device,
                                const GPUTransientAllocatorConfig *config);
 
 GPU_EXPORT
 GPUResult
-GPUAllocateTransientBuffer(GPUDevice *device,
-                           GPUBufferUsageFlags usage,
-                           uint64_t sizeBytes,
-                           uint64_t alignment,
+GPUAllocateTransientBuffer(GPUDevice               *device,
+                           GPUBufferUsageFlags      usage,
+                           uint64_t                 sizeBytes,
+                           uint64_t                 alignment,
                            GPUTransientBufferSlice *outSlice);
 
 GPU_EXPORT
@@ -384,34 +386,34 @@ GPUGetProcAddr(GPUDevice *device, const char *name);
 
 GPU_EXPORT
 GPUResult
-GPUCreateDevice(GPUAdapter               *adapter,
+GPUCreateDevice(GPUAdapter                *adapter,
                 const GPUDeviceCreateInfo *info,
                 GPUDevice                **outDevice);
 
 GPU_EXPORT
 GPUResult
-GPURequestDevice(GPUAdapter              *adapter,
+GPURequestDevice(GPUAdapter                *adapter,
                  const GPUDeviceCreateInfo *info,
-                 GPUDeviceRequestCallback  callback,
-                 void                     *userData);
+                 GPUDeviceRequestCallback   callback,
+                 void                      *userData);
 
-/*! Returns an instance-owned adapter selected for general use. */
+/*! returns an instance-owned adapter selected for general use. */
 GPU_EXPORT
-GPUAdapter *
+GPUAdapter*
 GPUGetAutoSelectedAdapter(GPUInstance *inst);
 
 GPU_EXPORT
-GPUDevice *
+GPUDevice*
 GPUCreateDeviceWithDefaultQueues(GPUAdapter *adapter);
 
-/*! Returns queue bits created and usable on this device. */
+/*! returns queue bits created and usable on this device. */
 GPU_EXPORT
 GPUQueueFlagBits
-GPUGetAvailableQueueBits(GPUDevice * __restrict device);
+GPUGetAvailableQueueBits(GPUDevice *__restrict device);
 
 GPU_EXPORT
 void
-GPUDestroyDevice(GPUDevice * __restrict device);
+GPUDestroyDevice(GPUDevice *__restrict device);
 
 #ifdef __cplusplus
 }

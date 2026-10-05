@@ -25,29 +25,27 @@ extern "C" {
 
 typedef struct GPUApiBuffer {
   GPUResult
-  (*create)(GPUDevice                 * __restrict device,
-            const GPUBufferCreateInfo * __restrict info,
-            GPUBuffer                ** __restrict outBuffer);
+  (*create)(GPUDevice                 *__restrict device,
+            const GPUBufferCreateInfo *__restrict info,
+            GPUBuffer                **__restrict outBuffer);
 
-  void
-  (*destroy)(GPUBuffer * __restrict buff);
-
-  GPUResult
-  (*write)(GPUQueue * __restrict queue,
-           GPUBuffer       * __restrict buff,
-           uint64_t                     dstOffset,
-           const void      * __restrict data,
-           uint64_t                     sizeBytes);
+  void (*destroy)(GPUBuffer *__restrict buff);
 
   GPUResult
-  (*read)(GPUQueue * __restrict queue,
-          GPUBuffer       * __restrict buff,
-          uint64_t                     srcOffset,
-          void           * __restrict outData,
-          uint64_t                     sizeBytes);
+  (*write)(GPUQueue   *__restrict queue,
+           GPUBuffer  *__restrict buff,
+           uint64_t               dstOffset,
+           const void *__restrict data,
+           uint64_t               sizeBytes);
 
-  void*
-  (*contents)(GPUBuffer * __restrict buff);
+  GPUResult
+  (*read)(GPUQueue  *__restrict queue,
+          GPUBuffer *__restrict buff,
+          uint64_t              srcOffset,
+          void      *__restrict outData,
+          uint64_t              sizeBytes);
+
+  void * (*contents)(GPUBuffer *__restrict buff);
 } GPUApiBuffer;
 
 #ifdef __cplusplus

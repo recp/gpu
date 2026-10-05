@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #define GPU_SAMPLE_PLATFORM_IMPLEMENTATION
 #define WIN32_LEAN_AND_MEAN
 
@@ -49,26 +65,44 @@ struct GPUWin32Sample {
   bool                    failed;
 };
 
+static const GPUFeature optionalFeatures[] = {
+  GPU_FEATURE_COMPUTE,
+  GPU_FEATURE_INDIRECT_DRAW,
+  GPU_FEATURE_MULTI_DRAW,
+  GPU_FEATURE_DESCRIPTOR_INDEXING,
+  GPU_FEATURE_SUBGROUPS,
+  GPU_FEATURE_SHADER_F16,
+  GPU_FEATURE_TIMESTAMPS
+};
+static const GPUQueueRequest queueRequests[] = {
+  {
+    .type  = GPU_QUEUE_GRAPHICS,
+    .count = 1u
+  }
+};
+
 static GPUWin32Sample *activeSample;
 static GPUWin32Fetch  *completedFetches;
 static SRWLOCK         fetchLock = SRWLOCK_INIT;
 
 static double
-startup_mark(bool          enabled,
-             const char   *phase,
-             double        started,
-             double        previous) {
+startup_mark(bool        enabled,
+             const char *phase,
+             double      started,
+             double      previous) {
   double now;
 
   if (!enabled) {
     return previous;
   }
+
   now = gpu_win32_get_now();
   fprintf(stderr,
           "GPU sample startup: %-12s %8.3f ms (%8.3f ms total)\n",
           phase,
           now - previous,
           now - started);
+
   return now;
 }
 
@@ -88,20 +122,23 @@ request_adapter(GPUInstance *instance, GPUPowerPreference preference) {
   GPUWin32AdapterRequest   request = {0};
   GPUResult                result;
 
-  request.completed = CreateEventW(NULL, TRUE, FALSE, NULL);
-  if (!request.completed) {
+  if (!(request.completed = CreateEventW(NULL, TRUE, FALSE, NULL))) {
     return NULL;
   }
-  options.chain.sType      = GPU_STRUCTURE_TYPE_ADAPTER_REQUEST_OPTIONS;
+
+  options.chain.sType       = GPU_STRUCTURE_TYPE_ADAPTER_REQUEST_OPTIONS;
   options.chain.structSize = sizeof(options);
   options.powerPreference  = preference;
+
   result = GPURequestAdapter(instance, &options, adapter_ready, &request);
-  if (result == GPU_OK &&
-      WaitForSingleObject(request.completed, INFINITE) == WAIT_OBJECT_0 &&
-      request.result == GPU_OK) {
+
+  if (result == GPU_OK
+      && WaitForSingleObject(request.completed, INFINITE) == WAIT_OBJECT_0
+      && request.result == GPU_OK) {
     CloseHandle(request.completed);
     return request.adapter;
   }
+
   CloseHandle(request.completed);
   return NULL;
 }
@@ -114,15 +151,18 @@ adapter_at_index(GPUInstance *instance, uint32_t index) {
 
   adapterCount = 0u;
   adapters     = NULL;
-  if (GPUEnumerateAdapters(instance, &adapterCount, NULL) != GPU_OK ||
-      index >= adapterCount ||
-      !(adapters = calloc(adapterCount, sizeof(*adapters))) ||
-      GPUEnumerateAdapters(instance, &adapterCount, adapters) != GPU_OK) {
+
+  if (GPUEnumerateAdapters(instance, &adapterCount, NULL) != GPU_OK
+      || index >= adapterCount
+      || !(adapters = calloc(adapterCount, sizeof(*adapters)))
+      || GPUEnumerateAdapters(instance, &adapterCount, adapters) != GPU_OK) {
     free(adapters);
     return NULL;
   }
+
   adapter = adapters[index];
   free(adapters);
+
   return adapter;
 }
 
@@ -136,25 +176,31 @@ select_adapter(GPUInstance *instance) {
   length = GetEnvironmentVariableA("GPU_SAMPLE_ADAPTER",
                                    selection,
                                    sizeof(selection));
-  if (length == 0u || length >= sizeof(selection) ||
-      strcmp(selection, "auto") == 0) {
+
+  if (length == 0u || length >= sizeof(selection)
+      || strcmp(selection, "auto") == 0) {
     return request_adapter(instance, GPU_POWER_PREFERENCE_DEFAULT);
   }
+
   if (strcmp(selection, "low") == 0) {
     return request_adapter(instance, GPU_POWER_PREFERENCE_LOW_POWER);
   }
+
   if (strcmp(selection, "high") == 0) {
     return request_adapter(instance,
                            GPU_POWER_PREFERENCE_HIGH_PERFORMANCE);
   }
+
   if (strncmp(selection, "index:", 6u) != 0 || selection[6] == '\0') {
     return request_adapter(instance, GPU_POWER_PREFERENCE_DEFAULT);
   }
 
   index = strtoul(selection + 6u, &end, 10);
+
   if (*end != '\0' || index > UINT32_MAX) {
     return NULL;
   }
+
   return adapter_at_index(instance, (uint32_t)index);
 }
 
@@ -163,9 +209,11 @@ asset_name(const char *path) {
   if (!path) {
     return NULL;
   }
+
   while (*path == '/' || *path == '\\') {
     path++;
   }
+
   return path;
 }
 
@@ -179,21 +227,25 @@ asset_path(const char *path, char out[MAX_PATH]) {
   if (!path || !out || !(name = asset_name(path)) || !name[0]) {
     return false;
   }
+
   length = GetModuleFileNameA(NULL, out, MAX_PATH);
+
   if (length == 0u || length >= MAX_PATH) {
     return false;
   }
-  slash = strrchr(out, '\\');
-  if (!slash) {
+
+  if (!(slash = strrchr(out, '\\'))) {
     return false;
   }
+
   slash[1] = '\0';
   written  = snprintf(out + (slash + 1 - out),
                       MAX_PATH - (size_t)(slash + 1 - out),
                       "%s",
                       name);
-  return written > 0 &&
-         (size_t)written < MAX_PATH - (size_t)(slash + 1 - out);
+
+  return written > 0
+         && (size_t)written < MAX_PATH - (size_t)(slash + 1 - out);
 }
 
 static bool
@@ -205,29 +257,32 @@ read_path(const char *path, void **outData, uint64_t *outSize) {
   if (!path || !outData || !outSize) {
     return false;
   }
+
   *outData = NULL;
   *outSize = 0u;
-  file     = fopen(path, "rb");
-  if (!file) {
+
+  if (!(file = fopen(path, "rb"))) {
     return false;
   }
-  if (_fseeki64(file, 0, SEEK_END) != 0 ||
-      (length = _ftelli64(file)) <= 0 ||
-      (uint64_t)length > SIZE_MAX ||
-      _fseeki64(file, 0, SEEK_SET) != 0) {
+
+  if (_fseeki64(file, 0, SEEK_END) != 0
+      || (length = _ftelli64(file)) <= 0
+      || (uint64_t)length > SIZE_MAX
+      || _fseeki64(file, 0, SEEK_SET) != 0) {
     fclose(file);
     return false;
   }
 
-  data = malloc((size_t)length);
-  if (!data || fread(data, (size_t)length, 1u, file) != 1u) {
+  if (!(data = malloc((size_t)length)) || fread(data, (size_t)length, 1u, file) != 1u) {
     free(data);
     fclose(file);
     return false;
   }
+
   fclose(file);
   *outData = data;
   *outSize = (uint64_t)length;
+
   return true;
 }
 
@@ -239,23 +294,22 @@ resize_surface(GPUWin32Sample *sample,
   RECT     bounds;
   uint32_t nextHeight, nextWidth;
 
-  if (!sample || !sample->window || !sample->window->handle ||
-      !width || !height ||
-      !GetClientRect(sample->window->handle, &bounds)) {
+  if (!sample || !sample->window || !sample->window->handle
+      || !width || !height
+      || !GetClientRect(sample->window->handle, &bounds)) {
     return false;
   }
-  nextWidth  = bounds.right > bounds.left
-                 ? (uint32_t)(bounds.right - bounds.left)
-                 : 0u;
-  nextHeight = bounds.bottom > bounds.top
-                 ? (uint32_t)(bounds.bottom - bounds.top)
-                 : 0u;
+
+  nextWidth  = bounds.right > bounds.left ? (uint32_t)(bounds.right - bounds.left) : 0u;
+  nextHeight = bounds.bottom > bounds.top ? (uint32_t)(bounds.bottom - bounds.top) : 0u;
+
   if (nextWidth == 0u || nextHeight == 0u) {
     return false;
   }
-  if ((nextWidth != sample->width || nextHeight != sample->height) &&
-      swapchain &&
-      GPUResizeSwapchain(swapchain, nextWidth, nextHeight) != GPU_OK) {
+
+  if ((nextWidth != sample->width || nextHeight != sample->height)
+      && swapchain
+      && GPUResizeSwapchain(swapchain, nextWidth, nextHeight) != GPU_OK) {
     return false;
   }
 
@@ -265,6 +319,7 @@ resize_surface(GPUWin32Sample *sample,
   sample->height         = nextHeight;
   *width                 = nextWidth;
   *height                = nextHeight;
+
   return true;
 }
 
@@ -298,28 +353,35 @@ append_download(GPUWin32Fetch *fetch,
   uint8_t *nextBytes;
   size_t   required, nextCapacity;
 
-  if (!fetch || !bytes || byteCount == 0u || !capacity ||
-      fetch->byteCount > SIZE_MAX - byteCount) {
+  if (!fetch || !bytes || byteCount == 0u || !capacity
+      || fetch->byteCount > SIZE_MAX - byteCount) {
     return false;
   }
+
   required = (size_t)fetch->byteCount + byteCount;
+
   if (required > *capacity) {
     nextCapacity = *capacity ? *capacity : 64u * 1024u;
+
     while (nextCapacity < required) {
       if (nextCapacity > SIZE_MAX / 2u) {
         return false;
       }
+
       nextCapacity *= 2u;
     }
-    nextBytes = realloc(fetch->bytes, nextCapacity);
-    if (!nextBytes) {
+
+    if (!(nextBytes = realloc(fetch->bytes, nextCapacity))) {
       return false;
     }
+
     fetch->bytes = nextBytes;
     *capacity    = nextCapacity;
   }
+
   memcpy(fetch->bytes + fetch->byteCount, bytes, byteCount);
   fetch->byteCount += byteCount;
+
   return true;
 }
 
@@ -328,6 +390,7 @@ set_fetch_error(GPUWin32Fetch *fetch, const char *message) {
   if (!fetch || fetch->error[0]) {
     return;
   }
+
   snprintf(fetch->error,
            sizeof(fetch->error),
            "%s",
@@ -336,49 +399,53 @@ set_fetch_error(GPUWin32Fetch *fetch, const char *message) {
 
 static DWORD WINAPI
 fetch_worker(void *userData) {
-  GPUWin32Fetch *fetch;
+  uint8_t        chunk[64u * 1024u];
   URL_COMPONENTS components = {0};
+  GPUWin32Fetch  *fetch;
   HINTERNET      session, connection, request;
   wchar_t       *host, *path;
-  uint8_t        chunk[64u * 1024u];
   size_t         capacity;
   DWORD          available, read, status, statusSize;
   bool           success;
 
-  fetch                 = userData;
-  components.dwStructSize = sizeof(components);
-  components.dwHostNameLength = (DWORD)-1;
-  components.dwUrlPathLength  = (DWORD)-1;
-  components.dwExtraInfoLength = (DWORD)-1;
-  session               = NULL;
-  connection            = NULL;
-  request               = NULL;
-  host                  = NULL;
-  path                  = NULL;
-  capacity              = 0u;
-  success               = false;
+  fetch = userData;
 
-  if (!fetch || !fetch->url ||
-      !WinHttpCrackUrl(fetch->url, 0u, 0u, &components) ||
-      components.dwHostNameLength == 0u) {
+  components.dwStructSize      = sizeof(components);
+  components.dwHostNameLength  = (DWORD)-1;
+  components.dwUrlPathLength   = (DWORD)-1;
+  components.dwExtraInfoLength = (DWORD)-1;
+
+  session    = NULL;
+  connection = NULL;
+  request    = NULL;
+  host       = NULL;
+  path       = NULL;
+  capacity   = 0u;
+  success    = false;
+
+  if (!fetch || !fetch->url
+      || !WinHttpCrackUrl(fetch->url, 0u, 0u, &components)
+      || components.dwHostNameLength == 0u) {
     set_fetch_error(fetch, "sample: invalid download URL");
     goto complete;
   }
 
   host = calloc((size_t)components.dwHostNameLength + 1u, sizeof(*host));
-  path = calloc((size_t)components.dwUrlPathLength +
-                  (size_t)components.dwExtraInfoLength + 1u,
+  path = calloc((size_t)components.dwUrlPathLength + (size_t)components.dwExtraInfoLength + 1u,
                 sizeof(*path));
+
   if (!host || !path) {
     set_fetch_error(fetch, "sample: download allocation failed");
     goto complete;
   }
+
   memcpy(host,
          components.lpszHostName,
          (size_t)components.dwHostNameLength * sizeof(*host));
   memcpy(path,
          components.lpszUrlPath,
          (size_t)components.dwUrlPathLength * sizeof(*path));
+
   if (components.dwExtraInfoLength > 0u) {
     memcpy(path + components.dwUrlPathLength,
            components.lpszExtraInfo,
@@ -390,76 +457,77 @@ fetch_worker(void *userData) {
                         WINHTTP_NO_PROXY_NAME,
                         WINHTTP_NO_PROXY_BYPASS,
                         0u);
-  connection = session
-                 ? WinHttpConnect(session,
-                                  host,
-                                  components.nPort,
-                                  0u)
-                 : NULL;
-  request = connection
-              ? WinHttpOpenRequest(
-                  connection,
-                  L"GET",
-                  path[0] ? path : L"/",
-                  NULL,
-                  WINHTTP_NO_REFERER,
-                  WINHTTP_DEFAULT_ACCEPT_TYPES,
-                  components.nScheme == INTERNET_SCHEME_HTTPS
-                    ? WINHTTP_FLAG_SECURE
-                    : 0u)
-              : NULL;
-  if (!request ||
-      !WinHttpSendRequest(request,
-                          WINHTTP_NO_ADDITIONAL_HEADERS,
-                          0u,
-                          WINHTTP_NO_REQUEST_DATA,
-                          0u,
-                          0u,
-                          0u) ||
-      !WinHttpReceiveResponse(request, NULL)) {
+  connection = session ? WinHttpConnect(session, host, components.nPort, 0u) : NULL;
+
+  if (connection) {
+    request = WinHttpOpenRequest(connection,
+                                 L"GET",
+                                 path[0] ? path : L"/",
+                                 NULL,
+                                 WINHTTP_NO_REFERER,
+                                 WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                 components.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0u);
+  } else {
+    request = NULL;
+  }
+
+  if (!request
+      || !WinHttpSendRequest(request,
+                             WINHTTP_NO_ADDITIONAL_HEADERS,
+                             0u,
+                             WINHTTP_NO_REQUEST_DATA,
+                             0u,
+                             0u,
+                             0u)
+      || !WinHttpReceiveResponse(request, NULL)) {
     set_fetch_error(fetch, "sample: Windows HTTP request failed");
     goto complete;
   }
 
   status     = 0u;
   statusSize = sizeof(status);
+
   if (!WinHttpQueryHeaders(request,
-                           WINHTTP_QUERY_STATUS_CODE |
-                             WINHTTP_QUERY_FLAG_NUMBER,
+                           WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
                            WINHTTP_HEADER_NAME_BY_INDEX,
                            &status,
                            &statusSize,
-                           WINHTTP_NO_HEADER_INDEX) ||
-      status < 200u || status >= 300u) {
+                           WINHTTP_NO_HEADER_INDEX)
+      || status < 200u || status >= 300u) {
     set_fetch_error(fetch, "sample: download returned an HTTP error");
     goto complete;
   }
 
   for (;;) {
     available = 0u;
+
     if (!WinHttpQueryDataAvailable(request, &available)) {
       set_fetch_error(fetch, "sample: failed to query download data");
       goto complete;
     }
+
     if (available == 0u) {
       break;
     }
+
     while (available > 0u) {
       DWORD requestSize;
 
-      requestSize = available < sizeof(chunk)
-                      ? available
-                      : (DWORD)sizeof(chunk);
-      read = 0u;
-      if (!WinHttpReadData(request, chunk, requestSize, &read) || read == 0u ||
-          !append_download(fetch, chunk, read, &capacity)) {
+      requestSize = available < sizeof(chunk) ? available : (DWORD)sizeof(chunk);
+      read        = 0u;
+
+      if (!WinHttpReadData(request, chunk, requestSize, &read) || read == 0u
+          || !append_download(fetch, chunk, read, &capacity)) {
         set_fetch_error(fetch, "sample: failed to read download data");
         goto complete;
       }
+
       available -= read;
     }
   }
+
   success = fetch->byteCount > 0u;
+
   if (!success) {
     set_fetch_error(fetch, "sample: download returned no data");
   }
@@ -470,15 +538,19 @@ complete:
     fetch->bytes     = NULL;
     fetch->byteCount = 0u;
   }
+
   if (request) {
     WinHttpCloseHandle(request);
   }
+
   if (connection) {
     WinHttpCloseHandle(connection);
   }
+
   if (session) {
     WinHttpCloseHandle(session);
   }
+
   free(path);
   free(host);
 
@@ -486,49 +558,37 @@ complete:
   fetch->next      = completedFetches;
   completedFetches = fetch;
   ReleaseSRWLockExclusive(&fetchLock);
+
   return 0u;
 }
 
 GPUWin32Sample*
-GPUSampleWin32Create(GPUWin32Window      *window,
-                     const char          *name,
-                     GPUWin32SampleStart  start) {
-  static const GPUFeature optionalFeatures[] = {
-    GPU_FEATURE_COMPUTE,
-    GPU_FEATURE_INDIRECT_DRAW,
-    GPU_FEATURE_MULTI_DRAW,
-    GPU_FEATURE_DESCRIPTOR_INDEXING,
-    GPU_FEATURE_SUBGROUPS,
-    GPU_FEATURE_SHADER_F16,
-    GPU_FEATURE_TIMESTAMPS
-  };
-  static const GPUQueueRequest queueRequests[] = {
-    {
-      .type  = GPU_QUEUE_GRAPHICS,
-      .count = 1u
-    }
-  };
+GPUSampleWin32Create(GPUWin32Window     *window,
+                     const char         *name,
+                     GPUWin32SampleStart start) {
+  GPUDeviceCreateInfo   deviceInfo   = {0};
   GPUInstanceCreateInfo instanceInfo = {0};
-  GPUDeviceCreateInfo   deviceInfo = {0};
-  GPURuntimeConfig      runtimeInfo = {0};
+  GPURuntimeConfig      runtimeInfo  = {0};
   GPUWin32Sample       *sample;
   const char           *failure;
   double                startupLast;
   double                startupStart;
   bool                  startupLog;
 
-  if (!window || !window->handle || !name || !start || activeSample ||
-      window->width == 0u || window->height == 0u ||
-      !(window->scale > 0.0f)) {
+  if (!window || !window->handle || !name || !start || activeSample
+      || window->width == 0u || window->height == 0u
+      || !(window->scale > 0.0f)) {
     return NULL;
   }
+
   startupLog   = getenv("GPU_SAMPLE_STARTUP_LOG") != NULL;
   startupStart = startupLog ? gpu_win32_get_now() : 0.0;
   startupLast  = startupStart;
-  sample = calloc(1, sizeof(*sample));
-  if (!sample) {
+
+  if (!(sample = calloc(1, sizeof(*sample)))) {
     return NULL;
   }
+
   failure        = "initialize sample";
   sample->window = window;
   sample->name   = name;
@@ -539,47 +599,54 @@ GPUSampleWin32Create(GPUWin32Window      *window,
   instanceInfo.label            = name;
   instanceInfo.preferredBackend = GPU_BACKEND_DX12;
   instanceInfo.enableValidation = true;
+
   failure = "create the Direct3D 12 instance";
-  if (GPUCreateInstance(&instanceInfo, &sample->instance) != GPU_OK ||
-      !sample->instance) {
+
+  if (GPUCreateInstance(&instanceInfo, &sample->instance) != GPU_OK
+      || !sample->instance) {
     goto fail;
   }
+
   startupLast = startup_mark(startupLog,
                              "instance",
                              startupStart,
                              startupLast);
 
-  failure         = "select the requested Direct3D 12 adapter";
-  sample->adapter = select_adapter(sample->instance);
-  if (!sample->adapter) {
+  failure = "select the requested Direct3D 12 adapter";
+
+  if (!(sample->adapter = select_adapter(sample->instance))) {
     goto fail;
   }
+
   startupLast = startup_mark(startupLog,
                              "adapter",
                              startupStart,
                              startupLast);
 
-  deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  deviceInfo.chain.structSize      = sizeof(deviceInfo);
-  deviceInfo.optional.pFeatures    = optionalFeatures;
-  deviceInfo.optional.featureCount = GPU_ARRAY_LEN(optionalFeatures);
-  deviceInfo.queues.chain.sType      =
-    GPU_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  deviceInfo.chain.sType             = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize        = sizeof(deviceInfo);
+  deviceInfo.optional.pFeatures      = optionalFeatures;
+  deviceInfo.optional.featureCount   = GPU_ARRAY_LEN(optionalFeatures);
+  deviceInfo.queues.chain.sType      = GPU_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
   deviceInfo.queues.chain.structSize = sizeof(deviceInfo.queues);
   deviceInfo.queues.pRequests        = queueRequests;
   deviceInfo.queues.requestCount     = GPU_ARRAY_LEN(queueRequests);
+
   failure = "create the Direct3D 12 device";
+
   if (GPUCreateDevice(sample->adapter,
                       &deviceInfo,
-                      &sample->device) != GPU_OK ||
-      !sample->device) {
+                      &sample->device) != GPU_OK
+      || !sample->device) {
     goto fail;
   }
-  failure       = "get the graphics queue";
-  sample->queue = GPUGetQueue(sample->device, GPU_QUEUE_GRAPHICS, 0u);
-  if (!sample->queue) {
+
+  failure = "get the graphics queue";
+
+  if (!(sample->queue = GPUGetQueue(sample->device, GPU_QUEUE_GRAPHICS, 0u))) {
     goto fail;
   }
+
   startupLast = startup_mark(startupLog,
                              "device+queue",
                              startupStart,
@@ -589,37 +656,43 @@ GPUSampleWin32Create(GPUWin32Window      *window,
   runtimeInfo.chain.structSize = sizeof(runtimeInfo);
   runtimeInfo.validationMode   = GPU_VALIDATION_FULL;
   runtimeInfo.enableStats      = true;
+
   failure = "configure the GPU runtime";
+
   if (GPUConfigureRuntime(sample->device, &runtimeInfo) != GPU_OK) {
     goto fail;
   }
+
   startupLast = startup_mark(startupLog,
                              "runtime",
                              startupStart,
                              startupLast);
 
   failure = "create the window surface";
-  sample->surface = GPUCreateSurfaceFromNative(sample->instance,
-                                               sample->adapter,
-                                               window->handle,
-                                               GPU_SURFACE_WINDOWS_HWND,
-                                               window->scale);
-  if (!sample->surface ||
-      !resize_surface(sample, NULL, &sample->width, &sample->height)) {
+
+  if (!(sample->surface = GPUCreateSurfaceFromNative(sample->instance,
+                                                     sample->adapter,
+                                                     window->handle,
+                                                     GPU_SURFACE_WINDOWS_HWND,
+                                                     window->scale))
+      || !resize_surface(sample, NULL, &sample->width, &sample->height)) {
     goto fail;
   }
+
   startupLast = startup_mark(startupLog,
                              "surface",
                              startupStart,
                              startupLast);
+
   failure = "create the swapchain";
-  sample->swapchain = GPUCreateSwapchainDefault(sample->device,
-                                                sample->surface,
-                                                sample->width,
-                                                sample->height);
-  if (!sample->swapchain) {
+
+  if (!(sample->swapchain = GPUCreateSwapchainDefault(sample->device,
+                                                      sample->surface,
+                                                      sample->width,
+                                                      sample->height))) {
     goto fail;
   }
+
   startupLast = startup_mark(startupLog,
                              "swapchain",
                              startupStart,
@@ -627,40 +700,49 @@ GPUSampleWin32Create(GPUWin32Window      *window,
 
   activeSample = sample;
   failure      = "initialize sample resources";
+
   if (start() != 0 || sample->failed) {
     goto fail;
   }
+
   startup_mark(startupLog,
                "resources",
                startupStart,
                startupLast);
+
   return sample;
 
 fail:
   if (activeSample == sample) {
     activeSample = NULL;
   }
+
   sample->failed = true;
+
   if (strncmp(sample->status, "GPU: starting ", 14u) == 0) {
     snprintf(sample->status,
              sizeof(sample->status),
              "GPU: failed to %s",
              failure);
   }
+
   fprintf(stderr, "%s\n", sample->status);
   return sample;
 }
 
 bool
 GPUSampleWin32Render(GPUWin32Sample *sample) {
-  if (!sample || sample != activeSample || sample->failed ||
-      sample->canceled) {
+  if (!sample || sample != activeSample || sample->failed
+      || sample->canceled) {
     return false;
   }
+
   dispatch_fetches();
+
   if (sample->render) {
     sample->render(sample->renderData);
   }
+
   return !sample->failed && !sample->canceled;
 }
 
@@ -669,7 +751,9 @@ GPUSampleWin32Stop(GPUWin32Sample *sample) {
   if (!sample) {
     return;
   }
+
   sample->canceled = true;
+
   if (activeSample == sample) {
     activeSample = NULL;
   }
@@ -690,6 +774,7 @@ set_status(const char *message, int failed) {
   if (!activeSample) {
     return;
   }
+
   snprintf(activeSample->status,
            sizeof(activeSample->status),
            "%s",
@@ -707,8 +792,8 @@ int
 read_file(const char *path, void **outData, uint64_t *outSize) {
   char resolved[MAX_PATH];
 
-  return asset_path(path, resolved) &&
-         read_path(resolved, outData, outSize);
+  return asset_path(path, resolved)
+         && read_path(resolved, outData, outSize);
 }
 
 GPUResult
@@ -733,6 +818,7 @@ request_webgpu_device_features(GPUInstance        *instance,
                                uint32_t            optionalFeatureCount) {
   (void)optionalFeatures;
   (void)optionalFeatureCount;
+
   if (!activeSample || !instance || !request || !callback) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -746,6 +832,7 @@ request_webgpu_device_features(GPUInstance        *instance,
            activeSample->adapter,
            activeSample->device,
            userData);
+
   return activeSample->failed ? GPU_ERROR_BACKEND_FAILURE : GPU_OK;
 }
 
@@ -758,14 +845,16 @@ resize_webgpu_canvas(GPUSwapchain *swapchain,
 
 void
 gpu_win32_set_main_loop(void (*callback)(void *),
-                        void  *userData,
-                        int    fps,
-                        bool   simulateInfiniteLoop) {
+                       void  *userData,
+                       int    fps,
+                       bool   simulateInfiniteLoop) {
   (void)fps;
   (void)simulateInfiniteLoop;
+
   if (!activeSample) {
     return;
   }
+
   activeSample->render     = callback;
   activeSample->renderData = userData;
 }
@@ -781,11 +870,12 @@ double
 gpu_win32_get_now(void) {
   LARGE_INTEGER frequency, now;
 
-  if (!QueryPerformanceFrequency(&frequency) ||
-      !QueryPerformanceCounter(&now) ||
-      frequency.QuadPart == 0) {
+  if (!QueryPerformanceFrequency(&frequency)
+      || !QueryPerformanceCounter(&now)
+      || frequency.QuadPart == 0) {
     return (double)GetTickCount64();
   }
+
   return (double)now.QuadPart * 1000.0 / (double)frequency.QuadPart;
 }
 
@@ -797,24 +887,28 @@ gpu_win32_load_image(const char *path, int *width, int *height) {
   uint64_t byteCount;
   uint32_t imageWidth, imageHeight;
 
-  if (!path || !width || !height ||
-      !asset_path(path, resolved) ||
-      !read_path(resolved, &bytes, &byteCount) ||
-      byteCount > SIZE_MAX) {
+  if (!path || !width || !height
+      || !asset_path(path, resolved)
+      || !read_path(resolved, &bytes, &byteCount)
+      || byteCount > SIZE_MAX) {
     return NULL;
   }
+
   imageWidth  = 0u;
   imageHeight = 0u;
   pixels      = GPUSampleWin32DecodeImage(bytes,
-                                         (size_t)byteCount,
-                                         &imageWidth,
-                                         &imageHeight);
+                                          (size_t)byteCount,
+                                          &imageWidth,
+                                          &imageHeight);
   free(bytes);
+
   if (!pixels) {
     return NULL;
   }
+
   *width  = (int)imageWidth;
   *height = (int)imageHeight;
+
   return pixels;
 }
 
@@ -822,10 +916,13 @@ GPUResult
 gpu_win32_sample_create_instance(const GPUInstanceCreateInfo *info,
                                  GPUInstance                **outInstance) {
   (void)info;
+
   if (!activeSample || !outInstance) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outInstance = activeSample->instance;
+
   return GPU_OK;
 }
 
@@ -840,6 +937,7 @@ gpu_win32_sample_create_surface(GPUInstance   *instance,
   (void)nativeHandle;
   (void)nativeType;
   (void)contentScale;
+
   return activeSample ? activeSample->surface : NULL;
 }
 
@@ -852,6 +950,7 @@ gpu_win32_sample_create_swapchain(GPUDevice  *device,
   (void)surface;
   (void)width;
   (void)height;
+
   return activeSample ? activeSample->swapchain : NULL;
 }
 
@@ -866,32 +965,37 @@ sample_fetch_url(const char         *url,
   if (!activeSample || !url || !callback) {
     return 0;
   }
+
   length = MultiByteToWideChar(CP_UTF8, 0u, url, -1, NULL, 0);
   fetch  = length > 0 ? calloc(1, sizeof(*fetch)) : NULL;
+
   if (!fetch) {
     return 0;
   }
-  fetch->url = calloc((size_t)length, sizeof(*fetch->url));
-  if (!fetch->url ||
-      MultiByteToWideChar(CP_UTF8,
-                          0u,
-                          url,
-                          -1,
-                          fetch->url,
-                          length) != length) {
+
+  if (!(fetch->url = calloc((size_t)length, sizeof(*fetch->url)))
+      || MultiByteToWideChar(CP_UTF8,
+                             0u,
+                             url,
+                             -1,
+                             fetch->url,
+                             length) != length) {
     free(fetch->url);
     free(fetch);
     return 0;
   }
+
   fetch->callback = callback;
   fetch->userData = userData;
-  thread = CreateThread(NULL, 0u, fetch_worker, fetch, 0u, NULL);
-  if (!thread) {
+
+  if (!(thread = CreateThread(NULL, 0u, fetch_worker, fetch, 0u, NULL))) {
     free(fetch->url);
     free(fetch);
     return 0;
   }
+
   CloseHandle(thread);
+
   return 1;
 }
 
@@ -906,17 +1010,19 @@ sample_decode_image(const void         *bytes,
   if (!bytes || byteCount == 0u || byteCount > SIZE_MAX || !callback) {
     return 0;
   }
+
   width  = 0u;
   height = 0u;
   pixels = GPUSampleWin32DecodeImage(bytes,
-                                    (size_t)byteCount,
-                                    &width,
-                                    &height);
+                                     (size_t)byteCount,
+                                     &width,
+                                     &height);
   callback(pixels,
            width,
            height,
            pixels ? NULL : "sample: Windows image decode failed",
            userData);
+
   return pixels != NULL;
 }
 
@@ -929,16 +1035,22 @@ sample_temporary_path(const char *name, char *path, size_t capacity) {
   if (!name || !name[0] || !path || capacity == 0u) {
     return 0;
   }
+
   length = GetTempPathA(MAX_PATH, directory);
-  if (length == 0u || length >= MAX_PATH ||
-      (size_t)length + strlen("gpu-samples\\") >= MAX_PATH) {
+
+  if (length == 0u || length >= MAX_PATH
+      || (size_t)length + strlen("gpu-samples\\") >= MAX_PATH) {
     return 0;
   }
+
   memcpy(directory + length, "gpu-samples", sizeof("gpu-samples"));
-  if (!CreateDirectoryA(directory, NULL) &&
-      GetLastError() != ERROR_ALREADY_EXISTS) {
+
+  if (!CreateDirectoryA(directory, NULL)
+      && GetLastError() != ERROR_ALREADY_EXISTS) {
     return 0;
   }
+
   written = snprintf(path, capacity, "%s\\%s", directory, name);
+
   return written > 0 && (size_t)written < capacity;
 }

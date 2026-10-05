@@ -21,12 +21,11 @@
 
 static bool
 gpuSharedMemoryRequirementsValid(const GPUMemoryRequirements *requirements) {
-  return requirements &&
-         requirements->sizeBytes > 0u &&
-         requirements->alignmentBytes > 0u &&
-         (requirements->alignmentBytes &
-          (requirements->alignmentBytes - 1u)) == 0u &&
-         requirements->compatibilityMask != 0u;
+  return requirements
+         && requirements->sizeBytes > 0u
+         && requirements->alignmentBytes > 0u
+         && (requirements->alignmentBytes & (requirements->alignmentBytes - 1u)) == 0u
+         && requirements->compatibilityMask != 0u;
 }
 
 static bool
@@ -45,10 +44,8 @@ static bool
 gpuSharedAccessMaskValid(GPUAccessMask access) {
   const uint32_t known = GPU_ACCESS_SHADER_READ |
                          GPU_ACCESS_SHADER_WRITE |
-                         GPU_ACCESS_COLOR_READ |
-                         GPU_ACCESS_COLOR_WRITE |
-                         GPU_ACCESS_DEPTH_READ |
-                         GPU_ACCESS_DEPTH_WRITE |
+                         GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE |
+                         GPU_ACCESS_DEPTH_READ | GPU_ACCESS_DEPTH_WRITE |
                          GPU_ACCESS_TRANSFER_READ |
                          GPU_ACCESS_TRANSFER_WRITE |
                          GPU_ACCESS_INDIRECT_READ;
@@ -61,135 +58,126 @@ gpuSharedTextureAccessValid(const GPUTexture *texture,
                             GPUAccessMask     access) {
   GPUTextureUsageFlags usage;
 
-  if (!texture || !gpuSharedAccessMaskValid(access) ||
-      (access & GPU_ACCESS_INDIRECT_READ) != 0u) {
+  if (!texture || !gpuSharedAccessMaskValid(access)
+      || (access & GPU_ACCESS_INDIRECT_READ) != 0u) {
     return false;
   }
 
   usage = texture->usage;
-  return ((access & GPU_ACCESS_SHADER_READ) == 0u ||
-          (usage & (GPU_TEXTURE_USAGE_SAMPLED |
-                    GPU_TEXTURE_USAGE_STORAGE)) != 0u) &&
-         ((access & GPU_ACCESS_SHADER_WRITE) == 0u ||
-          (usage & GPU_TEXTURE_USAGE_STORAGE) != 0u) &&
-         ((access & (GPU_ACCESS_COLOR_READ |
-                     GPU_ACCESS_COLOR_WRITE)) == 0u ||
-          (usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u) &&
-         ((access & (GPU_ACCESS_DEPTH_READ |
-                     GPU_ACCESS_DEPTH_WRITE)) == 0u ||
-          (usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u) &&
-         ((access & GPU_ACCESS_TRANSFER_READ) == 0u ||
-          (usage & GPU_TEXTURE_USAGE_COPY_SRC) != 0u) &&
-         ((access & GPU_ACCESS_TRANSFER_WRITE) == 0u ||
-          (usage & GPU_TEXTURE_USAGE_COPY_DST) != 0u);
+
+  return ((access & GPU_ACCESS_SHADER_READ) == 0u
+          || (usage & (GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_STORAGE)) != 0u)
+         && ((access & GPU_ACCESS_SHADER_WRITE) == 0u
+             || (usage & GPU_TEXTURE_USAGE_STORAGE) != 0u)
+         && ((access & (GPU_ACCESS_COLOR_READ | GPU_ACCESS_COLOR_WRITE)) == 0u
+             || (usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u)
+         && ((access & (GPU_ACCESS_DEPTH_READ | GPU_ACCESS_DEPTH_WRITE)) == 0u
+             || (usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL) != 0u)
+         && ((access & GPU_ACCESS_TRANSFER_READ) == 0u
+             || (usage & GPU_TEXTURE_USAGE_COPY_SRC) != 0u)
+         && ((access & GPU_ACCESS_TRANSFER_WRITE) == 0u
+             || (usage & GPU_TEXTURE_USAGE_COPY_DST) != 0u);
 }
 
 static bool
 gpuSharedResourceDevicesValid(const GPUDeviceInteropEXT *interop,
                               const GPUDevice           *source,
                               const GPUDevice           *destination) {
-  return interop && source && destination &&
-         ((source == interop->firstDevice &&
-           destination == interop->secondDevice) ||
-          (source == interop->secondDevice &&
-           destination == interop->firstDevice));
+  return interop && source && destination
+         && ((source == interop->firstDevice
+              && destination == interop->secondDevice)
+             || (source == interop->secondDevice
+                 && destination == interop->firstDevice));
 }
 
 static bool
-gpuSharedBarrierBatchValid(GPUDeviceInteropEXT           *interop,
+gpuSharedBarrierBatchValid(GPUDeviceInteropEXT            *interop,
                            GPUCommandBuffer               *cmdb,
                            const GPUSharedBarrierBatchEXT *barriers,
                            bool                            acquire) {
-  GPUDevice *commandDevice;
+  const GPUSharedBufferBarrierEXT  *bufferBarrier;
+  const GPUSharedTextureBarrierEXT *textureBarrier;
+  GPUDevice                        *commandDevice;
+  GPUDevice                        *bufferSource;
+  GPUDevice                        *bufferDestination;
+  GPUDevice                        *textureSource;
+  GPUDevice                        *textureDestination;
+  uint32_t                          bufferIndex;
+  uint32_t                          textureIndex;
 
-  if (!interop || !cmdb || cmdb->_submitted || cmdb->_activeEncoder ||
-      !barriers ||
-      !gpuSharedStageMaskValid(barriers->srcStages) ||
-      !gpuSharedStageMaskValid(barriers->dstStages) ||
-      (barriers->bufferBarrierCount > 0u && !barriers->pBufferBarriers) ||
-      (barriers->textureBarrierCount > 0u && !barriers->pTextureBarriers) ||
-      (barriers->bufferBarrierCount == 0u &&
-       barriers->textureBarrierCount == 0u)) {
+  if (!interop || !cmdb || cmdb->_submitted || cmdb->_activeEncoder
+      || !barriers
+      || !gpuSharedStageMaskValid(barriers->srcStages)
+      || !gpuSharedStageMaskValid(barriers->dstStages)
+      || (barriers->bufferBarrierCount > 0u && !barriers->pBufferBarriers)
+      || (barriers->textureBarrierCount > 0u && !barriers->pTextureBarriers)
+      || (barriers->bufferBarrierCount == 0u
+          && barriers->textureBarrierCount == 0u)) {
     return false;
   }
 
   commandDevice = gpuCommandBufferDevice(cmdb);
-  for (uint32_t i = 0u; i < barriers->bufferBarrierCount; i++) {
-    const GPUSharedBufferBarrierEXT *barrier;
-    GPUDevice                       *sourceDevice, *destinationDevice;
 
-    barrier           = &barriers->pBufferBarriers[i];
-    sourceDevice      = barrier->sourceBuffer
-                          ? barrier->sourceBuffer->device
-                          : NULL;
-    destinationDevice = barrier->destinationBuffer
-                          ? barrier->destinationBuffer->device
-                          : NULL;
+  for (bufferIndex = 0u; bufferIndex < barriers->bufferBarrierCount; bufferIndex++) {
+    bufferBarrier     = &barriers->pBufferBarriers[bufferIndex];
+    bufferSource      = bufferBarrier->sourceBuffer ? bufferBarrier->sourceBuffer->device : NULL;
+    bufferDestination = bufferBarrier->destinationBuffer ? bufferBarrier->destinationBuffer->device : NULL;
+
     if (!gpuSharedResourceDevicesValid(interop,
-                                       sourceDevice,
-                                       destinationDevice) ||
-        barrier->sourceBuffer->_sharedPeer != barrier->destinationBuffer ||
-        barrier->destinationBuffer->_sharedPeer != barrier->sourceBuffer ||
-        commandDevice != (acquire ? destinationDevice : sourceDevice) ||
-        barrier->sourceBuffer->sizeBytes !=
-          barrier->destinationBuffer->sizeBytes ||
-        !gpuBufferRangeValid(barrier->sourceBuffer,
-                             barrier->offset,
-                             barrier->sizeBytes) ||
-        !gpuBufferRangeValid(barrier->destinationBuffer,
-                             barrier->offset,
-                             barrier->sizeBytes) ||
-        !gpuSharedAccessMaskValid(barrier->srcAccess) ||
-        !gpuSharedAccessMaskValid(barrier->dstAccess)) {
+                                       bufferSource,
+                                       bufferDestination)
+        || bufferBarrier->sourceBuffer->_sharedPeer != bufferBarrier->destinationBuffer
+        || bufferBarrier->destinationBuffer->_sharedPeer != bufferBarrier->sourceBuffer
+        || commandDevice != (acquire ? bufferDestination : bufferSource)
+        || bufferBarrier->sourceBuffer->sizeBytes != bufferBarrier->destinationBuffer->sizeBytes
+        || !gpuBufferRangeValid(bufferBarrier->sourceBuffer,
+                                bufferBarrier->offset,
+                                bufferBarrier->sizeBytes)
+        || !gpuBufferRangeValid(bufferBarrier->destinationBuffer,
+                                bufferBarrier->offset,
+                                bufferBarrier->sizeBytes)
+        || !gpuSharedAccessMaskValid(bufferBarrier->srcAccess)
+        || !gpuSharedAccessMaskValid(bufferBarrier->dstAccess)) {
       return false;
     }
   }
 
-  for (uint32_t i = 0u; i < barriers->textureBarrierCount; i++) {
-    const GPUSharedTextureBarrierEXT *barrier;
-    GPUDevice                        *sourceDevice, *destinationDevice;
+  for (textureIndex = 0u; textureIndex < barriers->textureBarrierCount; textureIndex++) {
+    textureBarrier     = &barriers->pTextureBarriers[textureIndex];
+    textureSource      = textureBarrier->sourceTexture ? textureBarrier->sourceTexture->device : NULL;
+    textureDestination = textureBarrier->destinationTexture ? textureBarrier->destinationTexture->device : NULL;
 
-    barrier           = &barriers->pTextureBarriers[i];
-    sourceDevice      = barrier->sourceTexture
-                          ? barrier->sourceTexture->device
-                          : NULL;
-    destinationDevice = barrier->destinationTexture
-                          ? barrier->destinationTexture->device
-                          : NULL;
     if (!gpuSharedResourceDevicesValid(interop,
-                                       sourceDevice,
-                                       destinationDevice) ||
-        barrier->sourceTexture->_sharedPeer != barrier->destinationTexture ||
-        barrier->destinationTexture->_sharedPeer != barrier->sourceTexture ||
-        commandDevice != (acquire ? destinationDevice : sourceDevice) ||
-        barrier->sourceTexture->format != barrier->destinationTexture->format ||
-        barrier->sourceTexture->dimension !=
-          barrier->destinationTexture->dimension ||
-        barrier->sourceTexture->width != barrier->destinationTexture->width ||
-        barrier->sourceTexture->height != barrier->destinationTexture->height ||
-        barrier->sourceTexture->depthOrLayers !=
-          barrier->destinationTexture->depthOrLayers ||
-        barrier->sourceTexture->mipLevelCount !=
-          barrier->destinationTexture->mipLevelCount ||
-        barrier->sourceTexture->sampleCount !=
-          barrier->destinationTexture->sampleCount ||
-        !gpuTextureSubresourceRangeValid(barrier->sourceTexture,
-                                         barrier->baseMip,
-                                         barrier->mipCount,
-                                         barrier->baseLayer,
-                                         barrier->layerCount) ||
-        !gpuTextureSubresourceRangeValid(barrier->destinationTexture,
-                                         barrier->baseMip,
-                                         barrier->mipCount,
-                                         barrier->baseLayer,
-                                         barrier->layerCount) ||
-        !gpuSharedTextureAccessValid(barrier->sourceTexture,
-                                     barrier->srcAccess) ||
-        !gpuSharedTextureAccessValid(barrier->destinationTexture,
-                                     barrier->dstAccess)) {
+                                       textureSource,
+                                       textureDestination)
+        || textureBarrier->sourceTexture->_sharedPeer != textureBarrier->destinationTexture
+        || textureBarrier->destinationTexture->_sharedPeer != textureBarrier->sourceTexture
+        || commandDevice != (acquire ? textureDestination : textureSource)
+        || textureBarrier->sourceTexture->format != textureBarrier->destinationTexture->format
+        || textureBarrier->sourceTexture->dimension != textureBarrier->destinationTexture->dimension
+        || textureBarrier->sourceTexture->width != textureBarrier->destinationTexture->width
+        || textureBarrier->sourceTexture->height != textureBarrier->destinationTexture->height
+        || textureBarrier->sourceTexture->depthOrLayers != textureBarrier->destinationTexture->depthOrLayers
+        || textureBarrier->sourceTexture->mipLevelCount != textureBarrier->destinationTexture->mipLevelCount
+        || textureBarrier->sourceTexture->sampleCount != textureBarrier->destinationTexture->sampleCount
+        || !gpuTextureSubresourceRangeValid(textureBarrier->sourceTexture,
+                                            textureBarrier->baseMip,
+                                            textureBarrier->mipCount,
+                                            textureBarrier->baseLayer,
+                                            textureBarrier->layerCount)
+        || !gpuTextureSubresourceRangeValid(textureBarrier->destinationTexture,
+                                            textureBarrier->baseMip,
+                                            textureBarrier->mipCount,
+                                            textureBarrier->baseLayer,
+                                            textureBarrier->layerCount)
+        || !gpuSharedTextureAccessValid(textureBarrier->sourceTexture,
+                                        textureBarrier->srcAccess)
+        || !gpuSharedTextureAccessValid(textureBarrier->destinationTexture,
+                                        textureBarrier->dstAccess)) {
       return false;
     }
   }
+
   return true;
 }
 
@@ -207,13 +195,14 @@ gpuSharedTextureShapeEqual(const GPUTextureCreateInfo *first,
   secondMipCount    = second->mipLevelCount ? second->mipLevelCount : 1u;
   firstSampleCount  = first->sampleCount ? first->sampleCount : 1u;
   secondSampleCount = second->sampleCount ? second->sampleCount : 1u;
-  return first->dimension == second->dimension &&
-         first->format == second->format &&
-         first->width == second->width &&
-         first->height == second->height &&
-         first->depthOrLayers == second->depthOrLayers &&
-         firstMipCount == secondMipCount &&
-         firstSampleCount == secondSampleCount;
+
+  return first->dimension == second->dimension
+         && first->format == second->format
+         && first->width == second->width
+         && first->height == second->height
+         && first->depthOrLayers == second->depthOrLayers
+         && firstMipCount == secondMipCount
+         && firstSampleCount == secondSampleCount;
 }
 
 static GPUResult
@@ -222,16 +211,18 @@ gpuValidateSharedBufferInfo(GPUDeviceInteropEXT       *interop,
                             const GPUBufferCreateInfo *secondInfo) {
   GPUResult result;
 
-  if (!interop || !interop->firstDevice || !interop->secondDevice ||
-      !interop->api || !firstInfo || !secondInfo ||
-      firstInfo->sizeBytes != secondInfo->sizeBytes) {
+  if (!interop || !interop->firstDevice || !interop->secondDevice
+      || !interop->api || !firstInfo || !secondInfo
+      || firstInfo->sizeBytes != secondInfo->sizeBytes) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   result = gpuValidateBufferCreateInfo(interop->firstDevice, firstInfo);
+
   if (result != GPU_OK) {
     return result;
   }
+
   return gpuValidateBufferCreateInfo(interop->secondDevice, secondInfo);
 }
 
@@ -241,16 +232,38 @@ gpuValidateSharedTextureInfo(GPUDeviceInteropEXT        *interop,
                              const GPUTextureCreateInfo *secondInfo) {
   GPUResult result;
 
-  if (!interop || !interop->firstDevice || !interop->secondDevice ||
-      !interop->api || !gpuSharedTextureShapeEqual(firstInfo, secondInfo)) {
+  if (!interop || !interop->firstDevice || !interop->secondDevice
+      || !interop->api || !gpuSharedTextureShapeEqual(firstInfo, secondInfo)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   result = gpuValidateTextureCreateInfo(interop->firstDevice, firstInfo);
+
   if (result != GPU_OK) {
     return result;
   }
+
   return gpuValidateTextureCreateInfo(interop->secondDevice, secondInfo);
+}
+
+static GPUResult
+gpuEncodeSharedBarrier(GPUDeviceInteropEXT            *interop,
+                       GPUCommandBuffer               *cmdb,
+                       const GPUSharedBarrierBatchEXT *barriers,
+                       bool                            acquire) {
+  if (!gpuSharedBarrierBatchValid(interop, cmdb, barriers, acquire)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (acquire) {
+    return interop->api->multigpu.encodeAcquire
+             ? interop->api->multigpu.encodeAcquire(interop, cmdb, barriers)
+             : GPU_ERROR_UNSUPPORTED;
+  }
+
+  return interop->api->multigpu.encodeRelease
+           ? interop->api->multigpu.encodeRelease(interop, cmdb, barriers)
+           : GPU_ERROR_UNSUPPORTED;
 }
 
 GPU_EXPORT
@@ -265,59 +278,68 @@ GPUCreateDeviceInteropEXT(GPUDevice            *firstDevice,
   if (!outInterop) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outInterop = NULL;
 
   if (!firstDevice || !secondDevice || firstDevice == secondDevice) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   firstApi  = gpuDeviceApi(firstDevice);
   secondApi = gpuDeviceApi(secondDevice);
-  if (!firstApi || !secondApi ||
-      ((!firstApi->multigpu.createInterop ||
-        !firstApi->multigpu.destroyInterop) &&
-       (secondApi == firstApi ||
-        !secondApi->multigpu.createInterop ||
-        !secondApi->multigpu.destroyInterop))) {
+
+  if (!firstApi || !secondApi
+      || ((!firstApi->multigpu.createInterop
+           || !firstApi->multigpu.destroyInterop)
+          && (secondApi == firstApi
+              || !secondApi->multigpu.createInterop
+              || !secondApi->multigpu.destroyInterop))) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  interop = calloc(1, sizeof(*interop));
-  if (!interop) {
+  if (!(interop = calloc(1, sizeof(*interop)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+
   interop->firstDevice  = firstDevice;
   interop->secondDevice = secondDevice;
 
   result = GPU_ERROR_UNSUPPORTED;
-  if (firstApi->multigpu.createInterop &&
-      firstApi->multigpu.destroyInterop) {
+
+  if (firstApi->multigpu.createInterop
+      && firstApi->multigpu.destroyInterop) {
     interop->api = firstApi;
-    result = firstApi->multigpu.createInterop(firstDevice,
-                                               secondDevice,
-                                               interop);
+    result       = firstApi->multigpu.createInterop(firstDevice,
+                                                    secondDevice,
+                                                    interop);
+
     if (result != GPU_OK) {
       firstApi->multigpu.destroyInterop(interop);
       interop->_priv = NULL;
     }
   }
-  if (result == GPU_ERROR_UNSUPPORTED && secondApi != firstApi &&
-      secondApi->multigpu.createInterop &&
-      secondApi->multigpu.destroyInterop) {
+
+  if (result == GPU_ERROR_UNSUPPORTED && secondApi != firstApi
+      && secondApi->multigpu.createInterop
+      && secondApi->multigpu.destroyInterop) {
     interop->api = secondApi;
-    result = secondApi->multigpu.createInterop(firstDevice,
-                                                secondDevice,
-                                                interop);
+    result       = secondApi->multigpu.createInterop(firstDevice,
+                                                     secondDevice,
+                                                     interop);
+
     if (result != GPU_OK) {
       secondApi->multigpu.destroyInterop(interop);
       interop->_priv = NULL;
     }
   }
+
   if (result != GPU_OK) {
     free(interop);
     return result;
   }
 
   *outInterop = interop;
+
   return GPU_OK;
 }
 
@@ -327,44 +349,49 @@ GPUDestroyDeviceInteropEXT(GPUDeviceInteropEXT *interop) {
   if (!interop) {
     return;
   }
+
   if (interop->api && interop->api->multigpu.destroyInterop) {
     interop->api->multigpu.destroyInterop(interop);
   }
+
   free(interop);
 }
 
 GPU_EXPORT
 GPUResult
-GPUGetSharedBufferMemoryRequirementsEXT(
-  GPUDeviceInteropEXT       *interop,
-  const GPUBufferCreateInfo *firstInfo,
-  const GPUBufferCreateInfo *secondInfo,
-  GPUMemoryRequirements     *outRequirements
-) {
+GPUGetSharedBufferMemoryRequirementsEXT(GPUDeviceInteropEXT       *interop,
+                                        const GPUBufferCreateInfo *firstInfo,
+                                        const GPUBufferCreateInfo *secondInfo,
+                                        GPUMemoryRequirements     *outRequirements) {
   GPUResult result;
 
   if (!outRequirements) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   memset(outRequirements, 0, sizeof(*outRequirements));
 
   result = gpuValidateSharedBufferInfo(interop, firstInfo, secondInfo);
+
   if (result != GPU_OK) {
     return result;
   }
+
   if (!interop->api->multigpu.getBufferRequirements) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   result = interop->api->multigpu.getBufferRequirements(interop,
-                                                         firstInfo,
-                                                         secondInfo,
-                                                         outRequirements);
-  if (result != GPU_OK ||
-      !gpuSharedMemoryRequirementsValid(outRequirements)) {
+                                                        firstInfo,
+                                                        secondInfo,
+                                                        outRequirements);
+
+  if (result != GPU_OK
+      || !gpuSharedMemoryRequirementsValid(outRequirements)) {
     memset(outRequirements, 0, sizeof(*outRequirements));
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
+
   return GPU_OK;
 }
 
@@ -377,26 +404,30 @@ GPUCreateSharedBufferEXT(GPUDeviceInteropEXT       *interop,
                          GPUBuffer                **outSecondBuffer) {
   GPUResult result;
 
-  if (!outFirstBuffer || !outSecondBuffer ||
-      outFirstBuffer == outSecondBuffer) {
+  if (!outFirstBuffer || !outSecondBuffer
+      || outFirstBuffer == outSecondBuffer) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outFirstBuffer  = NULL;
   *outSecondBuffer = NULL;
 
   result = gpuValidateSharedBufferInfo(interop, firstInfo, secondInfo);
+
   if (result != GPU_OK) {
     return result;
   }
+
   if (!interop->api->multigpu.createBuffer) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   result = interop->api->multigpu.createBuffer(interop,
-                                                firstInfo,
-                                                secondInfo,
-                                                outFirstBuffer,
-                                                outSecondBuffer);
+                                               firstInfo,
+                                               secondInfo,
+                                               outFirstBuffer,
+                                               outSecondBuffer);
+
   if (result != GPU_OK) {
     GPUDestroyBuffer(*outSecondBuffer);
     GPUDestroyBuffer(*outFirstBuffer);
@@ -404,52 +435,58 @@ GPUCreateSharedBufferEXT(GPUDeviceInteropEXT       *interop,
     *outSecondBuffer = NULL;
     return result;
   }
-  if (!*outFirstBuffer || !*outSecondBuffer ||
-      (*outFirstBuffer)->device != interop->firstDevice ||
-      (*outSecondBuffer)->device != interop->secondDevice) {
+
+  if (!*outFirstBuffer || !*outSecondBuffer
+      || (*outFirstBuffer)->device != interop->firstDevice
+      || (*outSecondBuffer)->device != interop->secondDevice) {
     GPUDestroyBuffer(*outSecondBuffer);
     GPUDestroyBuffer(*outFirstBuffer);
     *outFirstBuffer  = NULL;
     *outSecondBuffer = NULL;
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   (*outFirstBuffer)->_sharedPeer  = *outSecondBuffer;
   (*outSecondBuffer)->_sharedPeer = *outFirstBuffer;
+
   return GPU_OK;
 }
 
 GPU_EXPORT
 GPUResult
-GPUGetSharedTextureMemoryRequirementsEXT(
-  GPUDeviceInteropEXT        *interop,
-  const GPUTextureCreateInfo *firstInfo,
-  const GPUTextureCreateInfo *secondInfo,
-  GPUMemoryRequirements      *outRequirements
-) {
+GPUGetSharedTextureMemoryRequirementsEXT(GPUDeviceInteropEXT        *interop,
+                                         const GPUTextureCreateInfo *firstInfo,
+                                         const GPUTextureCreateInfo *secondInfo,
+                                         GPUMemoryRequirements      *outRequirements) {
   GPUResult result;
 
   if (!outRequirements) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   memset(outRequirements, 0, sizeof(*outRequirements));
 
   result = gpuValidateSharedTextureInfo(interop, firstInfo, secondInfo);
+
   if (result != GPU_OK) {
     return result;
   }
+
   if (!interop->api->multigpu.getTextureRequirements) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   result = interop->api->multigpu.getTextureRequirements(interop,
-                                                          firstInfo,
-                                                          secondInfo,
-                                                          outRequirements);
-  if (result != GPU_OK ||
-      !gpuSharedMemoryRequirementsValid(outRequirements)) {
+                                                         firstInfo,
+                                                         secondInfo,
+                                                         outRequirements);
+
+  if (result != GPU_OK
+      || !gpuSharedMemoryRequirementsValid(outRequirements)) {
     memset(outRequirements, 0, sizeof(*outRequirements));
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
+
   return GPU_OK;
 }
 
@@ -462,26 +499,30 @@ GPUCreateSharedTextureEXT(GPUDeviceInteropEXT        *interop,
                           GPUTexture                **outSecondTexture) {
   GPUResult result;
 
-  if (!outFirstTexture || !outSecondTexture ||
-      outFirstTexture == outSecondTexture) {
+  if (!outFirstTexture || !outSecondTexture
+      || outFirstTexture == outSecondTexture) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outFirstTexture  = NULL;
   *outSecondTexture = NULL;
 
   result = gpuValidateSharedTextureInfo(interop, firstInfo, secondInfo);
+
   if (result != GPU_OK) {
     return result;
   }
+
   if (!interop->api->multigpu.createTexture) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   result = interop->api->multigpu.createTexture(interop,
-                                                 firstInfo,
-                                                 secondInfo,
-                                                 outFirstTexture,
-                                                 outSecondTexture);
+                                                firstInfo,
+                                                secondInfo,
+                                                outFirstTexture,
+                                                outSecondTexture);
+
   if (result != GPU_OK) {
     GPUDestroyTexture(*outSecondTexture);
     GPUDestroyTexture(*outFirstTexture);
@@ -489,70 +530,77 @@ GPUCreateSharedTextureEXT(GPUDeviceInteropEXT        *interop,
     *outSecondTexture = NULL;
     return result;
   }
-  if (!*outFirstTexture || !*outSecondTexture ||
-      (*outFirstTexture)->device != interop->firstDevice ||
-      (*outSecondTexture)->device != interop->secondDevice) {
+
+  if (!*outFirstTexture || !*outSecondTexture
+      || (*outFirstTexture)->device != interop->firstDevice
+      || (*outSecondTexture)->device != interop->secondDevice) {
     GPUDestroyTexture(*outSecondTexture);
     GPUDestroyTexture(*outFirstTexture);
     *outFirstTexture  = NULL;
     *outSecondTexture = NULL;
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
   (*outFirstTexture)->_sharedPeer  = *outSecondTexture;
   (*outSecondTexture)->_sharedPeer = *outFirstTexture;
+
   return GPU_OK;
 }
 
 GPU_EXPORT
 GPUResult
-GPUCreateSharedSemaphoreEXT(
-  GPUDeviceInteropEXT          *interop,
-  const GPUSemaphoreCreateInfo *info,
-  GPUSemaphore                **outFirstSemaphore,
-  GPUSemaphore                **outSecondSemaphore
-) {
+GPUCreateSharedSemaphoreEXT(GPUDeviceInteropEXT          *interop,
+                            const GPUSemaphoreCreateInfo *info,
+                            GPUSemaphore                **outFirstSemaphore,
+                            GPUSemaphore                **outSecondSemaphore) {
   GPUSemaphore *firstSemaphore, *secondSemaphore;
   GPUResult     result;
 
-  if (!interop || !interop->api ||
-      !outFirstSemaphore || !outSecondSemaphore ||
-      outFirstSemaphore == outSecondSemaphore) {
+  if (!interop || !interop->api
+      || !outFirstSemaphore || !outSecondSemaphore
+      || outFirstSemaphore == outSecondSemaphore) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   *outFirstSemaphore  = NULL;
   *outSecondSemaphore = NULL;
 
-  if (info &&
-      ((info->chain.sType != GPU_STRUCTURE_TYPE_NONE &&
-        info->chain.sType != GPU_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO) ||
-       (info->chain.structSize != 0u &&
-        info->chain.structSize < sizeof(*info)))) {
+  if (info
+      && ((info->chain.sType != GPU_STRUCTURE_TYPE_NONE
+           && info->chain.sType != GPU_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO)
+          || (info->chain.structSize != 0u
+              && info->chain.structSize < sizeof(*info)))) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
   if (!interop->api->multigpu.createSemaphore) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   firstSemaphore  = calloc(1, sizeof(*firstSemaphore));
   secondSemaphore = calloc(1, sizeof(*secondSemaphore));
+
   if (!firstSemaphore || !secondSemaphore) {
     free(secondSemaphore);
     free(firstSemaphore);
     return GPU_ERROR_OUT_OF_MEMORY;
   }
+
   firstSemaphore->_device  = interop->firstDevice;
   secondSemaphore->_device = interop->secondDevice;
 
   result = interop->api->multigpu.createSemaphore(interop,
-                                                   info,
-                                                   firstSemaphore,
-                                                   secondSemaphore);
+                                                  info,
+                                                  firstSemaphore,
+                                                  secondSemaphore);
+
   if (result != GPU_OK) {
     if (secondSemaphore->_priv) {
       GPUDestroySemaphore(secondSemaphore);
     } else {
       free(secondSemaphore);
     }
+
     if (firstSemaphore->_priv) {
       GPUDestroySemaphore(firstSemaphore);
     } else {
@@ -560,6 +608,7 @@ GPUCreateSharedSemaphoreEXT(
     }
     return result;
   }
+
   if (!firstSemaphore->_priv || !secondSemaphore->_priv) {
     GPUDestroySemaphore(secondSemaphore);
     GPUDestroySemaphore(firstSemaphore);
@@ -568,30 +617,13 @@ GPUCreateSharedSemaphoreEXT(
 
   *outFirstSemaphore  = firstSemaphore;
   *outSecondSemaphore = secondSemaphore;
-  return GPU_OK;
-}
 
-static GPUResult
-gpuEncodeSharedBarrier(GPUDeviceInteropEXT           *interop,
-                       GPUCommandBuffer               *cmdb,
-                       const GPUSharedBarrierBatchEXT *barriers,
-                       bool                            acquire) {
-  if (!gpuSharedBarrierBatchValid(interop, cmdb, barriers, acquire)) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-  if (acquire) {
-    return interop->api->multigpu.encodeAcquire
-             ? interop->api->multigpu.encodeAcquire(interop, cmdb, barriers)
-             : GPU_ERROR_UNSUPPORTED;
-  }
-  return interop->api->multigpu.encodeRelease
-           ? interop->api->multigpu.encodeRelease(interop, cmdb, barriers)
-           : GPU_ERROR_UNSUPPORTED;
+  return GPU_OK;
 }
 
 GPU_EXPORT
 GPUResult
-GPUEncodeSharedReleaseEXT(GPUDeviceInteropEXT           *interop,
+GPUEncodeSharedReleaseEXT(GPUDeviceInteropEXT            *interop,
                           GPUCommandBuffer               *cmdb,
                           const GPUSharedBarrierBatchEXT *barriers) {
   return gpuEncodeSharedBarrier(interop, cmdb, barriers, false);
@@ -599,7 +631,7 @@ GPUEncodeSharedReleaseEXT(GPUDeviceInteropEXT           *interop,
 
 GPU_EXPORT
 GPUResult
-GPUEncodeSharedAcquireEXT(GPUDeviceInteropEXT           *interop,
+GPUEncodeSharedAcquireEXT(GPUDeviceInteropEXT            *interop,
                           GPUCommandBuffer               *cmdb,
                           const GPUSharedBarrierBatchEXT *barriers) {
   return gpuEncodeSharedBarrier(interop, cmdb, barriers, true);

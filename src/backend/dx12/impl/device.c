@@ -19,6 +19,61 @@
 
 #include <us/compiler.h>
 
+#if defined(DIRECT3D_LINEAR_ALGEBRA)
+typedef struct DX12SubgroupMatrixProfile {
+  D3D12_LINEAR_ALGEBRA_DATATYPE     aType;
+  D3D12_LINEAR_ALGEBRA_DATATYPE     bType;
+  D3D12_LINEAR_ALGEBRA_DATATYPE     cType;
+  GPUSubgroupMatrixComponentTypeEXT gpuAType;
+  GPUSubgroupMatrixComponentTypeEXT gpuBType;
+  GPUSubgroupMatrixComponentTypeEXT gpuCType;
+} DX12SubgroupMatrixProfile;
+#endif
+
+/* shader-model enum values encode major/minor as hexadecimal nibbles. */
+static const D3D_SHADER_MODEL dx12_shaderModels[] = {
+  (D3D_SHADER_MODEL)0x6a,
+  (D3D_SHADER_MODEL)0x69,
+  (D3D_SHADER_MODEL)0x68,
+  (D3D_SHADER_MODEL)0x67,
+  D3D_SHADER_MODEL_6_6,
+  D3D_SHADER_MODEL_6_5,
+  (D3D_SHADER_MODEL)0x64,
+  (D3D_SHADER_MODEL)0x63,
+  D3D_SHADER_MODEL_6_2,
+  D3D_SHADER_MODEL_6_1,
+  D3D_SHADER_MODEL_6_0
+};
+
+#if defined(DIRECT3D_LINEAR_ALGEBRA)
+static const DX12SubgroupMatrixProfile dx12_matrixProfiles[] = {
+  {
+    D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
+    D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
+    D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
+    GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
+    GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
+    GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT
+  },
+  {
+    D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
+    D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
+    D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT32,
+    GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
+    GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
+    GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT
+  },
+  {
+    D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT32,
+    D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT32,
+    D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT32,
+    GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT,
+    GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT,
+    GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT
+  }
+};
+#endif
+
 static USLTargetProfile
 dx12_uslTargetProfile(D3D_SHADER_MODEL shaderModel,
                       uint32_t         dxcTargetProfile) {
@@ -42,9 +97,8 @@ dx12_uslTargetProfile(D3D_SHADER_MODEL shaderModel,
   if (dxcTargetProfile < USL_TARGET_PROFILE_HLSL_SM_6_0) {
     return USL_TARGET_PROFILE_HLSL_SM_5_1;
   }
-  return hardwareProfile < (USLTargetProfile)dxcTargetProfile
-           ? hardwareProfile
-           : (USLTargetProfile)dxcTargetProfile;
+
+  return hardwareProfile < (USLTargetProfile)dxcTargetProfile ? hardwareProfile : (USLTargetProfile)dxcTargetProfile;
 }
 
 static void
@@ -66,45 +120,30 @@ dx12_fillAdapterName(GPUAdapterDX12 *adapterDX12) {
 
 static bool
 dx12_isParallels(const GPUAdapterDX12 *adapterDX12) {
-  return adapterDX12 &&
-         strstr(adapterDX12->name, "Parallels Display Adapter") != NULL;
+  return adapterDX12 && strstr(adapterDX12->name, "Parallels Display Adapter") != NULL;
 }
 
 static bool
 dx12_queryResultsReliable(const GPUAdapterDX12 *adapterDX12) {
-  return adapterDX12 &&
-         !dx12_isParallels(adapterDX12);
+  return adapterDX12 && !dx12_isParallels(adapterDX12);
 }
 
 static D3D_SHADER_MODEL
 dx12_queryShaderModel(ID3D12Device *device) {
-  /* Shader-model enum values encode major/minor as hexadecimal nibbles. */
-  static const D3D_SHADER_MODEL models[] = {
-    (D3D_SHADER_MODEL)0x6a,
-    (D3D_SHADER_MODEL)0x69,
-    (D3D_SHADER_MODEL)0x68,
-    (D3D_SHADER_MODEL)0x67,
-    D3D_SHADER_MODEL_6_6,
-    D3D_SHADER_MODEL_6_5,
-    (D3D_SHADER_MODEL)0x64,
-    (D3D_SHADER_MODEL)0x63,
-    D3D_SHADER_MODEL_6_2,
-    D3D_SHADER_MODEL_6_1,
-    D3D_SHADER_MODEL_6_0
-  };
   D3D12_FEATURE_DATA_SHADER_MODEL shaderModel;
+  uint32_t                        i;
 
   if (!device) {
     return D3D_SHADER_MODEL_5_1;
   }
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(models); i++) {
-    shaderModel.HighestShaderModel = models[i];
-    if (SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
-          device,
-          D3D12_FEATURE_SHADER_MODEL,
-          &shaderModel,
-          sizeof(shaderModel)))) {
+  for (i = 0u; i < GPU_ARRAY_LEN(dx12_shaderModels); i++) {
+    shaderModel.HighestShaderModel = dx12_shaderModels[i];
+
+    if (SUCCEEDED(device->lpVtbl->CheckFeatureSupport(device,
+                                                      D3D12_FEATURE_SHADER_MODEL,
+                                                      &shaderModel,
+                                                      sizeof(shaderModel)))) {
       return shaderModel.HighestShaderModel;
     }
   }
@@ -123,30 +162,26 @@ dx12_queryMeshShader(ID3D12Device    *device,
   if (outDevice2) {
     *outDevice2 = NULL;
   }
-  if (!device || shaderModel < D3D_SHADER_MODEL_6_5 ||
-      FAILED(device->lpVtbl->CheckFeatureSupport(
-        device,
-        D3D12_FEATURE_D3D12_OPTIONS7,
-        &options7,
-        sizeof(options7))) ||
-      options7.MeshShaderTier == D3D12_MESH_SHADER_TIER_NOT_SUPPORTED) {
+
+  if (!device || shaderModel < D3D_SHADER_MODEL_6_5
+      || FAILED(device->lpVtbl->CheckFeatureSupport(device, D3D12_FEATURE_D3D12_OPTIONS7, &options7, sizeof(options7)))
+      || options7.MeshShaderTier == D3D12_MESH_SHADER_TIER_NOT_SUPPORTED) {
     return false;
   }
 
-  device2 = NULL;
-  supported = SUCCEEDED(device->lpVtbl->QueryInterface(
-    device,
-    &IID_ID3D12Device2,
-    (void **)&device2
-  )) && device2;
+  device2   = NULL;
+  supported = SUCCEEDED(device->lpVtbl->QueryInterface(device, &IID_ID3D12Device2, (void **)&device2)) && device2;
+
   if (!supported) {
     return false;
   }
+
   if (outDevice2) {
     *outDevice2 = device2;
   } else {
     device2->lpVtbl->Release(device2);
   }
+
   return true;
 }
 
@@ -156,9 +191,9 @@ dx12_querySamplerFeedback(ID3D12Device    *device,
 #if GPU_DX12_HAS_SAMPLER_FEEDBACK
                           ID3D12Device8  **outDevice8
 #else
-                          void           *outDevice8
+                          void            *outDevice8
 #endif
-                          ) {
+) {
 #if GPU_DX12_HAS_SAMPLER_FEEDBACK
   D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7 = {0};
   ID3D12Device8                    *device8;
@@ -166,29 +201,26 @@ dx12_querySamplerFeedback(ID3D12Device    *device,
   if (outDevice8) {
     *outDevice8 = NULL;
   }
-  if (!device || shaderModel < D3D_SHADER_MODEL_6_5 ||
-      FAILED(device->lpVtbl->CheckFeatureSupport(
-        device,
-        D3D12_FEATURE_D3D12_OPTIONS7,
-        &options7,
-        sizeof(options7))) ||
-      options7.SamplerFeedbackTier ==
-        D3D12_SAMPLER_FEEDBACK_TIER_NOT_SUPPORTED) {
+
+  if (!device || shaderModel < D3D_SHADER_MODEL_6_5
+      || FAILED(device->lpVtbl->CheckFeatureSupport(device, D3D12_FEATURE_D3D12_OPTIONS7, &options7, sizeof(options7)))
+      || options7.SamplerFeedbackTier == D3D12_SAMPLER_FEEDBACK_TIER_NOT_SUPPORTED) {
     return 0u;
   }
 
   device8 = NULL;
-  if (FAILED(device->lpVtbl->QueryInterface(device,
-                                             &IID_ID3D12Device8,
-                                             (void **)&device8)) ||
-      !device8) {
+
+  if (FAILED(device->lpVtbl->QueryInterface(device, &IID_ID3D12Device8, (void **)&device8))
+      || !device8) {
     return 0u;
   }
+
   if (outDevice8) {
     *outDevice8 = device8;
   } else {
     device8->lpVtbl->Release(device8);
   }
+
   return (uint32_t)options7.SamplerFeedbackTier;
 #else
   GPU__UNUSED(device);
@@ -209,30 +241,26 @@ dx12_queryRayQuery(ID3D12Device    *device,
   if (outDevice5) {
     *outDevice5 = NULL;
   }
-  if (!device || shaderModel < D3D_SHADER_MODEL_6_5 ||
-      FAILED(device->lpVtbl->CheckFeatureSupport(
-        device,
-        D3D12_FEATURE_D3D12_OPTIONS5,
-        &options5,
-        sizeof(options5))) ||
-      options5.RaytracingTier < D3D12_RAYTRACING_TIER_1_1) {
+
+  if (!device || shaderModel < D3D_SHADER_MODEL_6_5
+      || FAILED(device->lpVtbl->CheckFeatureSupport(device, D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5)))
+      || options5.RaytracingTier < D3D12_RAYTRACING_TIER_1_1) {
     return false;
   }
 
-  device5 = NULL;
-  supported = SUCCEEDED(device->lpVtbl->QueryInterface(
-    device,
-    &IID_ID3D12Device5,
-    (void **)&device5
-  )) && device5;
+  device5   = NULL;
+  supported = SUCCEEDED(device->lpVtbl->QueryInterface(device, &IID_ID3D12Device5, (void **)&device5)) && device5;
+
   if (!supported) {
     return false;
   }
+
   if (outDevice5) {
     *outDevice5 = device5;
   } else {
     device5->lpVtbl->Release(device5);
   }
+
   return true;
 }
 
@@ -248,30 +276,29 @@ dx12_queryExecutionGraphs(ID3D12Device    *device,
   if (outDevice5) {
     *outDevice5 = NULL;
   }
-  if (!device || shaderModel < (D3D_SHADER_MODEL)0x68 ||
-      FAILED(device->lpVtbl->CheckFeatureSupport(
-        device,
-        D3D12_FEATURE_D3D12_OPTIONS21,
-        &options21,
-        sizeof(options21))) ||
-      options21.WorkGraphsTier < D3D12_WORK_GRAPHS_TIER_1_0) {
+
+  if (!device || shaderModel < (D3D_SHADER_MODEL)0x68
+      || FAILED(device->lpVtbl->CheckFeatureSupport(device,
+                                                    D3D12_FEATURE_D3D12_OPTIONS21,
+                                                    &options21,
+                                                    sizeof(options21)))
+      || options21.WorkGraphsTier < D3D12_WORK_GRAPHS_TIER_1_0) {
     return false;
   }
 
-  device5 = NULL;
-  supported = SUCCEEDED(device->lpVtbl->QueryInterface(
-    device,
-    &IID_ID3D12Device5,
-    (void **)&device5
-  )) && device5;
+  device5   = NULL;
+  supported = SUCCEEDED(device->lpVtbl->QueryInterface(device, &IID_ID3D12Device5, (void **)&device5)) && device5;
+
   if (!supported) {
     return false;
   }
+
   if (outDevice5) {
     *outDevice5 = device5;
   } else {
     device5->lpVtbl->Release(device5);
   }
+
   return true;
 #else
   GPU__UNUSED(device);
@@ -291,33 +318,34 @@ dx12_queryVRS(ID3D12Device                     *device,
   if (outTier) {
     *outTier = D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
   }
+
   if (outTileSize) {
     *outTileSize = 0u;
   }
+
   if (outAdditionalRates) {
     *outAdditionalRates = false;
   }
-  if (!device ||
-      FAILED(device->lpVtbl->CheckFeatureSupport(
-        device,
-        D3D12_FEATURE_D3D12_OPTIONS6,
-        &options6,
-        sizeof(options6))) ||
-      options6.VariableShadingRateTier ==
-        D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED) {
+
+  if (!device
+      || FAILED(device->lpVtbl->CheckFeatureSupport(device, D3D12_FEATURE_D3D12_OPTIONS6, &options6, sizeof(options6)))
+      || options6.VariableShadingRateTier == D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED) {
     return false;
   }
 
   if (outTier) {
     *outTier = options6.VariableShadingRateTier;
   }
-  if (outTileSize &&
-      options6.VariableShadingRateTier >= D3D12_VARIABLE_SHADING_RATE_TIER_2) {
+
+  if (outTileSize
+      && options6.VariableShadingRateTier >= D3D12_VARIABLE_SHADING_RATE_TIER_2) {
     *outTileSize = options6.ShadingRateImageTileSize;
   }
+
   if (outAdditionalRates) {
     *outAdditionalRates = options6.AdditionalShadingRatesSupported != FALSE;
   }
+
   return true;
 }
 
@@ -326,47 +354,43 @@ dx12_supportsShaderF16(ID3D12Device    *device,
                        D3D_SHADER_MODEL shaderModel) {
   D3D12_FEATURE_DATA_D3D12_OPTIONS4 options4 = {0};
 
-  return device && shaderModel >= D3D_SHADER_MODEL_6_2 &&
-         SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
-           device,
-           D3D12_FEATURE_D3D12_OPTIONS4,
-           &options4,
-           sizeof(options4))) &&
-         options4.Native16BitShaderOpsSupported != FALSE;
+  return device && shaderModel >= D3D_SHADER_MODEL_6_2
+         && SUCCEEDED(device->lpVtbl->CheckFeatureSupport(device,
+                                                          D3D12_FEATURE_D3D12_OPTIONS4,
+                                                          &options4,
+                                                          sizeof(options4)))
+         && options4.Native16BitShaderOpsSupported != FALSE;
 }
 
 static bool
 dx12_supportsAtomic64(ID3D12Device    *device,
                       D3D_SHADER_MODEL shaderModel) {
-  D3D12_FEATURE_DATA_D3D12_OPTIONS1 options1  = {0};
+  D3D12_FEATURE_DATA_D3D12_OPTIONS1  options1 = {0};
   D3D12_FEATURE_DATA_D3D12_OPTIONS11 options11 = {0};
 
-  return device && shaderModel >= D3D_SHADER_MODEL_6_6 &&
-         SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
-           device,
-           D3D12_FEATURE_D3D12_OPTIONS1,
-           &options1,
-           sizeof(options1))) &&
-         options1.Int64ShaderOps != FALSE &&
-         SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
-           device,
-           D3D12_FEATURE_D3D12_OPTIONS11,
-           &options11,
-           sizeof(options11))) &&
-         options11.AtomicInt64OnDescriptorHeapResourceSupported != FALSE;
+  return device && shaderModel >= D3D_SHADER_MODEL_6_6
+         && SUCCEEDED(device->lpVtbl->CheckFeatureSupport(device,
+                                                          D3D12_FEATURE_D3D12_OPTIONS1,
+                                                          &options1,
+                                                          sizeof(options1)))
+         && options1.Int64ShaderOps != FALSE
+         && SUCCEEDED(device->lpVtbl->CheckFeatureSupport(device,
+                                                          D3D12_FEATURE_D3D12_OPTIONS11,
+                                                          &options11,
+                                                          sizeof(options11)))
+         && options11.AtomicInt64OnDescriptorHeapResourceSupported != FALSE;
 }
 
 static bool
 dx12_supportsBindless(ID3D12Device *device) {
   D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
 
-  return device &&
-         SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
-           device,
-           D3D12_FEATURE_D3D12_OPTIONS,
-           &options,
-           sizeof(options))) &&
-         options.ResourceBindingTier >= D3D12_RESOURCE_BINDING_TIER_2;
+  return device
+         && SUCCEEDED(device->lpVtbl->CheckFeatureSupport(device,
+                                                          D3D12_FEATURE_D3D12_OPTIONS,
+                                                          &options,
+                                                          sizeof(options)))
+         && options.ResourceBindingTier >= D3D12_RESOURCE_BINDING_TIER_2;
 }
 
 static bool
@@ -378,200 +402,164 @@ dx12_querySubgroups(ID3D12Device *device,
   if (outMinSubgroupSize) {
     *outMinSubgroupSize = 0u;
   }
+
   if (outMaxSubgroupSize) {
     *outMaxSubgroupSize = 0u;
   }
-  if (!device || !outMinSubgroupSize || !outMaxSubgroupSize ||
-      FAILED(device->lpVtbl->CheckFeatureSupport(
-        device,
-        D3D12_FEATURE_D3D12_OPTIONS1,
-        &options1,
-        sizeof(options1))) ||
-      options1.WaveOps == FALSE ||
-      options1.WaveLaneCountMin == 0u ||
-      options1.WaveLaneCountMax < options1.WaveLaneCountMin) {
+
+  if (!device || !outMinSubgroupSize || !outMaxSubgroupSize
+      || FAILED(device->lpVtbl->CheckFeatureSupport(device, D3D12_FEATURE_D3D12_OPTIONS1, &options1, sizeof(options1)))
+      || options1.WaveOps == FALSE
+      || options1.WaveLaneCountMin == 0u
+      || options1.WaveLaneCountMax < options1.WaveLaneCountMin) {
     return false;
   }
 
   *outMinSubgroupSize = options1.WaveLaneCountMin;
   *outMaxSubgroupSize = options1.WaveLaneCountMax;
+
   return true;
 }
 
 #if defined(DIRECT3D_LINEAR_ALGEBRA)
-typedef struct DX12SubgroupMatrixProfile {
-  D3D12_LINEAR_ALGEBRA_DATATYPE         aType;
-  D3D12_LINEAR_ALGEBRA_DATATYPE         bType;
-  D3D12_LINEAR_ALGEBRA_DATATYPE         cType;
-  GPUSubgroupMatrixComponentTypeEXT     gpuAType;
-  GPUSubgroupMatrixComponentTypeEXT     gpuBType;
-  GPUSubgroupMatrixComponentTypeEXT     gpuCType;
-} DX12SubgroupMatrixProfile;
-
 static bool
 dx12_supportsMatrixConstruction(ID3D12Device                 *device,
                                 D3D12_LINEAR_ALGEBRA_DATATYPE type) {
   D3D12_FEATURE_DATA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT query = {0};
 
-  query.OperationType =
-    D3D12_LINEAR_ALGEBRA_OPERATION_TYPE_MATRIX_CONSTRUCTION;
+  query.OperationType                    = D3D12_LINEAR_ALGEBRA_OPERATION_TYPE_MATRIX_CONSTRUCTION;
   query.MatrixConstruction.ComponentType = type;
-  query.MatrixConstruction.WaveSize       = 0u;
-  return SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
-           device,
-           D3D12_FEATURE_LINEAR_ALGEBRA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT,
-           &query,
-           sizeof(query)
-         )) &&
-         query.MatrixConstruction.MinM > 0u &&
-         query.MatrixConstruction.MinK > 0u &&
-         query.MatrixConstruction.MinN > 0u;
+  query.MatrixConstruction.WaveSize      = 0u;
+
+  return SUCCEEDED(device->lpVtbl->CheckFeatureSupport(device,
+                                                       D3D12_FEATURE_LINEAR_ALGEBRA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT,
+                                                       &query,
+                                                       sizeof(query)))
+         && query.MatrixConstruction.MinM > 0u
+         && query.MatrixConstruction.MinK > 0u
+         && query.MatrixConstruction.MinN > 0u;
 }
 
 static void
-dx12_appendSubgroupMatrixProfile(GPUAdapterDX12                 *adapter,
-                                 ID3D12Device                   *device,
+dx12_appendSubgroupMatrixProfile(GPUAdapterDX12                  *adapter,
+                                 ID3D12Device                    *device,
                                  const DX12SubgroupMatrixProfile *profile) {
   D3D12_FEATURE_DATA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT query = {0};
-  D3D12_LINEAR_ALGEBRA_MATRIX_MULTIPLY_SHAPE                 *shapes;
-  GPUSubgroupMatrixPropertiesEXT                             *properties;
-  uint32_t                                                    validCount;
-  uint32_t                                                    oldCount;
-  UINT                                                        shapeCount;
+  GPUSubgroupMatrixPropertiesEXT                             property;
+  D3D12_LINEAR_ALGEBRA_MATRIX_MULTIPLY_SHAPE                *shapes;
+  GPUSubgroupMatrixPropertiesEXT                            *properties;
+  uint32_t                                                   validCount;
+  uint32_t                                                   oldCount;
+  UINT                                                       shapeCount;
+  UINT                                                       shapeIndex;
+  UINT                                                       propertyIndex;
 
-  if (!adapter || !device || !profile ||
-      !dx12_supportsMatrixConstruction(device, profile->aType) ||
-      !dx12_supportsMatrixConstruction(device, profile->bType) ||
-      !dx12_supportsMatrixConstruction(device, profile->cType)) {
+  if (!adapter || !device || !profile
+      || !dx12_supportsMatrixConstruction(device, profile->aType)
+      || !dx12_supportsMatrixConstruction(device, profile->bType)
+      || !dx12_supportsMatrixConstruction(device, profile->cType)) {
     return;
   }
 
-  query.OperationType =
-    D3D12_LINEAR_ALGEBRA_OPERATION_TYPE_WAVE_MATRIX_MULTIPLY;
-  query.WaveMatrixMultiply.Inputs.WaveSize = 0u;
-  query.WaveMatrixMultiply.Inputs.MatrixAComponentType = profile->aType;
-  query.WaveMatrixMultiply.Inputs.MatrixBComponentType = profile->bType;
+  query.OperationType                                      = D3D12_LINEAR_ALGEBRA_OPERATION_TYPE_WAVE_MATRIX_MULTIPLY;
+  query.WaveMatrixMultiply.Inputs.WaveSize                 = 0u;
+  query.WaveMatrixMultiply.Inputs.MatrixAComponentType     = profile->aType;
+  query.WaveMatrixMultiply.Inputs.MatrixBComponentType     = profile->bType;
   query.WaveMatrixMultiply.Inputs.AccumulatorComponentType = profile->cType;
-  if (FAILED(device->lpVtbl->CheckFeatureSupport(
-        device,
-        D3D12_FEATURE_LINEAR_ALGEBRA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT,
-        &query,
-        sizeof(query)
-      )) ||
-      (query.WaveMatrixMultiply.SupportFlags &
-       D3D12_LINEAR_ALGEBRA_MULTIPLICATION_SUPPORT_FLAG_SUPPORTED) == 0u ||
-      query.WaveMatrixMultiply.NumShapes == 0u) {
+
+  if (FAILED(device->lpVtbl->CheckFeatureSupport(device,
+                                                 D3D12_FEATURE_LINEAR_ALGEBRA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT,
+                                                 &query,
+                                                 sizeof(query)))
+      || (query.WaveMatrixMultiply.SupportFlags &
+          D3D12_LINEAR_ALGEBRA_MULTIPLICATION_SUPPORT_FLAG_SUPPORTED) == 0u
+      || query.WaveMatrixMultiply.NumShapes == 0u) {
     return;
   }
 
   shapeCount = query.WaveMatrixMultiply.NumShapes;
+
   if ((size_t)shapeCount > SIZE_MAX / sizeof(*shapes)) {
     return;
   }
-  shapes = calloc((size_t)shapeCount, sizeof(*shapes));
-  if (!shapes) {
+
+  if (!(shapes = calloc((size_t)shapeCount, sizeof(*shapes)))) {
     return;
   }
 
   query.WaveMatrixMultiply.NumShapes = shapeCount;
   query.WaveMatrixMultiply.Shapes    = shapes;
-  if (FAILED(device->lpVtbl->CheckFeatureSupport(
-        device,
-        D3D12_FEATURE_LINEAR_ALGEBRA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT,
-        &query,
-        sizeof(query)
-      ))) {
+
+  if (FAILED(device->lpVtbl->CheckFeatureSupport(device,
+                                                 D3D12_FEATURE_LINEAR_ALGEBRA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT,
+                                                 &query,
+                                                 sizeof(query)))) {
     free(shapes);
     return;
   }
 
-  shapeCount = query.WaveMatrixMultiply.NumShapes < shapeCount
-                 ? query.WaveMatrixMultiply.NumShapes
-                 : shapeCount;
+  shapeCount = query.WaveMatrixMultiply.NumShapes < shapeCount ? query.WaveMatrixMultiply.NumShapes : shapeCount;
   validCount = 0u;
-  for (UINT i = 0u; i < shapeCount; i++) {
-    validCount += shapes[i].M > 0u && shapes[i].N > 0u && shapes[i].K > 0u;
+
+  for (shapeIndex = 0u; shapeIndex < shapeCount; shapeIndex++) {
+    validCount += shapes[shapeIndex].M > 0u && shapes[shapeIndex].N > 0u && shapes[shapeIndex].K > 0u;
   }
+
   oldCount = adapter->subgroupMatrixPropertyCount;
-  if (validCount == 0u || oldCount > UINT32_MAX - validCount ||
-      (size_t)(oldCount + validCount) > SIZE_MAX / sizeof(*properties)) {
+
+  if (validCount == 0u || oldCount > UINT32_MAX - validCount
+      || (size_t)(oldCount + validCount) > SIZE_MAX / sizeof(*properties)) {
     free(shapes);
     return;
   }
 
-  properties = realloc(
-    adapter->subgroupMatrixProperties,
-    (size_t)(oldCount + validCount) * sizeof(*properties)
-  );
-  if (!properties) {
+  if (!(properties = realloc(adapter->subgroupMatrixProperties,
+                             (size_t)(oldCount + validCount) * sizeof(*properties)))) {
     free(shapes);
     return;
   }
+
   adapter->subgroupMatrixProperties = properties;
-  for (UINT i = 0u; i < shapeCount; i++) {
-    GPUSubgroupMatrixPropertiesEXT property = {0};
 
-    if (shapes[i].M == 0u || shapes[i].N == 0u || shapes[i].K == 0u) {
+  for (propertyIndex = 0u; propertyIndex < shapeCount; propertyIndex++) {
+    property = (GPUSubgroupMatrixPropertiesEXT){0};
+
+    if (shapes[propertyIndex].M == 0u || shapes[propertyIndex].N == 0u || shapes[propertyIndex].K == 0u) {
       continue;
     }
-    property.m          = shapes[i].M;
-    property.n          = shapes[i].N;
-    property.k          = shapes[i].K;
-    property.aType      = profile->gpuAType;
-    property.bType      = profile->gpuBType;
-    property.cType      = profile->gpuCType;
-    property.resultType = profile->gpuCType;
-    property.stages     = GPU_SHADER_STAGE_COMPUTE_BIT;
-    property.scope      = GPU_SUBGROUP_MATRIX_SCOPE_SUBGROUP_EXT;
+
+    property.m             = shapes[propertyIndex].M;
+    property.n             = shapes[propertyIndex].N;
+    property.k             = shapes[propertyIndex].K;
+    property.aType         = profile->gpuAType;
+    property.bType         = profile->gpuBType;
+    property.cType         = profile->gpuCType;
+    property.resultType    = profile->gpuCType;
+    property.stages        = GPU_SHADER_STAGE_COMPUTE_BIT;
+    property.scope         = GPU_SUBGROUP_MATRIX_SCOPE_SUBGROUP_EXT;
     properties[oldCount++] = property;
   }
+
   adapter->subgroupMatrixPropertyCount = oldCount;
   free(shapes);
 }
 
 static void
 dx12_querySubgroupMatrices(GPUAdapterDX12 *adapter, ID3D12Device *device) {
-  static const DX12SubgroupMatrixProfile profiles[] = {
-    {
-      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
-      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
-      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
-      GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
-      GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
-      GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT
-    },
-    {
-      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
-      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT16,
-      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT32,
-      GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
-      GPU_SUBGROUP_MATRIX_COMPONENT_F16_EXT,
-      GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT
-    },
-    {
-      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT32,
-      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT32,
-      D3D12_LINEAR_ALGEBRA_DATATYPE_FLOAT32,
-      GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT,
-      GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT,
-      GPU_SUBGROUP_MATRIX_COMPONENT_F32_EXT
-    }
-  };
   D3D12_FEATURE_DATA_LINEAR_ALGEBRA_SUPPORT support = {0};
+  uint32_t                                  i;
 
-  if (!adapter || !device ||
-      FAILED(device->lpVtbl->CheckFeatureSupport(
-        device,
-        D3D12_FEATURE_LINEAR_ALGEBRA_SUPPORT,
-        &support,
-        sizeof(support)
-      )) ||
-      support.LinearAlgebraTier < D3D12_LINEAR_ALGEBRA_TIER_1_0) {
+  if (!adapter || !device
+      || FAILED(device->lpVtbl->CheckFeatureSupport(device,
+                                                    D3D12_FEATURE_LINEAR_ALGEBRA_SUPPORT,
+                                                    &support,
+                                                    sizeof(support)))
+      || support.LinearAlgebraTier < D3D12_LINEAR_ALGEBRA_TIER_1_0) {
     return;
   }
 
-  for (uint32_t i = 0u; i < GPU_ARRAY_LEN(profiles); i++) {
-    dx12_appendSubgroupMatrixProfile(adapter, device, &profiles[i]);
+  for (i = 0u; i < GPU_ARRAY_LEN(dx12_matrixProfiles); i++) {
+    dx12_appendSubgroupMatrixProfile(adapter, device, &dx12_matrixProfiles[i]);
   }
 }
 #else
@@ -587,23 +575,25 @@ dx12_loadDXCompiler(void) {
   HMODULE module;
 
   module = LoadLibraryW(L"dxcompiler.dll");
+
   if (module && !GetProcAddress(module, "DxcCreateInstance")) {
     FreeLibrary(module);
     return NULL;
   }
+
   return module;
 }
 
 static bool
 dx12_queryAdapterCapabilities(const GPUInstanceDX12 *instance,
                               GPUAdapterDX12        *adapter) {
-  ID3D12Device    *device;
   D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
-  D3D_SHADER_MODEL shaderModel;
-  uint32_t         dxcTargetProfile;
-  HMODULE          dxcModule;
-  HRESULT          result;
-  bool             additionalRates;
+  HMODULE                          dxcModule;
+  ID3D12Device                    *device;
+  D3D_SHADER_MODEL                 shaderModel;
+  uint32_t                         dxcTargetProfile;
+  HRESULT                          result;
+  bool                             additionalRates;
 
   if (!adapter || !adapter->dxgiAdapter) {
     return false;
@@ -614,6 +604,7 @@ dx12_queryAdapterCapabilities(const GPUInstanceDX12 *instance,
                                    adapter->dxgiAdapter,
                                    &IID_ID3D12Device,
                                    (void **)&device);
+
   if (FAILED(result) || !device) {
     fprintf(stderr,
             "GPU: Direct3D 12 adapter probe failed for %s (0x%08lx)\n",
@@ -622,54 +613,44 @@ dx12_queryAdapterCapabilities(const GPUInstanceDX12 *instance,
     return false;
   }
 
-  shaderModel        = dx12_queryShaderModel(device);
-  dxcModule          = dx12_loadDXCompiler();
-  dxcTargetProfile   = dx12_queryDXCTargetProfile(dxcModule);
-  adapter->shaderModel      = shaderModel;
-  adapter->dxcTargetProfile = dxcTargetProfile;
-  adapter->subgroups =
-    dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_0 &&
-                       shaderModel >= D3D_SHADER_MODEL_6_0 &&
-                       dx12_querySubgroups(device,
-                                           &adapter->minSubgroupSize,
-                                           &adapter->maxSubgroupSize);
-  adapter->shaderF16 =
-                       dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_2 &&
-                       dx12_supportsShaderF16(device, shaderModel);
-  adapter->atomic64 =
-                      dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_6 &&
-                      dx12_supportsAtomic64(device, shaderModel);
-  adapter->descriptorIndexing =
-    shaderModel >= D3D_SHADER_MODEL_5_1;
-  adapter->bindless =
-                      dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_0 &&
-                      shaderModel >= D3D_SHADER_MODEL_6_0 &&
-                      dx12_supportsBindless(device);
-  adapter->meshShader =
-                        dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_5 &&
-                        dx12_queryMeshShader(device, shaderModel, NULL);
-  adapter->rayQuery =
-                      dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_5 &&
-                      dx12_queryRayQuery(device, shaderModel, NULL);
-  adapter->rayTracingPipeline = adapter->rayQuery;
-  adapter->executionGraph =
-    dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_8 &&
-                            dx12_queryExecutionGraphs(device,
-                                                      shaderModel,
-                                                      NULL);
-  adapter->samplerFeedbackTier =
-    dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_5
-    ? dx12_querySamplerFeedback(device, shaderModel, NULL)
-    : 0u;
-  adapter->tiledResourcesTier = D3D12_TILED_RESOURCES_TIER_NOT_SUPPORTED;
-  if (SUCCEEDED(device->lpVtbl->CheckFeatureSupport(
-        device,
-        D3D12_FEATURE_D3D12_OPTIONS,
-        &options,
-        sizeof(options)))) {
+  shaderModel                  = dx12_queryShaderModel(device);
+  dxcModule                    = dx12_loadDXCompiler();
+  dxcTargetProfile             = dx12_queryDXCTargetProfile(dxcModule);
+  adapter->shaderModel         = shaderModel;
+  adapter->dxcTargetProfile    = dxcTargetProfile;
+  adapter->subgroups           = dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_0
+                                 && shaderModel >= D3D_SHADER_MODEL_6_0
+                                 && dx12_querySubgroups(device,
+                                                        &adapter->minSubgroupSize,
+                                                        &adapter->maxSubgroupSize);
+  adapter->shaderF16           = dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_2
+                                 && dx12_supportsShaderF16(device, shaderModel);
+  adapter->atomic64            = dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_6
+                                 && dx12_supportsAtomic64(device, shaderModel);
+  adapter->descriptorIndexing  = shaderModel >= D3D_SHADER_MODEL_5_1;
+  adapter->bindless            = dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_0
+                                 && shaderModel >= D3D_SHADER_MODEL_6_0
+                                 && dx12_supportsBindless(device);
+  adapter->meshShader          = dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_5
+                                 && dx12_queryMeshShader(device, shaderModel, NULL);
+  adapter->rayQuery            = dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_5
+                                 && dx12_queryRayQuery(device, shaderModel, NULL);
+  adapter->rayTracingPipeline  = adapter->rayQuery;
+  adapter->executionGraph      = dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_8
+                                 && dx12_queryExecutionGraphs(device,
+                                                              shaderModel,
+                                                              NULL);
+  adapter->samplerFeedbackTier = dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_5
+                                 ? dx12_querySamplerFeedback(device, shaderModel, NULL)
+                                 : 0u;
+  adapter->tiledResourcesTier  = D3D12_TILED_RESOURCES_TIER_NOT_SUPPORTED;
+
+  if (SUCCEEDED(device->lpVtbl->CheckFeatureSupport(device, D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options)))) {
     adapter->tiledResourcesTier = options.TiledResourcesTier;
   }
+
   additionalRates = false;
+
   if (dx12_queryVRS(device,
                     &adapter->vrsTier,
                     &adapter->vrsTileSize,
@@ -678,22 +659,28 @@ dx12_queryAdapterCapabilities(const GPUInstanceDX12 *instance,
                         GPU_SHADING_RATE_1X2_BIT_EXT |
                         GPU_SHADING_RATE_2X1_BIT_EXT |
                         GPU_SHADING_RATE_2X2_BIT_EXT;
+
     if (additionalRates) {
       adapter->vrsRates |= GPU_SHADING_RATE_2X4_BIT_EXT |
                            GPU_SHADING_RATE_4X2_BIT_EXT |
                            GPU_SHADING_RATE_4X4_BIT_EXT;
     }
+
     adapter->vrsCombiners = GPU_SHADING_RATE_COMBINER_KEEP_BIT_EXT;
+
     if (adapter->vrsTier >= D3D12_VARIABLE_SHADING_RATE_TIER_2) {
       adapter->vrsCombiners |= GPU_SHADING_RATE_COMBINER_REPLACE_BIT_EXT |
                                GPU_SHADING_RATE_COMBINER_MIN_BIT_EXT |
                                GPU_SHADING_RATE_COMBINER_MAX_BIT_EXT;
     }
   }
+
   if (dxcModule) {
     FreeLibrary(dxcModule);
   }
+
   adapter->capabilityDevice = device;
+
   return true;
 }
 
@@ -706,72 +693,84 @@ dx12_ensureAdapterCapabilities(const GPUAdapter *adapter) {
 
   adapterDX12  = adapter ? adapter->_priv : NULL;
   instanceDX12 = adapter && adapter->inst ? adapter->inst->_priv : NULL;
+
   if (!adapterDX12 || !instanceDX12) {
     return false;
   }
 
   state = InterlockedCompareExchange(&adapterDX12->capabilityState, 0, 0);
+
   if (state != 0) {
     return state > 0;
   }
 
   AcquireSRWLockExclusive(&adapterDX12->capabilityLock);
   state = InterlockedCompareExchange(&adapterDX12->capabilityState, 0, 0);
+
   if (state == 0) {
     ready = dx12_queryAdapterCapabilities(instanceDX12, adapterDX12);
     InterlockedExchange(&adapterDX12->capabilityState, ready ? 1 : -1);
   }
+
   state = InterlockedCompareExchange(&adapterDX12->capabilityState, 0, 0);
   ReleaseSRWLockExclusive(&adapterDX12->capabilityLock);
+
   return state > 0;
 }
 
 static bool
 dx12_ensureSubgroupMatrices(const GPUAdapter *adapter) {
+  HMODULE          dxcModule;
   GPUAdapterDX12  *adapterDX12;
   GPUInstanceDX12 *instanceDX12;
   ID3D12Device    *device;
-  HMODULE          dxcModule;
   LONG             state;
 
   adapterDX12  = adapter ? adapter->_priv : NULL;
   instanceDX12 = adapter && adapter->inst ? adapter->inst->_priv : NULL;
-  if (!adapterDX12 || !instanceDX12 ||
-      !dx12_ensureAdapterCapabilities(adapter)) {
+
+  if (!adapterDX12 || !instanceDX12
+      || !dx12_ensureAdapterCapabilities(adapter)) {
     return false;
   }
 
   state = InterlockedCompareExchange(&adapterDX12->subgroupMatrixState, 0, 0);
+
   if (state != 0) {
     return adapterDX12->subgroupMatrixPropertyCount > 0u;
   }
 
   AcquireSRWLockExclusive(&adapterDX12->subgroupMatrixLock);
   state = InterlockedCompareExchange(&adapterDX12->subgroupMatrixState, 0, 0);
+
   if (state == 0) {
     device    = NULL;
     dxcModule = dx12_loadDXCompiler();
-    if (instanceDX12->linearAlgebraFactory &&
-        adapterDX12->dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_10 &&
-        dx12_hasLinearAlgebraCompiler(dxcModule) &&
-        SUCCEEDED(dx12_createNativeDevice(
-          instanceDX12->linearAlgebraFactory,
-          adapterDX12->dxgiAdapter,
-          &IID_ID3D12Device,
-          (void **)&device
-        )) &&
-        device) {
+
+    if (instanceDX12->linearAlgebraFactory
+        && adapterDX12->dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_10
+        && dx12_hasLinearAlgebraCompiler(dxcModule)
+        && SUCCEEDED(dx12_createNativeDevice(instanceDX12->linearAlgebraFactory,
+                                             adapterDX12->dxgiAdapter,
+                                             &IID_ID3D12Device,
+                                             (void **)&device))
+        && device) {
       if (dx12_queryShaderModel(device) >= (D3D_SHADER_MODEL)0x6a) {
         dx12_querySubgroupMatrices(adapterDX12, device);
       }
+
       device->lpVtbl->Release(device);
     }
+
     if (dxcModule) {
       FreeLibrary(dxcModule);
     }
+
     InterlockedExchange(&adapterDX12->subgroupMatrixState, 1);
   }
+
   ReleaseSRWLockExclusive(&adapterDX12->subgroupMatrixLock);
+
   return adapterDX12->subgroupMatrixPropertyCount > 0u;
 }
 
@@ -782,126 +781,123 @@ dx12_adapterType(const GPUAdapterDX12 *adapterDX12) {
   if (!adapterDX12) {
     return GPU_ADAPTER_TYPE_UNKNOWN;
   }
+
   if (adapterDX12->isWarp) {
     return GPU_ADAPTER_TYPE_SOFTWARE;
   }
 
   desc = &adapterDX12->desc1;
+
   if (desc->Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
     return GPU_ADAPTER_TYPE_SOFTWARE;
   }
+
   if (desc->DedicatedVideoMemory > 1024ull * 1024ull * 1024ull) {
     return GPU_ADAPTER_TYPE_DISCRETE;
   }
+
   return GPU_ADAPTER_TYPE_INTEGRATED;
 }
 
 static void
 dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
-  D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
-  D3D12_FEATURE_DATA_ROOT_SIGNATURE rootSignature = {0};
+  D3D12_FEATURE_DATA_D3D12_OPTIONS   options = {0};
+  D3D12_FEATURE_DATA_ROOT_SIGNATURE  rootSignature = {0};
   D3D12_FEATURE_DATA_D3D12_OPTIONS12 options12 = {0};
-  uint32_t minSubgroupSize;
-  uint32_t maxSubgroupSize;
+  uint32_t                           minSubgroupSize;
+  uint32_t                           maxSubgroupSize;
 
   if (!device || !device->d3dDevice) {
     return;
   }
 
   rootSignature.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
-  if (FAILED(device->d3dDevice->lpVtbl->CheckFeatureSupport(
-        device->d3dDevice,
-        D3D12_FEATURE_ROOT_SIGNATURE,
-        &rootSignature,
-        sizeof(rootSignature)))) {
+
+  if (FAILED(device->d3dDevice->lpVtbl->CheckFeatureSupport(device->d3dDevice,
+                                                            D3D12_FEATURE_ROOT_SIGNATURE,
+                                                            &rootSignature,
+                                                            sizeof(rootSignature)))) {
     rootSignature.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
   }
+
   device->rootSignatureVersion = rootSignature.HighestVersion;
 
-  device->resourceHeapTier = D3D12_RESOURCE_HEAP_TIER_1;
+  device->resourceHeapTier   = D3D12_RESOURCE_HEAP_TIER_1;
   device->tiledResourcesTier = D3D12_TILED_RESOURCES_TIER_NOT_SUPPORTED;
-  if (SUCCEEDED(device->d3dDevice->lpVtbl->CheckFeatureSupport(
-        device->d3dDevice,
-        D3D12_FEATURE_D3D12_OPTIONS,
-        &options,
-        sizeof(options)))) {
-    device->resourceHeapTier = options.ResourceHeapTier;
+
+  if (SUCCEEDED(device->d3dDevice->lpVtbl->CheckFeatureSupport(device->d3dDevice,
+                                                               D3D12_FEATURE_D3D12_OPTIONS,
+                                                               &options,
+                                                               sizeof(options)))) {
+    device->resourceHeapTier   = options.ResourceHeapTier;
     device->tiledResourcesTier = options.TiledResourcesTier;
   }
 
   device->shaderModel = dx12_queryShaderModel(device->d3dDevice);
 
-  if (SUCCEEDED(device->d3dDevice->lpVtbl->CheckFeatureSupport(
-        device->d3dDevice,
-        D3D12_FEATURE_D3D12_OPTIONS12,
-        &options12,
-        sizeof(options12)))) {
+  if (SUCCEEDED(device->d3dDevice->lpVtbl->CheckFeatureSupport(device->d3dDevice,
+                                                               D3D12_FEATURE_D3D12_OPTIONS12,
+                                                               &options12,
+                                                               sizeof(options12)))) {
     device->enhancedBarriers = options12.EnhancedBarriersSupported != FALSE;
   }
 
-  device->dxcModule         = dx12_loadDXCompiler();
-  device->dxcTargetProfile  =
-    dx12_queryDXCTargetProfile(device->dxcModule);
-  device->uslTargetProfile  =
-    (uint32_t)dx12_uslTargetProfile(device->shaderModel,
-                                    device->dxcTargetProfile);
-  device->dxcAvailable      =
-    device->dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_0 &&
-    device->shaderModel >= D3D_SHADER_MODEL_6_0;
-  device->subgroups    = device->dxcAvailable &&
-                         dx12_querySubgroups(device->d3dDevice,
-                                             &minSubgroupSize,
-                                             &maxSubgroupSize);
-  device->shaderF16    = device->dxcAvailable &&
-                         dx12_supportsShaderF16(device->d3dDevice,
-                                               device->shaderModel);
-  device->atomic64     = device->dxcAvailable &&
-                         dx12_supportsAtomic64(device->d3dDevice,
-                                              device->shaderModel);
-  device->descriptorIndexing =
-    device->shaderModel >= D3D_SHADER_MODEL_5_1;
-  device->bindless = device->dxcAvailable &&
-                     dx12_supportsBindless(device->d3dDevice);
-  device->meshShader = device->dxcAvailable &&
-                       dx12_queryMeshShader(device->d3dDevice,
-                                            device->shaderModel,
-                                            &device->d3dDevice2);
-  device->rayQuery = device->dxcAvailable &&
-                     dx12_queryRayQuery(device->d3dDevice,
-                                        device->shaderModel,
-                                        &device->d3dDevice5);
-  device->rayTracingPipeline = device->rayQuery;
-  device->executionGraph = device->dxcAvailable &&
-                           dx12_queryExecutionGraphs(
-                             device->d3dDevice,
-                             device->shaderModel,
-                             device->d3dDevice5 ? NULL : &device->d3dDevice5
-                           );
+  device->dxcModule           = dx12_loadDXCompiler();
+  device->dxcTargetProfile    = dx12_queryDXCTargetProfile(device->dxcModule);
+  device->uslTargetProfile    = (uint32_t)dx12_uslTargetProfile(device->shaderModel,
+                                                                device->dxcTargetProfile);
+  device->dxcAvailable        = device->dxcTargetProfile >= USL_TARGET_PROFILE_HLSL_SM_6_0
+                                && device->shaderModel >= D3D_SHADER_MODEL_6_0;
+  device->subgroups           = device->dxcAvailable
+                                && dx12_querySubgroups(device->d3dDevice,
+                                                       &minSubgroupSize,
+                                                       &maxSubgroupSize);
+  device->shaderF16           = device->dxcAvailable
+                                && dx12_supportsShaderF16(device->d3dDevice,
+                                                          device->shaderModel);
+  device->atomic64            = device->dxcAvailable
+                                && dx12_supportsAtomic64(device->d3dDevice,
+                                                         device->shaderModel);
+  device->descriptorIndexing  = device->shaderModel >= D3D_SHADER_MODEL_5_1;
+  device->bindless            = device->dxcAvailable
+                                && dx12_supportsBindless(device->d3dDevice);
+  device->meshShader          = device->dxcAvailable
+                                && dx12_queryMeshShader(device->d3dDevice,
+                                                        device->shaderModel,
+                                                        &device->d3dDevice2);
+  device->rayQuery            = device->dxcAvailable
+                                && dx12_queryRayQuery(device->d3dDevice,
+                                                      device->shaderModel,
+                                                      &device->d3dDevice5);
+  device->rayTracingPipeline  = device->rayQuery;
+  device->executionGraph      = device->dxcAvailable
+                                && dx12_queryExecutionGraphs(device->d3dDevice,
+                                                             device->shaderModel,
+                                                             device->d3dDevice5 ? NULL : &device->d3dDevice5);
   device->samplerFeedbackTier = device->dxcAvailable
-    ? dx12_querySamplerFeedback(device->d3dDevice,
-                                device->shaderModel,
+                               ? dx12_querySamplerFeedback(device->d3dDevice,
+                                                           device->shaderModel,
 #if GPU_DX12_HAS_SAMPLER_FEEDBACK
-                                &device->d3dDevice8
+                                                           &device->d3dDevice8
 #else
-                                NULL
+                                                           NULL
 #endif
-                                )
-    : 0u;
+                                                          )
+                               : 0u;
+
   (void)dx12_queryVRS(device->d3dDevice,
                       &device->vrsTier,
                       &device->vrsTileSize,
                       NULL);
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   device->pixModule = LoadLibraryW(L"WinPixEventRuntime.dll");
+
   if (device->pixModule) {
-    device->pixBeginEvent = (DX12PixBeginEventFn)GetProcAddress(
-      device->pixModule,
-      "PIXBeginEventOnCommandList"
-    );
-    device->pixEndEvent = (DX12PixEndEventFn)GetProcAddress(
-      device->pixModule,
-      "PIXEndEventOnCommandList"
-    );
+    device->pixBeginEvent = (DX12PixBeginEventFn)GetProcAddress(device->pixModule,
+                                                                "PIXBeginEventOnCommandList");
+    device->pixEndEvent   = (DX12PixEndEventFn)GetProcAddress(device->pixModule,
+                                                              "PIXEndEventOnCommandList");
+
     if (!device->pixBeginEvent || !device->pixEndEvent) {
       FreeLibrary(device->pixModule);
       device->pixModule     = NULL;
@@ -918,7 +914,7 @@ dx12__newSignature(GPUDeviceDX12               *device,
                    UINT                         stride,
                    ID3D12CommandSignature     **outSignature) {
   D3D12_INDIRECT_ARGUMENT_DESC argument = {0};
-  D3D12_COMMAND_SIGNATURE_DESC desc     = {0};
+  D3D12_COMMAND_SIGNATURE_DESC desc = {0};
 
   if (!device || !device->d3dDevice || !outSignature) {
     return false;
@@ -928,13 +924,12 @@ dx12__newSignature(GPUDeviceDX12               *device,
   desc.ByteStride       = stride;
   desc.NumArgumentDescs = 1u;
   desc.pArgumentDescs   = &argument;
-  return SUCCEEDED(device->d3dDevice->lpVtbl->CreateCommandSignature(
-    device->d3dDevice,
-    &desc,
-    NULL,
-    &IID_ID3D12CommandSignature,
-    (void **)outSignature
-  ));
+
+  return SUCCEEDED(device->d3dDevice->lpVtbl->CreateCommandSignature(device->d3dDevice,
+                                                                     &desc,
+                                                                     NULL,
+                                                                     &IID_ID3D12CommandSignature,
+                                                                     (void **)outSignature));
 }
 
 static bool
@@ -942,15 +937,15 @@ dx12__newSignatures(GPUDeviceDX12 *device) {
   return dx12__newSignature(device,
                             D3D12_INDIRECT_ARGUMENT_TYPE_DRAW,
                             sizeof(D3D12_DRAW_ARGUMENTS),
-                            &device->drawSignature) &&
-         dx12__newSignature(device,
-                            D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED,
-                            sizeof(D3D12_DRAW_INDEXED_ARGUMENTS),
-                            &device->drawIndexedSignature) &&
-         dx12__newSignature(device,
-                            D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH,
-                            sizeof(D3D12_DISPATCH_ARGUMENTS),
-                            &device->dispatchSignature);
+                            &device->drawSignature)
+         && dx12__newSignature(device,
+                               D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED,
+                               sizeof(D3D12_DRAW_INDEXED_ARGUMENTS),
+                               &device->drawIndexedSignature)
+         && dx12__newSignature(device,
+                               D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH,
+                               sizeof(D3D12_DISPATCH_ARGUMENTS),
+                               &device->dispatchSignature);
 }
 
 static void
@@ -958,37 +953,122 @@ dx12__freeSignatures(GPUDeviceDX12 *device) {
   if (!device) {
     return;
   }
+
   if (device->dispatchSignature) {
     device->dispatchSignature->lpVtbl->Release(device->dispatchSignature);
     device->dispatchSignature = NULL;
   }
+
   if (device->drawIndexedSignature) {
-    device->drawIndexedSignature->lpVtbl->Release(
-      device->drawIndexedSignature
-    );
+    device->drawIndexedSignature->lpVtbl->Release(device->drawIndexedSignature);
     device->drawIndexedSignature = NULL;
   }
+
   if (device->drawSignature) {
     device->drawSignature->lpVtbl->Release(device->drawSignature);
     device->drawSignature = NULL;
   }
 }
 
+static bool
+dx12_supportsSubgroupOperations(const GPUAdapter     *__restrict adapter,
+                                GPUShaderStageFlags              stage,
+                                GPUBackendSubgroupOperationFlags operations) {
+  GPUAdapterDX12 *adapterDX12;
+  const GPUShaderStageFlags              supportedStages = GPU_SHADER_STAGE_VERTEX_BIT
+                                                          | GPU_SHADER_STAGE_FRAGMENT_BIT
+                                                          | GPU_SHADER_STAGE_COMPUTE_BIT
+                                                          | GPU_SHADER_STAGE_TASK_BIT
+                                                          | GPU_SHADER_STAGE_MESH_BIT;
+  const GPUBackendSubgroupOperationFlags supportedOperations = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT
+                                                              | GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT
+                                                              | GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
+
+  adapterDX12 = adapter ? adapter->_priv : NULL;
+
+  return adapterDX12 && dx12_ensureAdapterCapabilities(adapter)
+         && adapterDX12->subgroups
+         && (supportedStages & stage) == stage
+         && (supportedOperations & operations) == operations;
+}
+
+static GPUResult
+dx12_getSubgroupMatrixProperties(const GPUAdapter               *__restrict adapter,
+                                 uint32_t                       *__restrict inoutPropertyCount,
+                                 GPUSubgroupMatrixPropertiesEXT *__restrict outProperties) {
+  GPUAdapterDX12 *adapterDX12;
+  uint32_t        capacity;
+  uint32_t        count;
+  uint32_t        copyCount;
+
+  adapterDX12 = adapter ? adapter->_priv : NULL;
+
+  if (!adapterDX12 || !inoutPropertyCount) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  (void)dx12_ensureSubgroupMatrices(adapter);
+
+  capacity            = *inoutPropertyCount;
+  count               = adapterDX12->subgroupMatrixPropertyCount;
+  *inoutPropertyCount = count;
+
+  if (count == 0u || !adapterDX12->subgroupMatrixProperties) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  if (outProperties && capacity > 0u) {
+    copyCount = capacity < count ? capacity : count;
+
+    memcpy(outProperties,
+           adapterDX12->subgroupMatrixProperties,
+           (size_t)copyCount * sizeof(*outProperties));
+  }
+
+  return outProperties && capacity < count ? GPU_ERROR_INSUFFICIENT_CAPACITY : GPU_OK;
+}
+
+static void
+dx12_getLimits(const GPUAdapter *__restrict adapter,
+               GPULimits        *__restrict outLimits) {
+  GPUAdapterDX12 *adapterDX12;
+
+  adapterDX12 = adapter ? adapter->_priv : NULL;
+
+  if (!adapterDX12 || !outLimits) {
+    return;
+  }
+
+  (void)dx12_ensureAdapterCapabilities(adapter);
+
+  outLimits->maxColorAttachments      = D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT;
+  outLimits->maxComputeWorkgroupSizeX = D3D12_CS_THREAD_GROUP_MAX_X;
+  outLimits->maxComputeWorkgroupSizeY = D3D12_CS_THREAD_GROUP_MAX_Y;
+  outLimits->maxComputeWorkgroupSizeZ = D3D12_CS_THREAD_GROUP_MAX_Z;
+  outLimits->maxPushConstantSizeBytes = 256u;
+  outLimits->maxSamplerAnisotropy     = 16u;
+  outLimits->minSubgroupSize          = adapterDX12->minSubgroupSize;
+  outLimits->maxSubgroupSize          = adapterDX12->maxSubgroupSize;
+}
+
 GPU_HIDE
-GPUAdapter *
-dx12_getAvailableAdapters(GPUInstance * __restrict inst,
-                          uint32_t                 maxNumberOfItems) {
-  GPUAdapterDX12        *adapterDX12;
-  GPUInstanceDX12       *instDX12;
-  IDXGIFactory4         *dxgiFactory;
-  GPUAdapter            *firstAdapter, *lastAdapter, *adapter;
-  IDXGIAdapter1         *dxgiAdapter;
-  IDXGIAdapter          *warpAdapter;
-  UINT                   adapterIndex, i;
-  HRESULT                enumResult;
-  HRESULT                hr;
-  HRESULT              (*EnumAdapters1)(IDXGIFactory4*, UINT, IDXGIAdapter1**);
-  bool                   forceWarp;
+GPUAdapter*
+dx12_getAvailableAdapters(GPUInstance *__restrict inst,
+                          uint32_t                maxNumberOfItems) {
+  GPUAdapterDX12  *adapterDX12;
+  GPUInstanceDX12 *instDX12;
+  IDXGIFactory4   *dxgiFactory;
+  GPUAdapter      *firstAdapter;
+  GPUAdapter      *lastAdapter;
+  GPUAdapter      *adapter;
+  IDXGIAdapter1   *dxgiAdapter;
+  IDXGIAdapter    *warpAdapter;
+  UINT             adapterIndex;
+  UINT             i;
+  HRESULT          enumResult;
+  HRESULT          hr;
+  HRESULT (*EnumAdapters1)(IDXGIFactory4 *, UINT, IDXGIAdapter1 **);
+  bool             forceWarp;
 
   firstAdapter  = lastAdapter = NULL;
   adapterIndex  = i = 0;
@@ -999,12 +1079,15 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
 
   /* loop until we either enumerate all devices or hit the maximum count. */
   enumResult = S_OK;
+
   while (!forceWarp && i < maxNumberOfItems) {
     dxgiAdapter = NULL;
     enumResult  = EnumAdapters1(dxgiFactory, adapterIndex, &dxgiAdapter);
+
     if (FAILED(enumResult)) {
       break;
     }
+
     if (dxgiAdapter) {
       adapterDX12              = calloc(1, sizeof(*adapterDX12));
       adapterDX12->dxgiAdapter = (IUnknown *)dxgiAdapter;
@@ -1016,23 +1099,27 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
       dx12_fillAdapterName(adapterDX12);
 
       if (adapterDX12->desc1.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
-        /* Don't select the Basic Render Driver adapter.*/
-        /* Release the current adapter before moving to next */
+        /* don't select the Basic Render Driver adapter. */
+        /* release the current adapter before moving to next */
         dxgiAdapter->lpVtbl->Release(dxgiAdapter);
         free(adapterDX12);
         goto nxt;
       }
 
-      adapter = calloc(1, sizeof(*adapter));
-      adapter->_priv                      = adapterDX12;
-      adapter->inst                       = inst;
-      adapter->separatePresentQueue       = 1; /* builtin */
-      adapter->supportsDisplayTiming      = 1; /* TODO */
+      adapter                       = calloc(1, sizeof(*adapter));
+      adapter->_priv                = adapterDX12;
+      adapter->inst                 = inst;
+      adapter->separatePresentQueue = 1; /* builtin */
+      adapter->supportsDisplayTiming = 1; /* TODO */
       adapter->supportsIncrementalPresent = 1; /* TODO */
-      adapter->supportsSwapchain          = 1; /* builtin */
+      adapter->supportsSwapchain = 1; /* builtin */
 
-      if (lastAdapter) { lastAdapter->next = adapter; }
-      else             { firstAdapter      = adapter; }
+      if (lastAdapter) {
+        lastAdapter->next = adapter;
+      } else {
+        firstAdapter = adapter;
+      }
+
       lastAdapter = adapter;
 
       /* move on to the next adapter. */
@@ -1040,34 +1127,36 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
       dxgiAdapter = NULL;
       i++;
     }
+
   nxt:
     adapterIndex++;
   }
 
-  /* Use WARP when requested or no hardware adapter is available. */
+  /* use WARP when requested or no hardware adapter is available. */
   if (forceWarp || !firstAdapter) {
     hr = dxgiFactory->lpVtbl->EnumWarpAdapter(dxgiFactory,
                                               &IID_IDXGIAdapter,
                                               (void **)&warpAdapter);
+
     if (FAILED(hr)) {
       fprintf(stderr,
-              "GPU: failed to enumerate the Direct3D 12 WARP adapter "
-              "(0x%08lx)\n",
+              "GPU: failed to enumerate the Direct3D 12 WARP adapter " "(0x%08lx)\n",
               (unsigned long)hr);
       goto err;
     }
-    adapter       = calloc(1, sizeof(*adapter));
-    adapterDX12   = calloc(1, sizeof(*adapterDX12));
 
-    adapterDX12->dxgiAdapter       = (IUnknown *)warpAdapter;
-    adapterDX12->isWarp            = true;
+    adapter     = calloc(1, sizeof(*adapter));
+    adapterDX12 = calloc(1, sizeof(*adapterDX12));
+
+    adapterDX12->dxgiAdapter = (IUnknown *)warpAdapter;
+    adapterDX12->isWarp      = true;
     InitializeSRWLock(&adapterDX12->capabilityLock);
     InitializeSRWLock(&adapterDX12->formatCapsLock);
     InitializeSRWLock(&adapterDX12->subgroupMatrixLock);
     snprintf(adapterDX12->name, sizeof(adapterDX12->name), "WARP");
-    adapter->_priv                      = adapterDX12;
-    adapter->inst                       = inst;
-    adapter->separatePresentQueue       = 1; /* builtin */
+    adapter->_priv                = adapterDX12;
+    adapter->inst                 = inst;
+    adapter->separatePresentQueue = 1; /* builtin */
     adapter->supportsDisplayTiming      = 1; /* TODO */
     adapter->supportsIncrementalPresent = 1; /* TODO */
     adapter->supportsSwapchain          = 1; /* builtin */
@@ -1077,44 +1166,48 @@ dx12_getAvailableAdapters(GPUInstance * __restrict inst,
 
   if (!firstAdapter && !forceWarp) {
     fprintf(stderr,
-            "GPU: no usable Direct3D 12 adapter was found "
-            "(last DXGI result 0x%08lx)\n",
+            "GPU: no usable Direct3D 12 adapter was found " "(last DXGI result 0x%08lx)\n",
             (unsigned long)enumResult);
   }
 
   return firstAdapter;
+
 err:
   dxThrowIfFailed(hr);
   return NULL;
 }
 
 GPU_HIDE
-GPUAdapter *
-dx12_selectAdapter(GPUInstance        * __restrict inst,
-                   GPUAdapter         * __restrict adapters,
-                   GPUPowerPreference              powerPreference) {
-  GPUInstanceDX12  *instDX12;
-  IDXGIFactory6    *factory6;
-  IDXGIAdapter1    *preferred;
-  DXGI_ADAPTER_DESC1 desc;
+GPUAdapter*
+dx12_selectAdapter(GPUInstance *__restrict inst,
+                   GPUAdapter  *__restrict adapters,
+                   GPUPowerPreference      powerPreference) {
+  DXGI_ADAPTER_DESC1  desc;
+  GPUInstanceDX12    *instDX12;
+  IDXGIFactory6      *factory6;
+  IDXGIAdapter1      *preferred;
+  GPUAdapter         *adapter;
+  GPUAdapter         *item;
+  GPUAdapterDX12     *itemDX12;
   DXGI_GPU_PREFERENCE nativePreference;
-  GPUAdapter       *adapter;
-  HRESULT           hr;
+  HRESULT             hr;
+  UINT                index;
 
   if (powerPreference == GPU_POWER_PREFERENCE_DEFAULT) {
     return adapters;
   }
+
   instDX12 = inst ? inst->_priv : NULL;
+
   if (!instDX12 || !instDX12->dxgiFactory) {
     return NULL;
   }
 
   factory6 = NULL;
-  hr = instDX12->dxgiFactory->lpVtbl->QueryInterface(
-    instDX12->dxgiFactory,
-    &IID_IDXGIFactory6,
-    (void **)&factory6
-  );
+  hr       = instDX12->dxgiFactory->lpVtbl->QueryInterface(instDX12->dxgiFactory,
+                                                           &IID_IDXGIFactory6,
+                                                           (void **)&factory6);
+
   if (FAILED(hr) || !factory6) {
     return NULL;
   }
@@ -1122,16 +1215,16 @@ dx12_selectAdapter(GPUInstance        * __restrict inst,
   nativePreference = powerPreference == GPU_POWER_PREFERENCE_LOW_POWER
     ? DXGI_GPU_PREFERENCE_MINIMUM_POWER
     : DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE;
-  adapter = NULL;
-  for (UINT index = 0u; ; index++) {
+  adapter          = NULL;
+
+  for (index = 0u; ; index++) {
     preferred = NULL;
-    hr = factory6->lpVtbl->EnumAdapterByGpuPreference(
-      factory6,
-      index,
-      nativePreference,
-      &IID_IDXGIAdapter1,
-      (void **)&preferred
-    );
+    hr        = factory6->lpVtbl->EnumAdapterByGpuPreference(factory6,
+                                                             index,
+                                                             nativePreference,
+                                                             &IID_IDXGIAdapter1,
+                                                             (void **)&preferred);
+
     if (FAILED(hr) || !preferred) {
       break;
     }
@@ -1139,28 +1232,31 @@ dx12_selectAdapter(GPUInstance        * __restrict inst,
     memset(&desc, 0, sizeof(desc));
     preferred->lpVtbl->GetDesc1(preferred, &desc);
     preferred->lpVtbl->Release(preferred);
-    for (GPUAdapter *item = adapters; item; item = item->next) {
-      GPUAdapterDX12 *itemDX12;
 
+    for (item = adapters; item; item = item->next) {
       itemDX12 = item->_priv;
-      if (itemDX12 &&
-          itemDX12->desc1.AdapterLuid.HighPart == desc.AdapterLuid.HighPart &&
-          itemDX12->desc1.AdapterLuid.LowPart == desc.AdapterLuid.LowPart) {
+
+      if (itemDX12
+          && itemDX12->desc1.AdapterLuid.HighPart == desc.AdapterLuid.HighPart
+          && itemDX12->desc1.AdapterLuid.LowPart == desc.AdapterLuid.LowPart) {
         adapter = item;
         break;
       }
     }
+
     if (adapter) {
       break;
     }
   }
+
   factory6->lpVtbl->Release(factory6);
+
   return adapter;
 }
 
 GPU_HIDE
 void
-dx12_destroyAdapter(GPUAdapter * __restrict adapter) {
+dx12_destroyAdapter(GPUAdapter *__restrict adapter) {
   GPUAdapterDX12 *adapterDX12;
 
   if (!adapter) {
@@ -1168,25 +1264,27 @@ dx12_destroyAdapter(GPUAdapter * __restrict adapter) {
   }
 
   adapterDX12 = adapter->_priv;
+
   if (adapterDX12) {
     if (adapterDX12->capabilityDevice) {
-      adapterDX12->capabilityDevice->lpVtbl->Release(
-        adapterDX12->capabilityDevice
-      );
+      adapterDX12->capabilityDevice->lpVtbl->Release(adapterDX12->capabilityDevice);
     }
+
     if (adapterDX12->dxgiAdapter) {
       adapterDX12->dxgiAdapter->lpVtbl->Release(adapterDX12->dxgiAdapter);
     }
+
     free(adapterDX12->subgroupMatrixProperties);
     free(adapterDX12);
   }
+
   free(adapter);
 }
 
 GPU_HIDE
 GPUResult
-dx12_getAdapterProperties(const GPUAdapter     * __restrict adapter,
-                          GPUAdapterProperties * __restrict outProps) {
+dx12_getAdapterProperties(const GPUAdapter     *__restrict adapter,
+                          GPUAdapterProperties *__restrict outProps) {
   GPUAdapterDX12 *adapterDX12;
 
   if (!adapter || !outProps || !adapter->_priv) {
@@ -1208,8 +1306,8 @@ dx12_getAdapterProperties(const GPUAdapter     * __restrict adapter,
 
 GPU_HIDE
 GPUResult
-dx12_getAdapterIdentity(const GPUAdapter   * __restrict adapter,
-                        GPUAdapterIdentity * __restrict outIdentity) {
+dx12_getAdapterIdentity(const GPUAdapter   *__restrict adapter,
+                        GPUAdapterIdentity *__restrict outIdentity) {
   GPUAdapterDX12 *adapterDX12;
 
   if (!adapter || !outIdentity || !adapter->_priv) {
@@ -1222,18 +1320,20 @@ dx12_getAdapterIdentity(const GPUAdapter   * __restrict adapter,
          &adapterDX12->desc1.AdapterLuid,
          sizeof(adapterDX12->desc1.AdapterLuid));
   outIdentity->validFlags = GPU_ADAPTER_IDENTITY_LUID_BIT;
+
   return GPU_OK;
 }
 
 GPU_HIDE
 bool
-dx12_supportsFeature(const GPUAdapter * __restrict adapter,
-                     GPUFeature feature) {
+dx12_supportsFeature(const GPUAdapter *__restrict adapter,
+                     GPUFeature                   feature) {
   GPUAdapterDX12 *adapterDX12;
 
   if (!adapter || !adapter->_priv) {
     return false;
   }
+
   adapterDX12 = adapter->_priv;
 
   switch (feature) {
@@ -1258,8 +1358,7 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
     case GPU_FEATURE_SPARSE_TEXTURES:
     case GPU_FEATURE_SPARSE_BUFFERS:
     case GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT:
-      return adapterDX12->tiledResourcesTier >=
-             D3D12_TILED_RESOURCES_TIER_1;
+      return adapterDX12->tiledResourcesTier >= D3D12_TILED_RESOURCES_TIER_1;
     case GPU_FEATURE_SHADER_F16:
       return adapterDX12->shaderF16;
     case GPU_FEATURE_ATOMIC64:
@@ -1281,8 +1380,7 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
     case GPU_FEATURE_SAMPLER_FEEDBACK:
       return adapterDX12->samplerFeedbackTier != 0u;
     case GPU_FEATURE_VARIABLE_RATE_SHADING:
-      return adapterDX12->vrsTier !=
-             D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
+      return adapterDX12->vrsTier != D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
     case GPU_FEATURE_SUBGROUPS:
       return adapterDX12->subgroups;
     case GPU_FEATURE_SUBGROUP_MATRIX:
@@ -1292,109 +1390,35 @@ dx12_supportsFeature(const GPUAdapter * __restrict adapter,
   }
 }
 
-static bool
-dx12_supportsSubgroupOperations(
-  const GPUAdapter                 * __restrict adapter,
-  GPUShaderStageFlags                           stage,
-  GPUBackendSubgroupOperationFlags              operations) {
-  const GPUShaderStageFlags supportedStages =
-    GPU_SHADER_STAGE_VERTEX_BIT |
-    GPU_SHADER_STAGE_FRAGMENT_BIT |
-    GPU_SHADER_STAGE_COMPUTE_BIT |
-    GPU_SHADER_STAGE_TASK_BIT |
-    GPU_SHADER_STAGE_MESH_BIT;
-  const GPUBackendSubgroupOperationFlags supportedOperations =
-    GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
-    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
-    GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
-  GPUAdapterDX12 *adapterDX12;
-
-  adapterDX12 = adapter ? adapter->_priv : NULL;
-  return adapterDX12 && dx12_ensureAdapterCapabilities(adapter) &&
-         adapterDX12->subgroups &&
-         (supportedStages & stage) == stage &&
-         (supportedOperations & operations) == operations;
-}
-
-static GPUResult
-dx12_getSubgroupMatrixProperties(
-  const GPUAdapter               * __restrict adapter,
-  uint32_t                       * __restrict inoutPropertyCount,
-  GPUSubgroupMatrixPropertiesEXT * __restrict outProperties) {
-  GPUAdapterDX12 *adapterDX12;
-  uint32_t        capacity;
-  uint32_t        count;
-
-  adapterDX12 = adapter ? adapter->_priv : NULL;
-  if (!adapterDX12 || !inoutPropertyCount) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  (void)dx12_ensureSubgroupMatrices(adapter);
-
-  capacity = *inoutPropertyCount;
-  count    = adapterDX12->subgroupMatrixPropertyCount;
-  *inoutPropertyCount = count;
-  if (count == 0u || !adapterDX12->subgroupMatrixProperties) {
-    return GPU_ERROR_UNSUPPORTED;
-  }
-  if (outProperties && capacity > 0u) {
-    uint32_t copyCount = capacity < count ? capacity : count;
-
-    memcpy(outProperties,
-           adapterDX12->subgroupMatrixProperties,
-           (size_t)copyCount * sizeof(*outProperties));
-  }
-  return outProperties && capacity < count
-           ? GPU_ERROR_INSUFFICIENT_CAPACITY
-           : GPU_OK;
-}
-
-static void
-dx12_getLimits(const GPUAdapter * __restrict adapter,
-               GPULimits       * __restrict outLimits) {
-  GPUAdapterDX12 *adapterDX12;
-
-  adapterDX12 = adapter ? adapter->_priv : NULL;
-  if (!adapterDX12 || !outLimits) {
-    return;
-  }
-
-  (void)dx12_ensureAdapterCapabilities(adapter);
-
-  outLimits->maxColorAttachments      = D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT;
-  outLimits->maxComputeWorkgroupSizeX = D3D12_CS_THREAD_GROUP_MAX_X;
-  outLimits->maxComputeWorkgroupSizeY = D3D12_CS_THREAD_GROUP_MAX_Y;
-  outLimits->maxComputeWorkgroupSizeZ = D3D12_CS_THREAD_GROUP_MAX_Z;
-  outLimits->maxPushConstantSizeBytes  = 256u;
-  outLimits->maxSamplerAnisotropy      = 16u;
-  outLimits->minSubgroupSize           = adapterDX12->minSubgroupSize;
-  outLimits->maxSubgroupSize           = adapterDX12->maxSubgroupSize;
-}
-
 GPU_HIDE
-GPUDevice *
-dx12_createDevice(GPUAdapter              * __restrict adapter,
+GPUDevice*
+dx12_createDevice(GPUAdapter   *__restrict adapter,
                   const GPUQueueCreateInfo queCI[],
                   uint32_t                 nQueCI,
                   uint64_t                 enabledFeatureMask) {
-  GPUInstance           *inst;
-  GPUInstanceDX12       *instDX12;
-  GPUAdapterDX12        *adapterDX12;
-  GPUDevice             *device;
-  GPUDeviceDX12         *deviceDX12;
-  ID3D12DeviceFactory   *deviceFactory;
-  HRESULT                hr;
-  uint32_t               queueCount;
-  uint32_t               queueIndex;
-  uint32_t               i, j;
+  GPUInstance         *inst;
+  GPUInstanceDX12     *instDX12;
+  GPUAdapterDX12      *adapterDX12;
+  GPUDevice           *device;
+  GPUDeviceDX12       *deviceDX12;
+  ID3D12DeviceFactory *deviceFactory;
+  GPUQueue            *queue;
+  HRESULT              hr;
+  uint32_t             queueCount;
+  uint32_t             queueIndex;
+  uint32_t             i;
+  uint32_t             j;
+  uint32_t             shaderModel;
+  uint32_t             targetProfile;
+  uint32_t             dxcProfile;
 
   device     = NULL;
   deviceDX12 = NULL;
-  if (!adapter ||
-      !(inst = adapter->inst) ||
-      !(instDX12 = inst->_priv) ||
-      !(adapterDX12 = adapter->_priv)) {
+
+  if (!adapter
+      || !(inst = adapter->inst)
+      || !(instDX12 = inst->_priv)
+      || !(adapterDX12 = adapter->_priv)) {
     goto err;
   }
 
@@ -1402,128 +1426,159 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
 
   device     = calloc(1, sizeof(*device));
   deviceDX12 = calloc(1, sizeof(*deviceDX12));
+
   if (!device || !deviceDX12) {
     goto err;
   }
 
   deviceFactory = instDX12->deviceFactory;
+
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u) {
     deviceFactory = instDX12->linearAlgebraFactory;
   }
+
   if (deviceFactory == instDX12->deviceFactory) {
     AcquireSRWLockExclusive(&adapterDX12->capabilityLock);
     deviceDX12->d3dDevice         = adapterDX12->capabilityDevice;
     adapterDX12->capabilityDevice = NULL;
     ReleaseSRWLockExclusive(&adapterDX12->capabilityLock);
   }
+
   if (!deviceDX12->d3dDevice) {
     hr = dx12_createNativeDevice(deviceFactory,
                                  adapterDX12->dxgiAdapter,
                                  &IID_ID3D12Device,
                                  (void **)&deviceDX12->d3dDevice);
+
     if (FAILED(hr)) {
       goto err;
     }
   }
+
   /* Parallels removes or corrupts devices on combined stencil-plane copies. */
+
   deviceDX12->stencilPlaneCopies = !dx12_isParallels(adapterDX12);
+
   /* Parallels accepts query commands but never writes resolved data. */
+
   deviceDX12->queryResultsReliable = dx12_queryResultsReliable(adapterDX12);
+
   /* Parallels advertises linear sampling but executes it as point sampling. */
+
   deviceDX12->manualBlitFiltering = dx12_isParallels(adapterDX12);
+
   /* Parallels ignores non-zero GPU sampler-table handles. */
+
   deviceDX12->samplerTableOffsetsReliable = !dx12_isParallels(adapterDX12);
+
   /* Parallels aliases root CBVs that share a register across spaces. */
+
   deviceDX12->rootCbvSpacesReliable = !dx12_isParallels(adapterDX12);
   dx12_queryDeviceCapabilities(deviceDX12);
-  deviceDX12->subgroupMatrix =
-    adapterDX12->subgroupMatrixPropertyCount > 0u &&
-    deviceDX12->dxcAvailable &&
-    deviceDX12->shaderModel >= (D3D_SHADER_MODEL)0x6a;
-  /* Parallels advertises enhanced barriers but fails on Barrier calls. */
+
+  deviceDX12->subgroupMatrix = adapterDX12->subgroupMatrixPropertyCount > 0u
+                               && deviceDX12->dxcAvailable
+                               && deviceDX12->shaderModel >= (D3D_SHADER_MODEL)0x6a;
+
+  /* Parallels advertises enhanced barriers but fails on barrier calls. */
+
   if (dx12_isParallels(adapterDX12)) {
     deviceDX12->enhancedBarriers = false;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUPS)) != 0u &&
-      !deviceDX12->subgroups) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUPS)) != 0u
+      && !deviceDX12->subgroups) {
     goto err;
   }
-  deviceDX12->subgroupMatrixEnabled =
-    (enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u;
+
+  deviceDX12->subgroupMatrixEnabled = (enabledFeatureMask & (1ull << GPU_FEATURE_SUBGROUP_MATRIX)) != 0u;
+
   if (deviceDX12->subgroupMatrixEnabled && !deviceDX12->subgroupMatrix) {
     goto err;
   }
-  deviceDX12->shaderF16Enabled =
-    (enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u;
+
+  deviceDX12->shaderF16Enabled = (enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u;
+
   if (deviceDX12->shaderF16Enabled && !deviceDX12->shaderF16) {
     goto err;
   }
-  deviceDX12->atomic64Enabled =
-    (enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u;
+
+  deviceDX12->atomic64Enabled = (enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u;
+
   if (deviceDX12->atomic64Enabled && !deviceDX12->atomic64) {
     goto err;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u &&
-      !deviceDX12->descriptorIndexing) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING)) != 0u
+      && !deviceDX12->descriptorIndexing) {
     goto err;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u &&
-      !deviceDX12->bindless) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_BINDLESS)) != 0u
+      && !deviceDX12->bindless) {
     goto err;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u &&
-      !deviceDX12->meshShader) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) != 0u
+      && !deviceDX12->meshShader) {
     goto err;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u &&
-      !deviceDX12->rayQuery) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) != 0u
+      && !deviceDX12->rayQuery) {
     goto err;
   }
-  if ((enabledFeatureMask &
-       (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u &&
-      !deviceDX12->rayTracingPipeline) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) != 0u
+      && !deviceDX12->rayTracingPipeline) {
     goto err;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_EXECUTION_GRAPH)) != 0u &&
-      !deviceDX12->executionGraph) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_EXECUTION_GRAPH)) != 0u
+      && !deviceDX12->executionGraph) {
     goto err;
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SAMPLER_FEEDBACK)) != 0u &&
-      deviceDX12->samplerFeedbackTier == 0u) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SAMPLER_FEEDBACK)) != 0u
+      && deviceDX12->samplerFeedbackTier == 0u) {
     goto err;
   }
-  if ((enabledFeatureMask &
-       (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u &&
-      deviceDX12->vrsTier ==
-        D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u
+      && deviceDX12->vrsTier == D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED) {
     goto err;
   }
+
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_MESH_SHADER)) == 0u) {
     deviceDX12->meshShader = false;
+
     if (deviceDX12->d3dDevice2) {
       deviceDX12->d3dDevice2->lpVtbl->Release(deviceDX12->d3dDevice2);
       deviceDX12->d3dDevice2 = NULL;
     }
   }
-  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) == 0u &&
-      (enabledFeatureMask &
-       (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) == 0u &&
-      (enabledFeatureMask & (1ull << GPU_FEATURE_EXECUTION_GRAPH)) == 0u) {
-    deviceDX12->rayQuery = false;
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_QUERY)) == 0u
+      && (enabledFeatureMask & (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) == 0u
+      && (enabledFeatureMask & (1ull << GPU_FEATURE_EXECUTION_GRAPH)) == 0u) {
+    deviceDX12->rayQuery           = false;
     deviceDX12->rayTracingPipeline = false;
-    deviceDX12->executionGraph = false;
+    deviceDX12->executionGraph     = false;
+
     if (deviceDX12->d3dDevice5) {
       deviceDX12->d3dDevice5->lpVtbl->Release(deviceDX12->d3dDevice5);
       deviceDX12->d3dDevice5 = NULL;
     }
   }
-  if ((enabledFeatureMask &
-       (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) == 0u) {
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_RAY_TRACING_PIPELINE)) == 0u) {
     deviceDX12->rayTracingPipeline = false;
   }
+
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_EXECUTION_GRAPH)) == 0u) {
     deviceDX12->executionGraph = false;
   }
+
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SAMPLER_FEEDBACK)) == 0u) {
     deviceDX12->samplerFeedbackTier = 0u;
 #if GPU_DX12_HAS_SAMPLER_FEEDBACK
@@ -1533,31 +1588,29 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
     }
 #endif
   }
-  if ((enabledFeatureMask &
-       (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) == 0u) {
-    deviceDX12->vrsTier = D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
+
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) == 0u) {
+    deviceDX12->vrsTier     = D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
     deviceDX12->vrsTileSize = 0u;
   }
+
   InitializeSRWLock(&deviceDX12->descriptorLock);
+
   if (!dx12__newSignatures(deviceDX12)) {
     goto err;
   }
 
-  device->inst      = inst;
-  device->_priv     = deviceDX12;
-  device->adapter   = adapter;
+  device->inst             = inst;
+  device->_priv            = deviceDX12;
+  device->adapter          = adapter;
   device->uslTargetProfile = deviceDX12->uslTargetProfile;
-  if (getenv("GPU_USL_LOG")) {
-    uint32_t shaderModel;
-    uint32_t targetProfile;
-    uint32_t dxcProfile;
 
+  if (getenv("GPU_USL_LOG")) {
     shaderModel   = (uint32_t)deviceDX12->shaderModel;
     targetProfile = deviceDX12->uslTargetProfile;
     dxcProfile    = deviceDX12->dxcTargetProfile;
     fprintf(stderr,
-            "GPU: Direct3D 12 \"%s\", SM %u.%u, DXC %u.%u, "
-            "USL/DXC ceiling %u.%u\n",
+            "GPU: Direct3D 12 \"%s\", SM %u.%u, DXC %u.%u, " "USL/DXC ceiling %u.%u\n",
             adapterDX12->name,
             shaderModel >> 4u,
             shaderModel & 0x0fu,
@@ -1566,50 +1619,50 @@ dx12_createDevice(GPUAdapter              * __restrict adapter,
             (targetProfile >> 8u) & 0xffu,
             targetProfile & 0xffu);
   }
+
   if (deviceDX12->meshShader) {
-    device->meshLimits.taskWorkgroupSize[0] = 128u;
-    device->meshLimits.taskWorkgroupSize[1] = 128u;
-    device->meshLimits.taskWorkgroupSize[2] = 64u;
-    device->meshLimits.meshWorkgroupSize[0] = 128u;
-    device->meshLimits.meshWorkgroupSize[1] = 128u;
-    device->meshLimits.meshWorkgroupSize[2] = 64u;
+    device->meshLimits.taskWorkgroupSize[0]        = 128u;
+    device->meshLimits.taskWorkgroupSize[1]        = 128u;
+    device->meshLimits.taskWorkgroupSize[2]        = 64u;
+    device->meshLimits.meshWorkgroupSize[0]        = 128u;
+    device->meshLimits.meshWorkgroupSize[1]        = 128u;
+    device->meshLimits.meshWorkgroupSize[2]        = 64u;
     device->meshLimits.maxTaskWorkgroupInvocations = 128u;
     device->meshLimits.maxMeshWorkgroupInvocations = 128u;
-    device->meshLimits.maxPayloadSizeBytes          = 16u * 1024u;
-    device->meshLimits.maxOutputVertices            = 256u;
-    device->meshLimits.maxOutputPrimitives          = 256u;
+    device->meshLimits.maxPayloadSizeBytes         = 16u * 1024u;
+    device->meshLimits.maxOutputVertices           = 256u;
+    device->meshLimits.maxOutputPrimitives         = 256u;
   }
+
   if (deviceDX12->rayTracingPipeline) {
-    device->rayTracingLimits.maxDispatchCount             = 1ull << 30u;
-    device->rayTracingLimits.maxDispatchSize[0]           = UINT32_MAX;
-    device->rayTracingLimits.maxDispatchSize[1]           = UINT32_MAX;
-    device->rayTracingLimits.maxDispatchSize[2]           = UINT32_MAX;
-    device->rayTracingLimits.maxRecursionDepth            =
-      D3D12_RAYTRACING_MAX_DECLARABLE_TRACE_RECURSION_DEPTH;
-    device->rayTracingLimits.maxHitAttributeSizeBytes     =
-      D3D12_RAYTRACING_MAX_ATTRIBUTE_SIZE_IN_BYTES;
+    device->rayTracingLimits.maxDispatchCount         = 1ull << 30u;
+    device->rayTracingLimits.maxDispatchSize[0]       = UINT32_MAX;
+    device->rayTracingLimits.maxDispatchSize[1]       = UINT32_MAX;
+    device->rayTracingLimits.maxDispatchSize[2]       = UINT32_MAX;
+    device->rayTracingLimits.maxRecursionDepth        = D3D12_RAYTRACING_MAX_DECLARABLE_TRACE_RECURSION_DEPTH;
+    device->rayTracingLimits.maxHitAttributeSizeBytes = D3D12_RAYTRACING_MAX_ATTRIBUTE_SIZE_IN_BYTES;
   }
 
   queueCount = 0u;
+
   for (i = 0u; i < nQueCI; i++) {
     queueCount += queCI[i].count;
   }
+
   if (queueCount > 0u) {
-    deviceDX12->createdQueues = calloc(queueCount,
-                                       sizeof(*deviceDX12->createdQueues));
-    if (!deviceDX12->createdQueues) {
+    if (!(deviceDX12->createdQueues = calloc(queueCount,
+                                             sizeof(*deviceDX12->createdQueues)))) {
       goto err;
     }
 
     queueIndex = 0u;
+
     for (i = 0u; i < nQueCI; i++) {
       for (j = 0u; j < queCI[i].count; j++) {
-        GPUQueue        *queue;
-
-        queue = dx12_createCommandQueue(device, queCI[i].flags);
-        if (!queue) {
+        if (!(queue = dx12_createCommandQueue(device, queCI[i].flags))) {
           goto err;
         }
+
         deviceDX12->createdQueues[queueIndex++] = queue;
         deviceDX12->nCreatedQueues              = queueIndex;
         device->queueFamilies                  |= queue->bits;
@@ -1625,14 +1678,18 @@ err:
       for (i = 0u; i < deviceDX12->nCreatedQueues; i++) {
         dx12_destroyCommandQueue(deviceDX12->createdQueues[i]);
       }
+
       free(deviceDX12->createdQueues);
     }
+
     if (deviceDX12->d3dDevice) {
       dx12__freeSignatures(deviceDX12);
       dx12_destroyDescriptorHeaps(deviceDX12);
+
       if (deviceDX12->d3dDevice2) {
         deviceDX12->d3dDevice2->lpVtbl->Release(deviceDX12->d3dDevice2);
       }
+
       if (deviceDX12->d3dDevice5) {
         deviceDX12->d3dDevice5->lpVtbl->Release(deviceDX12->d3dDevice5);
       }
@@ -1643,6 +1700,7 @@ err:
 #endif
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
     }
+
     if (deviceDX12->dxcModule) {
       FreeLibrary(deviceDX12->dxcModule);
     }
@@ -1653,33 +1711,40 @@ err:
 #endif
     free(deviceDX12);
   }
+
   free(device);
   return NULL;
 }
 
 GPU_HIDE
 void
-dx12_destroyDevice(GPUDevice * __restrict device) {
+dx12_destroyDevice(GPUDevice *__restrict device) {
   GPUDeviceDX12 *deviceDX12;
+  uint32_t       i;
 
   if (!device) {
     return;
   }
 
   deviceDX12 = device->_priv;
+
   if (deviceDX12) {
     if (deviceDX12->createdQueues) {
-      for (uint32_t i = 0u; i < deviceDX12->nCreatedQueues; i++) {
+      for (i = 0u; i < deviceDX12->nCreatedQueues; i++) {
         dx12_destroyCommandQueue(deviceDX12->createdQueues[i]);
       }
+
       free(deviceDX12->createdQueues);
     }
+
     if (deviceDX12->d3dDevice) {
       dx12__freeSignatures(deviceDX12);
       dx12_destroyDescriptorHeaps(deviceDX12);
+
       if (deviceDX12->d3dDevice2) {
         deviceDX12->d3dDevice2->lpVtbl->Release(deviceDX12->d3dDevice2);
       }
+
       if (deviceDX12->d3dDevice5) {
         deviceDX12->d3dDevice5->lpVtbl->Release(deviceDX12->d3dDevice5);
       }
@@ -1690,6 +1755,7 @@ dx12_destroyDevice(GPUDevice * __restrict device) {
 #endif
       deviceDX12->d3dDevice->lpVtbl->Release(deviceDX12->d3dDevice);
     }
+
     if (deviceDX12->dxcModule) {
       FreeLibrary(deviceDX12->dxcModule);
     }
@@ -1700,24 +1766,24 @@ dx12_destroyDevice(GPUDevice * __restrict device) {
 #endif
     free(deviceDX12);
   }
+
   free(device);
 }
 
 GPU_HIDE
 void
-dx12_initDevice(GPUApiDevice* apiDevice) {
-  apiDevice->getAvailableAdapters       = dx12_getAvailableAdapters;
-  apiDevice->selectAdapter              = dx12_selectAdapter;
-  apiDevice->destroyAdapter             = dx12_destroyAdapter;
-  apiDevice->getAdapterProperties       = dx12_getAdapterProperties;
-  apiDevice->getAdapterIdentity         = dx12_getAdapterIdentity;
-  apiDevice->supportsFeature            = dx12_supportsFeature;
-  apiDevice->supportsSubgroupOperations = dx12_supportsSubgroupOperations;
-  apiDevice->getLimits                  = dx12_getLimits;
-  apiDevice->getFormatCapabilities      = dx12_getFormatCapabilities;
-  apiDevice->getSubgroupMatrixProperties =
-    dx12_getSubgroupMatrixProperties;
-  apiDevice->createDevice               = dx12_createDevice;
-  apiDevice->waitIdle                   = dx12_waitDeviceIdle;
-  apiDevice->destroyDevice              = dx12_destroyDevice;
+dx12_initDevice(GPUApiDevice *apiDevice) {
+  apiDevice->getAvailableAdapters        = dx12_getAvailableAdapters;
+  apiDevice->selectAdapter               = dx12_selectAdapter;
+  apiDevice->destroyAdapter              = dx12_destroyAdapter;
+  apiDevice->getAdapterProperties        = dx12_getAdapterProperties;
+  apiDevice->getAdapterIdentity          = dx12_getAdapterIdentity;
+  apiDevice->supportsFeature             = dx12_supportsFeature;
+  apiDevice->supportsSubgroupOperations  = dx12_supportsSubgroupOperations;
+  apiDevice->getLimits                   = dx12_getLimits;
+  apiDevice->getFormatCapabilities       = dx12_getFormatCapabilities;
+  apiDevice->getSubgroupMatrixProperties = dx12_getSubgroupMatrixProperties;
+  apiDevice->createDevice                = dx12_createDevice;
+  apiDevice->waitIdle                    = dx12_waitDeviceIdle;
+  apiDevice->destroyDevice               = dx12_destroyDevice;
 }

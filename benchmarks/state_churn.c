@@ -26,22 +26,24 @@ enum {
 };
 
 typedef struct StateChurn {
-  GPURenderPipeline        *pipelines[STATE_COUNT];
-  GPUDynamicStateApplyInfo  states[STATE_COUNT];
+  GPURenderPipeline       *pipelines[STATE_COUNT];
+  GPUDynamicStateApplyInfo states[STATE_COUNT];
 } StateChurn;
 
 static void
 state_init(StateChurn *churn) {
   GPUDynamicStateMask mask;
+  uint32_t            i;
 
   memset(churn, 0, sizeof(*churn));
   mask = GPU_DYNAMIC_STATE_VIEWPORT_BIT |
          GPU_DYNAMIC_STATE_SCISSOR_BIT |
          GPU_DYNAMIC_STATE_BLEND_CONSTANT_BIT |
          GPU_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
-  for (uint32_t i = 0u; i < STATE_COUNT; i++) {
-    churn->states[i].chain.sType = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
-    churn->states[i].chain.structSize = sizeof(churn->states[i]);
+
+  for (i = 0u; i < STATE_COUNT; i++) {
+    churn->states[i].chain.sType       = GPU_STRUCTURE_TYPE_DYNAMIC_STATE_APPLY_INFO;
+    churn->states[i].chain.structSize  = sizeof(churn->states[i]);
     churn->states[i].mask              = mask;
     churn->states[i].viewport.minDepth = 0.0f;
     churn->states[i].viewport.maxDepth = 1.0f;
@@ -72,16 +74,18 @@ state_encode(GPURenderPassEncoder *pass,
              uint32_t              drawCount,
              void                 *userData) {
   StateChurn *churn;
+  uint32_t    draw;
+  uint32_t    stateIndex;
 
   churn = userData;
-  for (uint32_t draw = 0u; draw < drawCount; draw++) {
-    uint32_t stateIndex;
 
+  for (draw = 0u; draw < drawCount; draw++) {
     stateIndex = (draw >> 1u) & 1u;
     GPUBindRenderPipeline(pass, churn->pipelines[stateIndex]);
     GPUApplyDynamicState(pass, &churn->states[stateIndex]);
     GPUDraw(pass, 3u, 1u, 0u, 0u);
   }
+
   return true;
 }
 
@@ -93,13 +97,12 @@ state_metricsMatch(const BenchRenderConfig *config,
 
   frames = metrics->sampleCount;
   runs   = ((uint64_t)config->drawCount + 1u) / 2u;
-  return metrics->requestedBindCalls ==
-           ((uint64_t)config->drawCount + 1u) * frames &&
-         metrics->emittedBindCalls == (runs + 1u) * frames &&
-         metrics->requestedStateCalls ==
-           (uint64_t)config->drawCount * 4u * frames &&
-         metrics->emittedStateCalls == runs * 4u * frames &&
-         metrics->drawCalls == (uint64_t)config->drawCount * frames;
+
+  return metrics->requestedBindCalls == ((uint64_t)config->drawCount + 1u) * frames
+         && metrics->emittedBindCalls == (runs + 1u) * frames
+         && metrics->requestedStateCalls == (uint64_t)config->drawCount * 4u * frames
+         && metrics->emittedStateCalls == runs * 4u * frames
+         && metrics->drawCalls == (uint64_t)config->drawCount * frames;
 }
 
 int
@@ -115,12 +118,13 @@ main(int argc, char *argv[]) {
   memset(&pipelineInfo, 0, sizeof(pipelineInfo));
   memset(&metrics, 0, sizeof(metrics));
   state_init(&churn);
-  if (!bench_renderConfig(argc, argv, &config) ||
-      config.drawCount > UINT32_MAX / 4u ||
-      !bench_renderInit(&bench,
-                        &config,
-                        STATE_TARGET_SIZE,
-                        STATE_TARGET_SIZE)) {
+
+  if (!bench_renderConfig(argc, argv, &config)
+      || config.drawCount > UINT32_MAX / 4u
+      || !bench_renderInit(&bench,
+                           &config,
+                           STATE_TARGET_SIZE,
+                           STATE_TARGET_SIZE)) {
     bench_renderCleanup(&bench);
     return EXIT_FAILURE;
   }
@@ -128,6 +132,7 @@ main(int argc, char *argv[]) {
   pipelineInfo.label       = "state-churn-pipeline-a";
   pipelineInfo.frontFace   = GPU_FRONT_FACE_CCW;
   pipelineInfo.vertexInput = true;
+
   if (!bench_renderPipeline(&bench,
                             &pipelineInfo,
                             &churn.pipelines[0])) {
@@ -139,6 +144,7 @@ main(int argc, char *argv[]) {
   pipelineInfo.label        = "state-churn-pipeline-b";
   pipelineInfo.frontFace    = GPU_FRONT_FACE_CW;
   pipelineInfo.blendEnabled = true;
+
   if (!bench_renderPipeline(&bench,
                             &pipelineInfo,
                             &churn.pipelines[1])) {
@@ -153,19 +159,22 @@ main(int argc, char *argv[]) {
                        state_encode,
                        &churn,
                        &metrics);
+
   if (ok) {
     bench_renderPrint("state churn", &bench, &config, &metrics);
-    ok = bench_renderMetricsPass(&metrics) &&
-         (!config.enableStats || state_metricsMatch(&config, &metrics));
+    ok = bench_renderMetricsPass(&metrics)
+         && (!config.enableStats || state_metricsMatch(&config, &metrics));
   }
 
   bench_renderFreeMetrics(&metrics);
   GPUDestroyRenderPipeline(churn.pipelines[1]);
   GPUDestroyRenderPipeline(churn.pipelines[0]);
   bench_renderCleanup(&bench);
+
   if (!ok) {
     fprintf(stderr, "state churn benchmark failed\n");
     return EXIT_FAILURE;
   }
+
   return EXIT_SUCCESS;
 }
