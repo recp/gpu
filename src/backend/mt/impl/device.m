@@ -706,6 +706,11 @@ mt_selectCommandMode(id<MTLDevice>  device,
                ? MTCommandMode4
                : MTCommandModeClassic;
 
+  if (explicitSparse && *outMode != MTCommandMode4) {
+    NSLog(@"Sparse placement requires Metal 4; requested features select classic Metal");
+    return false;
+  }
+
   return true;
 }
 
