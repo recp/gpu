@@ -264,6 +264,9 @@ mt_writeSparseTexture4(GPUQueue                    *queue,
       }
     }
 
+    [encoder barrierAfterStages:MTLStageBlit
+              beforeQueueStages:MTLStageAll
+              visibilityOptions:MTL4VisibilityOptionDevice];
     [encoder endEncoding];
 
     submitList[0]                 = cmdb;
