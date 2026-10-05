@@ -2302,5 +2302,6 @@ gpu_test_copy(GPUDevice *device) {
          && check_texture_blit(device)
          && check_texture_blit_variants(device)
          && check_texture_generate_mipmaps(device)
+         && gpu_test_mipmaps(device)
          && gpu_test_texture_transfer(device);
 }

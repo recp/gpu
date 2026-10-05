@@ -2,6 +2,7 @@ if(GPU_BUILD_ANDROID_TESTS)
   add_executable(gpu-android-vulkan-test
     ${PROJECT_SOURCE_DIR}/tests/android/vulkan.c
     ${PROJECT_SOURCE_DIR}/tests/api/copy.c
+    ${PROJECT_SOURCE_DIR}/tests/api/mipmaps.c
     ${PROJECT_SOURCE_DIR}/tests/api/texture_transfer.c
   )
   target_include_directories(gpu-android-vulkan-test PRIVATE
@@ -762,6 +763,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/api/clock_derivative.c
     ${PROJECT_SOURCE_DIR}/tests/api/coordinate.c
     ${PROJECT_SOURCE_DIR}/tests/api/copy.c
+    ${PROJECT_SOURCE_DIR}/tests/api/mipmaps.c
     ${PROJECT_SOURCE_DIR}/tests/api/cube_texture.c
     ${PROJECT_SOURCE_DIR}/tests/api/descriptor_array.c
     ${PROJECT_SOURCE_DIR}/tests/api/dx12_binding_plan.c
@@ -1082,6 +1084,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
       ${PROJECT_SOURCE_DIR}/tests/vulkan/shader.c
       ${PROJECT_SOURCE_DIR}/tests/vulkan/texture.c
       ${PROJECT_SOURCE_DIR}/tests/api/copy.c
+      ${PROJECT_SOURCE_DIR}/tests/api/mipmaps.c
       ${PROJECT_SOURCE_DIR}/tests/api/texture_transfer.c
     )
     target_include_directories(gpu-vulkan-shader-test PRIVATE

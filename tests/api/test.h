@@ -122,6 +122,9 @@ int
 gpu_test_copy(GPUDevice *device);
 
 int
+gpu_test_mipmaps(GPUDevice *device);
+
+int
 gpu_test_coordinate_contract(GPUDevice *device, const char *bytecodePath);
 
 int
