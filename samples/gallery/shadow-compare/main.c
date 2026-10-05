@@ -154,10 +154,12 @@ resize_canvas(WebGPUShadowCompare *state) {
 
 static int
 create_shader(WebGPUShadowCompare *state) {
+  GPUAdapterProperties          properties;
   const GPUBindGroupLayoutEntry *entries;
   void                          *artifact;
   uint64_t                       artifactSize;
   uint32_t                       entryCount;
+  uint32_t                       expectedCount;
   uint32_t                       i;
   GPUResult                      result;
   bool                           foundDepth;
@@ -191,10 +193,17 @@ create_shader(WebGPUShadowCompare *state) {
     return 0;
   }
 
-  entries = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[0],
-                                         &entryCount);
+  if (GPUGetAdapterProperties(state->adapter, &properties) != GPU_OK) {
+    set_status("GPU: failed to query shadow adapter", 1);
+    return 0;
+  }
 
-  if (!entries || entryCount != 2u) {
+  expectedCount = properties.backend == GPU_BACKEND_WEBGPU ? 2u : 1u;
+  foundSampler  = expectedCount == 1u;
+  entries       = GPUGetBindGroupLayoutEntries(state->shaderLayout->bindGroupLayouts[0],
+                                               &entryCount);
+
+  if (!entries || entryCount != expectedCount) {
     set_status("GPU: unexpected shadow resource count", 1);
     return 0;
   }
