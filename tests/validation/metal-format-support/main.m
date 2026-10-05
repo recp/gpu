@@ -24,38 +24,48 @@ typedef enum FilterSupport {
   FILTER_DEPTH32_STENCIL
 } FilterSupport;
 
+typedef enum SampleSupport {
+  SAMPLES_DEFAULT,
+  SAMPLES_INTEGER32,
+  SAMPLES_WIDE_FLOAT
+} SampleSupport;
+
 typedef struct FormatCase {
   GPUFormat      format;
   FilterSupport  filter;
   MTLPixelFormat nativeFormat;
-  bool           integer32;
+  SampleSupport  samples;
   bool           depth;
 } FormatCase;
 
 /* Apple Metal feature tables: allocation, resolve and filtering are distinct. */
 static const FormatCase cases[] = {
-  {GPU_FORMAT_R32_UINT, FILTER_NONE, MTLPixelFormatR32Uint, true, false},
-  {GPU_FORMAT_R32_SINT, FILTER_NONE, MTLPixelFormatR32Sint, true, false},
-  {GPU_FORMAT_RG32_UINT, FILTER_NONE, MTLPixelFormatRG32Uint, true, false},
-  {GPU_FORMAT_RG32_SINT, FILTER_NONE, MTLPixelFormatRG32Sint, true, false},
-  {GPU_FORMAT_RGBA32_UINT, FILTER_NONE, MTLPixelFormatRGBA32Uint, true, false},
-  {GPU_FORMAT_RGBA32_SINT, FILTER_NONE, MTLPixelFormatRGBA32Sint, true, false},
-  {GPU_FORMAT_R32_FLOAT, FILTER_FLOAT32, MTLPixelFormatR32Float, false, false},
-  {GPU_FORMAT_RG32_FLOAT, FILTER_FLOAT32, MTLPixelFormatRG32Float, false, false},
-  {GPU_FORMAT_RGBA32_FLOAT, FILTER_FLOAT32, MTLPixelFormatRGBA32Float, false, false},
-  {GPU_FORMAT_DEPTH16_UNORM, FILTER_ALWAYS, MTLPixelFormatDepth16Unorm, false, true},
-  {GPU_FORMAT_DEPTH32_FLOAT, FILTER_FLOAT32, MTLPixelFormatDepth32Float, false, true},
-  {GPU_FORMAT_DEPTH32_FLOAT_STENCIL8, FILTER_DEPTH32_STENCIL, MTLPixelFormatDepth32Float_Stencil8, false, true},
-  {GPU_FORMAT_DEPTH24_UNORM_STENCIL8, FILTER_ALWAYS, MTLPixelFormatInvalid, false, true},
-  {GPU_FORMAT_STENCIL8, FILTER_NONE, MTLPixelFormatStencil8, false, true},
-  {GPU_FORMAT_R16_UINT, FILTER_NONE, MTLPixelFormatR16Uint, false, false},
-  {GPU_FORMAT_RGBA8_UNORM, FILTER_ALWAYS, MTLPixelFormatRGBA8Unorm, false, false}
+  {GPU_FORMAT_R32_UINT, FILTER_NONE, MTLPixelFormatR32Uint, SAMPLES_INTEGER32, false},
+  {GPU_FORMAT_R32_SINT, FILTER_NONE, MTLPixelFormatR32Sint, SAMPLES_INTEGER32, false},
+  {GPU_FORMAT_RG32_UINT, FILTER_NONE, MTLPixelFormatRG32Uint, SAMPLES_INTEGER32, false},
+  {GPU_FORMAT_RG32_SINT, FILTER_NONE, MTLPixelFormatRG32Sint, SAMPLES_INTEGER32, false},
+  {GPU_FORMAT_RGBA32_UINT, FILTER_NONE, MTLPixelFormatRGBA32Uint, SAMPLES_INTEGER32, false},
+  {GPU_FORMAT_RGBA32_SINT, FILTER_NONE, MTLPixelFormatRGBA32Sint, SAMPLES_INTEGER32, false},
+  {GPU_FORMAT_R32_FLOAT, FILTER_FLOAT32, MTLPixelFormatR32Float, SAMPLES_DEFAULT, false},
+  {GPU_FORMAT_RG32_FLOAT, FILTER_FLOAT32, MTLPixelFormatRG32Float, SAMPLES_WIDE_FLOAT, false},
+  {GPU_FORMAT_RGBA32_FLOAT, FILTER_FLOAT32, MTLPixelFormatRGBA32Float, SAMPLES_WIDE_FLOAT, false},
+  {GPU_FORMAT_DEPTH16_UNORM, FILTER_ALWAYS, MTLPixelFormatDepth16Unorm, SAMPLES_DEFAULT, true},
+  {GPU_FORMAT_DEPTH32_FLOAT, FILTER_FLOAT32, MTLPixelFormatDepth32Float, SAMPLES_DEFAULT, true},
+  {GPU_FORMAT_DEPTH32_FLOAT_STENCIL8, FILTER_DEPTH32_STENCIL,
+   MTLPixelFormatDepth32Float_Stencil8, SAMPLES_DEFAULT, true},
+  {GPU_FORMAT_DEPTH24_UNORM_STENCIL8, FILTER_ALWAYS, MTLPixelFormatInvalid, SAMPLES_DEFAULT, true},
+  {GPU_FORMAT_STENCIL8, FILTER_NONE, MTLPixelFormatStencil8, SAMPLES_DEFAULT, true},
+  {GPU_FORMAT_R16_UINT, FILTER_NONE, MTLPixelFormatR16Uint, SAMPLES_DEFAULT, false},
+  {GPU_FORMAT_RGBA8_UNORM, FILTER_ALWAYS, MTLPixelFormatRGBA8Unorm, SAMPLES_DEFAULT, false}
 };
 
 static const GPUSampleCountFlags sampleMasks[] = {
   GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT,
   GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_2_BIT | GPU_SAMPLE_COUNT_4_BIT | GPU_SAMPLE_COUNT_8_BIT
 };
+
+bool
+check_resolve(GPUAdapter *adapter);
 
 static bool
 check_policy(GPUAdapter *adapter) {
@@ -71,11 +81,12 @@ check_policy(GPUAdapter *adapter) {
   native = adapter->_priv;
 
   /* vary cached cold-path facts without sending synthetic capabilities to Metal. */
-  for (flags = 0u; flags < 16u; flags++) {
+  for (flags = 0u; flags < 32u; flags++) {
     native->float32Filterable        = (flags & 1u) != 0u;
     native->msaa32Supported          = (flags & 2u) != 0u;
     native->depth24Supported         = (flags & 4u) != 0u;
     native->depth32StencilFilterable = (flags & 8u) != 0u;
+    native->wideFloatMSAA            = (flags & 16u) != 0u;
 
     for (mask = 0u; mask < GPU_ARRAY_LEN(sampleMasks); mask++) {
       native->sampleCounts = sampleMasks[mask];
@@ -88,7 +99,8 @@ check_policy(GPUAdapter *adapter) {
 
         if (!supported) {
           expectedSamples = 0u;
-        } else if (test->integer32 && !(flags & 2u)) {
+        } else if ((test->samples == SAMPLES_INTEGER32 && !(flags & 2u))
+                   || (test->samples == SAMPLES_WIDE_FLOAT && !(flags & 16u))) {
           expectedSamples = GPU_SAMPLE_COUNT_1_BIT;
         }
 
@@ -111,7 +123,7 @@ check_policy(GPUAdapter *adapter) {
     }
   }
 
-  printf("format-policy: 512 cases, %u failures\n", failures);
+  printf("format-policy: 1024 cases, %u failures\n", failures);
   return failures == 0u;
 }
 
@@ -138,7 +150,9 @@ check_native(GPUAdapter *adapter) {
   if (@available(macOS 11.0, *)) {
     if (native->float32Filterable != device.supports32BitFloatFiltering
         || native->msaa32Supported != device.supports32BitMSAA
-        || native->depth32StencilFilterable != stencilFilter) {
+        || native->depth32StencilFilterable != stencilFilter
+        || native->wideFloatMSAA != ([device supportsFamily:MTLGPUFamilyMac2]
+                                    || [device supportsFamily:MTLGPUFamilyApple7])) {
       fprintf(stderr, "native format support cache mismatch\n");
       return false;
     }
@@ -210,6 +224,8 @@ run(void) {
   ok    = check_policy(adapter) && ok;
 
   *(GPUAdapterMT *)adapter->_priv = saved;
+  ok = check_resolve(adapter) && ok;
+
   GPUDestroyInstance(instance);
   return ok ? 0 : 1;
 }

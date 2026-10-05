@@ -131,6 +131,7 @@ mt_initFormatSupport(GPUAdapterMT *adapterMT) {
   if (@available(macOS 11.0, iOS 14.0, *)) {
     adapterMT->float32Filterable = device.supports32BitFloatFiltering;
     adapterMT->msaa32Supported   = device.supports32BitMSAA;
+    adapterMT->wideFloatMSAA     = [device supportsFamily:MTLGPUFamilyApple7];
   }
 
   if (@available(macOS 11.0, iOS 16.4, *)) {
@@ -144,6 +145,7 @@ mt_initFormatSupport(GPUAdapterMT *adapterMT) {
     adapterMT->appleFamily2 = [device supportsFamily:MTLGPUFamilyApple2];
 
     adapterMT->depth32StencilFilterable = macFamily2;
+    adapterMT->wideFloatMSAA           |= macFamily2;
   }
 
   if (@available(macOS 14.0, iOS 17.0, *)) {
@@ -622,8 +624,10 @@ mt_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
   if (outCaps->colorAttachment) {
     outCaps->supportedSampleCounts = adapterMT->sampleCounts;
 
-    /* float32 allocation and float32 resolve have separate native support. */
-    if (mt_isInteger32Format(format) && !adapterMT->msaa32Supported) {
+    /* integer and wide float allocation have separate native support. */
+    if ((mt_isInteger32Format(format) && !adapterMT->msaa32Supported)
+        || ((format == GPU_FORMAT_RG32_FLOAT || format == GPU_FORMAT_RGBA32_FLOAT)
+            && !adapterMT->wideFloatMSAA)) {
       outCaps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;
     }
   }

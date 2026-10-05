@@ -44,6 +44,7 @@ if(GPU_BUILD_TESTS)
 
     add_executable(gpu-metal-format-support-contract
       ${PROJECT_SOURCE_DIR}/tests/validation/metal-format-support/main.m
+      ${PROJECT_SOURCE_DIR}/tests/validation/metal-format-support/resolve.m
     )
     target_include_directories(gpu-metal-format-support-contract PRIVATE
       $<TARGET_PROPERTY:gpu,INCLUDE_DIRECTORIES>

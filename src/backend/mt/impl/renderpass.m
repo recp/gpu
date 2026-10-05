@@ -412,6 +412,8 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   const GPURenderPassColorAttachment         *color;
   const GPURenderPassDepthStencilAttachment  *depthStencil;
   MTCommandBuffer                            *commandState;
+  GPUAdapterMT                               *adapter;
+  GPUDevice                                  *device;
   GPURenderPassDesc                          *renderPass;
   MTRenderPass                               *nativePass;
   MTLRenderPassDescriptor                    *rpd;
@@ -534,6 +536,18 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
 
     if (!color->view)
       return NULL;
+
+    if (color->resolveView
+        && (color->view->format == GPU_FORMAT_R32_FLOAT
+            || color->view->format == GPU_FORMAT_RG32_FLOAT
+            || color->view->format == GPU_FORMAT_RGBA32_FLOAT)) {
+      device  = gpuCommandBufferDevice(cmdb);
+      adapter = device && device->adapter ? device->adapter->_priv : NULL;
+
+      if (!adapter || !adapter->msaa32Supported) {
+        return NULL;
+      }
+    }
 
     state                 = &nativePass->colorAttachments[i];
     colorTexture          = (id<MTLTexture>)color->view->_priv;
