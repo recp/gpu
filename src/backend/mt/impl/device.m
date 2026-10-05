@@ -613,6 +613,33 @@ mt_supportsMetal4(id<MTLDevice> device) {
 #endif
 }
 
+#if MT_HAS_METAL4
+static bool
+mt_supportsPlacementSparse(id<MTLDevice> device) {
+  if (!device) {
+    return false;
+  }
+
+#if defined(__MAC_26_4) && defined(__IPHONE_26_4)
+  if (@available(macOS 26.4, iOS 26.4, *)) {
+    return device.supportsPlacementSparse;
+  }
+#endif
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    if ([device supportsFamily:MTLGPUFamilyApple8]) {
+      return true;
+    }
+
+#if TARGET_OS_OSX
+    /* Apple7 macOS devices also support placement-backed sparse resources. */
+    return [device supportsFamily:MTLGPUFamilyApple7];
+#endif
+  }
+
+  return false;
+}
+#endif
+
 static bool
 mt_supportsMetal4RayQuery(id<MTLDevice> device) {
   if (@available(macOS 14.0, iOS 17.0, *)) {
@@ -924,19 +951,25 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
 
       return false;
     case GPU_FEATURE_SPARSE_TEXTURES:
-#if TARGET_OS_OSX
-      if (adapterMT->sparseTextures) {
-        return true;
-      }
-#endif
 #if MT_HAS_METAL4
       device = adapterMT->device;
+      mode   = getenv("GPU_METAL_MODE");
 
-      if (@available(macOS 26.0, iOS 26.0, *)) {
-        return [device respondsToSelector:@selector(newMTL4CommandQueue)];
+      if (!mode || strcmp(mode, "classic") != 0) {
+        if (mt_supportsMetal4(device)) {
+          return mt_supportsPlacementSparse(device);
+        }
+
+        if (mode && strcmp(mode, "metal4") == 0) {
+          return false;
+        }
       }
 #endif
+#if TARGET_OS_OSX
+      return adapterMT->sparseTextures;
+#else
       return false;
+#endif
     case GPU_FEATURE_SPARSE_BUFFERS:
     case GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT:
 #if MT_HAS_METAL4
@@ -948,10 +981,7 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
 
       device = adapterMT->device;
 
-      if (@available(macOS 26.0, iOS 26.0, *)) {
-        return [device respondsToSelector:@selector(newMTL4CommandQueue)]
-               && [device respondsToSelector:@selector(newCommandAllocator)];
-      }
+      return mt_supportsMetal4(device) && mt_supportsPlacementSparse(device);
 #endif
       return false;
     case GPU_FEATURE_MESH_SHADER:

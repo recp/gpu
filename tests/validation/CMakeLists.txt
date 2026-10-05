@@ -12,6 +12,37 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL)
 endif()
 
 if(GPU_BUILD_TESTS)
+  if(GPU_BUILD_METAL AND CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    add_executable(gpu-metal-sparse-support-contract
+      ${PROJECT_SOURCE_DIR}/src/backend/mt/impl/device.m
+      ${PROJECT_SOURCE_DIR}/tests/validation/metal-sparse-support/main.m
+    )
+    target_include_directories(gpu-metal-sparse-support-contract PRIVATE
+      $<TARGET_PROPERTY:gpu,INCLUDE_DIRECTORIES>
+    )
+    target_compile_definitions(gpu-metal-sparse-support-contract PRIVATE
+      $<TARGET_PROPERTY:gpu,COMPILE_DEFINITIONS>
+    )
+    target_compile_options(gpu-metal-sparse-support-contract PRIVATE
+      -Wall -Wextra -Wno-unused-parameter
+    )
+    set_target_properties(gpu-metal-sparse-support-contract PROPERTIES
+      OBJC_STANDARD 11
+      OBJC_STANDARD_REQUIRED YES
+      OBJC_EXTENSIONS NO
+    )
+    target_link_options(gpu-metal-sparse-support-contract PRIVATE -Wl,-dead_strip)
+    target_link_libraries(gpu-metal-sparse-support-contract PRIVATE
+      ${GPU_FRAMEWORK_FOUNDATION}
+      ${GPU_FRAMEWORK_METAL}
+    )
+    add_test(NAME metal-sparse-support-contract
+             COMMAND gpu-metal-sparse-support-contract)
+    set_tests_properties(metal-sparse-support-contract PROPERTIES
+      SKIP_RETURN_CODE 77
+    )
+  endif()
+
   add_executable(gpu-cache-file-concurrency-contract
     ${PROJECT_SOURCE_DIR}/src/backend/cache_file.c
     ${PROJECT_SOURCE_DIR}/tests/validation/cache-file-concurrency/main.c
