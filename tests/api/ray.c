@@ -71,7 +71,7 @@ static const char traversalMSL[] =
   "\n"
   "[[intersection(bounding_box, triangle_data, instancing)]]\n"
   "IFTResult constant_hit(device const float *distance [[buffer(0)]]) {\n"
-  "  return {true, distance[0]};\n"
+  "  return {distance[0] >= 0.0, distance[0]};\n"
   "}\n"
   "\n"
   "kernel void intersection_table_cs(\n"
@@ -91,7 +91,43 @@ static const char traversalMSL[] =
   "  } else {\n"
   "    result[0] = abs(hit.distance - 1.0) < 0.0001 ? 1u : 3u;\n"
   "  }\n"
+  "}\n"
+  "\n"
+  "struct IFTRaster {\n"
+  "  float4 position [[position]];\n"
+  "};\n"
+  "\n"
+  "vertex IFTRaster intersection_table_vs(uint vertexId [[vertex_id]]) {\n"
+  "  float2 position = vertexId == 0u ? float2(-1.0, -1.0)\n"
+  "                    : vertexId == 1u ? float2(3.0, -1.0)\n"
+  "                                     : float2(-1.0, 3.0);\n"
+  "  return {float4(position, 0.0, 1.0)};\n"
+  "}\n"
+  "\n"
+  "fragment float4 intersection_table_fs(\n"
+  "  instance_acceleration_structure scene [[buffer(1)]],\n"
+  "  intersection_function_table<triangle_data, instancing> table "
+    "[[buffer(2)]]) {\n"
+  "  ray value;\n"
+  "  value.origin       = float3(0.0, 0.0, -1.0);\n"
+  "  value.direction    = float3(0.0, 0.0, 1.0);\n"
+  "  value.min_distance = 0.0;\n"
+  "  value.max_distance = 100.0;\n"
+  "  intersector<triangle_data, instancing> tracer;\n"
+  "  auto hit = tracer.intersect(value, scene, 0xff, table);\n"
+  "  if (hit.type == intersection_type::none)\n"
+  "    return float4(0.0, 1.0, 0.0, 1.0);\n"
+  "  return abs(hit.distance - 1.0) < 0.0001\n"
+  "         ? float4(1.0, 0.0, 0.0, 1.0) : float4(0.0, 0.0, 1.0, 1.0);\n"
   "}\n";
+
+static const float intersectionDistances[] = {1.0f, 1.05f, -1.0f};
+
+static const uint8_t intersectionColors[][4] = {
+  {255u,   0u,   0u, 255u},
+  {  0u,   0u, 255u, 255u},
+  {  0u, 255u,   0u, 255u}
+};
 
 static const char * const intersectionEntries[] = {
   "GPUCreateIntersectionFunctionTableEXT",
@@ -814,6 +850,10 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
   GPUViewport                               viewport                  = {0};
   GPUScissorRect                            scissor                   = {0};
   GPUQueueSubmitInfo                        submitInfo                = {0};
+  GPUTextureBarrier                         textureBarrier            = {0};
+  GPUBarrierBatch                           barrierBatch              = {0};
+  GPUBufferTextureCopyRegion                readRegion                = {0};
+  uint8_t                                   pixel[4]                  = {0};
   GPUFeature                                feature;
   GPUDevice                                *device;
   GPUQueue                                 *computeQueue;
@@ -826,12 +866,15 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
   GPUBindGroup                             *traversalGroup;
   GPUComputePipeline                       *computePipeline;
   GPURenderPipeline                        *renderPipeline;
+  GPURenderPipeline                        *traversalRenderPipeline;
   GPUIntersectionFunctionTableEXT          *computeTable;
   GPUIntersectionFunctionTableEXT          *renderTable;
+  GPUIntersectionFunctionTableEXT          *traversalRenderTable;
   GPUBuffer                                *buffer;
   GPUBuffer                                *tableBuffer;
   GPUBuffer                                *aabbBuffer;
   GPUBuffer                                *scratchBuffer;
+  GPUBuffer                                *readback;
   GPUAccelerationStructureEXT              *aabbBlas;
   GPUAccelerationStructureEXT              *tlas;
   GPUTexture                               *target;
@@ -841,6 +884,7 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
   GPUComputePassEncoder                    *computePass;
   GPUAccelerationStructurePassEncoderEXT   *buildPass;
   GPURenderPassEncoder                     *renderPass;
+  GPUTransferPassEncoder                   *transferPass;
   GPUFence                                 *computeFence;
   GPUFence                                 *renderFence;
   void                                     *bytecode;
@@ -848,6 +892,8 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
   uint64_t                                  scratchSize;
   float                                     tableDistance;
   uint32_t                                  resultValue;
+  uint32_t                                  test;
+  uint32_t                                  repeat;
   bool                                      computeSubmitted;
   bool                                      renderSubmitted;
   int                                       ok;
@@ -879,12 +925,15 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
   traversalGroup          = NULL;
   computePipeline         = NULL;
   renderPipeline          = NULL;
+  traversalRenderPipeline = NULL;
   computeTable            = NULL;
   renderTable             = NULL;
+  traversalRenderTable    = NULL;
   buffer                  = NULL;
   tableBuffer             = NULL;
   aabbBuffer              = NULL;
   scratchBuffer           = NULL;
+  readback                = NULL;
   aabbBlas                = NULL;
   tlas                    = NULL;
   target                  = NULL;
@@ -894,6 +943,7 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
   computePass             = NULL;
   buildPass               = NULL;
   renderPass              = NULL;
+  transferPass            = NULL;
   computeFence            = NULL;
   renderFence             = NULL;
   bytecode                = NULL;
@@ -965,11 +1015,11 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
 
   traversalLayoutEntries[0].binding     = 0u;
   traversalLayoutEntries[0].bindingType = GPU_BINDING_STORAGE_BUFFER;
-  traversalLayoutEntries[0].visibility  = GPU_SHADER_STAGE_COMPUTE_BIT;
+  traversalLayoutEntries[0].visibility  = GPU_SHADER_STAGE_COMPUTE_BIT | GPU_SHADER_STAGE_FRAGMENT_BIT;
   traversalLayoutEntries[0].arrayCount  = 1u;
   traversalLayoutEntries[1].binding     = 1u;
   traversalLayoutEntries[1].bindingType = GPU_BINDING_ACCELERATION_STRUCTURE;
-  traversalLayoutEntries[1].visibility  = GPU_SHADER_STAGE_COMPUTE_BIT;
+  traversalLayoutEntries[1].visibility  = GPU_SHADER_STAGE_COMPUTE_BIT | GPU_SHADER_STAGE_FRAGMENT_BIT;
   traversalLayoutEntries[1].arrayCount  = 1u;
   traversalGroupInfo.chain.sType        = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
   traversalGroupInfo.chain.structSize   = sizeof(traversalGroupInfo);
@@ -1053,6 +1103,18 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
     goto cleanup;
   }
 
+  renderPipelineInfo.label   = "intersection-function-fragment-traversal";
+  renderPipelineInfo.layout  = traversalPipelineLayout;
+  renderPipelineInfo.library = traversalLibrary;
+
+  if (GPUCreateRenderPipeline(device,
+                              &renderPipelineInfo,
+                              &traversalRenderPipeline) != GPU_OK
+      || !traversalRenderPipeline) {
+    fprintf(stderr, "intersection-function fragment traversal pipeline failed\n");
+    goto cleanup;
+  }
+
   computeTableInfo.chain.sType      = GPU_STRUCTURE_TYPE_INTERSECTION_FUNCTION_TABLE_CREATE_INFO_EXT;
   computeTableInfo.chain.structSize = sizeof(computeTableInfo);
   computeTableInfo.label            = "intersection-function-table-compute";
@@ -1078,6 +1140,17 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
                                             &renderTable) != GPU_OK
       || !renderTable) {
     fprintf(stderr, "intersection-function-table render table failed\n");
+    goto cleanup;
+  }
+
+  renderTableInfo.label          = "intersection-function-fragment-traversal";
+  renderTableInfo.renderPipeline = traversalRenderPipeline;
+
+  if (GPUCreateIntersectionFunctionTableEXT(device,
+                                            &renderTableInfo,
+                                            &traversalRenderTable) != GPU_OK
+      || !traversalRenderTable) {
+    fprintf(stderr, "intersection-function fragment traversal table failed\n");
     goto cleanup;
   }
 
@@ -1112,7 +1185,16 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
       || GPUSetIntersectionFunctionTableBufferEXT(renderTable,
                                                   2u,
                                                   buffer,
-                                                  0u) != GPU_OK) {
+                                                  0u) != GPU_OK
+      || GPUSetIntersectionFunctionTableBufferEXT(traversalRenderTable,
+                                                  0u,
+                                                  tableBuffer,
+                                                  0u) != GPU_OK
+      || !ray_create_buffer(device,
+                            "intersection-function-render-readback",
+                            256u,
+                            GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST,
+                            &readback)) {
     fprintf(stderr, "intersection-function-table buffer setup failed\n");
     goto cleanup;
   }
@@ -1308,7 +1390,7 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
   textureInfo.depthOrLayers    = 1u;
   textureInfo.mipLevelCount    = 1u;
   textureInfo.sampleCount      = 1u;
-  textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET | GPU_TEXTURE_USAGE_COPY_SRC;
 
   if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target) {
     fprintf(stderr, "intersection-function-table render target failed\n");
@@ -1378,9 +1460,112 @@ gpu_test_intersection_function_table(GPUAdapter *adapter,
   }
 
   renderCmdb = NULL;
-  ok         = 1;
+
+  textureBarrier.texture    = target;
+  textureBarrier.srcAccess  = GPU_ACCESS_COLOR_WRITE;
+  textureBarrier.dstAccess  = GPU_ACCESS_TRANSFER_READ;
+  textureBarrier.mipCount   = 1u;
+  textureBarrier.layerCount = 1u;
+
+  barrierBatch.pTextureBarriers    = &textureBarrier;
+  barrierBatch.textureBarrierCount = 1u;
+  barrierBatch.srcStages           = GPU_STAGE_FRAGMENT;
+  barrierBatch.dstStages           = GPU_STAGE_TRANSFER;
+
+  readRegion.texture.texture.aspect = GPU_TEXTURE_ASPECT_ALL;
+  readRegion.texture.width          = 1u;
+  readRegion.texture.height         = 1u;
+  readRegion.texture.depth          = 1u;
+  readRegion.texture.layerCount     = 1u;
+  readRegion.bytesPerRow            = 256u;
+  readRegion.rowsPerImage           = 1u;
+
+  for (test = 0u; test < GPU_ARRAY_LEN(intersectionDistances); test++) {
+    tableDistance   = intersectionDistances[test];
+    renderSubmitted = false;
+
+    if (GPUQueueWriteBuffer(graphicsQueue,
+                            tableBuffer,
+                            0u,
+                            &tableDistance,
+                            sizeof(tableDistance)) != GPU_OK
+        || GPUAcquireCommandBuffer(graphicsQueue,
+                                   "intersection-function-fragment-traversal",
+                                   &renderCmdb) != GPU_OK
+        || !renderCmdb
+        || !(renderPass = GPUBeginRenderPass(renderCmdb, &renderPassInfo))) {
+      fprintf(stderr, "intersection-function fragment traversal setup failed\n");
+      goto cleanup;
+    }
+
+    GPUBindRenderPipeline(renderPass, traversalRenderPipeline);
+    GPUBindRenderGroup(renderPass, 0u, traversalGroup, 0u, NULL);
+    GPUBindRenderIntersectionFunctionTableEXT(renderPass, 2u, traversalRenderTable);
+    GPUResetStats(device);
+
+    for (repeat = 0u; repeat < GPU_RAY_PIPELINE_WARM_ITERATIONS; repeat++) {
+      GPUBindRenderPipeline(renderPass, traversalRenderPipeline);
+      GPUBindRenderGroup(renderPass, 0u, traversalGroup, 0u, NULL);
+      GPUBindRenderIntersectionFunctionTableEXT(renderPass, 2u, traversalRenderTable);
+    }
+
+    GPUSetViewport(renderPass, &viewport);
+    GPUSetScissor(renderPass, &scissor);
+    GPUDraw(renderPass, 3u, 1u, 0u, 0u);
+
+    if (device->currentFrameStats.hotPathAllocCount != 0u
+        || device->currentFrameStats.hotPathAllocBytes != 0u
+        || device->currentFrameStats.hotPathFreeCount != 0u
+        || device->currentFrameStats.hotPathFreeBytes != 0u) {
+      fprintf(stderr, "intersection-function warm render binding allocated\n");
+      goto cleanup;
+    }
+
+    GPUEndRenderPass(renderPass);
+    renderPass = NULL;
+
+    GPUEncodeBarriers(renderCmdb, &barrierBatch);
+
+    if (!(transferPass = GPUBeginTransferPass(renderCmdb,
+                                             "intersection-function-fragment-readback"))) {
+      fprintf(stderr, "intersection-function fragment readback pass failed\n");
+      goto cleanup;
+    }
+
+    GPUCopyTextureToBuffer(transferPass, target, readback, &readRegion);
+    GPUEndTransferPass(transferPass);
+    transferPass = NULL;
+
+    submitInfo.ppCommandBuffers = &renderCmdb;
+    renderSubmitted             = true;
+
+    if (GPUQueueSubmit(graphicsQueue, &submitInfo) != GPU_OK
+        || GPUWaitFence(renderFence, UINT64_C(5000000000)) != GPU_OK) {
+      renderCmdb = NULL;
+      fprintf(stderr, "intersection-function fragment traversal submit failed\n");
+      goto cleanup;
+    }
+
+    renderCmdb = NULL;
+
+    if (GPUQueueReadBuffer(graphicsQueue, readback, 0u, pixel, sizeof(pixel)) != GPU_OK
+        || memcmp(pixel, intersectionColors[test], sizeof(pixel)) != 0) {
+      fprintf(stderr,
+              "intersection-function fragment result mismatch %u: %u %u %u %u\n",
+              test,
+              pixel[0],
+              pixel[1],
+              pixel[2],
+              pixel[3]);
+      goto cleanup;
+    }
+  }
+
+  ok = 1;
 
 cleanup:
+  if (transferPass)
+    GPUEndTransferPass(transferPass);
   if (renderPass)
     GPUEndRenderPass(renderPass);
   if (computePass)
@@ -1395,8 +1580,10 @@ cleanup:
   GPUDestroyFence(computeFence);
   GPUDestroyTextureView(targetView);
   GPUDestroyTexture(target);
+  GPUDestroyBuffer(readback);
   GPUDestroyBindGroup(traversalGroup);
   GPUDestroyIntersectionFunctionTableEXT(renderTable);
+  GPUDestroyIntersectionFunctionTableEXT(traversalRenderTable);
   GPUDestroyIntersectionFunctionTableEXT(computeTable);
   GPUDestroyBuffer(tableBuffer);
   GPUDestroyBuffer(buffer);
@@ -1405,6 +1592,7 @@ cleanup:
   GPUDestroyAccelerationStructureEXT(tlas);
   GPUDestroyAccelerationStructureEXT(aabbBlas);
   GPUDestroyRenderPipeline(renderPipeline);
+  GPUDestroyRenderPipeline(traversalRenderPipeline);
   GPUDestroyComputePipeline(computePipeline);
   GPUDestroyPipelineLayout(traversalPipelineLayout);
   GPUDestroyBindGroupLayout(traversalGroupLayout);
@@ -1436,6 +1624,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   GPUPipelineLayoutCreateInfo             manualLayoutInfo = {0};
   GPUQueueSubmitInfo                      submitInfo       = {0};
   GPUShaderReflection                     reflection       = {0};
+  uint32_t                                queryInput[2]    = {0};
   GPUFeature                              feature;
   GPUDevice                              *device;
   GPUQueue                               *queue;
@@ -1456,6 +1645,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   GPUAccelerationStructureEXT            *aabbBlas;
   GPUAccelerationStructureEXT            *tlas;
   GPUBindGroup                           *group;
+  GPUBindGroup                           *manualGroup;
   GPUCommandBuffer                       *cmdb;
   GPUAccelerationStructurePassEncoderEXT *buildPass;
   GPUComputePassEncoder                  *computePass;
@@ -1468,6 +1658,9 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   uint32_t                                layoutCount;
   uint32_t                                inputValue;
   uint32_t                                resultValue;
+  uint32_t                                expectedValue;
+  uint32_t                                test;
+  uint32_t                                repeat;
   bool                                    sawScene;
   bool                                    sawInput;
   bool                                    sawResult;
@@ -1510,6 +1703,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   aabbBlas             = NULL;
   tlas                 = NULL;
   group                = NULL;
+  manualGroup          = NULL;
   cmdb                 = NULL;
   buildPass            = NULL;
   computePass          = NULL;
@@ -1518,6 +1712,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   bytecodeSize         = 0u;
   layoutEntryCount     = 0u;
   inputValue           = 0u;
+  queryInput[1]         = 1u;
   resultValue          = 0u;
   sawScene             = false;
   sawInput             = false;
@@ -1666,6 +1861,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
 
   instance.structure = blas;
   memcpy(instance.transform, queryIdentity, sizeof(queryIdentity));
+  instance.mask                    = 1u;
   instance.flags                   = GPU_ACCELERATION_STRUCTURE_INSTANCE_DISABLE_CULL_BIT_EXT;
   tlasBuild.chain.sType            = GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_INFO_EXT;
   tlasBuild.chain.structSize       = sizeof(tlasBuild);
@@ -1718,14 +1914,14 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
                             &outputBuffer)
       || !ray_create_buffer(device,
                             "ray-query-input",
-                            sizeof(inputValue),
+                            sizeof(queryInput),
                             GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_DST,
                             &inputBuffer)
       || GPUQueueWriteBuffer(queue,
                              inputBuffer,
                              0u,
-                             &inputValue,
-                             sizeof(inputValue)) != GPU_OK
+                             queryInput,
+                             sizeof(queryInput)) != GPU_OK
       || GPUQueueWriteBuffer(queue,
                              outputBuffer,
                              0u,
@@ -1859,7 +2055,7 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   groupEntries[1].binding               = 1u;
   groupEntries[1].bindingType           = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
   groupEntries[1].buffer.buffer         = inputBuffer;
-  groupEntries[1].buffer.size           = sizeof(inputValue);
+  groupEntries[1].buffer.size           = sizeof(queryInput);
   groupEntries[2].binding               = 2u;
   groupEntries[2].bindingType           = GPU_BINDING_STORAGE_BUFFER;
   groupEntries[2].buffer.buffer         = outputBuffer;
@@ -1876,42 +2072,13 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
     goto cleanup;
   }
 
-  if (GPUAcquireCommandBuffer(queue, "ray-query", &cmdb) != GPU_OK
-      || !cmdb
-      || !(buildPass = GPUBeginAccelerationStructurePassEXT(cmdb,
-                                                            "ray-query-build"))
-      || GPUBuildAccelerationStructureEXT(buildPass,
-                                          blas,
-                                          &blasBuild,
-                                          scratchBuffer,
-                                          0u) != GPU_OK
-      || GPUBuildAccelerationStructureEXT(buildPass,
-                                          aabbBlas,
-                                          &aabbBuild,
-                                          scratchBuffer,
-                                          0u) != GPU_OK
-      || GPUBuildAccelerationStructureEXT(buildPass,
-                                          tlas,
-                                          &tlasBuild,
-                                          scratchBuffer,
-                                          0u) != GPU_OK) {
-    fprintf(stderr, "ray-query build encoding failed\n");
+  groupInfo.label  = "ray-query-manual-group";
+  groupInfo.layout = manualGroupLayout;
+
+  if (GPUCreateBindGroup(device, &groupInfo, &manualGroup) != GPU_OK || !manualGroup) {
+    fprintf(stderr, "ray-query manual bind group failed\n");
     goto cleanup;
   }
-
-  GPUEndAccelerationStructurePassEXT(buildPass);
-  buildPass = NULL;
-
-  if (!(computePass = GPUBeginComputePass(cmdb, "ray-query-dispatch"))) {
-    fprintf(stderr, "ray-query compute pass failed\n");
-    goto cleanup;
-  }
-
-  GPUBindComputePipeline(computePass, pipeline);
-  GPUBindComputeGroup(computePass, 0u, group, 0u, NULL);
-  GPUDispatch(computePass, 1u, 1u, 1u);
-  GPUEndComputePass(computePass);
-  computePass = NULL;
 
   if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
     fprintf(stderr, "ray-query fence create failed\n");
@@ -1923,25 +2090,78 @@ gpu_test_ray_query(GPUAdapter *adapter, const char *bytecodePath) {
   submitInfo.commandBufferCount = 1u;
   submitInfo.ppCommandBuffers   = &cmdb;
   submitInfo.fence              = fence;
-  submitAttempted               = true;
 
-  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
-      || GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+  for (test = 0u; test < 4u; test++) {
+    inputValue               = 17u + test;
+    queryInput[0]            = inputValue;
+    queryInput[1]            = test == 2u ? 2u : 1u;
+    expectedValue            = inputValue + (test == 0u || test == 3u);
+    resultValue              = UINT32_MAX;
+    instance.transform[0][3] = test == 1u ? 2.0f : 0.0f;
+    submitAttempted          = false;
+
+    if (GPUQueueWriteBuffer(queue, inputBuffer, 0u, queryInput, sizeof(queryInput)) != GPU_OK
+        || GPUQueueWriteBuffer(queue, outputBuffer, 0u, &resultValue, sizeof(resultValue)) != GPU_OK
+        || GPUAcquireCommandBuffer(queue, "ray-query", &cmdb) != GPU_OK
+        || !cmdb
+        || !(buildPass = GPUBeginAccelerationStructurePassEXT(cmdb, "ray-query-build"))) {
+      fprintf(stderr, "ray-query case setup failed\n");
+      goto cleanup;
+    }
+
+    if ((test == 0u
+         && (GPUBuildAccelerationStructureEXT(buildPass, blas, &blasBuild, scratchBuffer, 0u) != GPU_OK
+             || GPUBuildAccelerationStructureEXT(buildPass, aabbBlas, &aabbBuild, scratchBuffer, 0u) != GPU_OK))
+        || GPUBuildAccelerationStructureEXT(buildPass, tlas, &tlasBuild, scratchBuffer, 0u) != GPU_OK) {
+      fprintf(stderr, "ray-query build encoding failed\n");
+      goto cleanup;
+    }
+
+    GPUEndAccelerationStructurePassEXT(buildPass);
+    buildPass = NULL;
+
+    if (!(computePass = GPUBeginComputePass(cmdb, "ray-query-dispatch"))) {
+      fprintf(stderr, "ray-query compute pass failed\n");
+      goto cleanup;
+    }
+
+    GPUBindComputePipeline(computePass, (test & 1u) != 0u ? manualPipeline : pipeline);
+    GPUBindComputeGroup(computePass, 0u, (test & 1u) != 0u ? manualGroup : group, 0u, NULL);
+    GPUResetStats(device);
+
+    for (repeat = 0u; repeat < GPU_RAY_PIPELINE_WARM_ITERATIONS; repeat++) {
+      GPUBindComputePipeline(computePass, (test & 1u) != 0u ? manualPipeline : pipeline);
+      GPUBindComputeGroup(computePass, 0u, (test & 1u) != 0u ? manualGroup : group, 0u, NULL);
+    }
+
+    GPUDispatch(computePass, 1u, 1u, 1u);
+
+    if (device->currentFrameStats.hotPathAllocCount != 0u
+        || device->currentFrameStats.hotPathAllocBytes != 0u
+        || device->currentFrameStats.hotPathFreeCount != 0u
+        || device->currentFrameStats.hotPathFreeBytes != 0u) {
+      fprintf(stderr, "ray-query warm binding allocated\n");
+      goto cleanup;
+    }
+
+    GPUEndComputePass(computePass);
+    computePass     = NULL;
+    submitAttempted = true;
+
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK
+        || GPUWaitFence(fence, UINT64_C(5000000000)) != GPU_OK) {
+      cmdb = NULL;
+      fprintf(stderr, "ray-query submit failed\n");
+      goto cleanup;
+    }
+
     cmdb = NULL;
-    fprintf(stderr, "ray-query submit failed\n");
-    goto cleanup;
-  }
 
-  cmdb = NULL;
-
-  if (GPUQueueReadBuffer(queue,
-                         outputBuffer,
-                         0u,
-                         &resultValue,
-                         sizeof(resultValue)) != GPU_OK
-      || resultValue != 1u) {
-    fprintf(stderr, "ray-query hit mismatch: %u\n", resultValue);
-    goto cleanup;
+    if (GPUQueueReadBuffer(queue, outputBuffer, 0u, &resultValue, sizeof(resultValue)) != GPU_OK
+        || resultValue != expectedValue) {
+      fprintf(stderr, "ray-query result mismatch %u: %u != %u\n", test, resultValue, expectedValue);
+      goto cleanup;
+    }
   }
 
   ok = 1;
@@ -1955,6 +2175,7 @@ cleanup:
     GPUDiscardCommandBuffer(cmdb);
   GPUDestroyFence(fence);
   GPUDestroyBindGroup(group);
+  GPUDestroyBindGroup(manualGroup);
   GPUDestroyComputePipeline(manualPipeline);
   GPUDestroyComputePipeline(pipeline);
   GPUDestroyPipelineLayout(manualPipelineLayout);
