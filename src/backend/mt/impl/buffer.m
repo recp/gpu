@@ -130,7 +130,7 @@ mt_writeBuffer(GPUQueue   *__restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  contents = (uint8_t *)[buffer contents];
+  contents = buffer.storageMode == MTLStorageModePrivate ? NULL : (uint8_t *)[buffer contents];
 
   if (!contents) {
     result = mt_beginTransfer(queue,
@@ -204,7 +204,7 @@ mt_readBuffer(GPUQueue  *__restrict queue,
     return result;
   }
 
-  contents = (const uint8_t *)[buffer contents];
+  contents = buffer.storageMode == MTLStorageModePrivate ? NULL : (const uint8_t *)[buffer contents];
 
   if (!contents) {
     result = mt_beginTransfer(queue,
@@ -247,7 +247,7 @@ mt_readBuffer(GPUQueue  *__restrict queue,
 GPU_HIDE
 void*
 mt_bufferContents(GPUBuffer *__restrict buff) {
-  if (!buff) {
+  if (!buff || [(id<MTLBuffer>)buff->_priv storageMode] == MTLStorageModePrivate) {
     return NULL;
   }
 
