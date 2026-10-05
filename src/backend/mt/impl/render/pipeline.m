@@ -528,8 +528,9 @@ mt_newRenderState(GPUDevice         *__restrict device,
                                                                    reflection:nil
                                                                         error:&error];
 
+      mt_addRenderCache(pipeline->_cache, renderDesc, native->render == nil);
+
       if (!native->render) {
-        mt_addRenderCache(pipeline->_cache, renderDesc);
         error = nil;
       }
     }

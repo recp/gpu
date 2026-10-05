@@ -201,10 +201,11 @@ static int
 check_pipeline_disk_cache(GPUDevice                   *device,
                           GPURenderPipelineCreateInfo *info) {
 #if defined(__APPLE__)
-  struct stat                archiveBefore;
-  struct stat                metadataBefore;
-  struct stat                archiveAfter;
-  struct stat                metadataAfter;
+  GPURenderPipelineCreateInfo mixedInfo;
+  struct stat                 archiveBefore;
+  struct stat                 metadataBefore;
+  struct stat                 archiveAfter;
+  struct stat                 metadataAfter;
 #endif
   GPUPipelineCacheCreateInfo cacheInfo = {0};
   GPUPipelineCache          *cache;
@@ -218,6 +219,10 @@ check_pipeline_disk_cache(GPUDevice                   *device,
   char                       lockPath[168];
   FILE                      *file;
   long                       fileSize;
+#if defined(__APPLE__)
+  uint32_t                   phase;
+  uint32_t                   entry;
+#endif
   int                        ok;
 
   if (!(api = gpuDeviceApi(device))) {
@@ -354,6 +359,63 @@ check_pipeline_disk_cache(GPUDevice                   *device,
           || metadataAfter.st_size != metadataBefore.st_size)) {
     fprintf(stderr, "Metal pipeline cache hit rewrote archive or metadata\n");
     goto cleanup;
+  }
+#endif
+
+#if defined(__APPLE__)
+  if (api->backend == GPU_BACKEND_METAL) {
+    remove(path);
+    remove(metadataPath);
+
+    for (phase = 0u; phase < 3u; phase++) {
+      if (phase > 0u
+          && (stat(path, &archiveBefore) != 0 || stat(metadataPath, &metadataBefore) != 0)) {
+        fprintf(stderr, "failed to snapshot mixed Metal pipeline cache files\n");
+        goto cleanup;
+      }
+
+      if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
+        fprintf(stderr, "mixed Metal pipeline cache create failed\n");
+        goto cleanup;
+      }
+
+      mixedInfo       = *info;
+      mixedInfo.cache = cache;
+
+      for (entry = 0u; entry < (phase == 0u ? 1u : 2u); entry++) {
+        mixedInfo.fragmentEntry = entry == 0u ? "api_alpha_fs" : "api_fs";
+
+        if (GPUCreateRenderPipeline(device, &mixedInfo, &pipeline) != GPU_OK || !pipeline) {
+          fprintf(stderr, "mixed Metal pipeline create failed\n");
+          goto cleanup;
+        }
+
+        GPUDestroyRenderPipeline(pipeline);
+        pipeline = NULL;
+      }
+
+      GPUDestroyPipelineCache(cache);
+      cache = NULL;
+
+      if (stat(path, &archiveAfter) != 0 || stat(metadataPath, &metadataAfter) != 0) {
+        fprintf(stderr, "mixed Metal pipeline cache files missing\n");
+        goto cleanup;
+      }
+
+      if (phase == 1u && archiveAfter.st_ino == archiveBefore.st_ino) {
+        fprintf(stderr, "Metal pipeline cache did not store mixed entries\n");
+        goto cleanup;
+      }
+
+      if (phase == 2u
+          && (archiveAfter.st_dev != archiveBefore.st_dev || archiveAfter.st_ino != archiveBefore.st_ino
+              || archiveAfter.st_size != archiveBefore.st_size
+              || metadataAfter.st_dev != metadataBefore.st_dev || metadataAfter.st_ino != metadataBefore.st_ino
+              || metadataAfter.st_size != metadataBefore.st_size)) {
+        fprintf(stderr, "Metal pipeline cache failed to preserve mixed entries\n");
+        goto cleanup;
+      }
+    }
   }
 #endif
 

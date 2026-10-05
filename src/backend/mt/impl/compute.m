@@ -200,11 +200,13 @@ mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
     usesArchive = mt_useComputeCache(pipeline->_cache, pipelineDesc);
 
     if (usesArchive) {
-      if (!(mtState = [deviceMT->device newComputePipelineStateWithDescriptor:pipelineDesc
-                                                                      options:MTLPipelineOptionFailOnBinaryArchiveMiss
-                                                                   reflection:nil
-                                                                        error:&error])) {
-        mt_addComputeCache(pipeline->_cache, pipelineDesc);
+      mtState = [deviceMT->device newComputePipelineStateWithDescriptor:pipelineDesc
+                                                                options:MTLPipelineOptionFailOnBinaryArchiveMiss
+                                                             reflection:nil
+                                                                  error:&error];
+      mt_addComputeCache(pipeline->_cache, pipelineDesc, mtState == nil);
+
+      if (!mtState) {
         error = nil;
       }
     }

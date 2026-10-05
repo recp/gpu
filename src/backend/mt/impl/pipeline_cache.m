@@ -374,7 +374,14 @@ mt_createCache(GPUDevice                        *device,
 #endif
     }
 
-    if (!archive && exists) {
+    /* loaded archives are lookup-only; record updates in a fresh archive. */
+    if (archive && exists) {
+      native->lookupArchive = archive;
+      descriptor.url        = nil;
+      error                 = nil;
+      archive               = [deviceMT->device newBinaryArchiveWithDescriptor:descriptor
+                                                                         error:&error];
+    } else if (!archive && exists) {
       descriptor.url = nil;
       error          = nil;
       archive        = [deviceMT->device newBinaryArchiveWithDescriptor:descriptor
@@ -385,19 +392,21 @@ mt_createCache(GPUDevice                        *device,
 
     if (!archive) {
       NSLog(@"Failed to create Metal pipeline cache: %@", error);
+      [native->lookupArchive release];
       free(native);
       gpuCacheFileEnd(&guard);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
     native->archive  = archive;
-    native->archives = [[NSArray alloc] initWithObjects:archive, nil];
+    native->archives = [[NSArray alloc] initWithObjects:archive, native->lookupArchive, nil];
     native->url      = [url retain];
 
     if (!native->archives || !native->url) {
       [native->archives release];
       [native->url release];
       [archive release];
+      [native->lookupArchive release];
       free(native);
       gpuCacheFileEnd(&guard);
       return GPU_ERROR_OUT_OF_MEMORY;
@@ -600,7 +609,8 @@ mt_useRenderCache(GPUPipelineCache            *cache,
 GPU_HIDE
 bool
 mt_addRenderCache(GPUPipelineCache            *cache,
-                  MTLRenderPipelineDescriptor *descriptor) {
+                  MTLRenderPipelineDescriptor *descriptor,
+                  bool                         miss) {
   MTPipelineCache *native;
   NSError         *error;
   BOOL             added;
@@ -611,12 +621,16 @@ mt_addRenderCache(GPUPipelineCache            *cache,
     return false;
   }
 
+  if (!miss && !native->lookupArchive) {
+    return true;
+  }
+
   if (@available(macOS 11.0, iOS 14.0, *)) {
     error = nil;
     os_unfair_lock_lock(&native->lock);
     added = [native->archive addRenderPipelineFunctionsWithDescriptor:descriptor
                                                                 error:&error];
-    native->dirty |= added;
+    native->dirty |= added && miss;
     os_unfair_lock_unlock(&native->lock);
 
     return added;
@@ -649,7 +663,8 @@ mt_useComputeCache(GPUPipelineCache             *cache,
 GPU_HIDE
 bool
 mt_addComputeCache(GPUPipelineCache             *cache,
-                   MTLComputePipelineDescriptor *descriptor) {
+                   MTLComputePipelineDescriptor *descriptor,
+                   bool                          miss) {
   MTPipelineCache *native;
   NSError         *error;
   BOOL             added;
@@ -660,12 +675,16 @@ mt_addComputeCache(GPUPipelineCache             *cache,
     return false;
   }
 
+  if (!miss && !native->lookupArchive) {
+    return true;
+  }
+
   if (@available(macOS 11.0, iOS 14.0, *)) {
     error = nil;
     os_unfair_lock_lock(&native->lock);
     added = [native->archive addComputePipelineFunctionsWithDescriptor:descriptor
                                                                  error:&error];
-    native->dirty |= added;
+    native->dirty |= added && miss;
     os_unfair_lock_unlock(&native->lock);
 
     return added;

@@ -47,7 +47,8 @@ mt_useRenderCache(GPUPipelineCache            *cache,
 GPU_HIDE
 bool
 mt_addRenderCache(GPUPipelineCache            *cache,
-                  MTLRenderPipelineDescriptor *descriptor);
+                  MTLRenderPipelineDescriptor *descriptor,
+                  bool                         miss);
 
 GPU_HIDE
 bool
@@ -57,6 +58,7 @@ mt_useComputeCache(GPUPipelineCache             *cache,
 GPU_HIDE
 bool
 mt_addComputeCache(GPUPipelineCache             *cache,
-                   MTLComputePipelineDescriptor *descriptor);
+                   MTLComputePipelineDescriptor *descriptor,
+                   bool                          miss);
 
 #endif /* mt_pipeline_cache_h */
