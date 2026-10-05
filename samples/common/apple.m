@@ -77,7 +77,11 @@ asset_path(const char *path) {
   }
 
   name      = [NSString stringWithUTF8String:asset_name(path)];
-  directory = NSBundle.mainBundle.executableURL.URLByDeletingLastPathComponent;
+  directory = NSBundle.mainBundle.resourceURL;
+
+  if (!directory) {
+    directory = NSBundle.mainBundle.executableURL.URLByDeletingLastPathComponent;
+  }
 
   return [directory.path stringByAppendingPathComponent:name];
 }

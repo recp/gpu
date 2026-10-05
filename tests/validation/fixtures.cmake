@@ -308,9 +308,11 @@ if(GPU_BUILD_TESTS OR (GPU_BUILD_CUDA AND GPU_BUILD_SAMPLES))
       ${GPU_CUDA_SUBGROUP_USL_FIXTURES}
       ${GPU_CUDA_ATOMIC32_USL_FIXTURE}
       ${GPU_CUDA_CLOCK_USL_FIXTURES}
-      ${GPU_CUDA_ASYNC_COPY_USL_FIXTURE}
-      ${GPU_CUDA_SUBGROUP_MATRIX_USL_FIXTURE}
-      ${GPU_CUDA_ATOMIC64_USL_FIXTURE}
+  )
+  add_dependencies(gpu-cuda-metadata-fixtures
+    gpu-cuda-async-copy-fixture
+    gpu-cuda-subgroup-matrix-fixture
+    gpu-cuda-atomic64-fixture
   )
 endif()
 
@@ -324,7 +326,8 @@ if(GPU_BUILD_CUDA AND (GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES))
       ${GPU_CUDA_ASYNC_COPY_USL_FIXTURE}
       ${GPU_CUDA_SUBGROUP_MATRIX_USL_FIXTURE}
       ${GPU_CUDA_ATOMIC64_USL_FIXTURE})
-  add_custom_target(gpu-cuda-fixtures DEPENDS ${GPU_CUDA_USL_FIXTURES})
+  add_custom_target(gpu-cuda-fixtures)
+  add_dependencies(gpu-cuda-fixtures gpu-cuda-metadata-fixtures)
 endif()
 
 if(GPU_BUILD_METAL AND GPU_BUILD_TESTS AND

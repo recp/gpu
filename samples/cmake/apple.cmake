@@ -12,14 +12,19 @@ set(GPU_APPLE_GALLERY_OUTPUT_DIR
 file(MAKE_DIRECTORY "${GPU_APPLE_GALLERY_GENERATED_DIR}")
 
 if(EXISTS "${GPU_ASSETKIT_ROOT}/CMakeLists.txt")
+  get_property(GPU_APPLE_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+  set(GPU_ASSETKIT_APPLE_CONFIG_DIR "")
+  if(GPU_APPLE_MULTI_CONFIG)
+    set(GPU_ASSETKIT_APPLE_CONFIG_DIR "/Release")
+  endif()
   set(GPU_ASSETKIT_APPLE_BINARY_DIR
       "${CMAKE_CURRENT_BINARY_DIR}/assetkit-apple")
   set(GPU_ASSETKIT_APPLE_LIBRARY
-      "${GPU_ASSETKIT_APPLE_BINARY_DIR}/libassetkit.a")
+      "${GPU_ASSETKIT_APPLE_BINARY_DIR}${GPU_ASSETKIT_APPLE_CONFIG_DIR}/libassetkit.a")
   set(GPU_ASSETKIT_APPLE_DS_LIBRARY
-      "${GPU_ASSETKIT_APPLE_BINARY_DIR}/deps/ds/libds.a")
+      "${GPU_ASSETKIT_APPLE_BINARY_DIR}/deps/ds${GPU_ASSETKIT_APPLE_CONFIG_DIR}/libds.a")
   set(GPU_ASSETKIT_APPLE_DEFLATE_LIBRARY
-      "${GPU_ASSETKIT_APPLE_BINARY_DIR}/libdeflate.a")
+      "${GPU_ASSETKIT_APPLE_BINARY_DIR}${GPU_ASSETKIT_APPLE_CONFIG_DIR}/libdeflate.a")
   ExternalProject_Add(gpu-assetkit-apple
     SOURCE_DIR "${GPU_ASSETKIT_ROOT}"
     BINARY_DIR "${GPU_ASSETKIT_APPLE_BINARY_DIR}"
@@ -37,6 +42,7 @@ if(EXISTS "${GPU_ASSETKIT_ROOT}/CMakeLists.txt")
       -DAK_USE_TEST=OFF
       -DAK_ENABLE_LTO=OFF
       -DGIT_SUBMODULE=OFF
+    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
     BUILD_BYPRODUCTS
       "${GPU_ASSETKIT_APPLE_LIBRARY}"
       "${GPU_ASSETKIT_APPLE_DS_LIBRARY}"
@@ -52,7 +58,6 @@ function(gpu_apple_gallery_sample sampleDir)
     "${options}" "" "${multiValueArgs}" ${ARGN})
 
   get_filename_component(sampleId "${sampleDir}" NAME)
-  string(REPLACE "-" "_" sampleSymbol "${sampleId}")
   set(target "gpu-gallery-${sampleId}-metal-usl")
   set(wrapper "${GPU_APPLE_GALLERY_GENERATED_DIR}/${sampleId}.c")
 
@@ -95,7 +100,9 @@ function(gpu_apple_gallery_sample sampleDir)
     C_STANDARD_REQUIRED YES
     C_EXTENSIONS NO
     MACOSX_BUNDLE_GUI_IDENTIFIER
-      "gpu.samples.${sampleSymbol}"
+      "gpu.samples.${sampleId}"
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
+      "gpu.samples.${sampleId}"
     MACOSX_BUNDLE_BUNDLE_NAME "${sampleId}"
     OUTPUT_NAME "${sampleId}"
     RUNTIME_OUTPUT_DIRECTORY "${GPU_APPLE_GALLERY_OUTPUT_DIR}/${sampleId}"
@@ -119,6 +126,7 @@ function(gpu_apple_gallery_sample sampleDir)
   endif()
 
   file(GLOB shaderSources CONFIGURE_DEPENDS "${sampleDir}/*.usl")
+  set(resourceDir "$<TARGET_BUNDLE_CONTENT_DIR:${target}>/Resources")
   set(artifactOutputs)
   set(artifactCommands)
   foreach(shaderSource IN LISTS shaderSources)
@@ -160,7 +168,9 @@ function(gpu_apple_gallery_sample sampleDir)
     list(APPEND artifactCommands
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
               "${artifact}"
-              $<TARGET_FILE_DIR:${target}>
+              "${resourceDir}"
+      COMMAND ${CMAKE_COMMAND} -E rm -f
+              "$<TARGET_FILE_DIR:${target}>/${shaderStem}.us"
     )
   endforeach()
 
@@ -180,17 +190,20 @@ function(gpu_apple_gallery_sample sampleDir)
     )
   endif()
   foreach(asset IN LISTS sampleAssets)
+    get_filename_component(assetName "${asset}" NAME)
     list(APPEND artifactCommands
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
               "${asset}"
-              $<TARGET_FILE_DIR:${target}>
+              "${resourceDir}"
+      COMMAND ${CMAKE_COMMAND} -E rm -f
+              "$<TARGET_FILE_DIR:${target}>/${assetName}"
     )
   endforeach()
 
   set(artifactTarget "${target}-artifacts")
   add_custom_target(${artifactTarget}
     COMMAND ${CMAKE_COMMAND} -E make_directory
-            $<TARGET_FILE_DIR:${target}>
+            "${resourceDir}"
     ${artifactCommands}
     DEPENDS ${artifactOutputs}
     VERBATIM
