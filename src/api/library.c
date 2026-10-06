@@ -589,7 +589,13 @@ static int
 gpu_shaderRequirementsEnabled(const GPUDevice     *device,
                               const USRuntimeInfo *runtimeInfo) {
   const USLRuntimeCapabilityRequirement *requirement;
+  const USLRuntimeCapabilityRequirement *previousRequirement;
   uint32_t                               flags;
+  uint32_t                               i;
+  uint32_t                               j;
+  bool                                   descriptorIndexingEnabled;
+  bool                                   groupRequiresIndexing;
+  bool                                   clauseRequiresIndexing;
 
   flags = USL_BYTECODE_RUNTIME_INFO_FLAG_ENTRY_OVERFLOW
           | USL_BYTECODE_RUNTIME_INFO_FLAG_CAPABILITY_REQUIREMENT_OVERFLOW
@@ -603,9 +609,11 @@ gpu_shaderRequirementsEnabled(const GPUDevice     *device,
     return 0;
   }
 
-  for (uint32_t i = 0u;
-       i < runtimeInfo->capability_requirement_count;
-       i++) {
+  previousRequirement       = NULL;
+  descriptorIndexingEnabled = GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING);
+  groupRequiresIndexing     = false;
+
+  for (i = 0u; i < runtimeInfo->capability_requirement_count; i++) {
     requirement = &runtimeInfo->capability_requirements[i];
 
     if ((requirement->flags & USL_RUNTIME_CAPABILITY_REQUIREMENT_FLAG_ATOM_OVERFLOW) != 0u
@@ -614,6 +622,40 @@ gpu_shaderRequirementsEnabled(const GPUDevice     *device,
           USL_RUNTIME_MAX_CAPABILITY_REQUIREMENT_ATOMS) {
       return 0;
     }
+
+    if (descriptorIndexingEnabled) {
+      continue;
+    }
+
+    /* reflected groups are conjunctive; their consecutive clauses are alternatives. */
+
+    if (!previousRequirement
+        || requirement->function_index != previousRequirement->function_index
+        || requirement->stage != previousRequirement->stage
+        || requirement->group_index != previousRequirement->group_index) {
+      if (groupRequiresIndexing) {
+        return 0;
+      }
+
+      groupRequiresIndexing = true;
+    }
+
+    clauseRequiresIndexing = false;
+
+    for (j = 0u; j < requirement->atom_count; j++) {
+      if (requirement->atoms[j].family == USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE
+          && requirement->atoms[j].id == USL_SEMANTIC_FEATURE_ID_DESCRIPTOR_INDEXING) {
+        clauseRequiresIndexing = true;
+        break;
+      }
+    }
+
+    groupRequiresIndexing = groupRequiresIndexing && clauseRequiresIndexing;
+    previousRequirement  = requirement;
+  }
+
+  if (groupRequiresIndexing) {
+    return 0;
   }
 
   return gpu_subgroupRequirementsEnabled(device, runtimeInfo)

@@ -926,7 +926,7 @@ gpu_test_descriptor_indexing(GPUAdapter *adapter, const char *bytecodePath) {
       || GPUCreateShaderLibraryFromUSL(disabledDevice,
                                        bytecode,
                                        bytecodeSize,
-                                       &disabledLibrary) == GPU_OK
+                                       &disabledLibrary) != GPU_ERROR_UNSUPPORTED
       || disabledLibrary) {
     fprintf(stderr,
             "descriptor indexing was accepted without feature enablement\n");
