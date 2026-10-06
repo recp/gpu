@@ -469,7 +469,7 @@ webgpu_hasAdapterFeature(const GPUAdapter *adapter, WGPUFeatureName feature) {
          && wgpuAdapterHasFeature(native->adapter, feature);
 }
 
-#if defined(WGPU_SUPPORTED_WGSL_LANGUAGE_FEATURES_INIT)
+#if GPU_WEBGPU_PROVIDER_DAWN && defined(WGPU_SUPPORTED_WGSL_LANGUAGE_FEATURES_INIT)
 static bool
 webgpu_hasWGSLLanguageFeature(const GPUAdapter           *adapter,
                               WGPUWGSLLanguageFeatureName feature) {
@@ -746,6 +746,10 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
 
         device->_priv         = native;
         device->queueFamilies = native->queueHandle.bits;
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+        device->uslStorageExtAccess = wgpuDeviceHasFeature(nativeDevice,
+                                                           (WGPUFeatureName)WGPUNativeFeature_TextureAdapterSpecificFormatFeatures);
+#endif
       } else {
         if (native->queue) {
           wgpuQueueRelease(native->queue);
@@ -890,7 +894,7 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   request->userData       = userData;
   request->queueBits      = queueBits;
   request->native->limits = requiredLimits;
-#if defined(WGPU_SUPPORTED_WGSL_LANGUAGE_FEATURES_INIT)
+#if GPU_WEBGPU_PROVIDER_DAWN && defined(WGPU_SUPPORTED_WGSL_LANGUAGE_FEATURES_INIT)
   request->device->uslStorageExtAccess  =
     wgpuAdapterHasFeature(native->adapter,
                           WGPUFeatureName_TextureFormatsTier2)
