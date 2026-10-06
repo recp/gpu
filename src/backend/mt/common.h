@@ -288,6 +288,9 @@ typedef struct MTCommandQueue {
   uint32_t            nextTransferSlot;
   bool                transferOpen;
   bool                pendingSparseBarrier;
+
+  id<MTLSharedEvent>   transferEvent;
+  uint64_t            transferValue;
 } MTCommandQueue;
 
 struct MTCommandBuffer {

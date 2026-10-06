@@ -21,11 +21,12 @@
 #include "../../src/api/texture_internal.h"
 
 enum {
-  COPY_TEST_WIDTH      = 4u,
-  COPY_TEST_HEIGHT     = 4u,
-  COPY_TEST_PIXEL_SIZE = 4u,
-  COPY_TEST_ROW_PITCH  = 256u,
-  COPY_TEST_WARM_RUNS  = 16u
+  COPY_TEST_WIDTH       = 4u,
+  COPY_TEST_HEIGHT      = 4u,
+  COPY_TEST_PIXEL_SIZE  = 4u,
+  COPY_TEST_ROW_PITCH   = 256u,
+  COPY_TEST_WARM_RUNS   = 16u,
+  COPY_TEST_UPLOAD_RUNS = 32u
 };
 
 typedef struct TextureBlitCase {
@@ -2293,11 +2294,108 @@ cleanup:
   return ok;
 }
 
+static int
+check_buffer_upload_order(GPUDevice *device) {
+  uint32_t                actual[COPY_TEST_UPLOAD_RUNS][4];
+  uint32_t                expected[COPY_TEST_UPLOAD_RUNS][4];
+  uint32_t                values[4];
+  GPUBufferCreateInfo     bufferInfo = {0};
+  GPUQueueSubmitInfo      submitInfo = {0};
+  GPUBufferCopyRegion     region     = {0};
+  GPUCommandBuffer       *buffers[1];
+  GPUQueue               *queue;
+  GPUBuffer              *source, *readback;
+  GPUCommandBuffer       *cmdb;
+  GPUTransferPassEncoder *pass;
+  uint32_t                i, j;
+  int                     ok;
+
+  queue    = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  source   = NULL;
+  readback = NULL;
+  cmdb     = NULL;
+  ok       = 0;
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.sizeBytes        = sizeof(values);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_SRC
+                                | GPU_BUFFER_USAGE_COPY_DST;
+
+  if (!queue || GPUCreateBuffer(device, &bufferInfo, &source) != GPU_OK) {
+    goto cleanup;
+  }
+
+  bufferInfo.sizeBytes = sizeof(actual);
+  bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
+
+  if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK) {
+    goto cleanup;
+  }
+
+  region.sizeBytes                = sizeof(values);
+  submitInfo.chain.sType          = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize     = sizeof(submitInfo);
+  submitInfo.commandBufferCount   = 1u;
+  submitInfo.ppCommandBuffers     = buffers;
+
+  for (i = 0u; i < COPY_TEST_UPLOAD_RUNS; i++) {
+    for (j = 0u; j < 4u; j++) {
+      values[j] = expected[i][j] = 0x13579bdfu ^ (i * 0x10203u + j);
+    }
+
+    if (GPUQueueWriteBuffer(queue, source, 0u, values, sizeof(values)) != GPU_OK
+        || GPUAcquireCommandBuffer(queue, "buffer-upload-order", &cmdb) != GPU_OK
+        || !cmdb) {
+      goto cleanup;
+    }
+
+    memset(values, 0, sizeof(values));
+
+    if (!(pass = GPUBeginTransferPass(cmdb, "buffer-upload-order"))) {
+      goto cleanup;
+    }
+
+    region.dstOffset = i * sizeof(values);
+    GPUCopyBufferToBuffer(pass, source, readback, &region);
+    GPUEndTransferPass(pass);
+
+    buffers[0] = cmdb;
+
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
+      cmdb = NULL;
+      goto cleanup;
+    }
+
+    cmdb = NULL;
+  }
+
+  ok = GPUQueueReadBuffer(queue, readback, 0u, actual, sizeof(actual)) == GPU_OK
+       && memcmp(actual, expected, sizeof(actual)) == 0;
+
+  if (!ok) {
+    fprintf(stderr, "queued buffer uploads changed earlier submitted reads\n");
+  }
+
+cleanup:
+  if (cmdb) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+  }
+
+  if (!ok && queue && readback) {
+    (void)GPUQueueReadBuffer(queue, readback, 0u, actual, sizeof(actual));
+  }
+  GPUDestroyBuffer(readback);
+  GPUDestroyBuffer(source);
+  return ok;
+}
+
 int
 gpu_test_copy(GPUDevice *device) {
   return check_copy_pass_device_dispatch(device)
          && check_copy_pass_validation(device)
          && check_copy_pass_invalid_copy_noops(device)
+         && check_buffer_upload_order(device)
          && check_compressed_texture_copies(device)
          && check_texture_blit(device)
          && check_texture_blit_variants(device)

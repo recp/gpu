@@ -130,42 +130,28 @@ mt_writeBuffer(GPUQueue   *__restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  contents = buffer.storageMode == MTLStorageModePrivate ? NULL : (uint8_t *)[buffer contents];
+  result = mt_beginTransfer(queue,
+                            sizeBytes,
+                            &blit,
+                            &staging,
+                            &stagingOffset);
+
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  contents = (uint8_t *)[staging contents];
 
   if (!contents) {
-    result = mt_beginTransfer(queue,
-                              sizeBytes,
-                              &blit,
-                              &staging,
-                              &stagingOffset);
-
-    if (result != GPU_OK) {
-      return result;
-    }
-
-    contents = (uint8_t *)[staging contents];
-
-    if (!contents) {
-      return GPU_ERROR_BACKEND_FAILURE;
-    }
-
-    memcpy(contents + stagingOffset, data, (size_t)sizeBytes);
-    [blit copyFromBuffer:staging
-            sourceOffset:(NSUInteger)stagingOffset
-                toBuffer:buffer
-       destinationOffset:(NSUInteger)dstOffset
-                    size:(NSUInteger)sizeBytes];
-
-    return GPU_OK;
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  memcpy(contents + dstOffset, data, (size_t)sizeBytes);
-#if TARGET_OS_OSX
-  if (buffer.storageMode == MTLStorageModeManaged) {
-    [buffer didModifyRange:NSMakeRange((NSUInteger)dstOffset,
-                                       (NSUInteger)sizeBytes)];
-  }
-#endif
+  memcpy(contents + stagingOffset, data, (size_t)sizeBytes);
+  [blit copyFromBuffer:staging
+          sourceOffset:(NSUInteger)stagingOffset
+              toBuffer:buffer
+     destinationOffset:(NSUInteger)dstOffset
+                  size:(NSUInteger)sizeBytes];
 
   return GPU_OK;
 }

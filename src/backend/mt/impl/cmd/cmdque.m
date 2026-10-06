@@ -355,8 +355,7 @@ mt_submitEx(GPUQueue                   *queueHandle,
     }
   }
 
-  if (mt_flushTransfers(queueHandle,
-                        queue->mode == MTCommandMode4) != GPU_OK) {
+  if (mt_flushTransfers(queueHandle, false) != GPU_OK) {
     for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
       gpuFinishCommandBuffer(info->ppCommandBuffers[i],
                              mt_recycleCommandBuffer);
@@ -669,6 +668,12 @@ mt_beginTransfer(GPUQueue                  *queue,
 
   @autoreleasepool {
     slot->command = [[commandQueue commandBuffer] retain];
+#if MT_HAS_METAL4
+    if (native->mode == MTCommandMode4) {
+      [slot->command encodeWaitForEvent:native->transferEvent
+                                 value:native->transferValue];
+    }
+#endif
     slot->blit    = [[slot->command blitCommandEncoder] retain];
   }
 
@@ -705,6 +710,12 @@ mt_flushTransfers(GPUQueue *queue, bool wait) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+#if MT_HAS_METAL4
+  if (native->mode == MTCommandMode4 && native->transferValue >= UINT64_MAX - 1u) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+#endif
+
   flushResult = GPU_OK;
 
   if (native->transferOpen) {
@@ -717,7 +728,21 @@ mt_flushTransfers(GPUQueue *queue, bool wait) {
     [slot->blit endEncoding];
     [slot->blit release];
     slot->blit = nil;
+#if MT_HAS_METAL4
+    if (native->mode == MTCommandMode4) {
+      [slot->command encodeSignalEvent:native->transferEvent
+                                 value:++native->transferValue];
+    }
+#endif
     [slot->command commit];
+#if MT_HAS_METAL4
+    if (native->mode == MTCommandMode4) {
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        [native->modern waitForEvent:native->transferEvent
+                              value:native->transferValue];
+      }
+    }
+#endif
     slot->pending            = true;
     native->transferOpen     = false;
     native->nextTransferSlot = (native->activeTransferSlot + 1u) % MT_TRANSFER_SLOT_COUNT;
@@ -783,6 +808,7 @@ mt_newCommandQueue(GPUDevice *__restrict device) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       native->modern = [deviceMT->device newMTL4CommandQueue];
       native->upload = [deviceMT->device newCommandQueue];
+      native->transferEvent = [deviceMT->device newSharedEvent];
     }
   } else
 #endif
@@ -792,7 +818,7 @@ mt_newCommandQueue(GPUDevice *__restrict device) {
 
   native->inFlightGroup = dispatch_group_create();
 #if MT_HAS_METAL4
-  if ((!native->classic && (!native->modern || !native->upload))
+  if ((!native->classic && (!native->modern || !native->upload || !native->transferEvent))
       || !native->inFlightGroup) {
 #else
   if (!native->classic || !native->inFlightGroup) {
@@ -800,6 +826,7 @@ mt_newCommandQueue(GPUDevice *__restrict device) {
     [native->classic release];
     [native->upload release];
     [native->modern release];
+    [native->transferEvent release];
 
     if (native->inFlightGroup) {
       dispatch_release(native->inFlightGroup);
@@ -844,6 +871,7 @@ mt_destroyCommandQueue(GPUQueue *__restrict queue) {
     [native->classic release];
     [native->upload release];
     [native->modern release];
+    [native->transferEvent release];
 
     for (i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
       [native->transferSlots[i].blit release];
@@ -1070,8 +1098,7 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  if (mt_flushTransfers(cmdb->_queue,
-                        native->mode == MTCommandMode4) != GPU_OK) {
+  if (mt_flushTransfers(cmdb->_queue, false) != GPU_OK) {
     gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -1106,6 +1133,8 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
       [queue->modern commit:buffers
                       count:1u
                     options:options];
+      [queue->modern signalEvent:queue->transferEvent
+                          value:++queue->transferValue];
 
       if (drawable) {
         [queue->modern signalDrawable:drawable];
@@ -1179,7 +1208,7 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
     modern[validateIndex] = natives[validateIndex]->modern;
   }
 
-  if (mt_flushTransfers(queueHandle, true) != GPU_OK) {
+  if (mt_flushTransfers(queueHandle, false) != GPU_OK) {
     for (cleanupIndex = 0u; cleanupIndex < count; cleanupIndex++) {
       gpuFinishCommandBuffer(buffers[cleanupIndex], mt_recycleCommandBuffer);
     }
@@ -1207,6 +1236,8 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
     }
 
     [queue->modern commit:modern count:count options:options];
+    [queue->modern signalEvent:queue->transferEvent
+                        value:++queue->transferValue];
     [options release];
     return GPU_OK;
   }
