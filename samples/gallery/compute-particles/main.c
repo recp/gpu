@@ -308,6 +308,20 @@ render_frame(void *userData) {
     return;
   }
 
+  barrier.buffer    = state->particleBuffer;
+  barrier.srcAccess = GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE;
+  barrier.dstAccess = GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE;
+  barrier.sizeBytes = sizeof(Particle) * PARTICLE_COUNT;
+
+  barriers.srcStages          = GPU_STAGE_COMPUTE | GPU_STAGE_VERTEX;
+  barriers.dstStages          = GPU_STAGE_COMPUTE;
+  barriers.pBufferBarriers    = &barrier;
+  barriers.bufferBarrierCount = 1u;
+
+  if (state->frameCount > 0u) {
+    GPUEncodeBarriers(cmdb, &barriers);
+  }
+
   if (!(compute = GPUBeginComputePass(cmdb, "webgpu-particle-simulation"))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
@@ -326,15 +340,12 @@ render_frame(void *userData) {
               1u);
   GPUEndComputePass(compute);
 
-  barrier.buffer    = state->particleBuffer;
   barrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
   barrier.dstAccess = GPU_ACCESS_SHADER_READ;
-  barrier.sizeBytes = sizeof(Particle) * PARTICLE_COUNT;
 
-  barriers.srcStages          = GPU_STAGE_COMPUTE;
-  barriers.dstStages          = GPU_STAGE_VERTEX;
-  barriers.pBufferBarriers    = &barrier;
-  barriers.bufferBarrierCount = 1u;
+  barriers.srcStages = GPU_STAGE_COMPUTE;
+  barriers.dstStages = GPU_STAGE_VERTEX;
+
   GPUEncodeBarriers(cmdb, &barriers);
 
   color.view                  = GPUFrameGetTargetView(frame);
