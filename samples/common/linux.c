@@ -48,6 +48,12 @@ typedef struct GPULinuxJPEGError {
   jmp_buf               jump;
 } GPULinuxJPEGError;
 
+typedef struct GPULinuxJPEG {
+  struct jpeg_decompress_struct image;
+  GPULinuxJPEGError             error;
+  uint8_t                      *pixels;
+} GPULinuxJPEG;
+
 struct GPULinuxSample {
   GPULinuxWindow         *window;
   GPUInstance            *instance;
@@ -205,98 +211,96 @@ jpeg_error_exit(j_common_ptr image) {
 }
 
 static uint8_t*
-decode_jpeg(const void *bytes,
-            size_t      byteCount,
-            uint32_t   *width,
-            uint32_t   *height) {
-  struct jpeg_decompress_struct image;
-  GPULinuxJPEGError             error;
-  uint8_t                      *pixels;
-  uint8_t                      *rgba;
-  size_t                        pixelCount, rgbSize, rowStride;
-  size_t                        i, source, target;
-  uint32_t                      imageWidth, imageHeight;
+read_jpeg(GPULinuxJPEG *state,
+          const void  *bytes,
+          size_t       byteCount,
+          uint32_t    *width,
+          uint32_t    *height) {
+  struct jpeg_decompress_struct *image;
+  GPULinuxJPEGError             *error;
+  uint8_t                       *rgba;
+  size_t                         pixelCount, rgbSize, rowStride;
+  size_t                         i, source, target;
+  uint32_t                       imageWidth, imageHeight;
 
-  if (!bytes || byteCount == 0u || !width || !height) {
+  image = &state->image;
+  error = &state->error;
+
+  image->err             = jpeg_std_error(&error->base);
+  error->base.error_exit = jpeg_error_exit;
+
+  if (setjmp(error->jump)) {
+    jpeg_destroy_decompress(image);
+    free(state->pixels);
     return NULL;
   }
 
-  memset(&image, 0, sizeof(image));
-  image.err             = jpeg_std_error(&error.base);
-  error.base.error_exit = jpeg_error_exit;
-  pixels                = NULL;
+  jpeg_create_decompress(image);
+  jpeg_mem_src(image, bytes, byteCount);
 
-  if (setjmp(error.jump)) {
-    jpeg_destroy_decompress(&image);
-    free(pixels);
+  if (jpeg_read_header(image, TRUE) != JPEG_HEADER_OK) {
+    jpeg_destroy_decompress(image);
     return NULL;
   }
 
-  jpeg_create_decompress(&image);
-  jpeg_mem_src(&image, bytes, byteCount);
+  image->out_color_space = JCS_RGB;
+  jpeg_start_decompress(image);
 
-  if (jpeg_read_header(&image, TRUE) != JPEG_HEADER_OK) {
-    jpeg_destroy_decompress(&image);
+  if (image->output_width == 0u || image->output_height == 0u
+      || image->output_width > UINT32_MAX || image->output_height > UINT32_MAX) {
+    jpeg_destroy_decompress(image);
     return NULL;
   }
 
-  image.out_color_space = JCS_RGB;
-  jpeg_start_decompress(&image);
-
-  if (image.output_width == 0u || image.output_height == 0u
-      || image.output_width > UINT32_MAX || image.output_height > UINT32_MAX) {
-    jpeg_destroy_decompress(&image);
-    return NULL;
-  }
-
-  imageWidth  = (uint32_t)image.output_width;
-  imageHeight = (uint32_t)image.output_height;
+  imageWidth  = (uint32_t)image->output_width;
+  imageHeight = (uint32_t)image->output_height;
 
   if (!multiply_size((size_t)imageWidth, 3u, &rowStride)
       || !multiply_size(rowStride, (size_t)imageHeight, &rgbSize)) {
-    jpeg_destroy_decompress(&image);
+    jpeg_destroy_decompress(image);
     return NULL;
   }
 
-  if (!(pixels = malloc(rgbSize))) {
-    jpeg_destroy_decompress(&image);
+  if (!(state->pixels = malloc(rgbSize))) {
+    jpeg_destroy_decompress(image);
     return NULL;
   }
 
-  while (image.output_scanline < image.output_height) {
+  while (image->output_scanline < image->output_height) {
     JSAMPROW row;
 
-    row = pixels + (size_t)image.output_scanline * rowStride;
+    row = state->pixels + (size_t)image->output_scanline * rowStride;
 
-    if (jpeg_read_scanlines(&image, &row, 1u) != 1u) {
-      jpeg_destroy_decompress(&image);
-      free(pixels);
+    if (jpeg_read_scanlines(image, &row, 1u) != 1u) {
+      jpeg_destroy_decompress(image);
+      free(state->pixels);
       return NULL;
     }
   }
 
-  jpeg_finish_decompress(&image);
-  jpeg_destroy_decompress(&image);
+  jpeg_finish_decompress(image);
+  jpeg_destroy_decompress(image);
 
   if (!multiply_size((size_t)imageWidth,
                      (size_t)imageHeight,
                      &pixelCount)
       || !multiply_size(pixelCount, 4u, &rgbSize)) {
-    free(pixels);
+    free(state->pixels);
     return NULL;
   }
 
-  if (!(rgba = realloc(pixels, rgbSize))) {
-    free(pixels);
+  if (!(rgba = realloc(state->pixels, rgbSize))) {
+    free(state->pixels);
     return NULL;
   }
 
+  /* expand backward, including channels whose source and destination overlap. */
   for (i = pixelCount; i > 0u; i--) {
     source           = (i - 1u) * 3u;
     target           = (i - 1u) * 4u;
-    rgba[target]     = rgba[source];
-    rgba[target + 1] = rgba[source + 1u];
     rgba[target + 2] = rgba[source + 2u];
+    rgba[target + 1] = rgba[source + 1u];
+    rgba[target]     = rgba[source];
     rgba[target + 3] = UINT8_MAX;
   }
 
@@ -304,6 +308,23 @@ decode_jpeg(const void *bytes,
   *height = imageHeight;
 
   return rgba;
+}
+
+static uint8_t*
+decode_jpeg(const void *bytes,
+            size_t      byteCount,
+            uint32_t   *width,
+            uint32_t   *height) {
+  GPULinuxJPEG state;
+
+  if (!bytes || byteCount == 0u || !width || !height)
+    return NULL;
+
+  /* the decompressor and buffer owner must survive read_jpeg's longjmp. */
+  memset(&state.image, 0, sizeof(state.image));
+  state.pixels = NULL;
+
+  return read_jpeg(&state, bytes, byteCount, width, height);
 }
 
 static uint8_t*
