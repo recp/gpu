@@ -5,7 +5,9 @@ if(NOT GPU_PACKAGE_BUILD_DIR OR
   message(FATAL_ERROR "GPU package test paths and version are required")
 endif()
 
+set(install_prefix "${GPU_PACKAGE_TEST_DIR}/install")
 set(package_prefix "${GPU_PACKAGE_TEST_DIR}/prefix")
+set(consumer_source "${GPU_PACKAGE_TEST_DIR}/source")
 set(consumer_build "${GPU_PACKAGE_TEST_DIR}/build")
 file(REMOVE_RECURSE "${GPU_PACKAGE_TEST_DIR}")
 file(MAKE_DIRECTORY "${GPU_PACKAGE_TEST_DIR}")
@@ -47,22 +49,27 @@ endif()
 
 execute_process(
   COMMAND "${CMAKE_COMMAND}" --install "${GPU_PACKAGE_BUILD_DIR}"
-          --prefix "${package_prefix}" ${config_args}
+          --prefix "${install_prefix}" ${config_args}
   RESULT_VARIABLE result
 )
 if(result)
   message(FATAL_ERROR "GPU package installation failed: ${result}")
 endif()
+file(RENAME "${install_prefix}" "${package_prefix}")
+file(COPY "${GPU_PACKAGE_SOURCE_DIR}/tests/package/"
+     DESTINATION "${consumer_source}")
 if(NOT EXISTS "${package_prefix}/share/gpu/LICENSE")
   message(FATAL_ERROR "GPU package license was not installed")
 endif()
 
 execute_process(
   COMMAND "${CMAKE_COMMAND}"
-          -S "${GPU_PACKAGE_SOURCE_DIR}/tests/package"
+          -S "${consumer_source}"
           -B "${consumer_build}"
           ${generator_args}
           "-DCMAKE_PREFIX_PATH=${package_prefix}"
+          -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF
+          -DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF
           "-DGPU_EXPECTED_PACKAGE_VERSION=${GPU_PACKAGE_VERSION}"
           ${vulkan_args}
           ${build_type_arg}
