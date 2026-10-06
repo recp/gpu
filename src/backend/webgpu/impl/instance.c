@@ -23,12 +23,10 @@ webgpu_createInstance(GPUApi                      *api,
   WGPUInstanceDescriptor  descriptor     = WGPU_INSTANCE_DESCRIPTOR_INIT;
 #if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
   WGPUInstanceLimits      requiredLimits = WGPU_INSTANCE_LIMITS_INIT;
+  WGPUInstanceFeatureName requiredFeatures[2];
 #endif
   GPUInstanceWebGPU      *native;
   GPUInstance            *instance;
-#if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
-  WGPUInstanceFeatureName requiredFeature = WGPUInstanceFeatureName_TimedWaitAny;
-#endif
 
   GPU__UNUSED(api);
   GPU__UNUSED(info);
@@ -47,10 +45,17 @@ webgpu_createInstance(GPUApi                      *api,
 
   if (native->timedWaitAny) {
     requiredLimits.timedWaitAnyMaxCount = 1u;
-    descriptor.requiredFeatureCount     = 1u;
-    descriptor.requiredFeatures         = &requiredFeature;
+    requiredFeatures[descriptor.requiredFeatureCount++] = WGPUInstanceFeatureName_TimedWaitAny;
     descriptor.requiredLimits           = &requiredLimits;
   }
+
+  if (wgpuHasInstanceFeature(WGPUInstanceFeatureName_MultipleDevicesPerAdapter)) {
+    requiredFeatures[descriptor.requiredFeatureCount++] = WGPUInstanceFeatureName_MultipleDevicesPerAdapter;
+  }
+
+  descriptor.requiredFeatures = descriptor.requiredFeatureCount
+                                  ? requiredFeatures
+                                  : NULL;
 
   native->instance = wgpuCreateInstance(&descriptor);
 #else
