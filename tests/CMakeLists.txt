@@ -808,6 +808,12 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/api/vrs.c
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
+  if(GPU_BUILD_METAL AND NOT BUILD_SHARED_LIBS)
+    target_sources(gpu-api-test PRIVATE
+      ${PROJECT_SOURCE_DIR}/tests/api/metal_error.m
+    )
+    target_compile_definitions(gpu-api-test PRIVATE GPU_TEST_METAL_ERRORS=1)
+  endif()
   add_dependencies(gpu-api-test gpu-api-fixtures)
   add_dependencies(gpu-api-test gpu-api-dx12-binding-plan-fixture)
   add_dependencies(gpu-api-test gpu-api-msaa-fixture)
@@ -876,7 +882,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
   gpu_enable_c11_atomics(gpu-api-test)
   if(NOT WIN32)
     target_compile_definitions(gpu-api-test PRIVATE
-      _POSIX_C_SOURCE=200809L
+      $<$<COMPILE_LANGUAGE:C>:_POSIX_C_SOURCE=200809L>
     )
   endif()
 

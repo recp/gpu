@@ -178,6 +178,11 @@ gpu_test_multigpu(GPUAdapter *adapter, GPUDevice *firstDevice);
 int
 gpu_test_runtime(GPUDevice *device);
 
+#if defined(GPU_TEST_METAL_ERRORS)
+int
+gpu_test_metal_errors(GPUDevice *device);
+#endif
+
 int
 gpu_test_threading(GPUDevice *device, const char *artifactPath);
 

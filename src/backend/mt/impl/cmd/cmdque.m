@@ -40,12 +40,6 @@ gpu_cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
                    id                           feedback);
 #endif
 
-static
-GPU_HIDE
-void
-mt_reportCommandBufferError(GPUCommandBuffer *__restrict cmdb,
-                            NSError          *__restrict error);
-
 GPU_HIDE
 void
 mt_ccmdbufOnComplete(GPUCommandBuffer *__restrict cmdb,
@@ -457,7 +451,6 @@ mt_submitEx(GPUQueue                   *queueHandle,
            : mt_cmdbufCommit(info->ppCommandBuffers[0]);
 }
 
-static
 GPU_HIDE
 void
 mt_reportCommandBufferError(GPUCommandBuffer *__restrict cmdb,

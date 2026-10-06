@@ -134,6 +134,87 @@ fail:
 }
 
 static int
+check_device_loss_callback(GPUDevice *device) {
+#if defined(GPU_STATIC)
+  GPUDevice             devices[2] = {0};
+#endif
+  GPUDeviceErrorCapture capture    = {0};
+  GPUDevice            *child;
+#if defined(GPU_STATIC)
+  uint32_t              i;
+#endif
+
+#if defined(GPU_STATIC)
+  for (i = 0u; i < GPU_ARRAY_LEN(devices); i++) {
+    if (GPUSetDeviceErrorCallback(&devices[i], capture_device_error, &capture) != GPU_OK) {
+      return 0;
+    }
+  }
+
+  gpuDeviceReportError(&devices[0],
+                       GPU_DEVICE_ERROR_OUT_OF_MEMORY,
+                       GPU_DEVICE_LOST_REASON_REMOVED,
+                       GPU_ERROR_OUT_OF_MEMORY,
+                       "out of memory");
+
+  if (capture.count != 1u || capture.type != GPU_DEVICE_ERROR_OUT_OF_MEMORY
+      || capture.result != GPU_ERROR_OUT_OF_MEMORY
+      || capture.lostReason != GPU_DEVICE_LOST_REASON_UNKNOWN) {
+    fprintf(stderr, "out-of-memory callback mismatch\n");
+    return 0;
+  }
+
+  gpuDeviceReportError(&devices[0],
+                       GPU_DEVICE_ERROR_LOST,
+                       GPU_DEVICE_LOST_REASON_RESET,
+                       GPU_ERROR_BACKEND_FAILURE,
+                       "device reset");
+
+  if (capture.count != 2u || capture.type != GPU_DEVICE_ERROR_LOST
+      || capture.lostReason != GPU_DEVICE_LOST_REASON_RESET
+      || strcmp(capture.message, "device reset") != 0) {
+    fprintf(stderr, "device loss callback mismatch\n");
+    return 0;
+  }
+
+  GPUSetDeviceErrorCallback(&devices[0], NULL, NULL);
+  GPUSetDeviceErrorCallback(&devices[0], capture_device_error, &capture);
+
+  for (i = 0u; i < GPU_ARRAY_LEN(devices); i++) {
+    gpuDeviceReportError(&devices[i],
+                         GPU_DEVICE_ERROR_LOST,
+                         GPU_DEVICE_LOST_REASON_REMOVED,
+                         GPU_ERROR_BACKEND_FAILURE,
+                         "device removed");
+  }
+
+  if (capture.count != 3u || capture.device != &devices[1]
+      || capture.lostReason != GPU_DEVICE_LOST_REASON_REMOVED) {
+    fprintf(stderr, "device loss was not reported once per device\n");
+    return 0;
+  }
+#endif
+
+  child = NULL;
+  memset(&capture, 0, sizeof(capture));
+
+  if (gpu_test_create_device(device->adapter, NULL, &child) != GPU_OK || !child) {
+    fprintf(stderr, "failed to create device for callback destruction test\n");
+    return 0;
+  }
+
+  GPUSetDeviceErrorCallback(child, capture_device_error, &capture);
+  GPUDestroyDevice(child);
+
+  if (capture.count != 0u) {
+    fprintf(stderr, "explicit device destruction reported device loss\n");
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
 check_runtime_config(GPUDevice *device) {
   GPURuntimeConfig config = {0};
 
@@ -594,6 +675,10 @@ int
 gpu_test_runtime(GPUDevice *device) {
   return check_runtime_config(device)
          && check_device_error_callback(device)
+         && check_device_loss_callback(device)
+#if defined(GPU_TEST_METAL_ERRORS)
+         && gpu_test_metal_errors(device)
+#endif
          && check_transient_validation(device)
          && check_transient_fallback(device)
          && check_stats_queries(device)

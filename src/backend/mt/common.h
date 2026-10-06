@@ -343,6 +343,11 @@ mt_format(GPUFormat format);
 
 GPU_HIDE
 void
+mt_reportCommandBufferError(GPUCommandBuffer *__restrict cmdb,
+                            NSError          *__restrict error);
+
+GPU_HIDE
+void
 mt_vertexBuffer(GPURenderPassEncoder *rce,
                 GPUBuffer            *buffer,
                 uint64_t              offset,
