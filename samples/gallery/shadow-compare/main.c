@@ -367,6 +367,22 @@ render_frame(void *userData) {
   passInfo.pDepthStencilAttachment = &depth;
   passInfo.colorAttachmentCount    = 1u;
 
+  depthBarrier.texture    = state->depthTexture;
+  depthBarrier.srcAccess  = GPU_ACCESS_SHADER_READ;
+  depthBarrier.dstAccess  = GPU_ACCESS_DEPTH_WRITE;
+  depthBarrier.mipCount   = 1u;
+  depthBarrier.layerCount = 1u;
+
+  barriers.pTextureBarriers    = &depthBarrier;
+  barriers.srcStages           = GPU_STAGE_FRAGMENT;
+  barriers.dstStages           = GPU_STAGE_FRAGMENT;
+  barriers.textureBarrierCount = 1u;
+
+  /* finish the previous preview's depth reads before clearing the target. */
+  if (state->frameCount > 0u) {
+    GPUEncodeBarriers(cmdb, &barriers);
+  }
+
   if (!(pass = GPUBeginRenderPass(cmdb, &passInfo))) {
     (void)GPUDiscardCommandBuffer(cmdb);
     GPUEndFrame(frame);
@@ -377,17 +393,8 @@ render_frame(void *userData) {
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   GPUEndRenderPass(pass);
 
-  depthBarrier.texture    = state->depthTexture;
-  depthBarrier.srcAccess  = GPU_ACCESS_DEPTH_WRITE;
-  depthBarrier.dstAccess  = GPU_ACCESS_SHADER_READ;
-  depthBarrier.mipCount   = 1u;
-  depthBarrier.layerCount = 1u;
-
-  barriers.pTextureBarriers    = &depthBarrier;
-  barriers.srcStages           = GPU_STAGE_FRAGMENT;
-  barriers.dstStages           = GPU_STAGE_FRAGMENT;
-  barriers.textureBarrierCount = 1u;
-
+  depthBarrier.srcAccess = GPU_ACCESS_DEPTH_WRITE;
+  depthBarrier.dstAccess = GPU_ACCESS_SHADER_READ;
   GPUEncodeBarriers(cmdb, &barriers);
 
   color.loadOp = GPU_LOAD_OP_LOAD;
