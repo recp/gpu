@@ -110,6 +110,7 @@ typedef struct WebGPUCompute {
   bool                timestampRecorded;
   bool                timestampsEnabled;
 #endif
+  bool                verticesReady;
   bool                noticeStatus;
 } WebGPUCompute;
 
@@ -476,6 +477,20 @@ render_frame(void *userData) {
     return;
   }
 
+  barrier.buffer    = state->vertexBuffer;
+  barrier.srcAccess = GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE;
+  barrier.dstAccess = GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE;
+  barrier.sizeBytes = sizeof(GeneratedVertex) * GPU_COMPUTE_VERTEX_CAPACITY;
+
+  barriers.srcStages          = GPU_STAGE_COMPUTE | GPU_STAGE_VERTEX;
+  barriers.dstStages          = GPU_STAGE_COMPUTE;
+  barriers.pBufferBarriers    = &barrier;
+  barriers.bufferBarrierCount = 1u;
+
+  if (state->verticesReady) {
+    GPUEncodeBarriers(cmdb, &barriers);
+  }
+
 #if GPU_COMPUTE_USE_TIMESTAMPS
   if (state->timestampsEnabled && !state->timestampRecorded) {
     computeTimestamps.querySet   = state->timestampQuery;
@@ -525,15 +540,12 @@ render_frame(void *userData) {
 #endif
   GPUEndComputePass(compute);
 
-  barrier.buffer    = state->vertexBuffer;
   barrier.srcAccess = GPU_ACCESS_SHADER_WRITE;
   barrier.dstAccess = GPU_ACCESS_SHADER_READ;
-  barrier.sizeBytes = sizeof(GeneratedVertex) * GPU_COMPUTE_VERTEX_CAPACITY;
 
-  barriers.srcStages          = GPU_STAGE_COMPUTE;
-  barriers.dstStages          = GPU_STAGE_VERTEX;
-  barriers.pBufferBarriers    = &barrier;
-  barriers.bufferBarrierCount = 1u;
+  barriers.srcStages = GPU_STAGE_COMPUTE;
+  barriers.dstStages = GPU_STAGE_VERTEX;
+
   GPUEncodeBarriers(cmdb, &barriers);
 
   color.view                  = GPUFrameGetTargetView(frame);
@@ -582,6 +594,8 @@ render_frame(void *userData) {
     fprintf(stderr, "GPU: failed to finish WebGPU compute frame\n");
     return;
   }
+
+  state->verticesReady = true;
 
 #if GPU_COMPUTE_USE_TIMESTAMPS
   if (state->timestampsEnabled && !state->timestampRecorded) {
