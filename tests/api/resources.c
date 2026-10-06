@@ -17,7 +17,9 @@
 #include "test.h"
 #include "../../src/api/buffer_internal.h"
 #include "../../src/api/cmdqueue_internal.h"
+#include "../../src/api/device_internal.h"
 #include "../../src/api/texture_internal.h"
+#include <stdatomic.h>
 
 typedef struct TextureViewFormatCase {
   GPUFormat textureFormat;
@@ -204,6 +206,15 @@ wait_queue_writes(GPUDevice *device, GPUQueue *queue) {
   return ok;
 }
 
+static void
+count_texture_error(GPUDevice                *device,
+                    const GPUDeviceErrorInfo *error,
+                    void                     *userData) {
+  (void)device;
+  atomic_fetch_add_explicit((atomic_uint *)userData, 1u, memory_order_relaxed);
+  fprintf(stderr, "texture device error: %s\n", error->message ? error->message : "unknown");
+}
+
 static int
 check_format_texture_create(GPUDevice           *device,
                             GPUFormat            format,
@@ -211,7 +222,11 @@ check_format_texture_create(GPUDevice           *device,
                             const char          *capability) {
   GPUTextureCreateInfo info = {0};
   GPUTexture          *texture;
+  void                *savedUserData;
+  atomic_uint          errors = 0u;
   GPUResult            result;
+
+  GPUDeviceErrorCallback savedCallback;
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   info.chain.structSize = sizeof(info);
@@ -223,10 +238,16 @@ check_format_texture_create(GPUDevice           *device,
   info.mipLevelCount    = 1u;
   info.sampleCount      = 1u;
   info.usage            = usage;
-  texture               = NULL;
-  result                = GPUCreateTexture(device, &info, &texture);
 
-  if (result != GPU_OK || !texture) {
+  texture               = NULL;
+  savedUserData         = device->errorUserData;
+  savedCallback         = device->errorCallback;
+  GPUSetDeviceErrorCallback(device, count_texture_error, &errors);
+  result = GPUCreateTexture(device, &info, &texture);
+  GPUSetDeviceErrorCallback(device, savedCallback, savedUserData);
+
+  if (result != GPU_OK || !texture
+      || atomic_load_explicit(&errors, memory_order_relaxed) != 0u) {
     fprintf(stderr,
             "format %u reports %s but texture creation returned %d\n",
             (uint32_t)format,

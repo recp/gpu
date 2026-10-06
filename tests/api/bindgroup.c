@@ -18,6 +18,7 @@
 #include "../../src/backend/api/gpudef.h"
 #include "../../src/api/device_internal.h"
 #include "../../src/api/texture_internal.h"
+#include <stdatomic.h>
 
 #define CHECK_BUFFER(x)                                            \
   do {                                                             \
@@ -1262,6 +1263,15 @@ check_bind_group_layout_validation(GPUDevice *device) {
   return 1;
 }
 
+static void
+count_binding_error(GPUDevice                *device,
+                    const GPUDeviceErrorInfo *error,
+                    void                     *userData) {
+  (void)device;
+  atomic_fetch_add_explicit((atomic_uint *)userData, 1u, memory_order_relaxed);
+  fprintf(stderr, "binding device error: %s\n", error->message ? error->message : "unknown");
+}
+
 static int
 check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
   GPUApiDescriptor             saved;
@@ -1281,6 +1291,9 @@ check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
   GPUBindGroup                *group           = NULL;
   GPURenderPassEncoder         renderPass      = {0};
   GPUComputePassEncoder        computePass     = {0};
+  void                        *savedUserData;
+  atomic_uint                  errors          = 0u;
+  GPUResult                    layoutResult;
   uint32_t                     stride          = type == GPU_BINDING_UNIFORM_BUFFER ? 0u : 12u;
   uint32_t                     validOffset     = stride ? 252u : 256u;
   uint32_t                     changedOffset   = 0u;
@@ -1291,6 +1304,8 @@ check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
 #endif
   int                          ok              = 0;
   uint32_t                     i;
+
+  GPUDeviceErrorCallback savedCallback;
 
   api = gpuDeviceApi(device);
 
@@ -1303,6 +1318,10 @@ check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
   api->descriptor.bindComputeGroup = test_bindComputeGroup;
   descriptorHookCounts.bindRender  = 0u;
   descriptorHookCounts.bindCompute = 0u;
+
+  savedUserData = device->errorUserData;
+  savedCallback = device->errorCallback;
+  GPUSetDeviceErrorCallback(device, count_binding_error, &errors);
 
   entry.binding            = 0u;
   entry.bindingType        = type;
@@ -1319,7 +1338,20 @@ check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
   layoutInfo.entryCount       = 1u;
   layoutInfo.pEntries         = &entry;
 
-  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout) {
+  layoutResult = GPUCreateBindGroupLayout(device, &layoutInfo, &layout);
+
+  if (layoutResult == GPU_ERROR_UNSUPPORTED
+      && api->backend == GPU_BACKEND_WEBGPU && type == GPU_BINDING_STORAGE_BUFFER) {
+    if (layout || atomic_load_explicit(&errors, memory_order_relaxed) != 0u) {
+      fprintf(stderr, "unsupported vertex storage returned a layout or device error\n");
+      goto cleanup;
+    }
+
+    entry.visibility &= ~GPU_SHADER_STAGE_VERTEX_BIT;
+    layoutResult = GPUCreateBindGroupLayout(device, &layoutInfo, &layout);
+  }
+
+  if (layoutResult != GPU_OK || !layout) {
     fprintf(stderr, "dynamic offset layout setup failed\n");
     goto cleanup;
   }
@@ -1362,6 +1394,13 @@ check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
 
   if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group) {
     fprintf(stderr, "dynamic offset group setup failed\n");
+    goto cleanup;
+  }
+
+  GPUSetDeviceErrorCallback(device, savedCallback, savedUserData);
+
+  if (atomic_load_explicit(&errors, memory_order_relaxed) != 0u) {
+    fprintf(stderr, "dynamic offset setup produced a device error\n");
     goto cleanup;
   }
 
@@ -1482,6 +1521,7 @@ check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
   ok = 1;
 
 cleanup:
+  GPUSetDeviceErrorCallback(device, savedCallback, savedUserData);
   api->descriptor = saved;
   GPUDestroyBindGroup(group);
   GPUDestroyBuffer(buffer);

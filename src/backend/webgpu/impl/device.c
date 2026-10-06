@@ -47,7 +47,11 @@ static const WGPUFeatureName webgpu_optionalFeatures[] = {
   WGPUFeatureName_TextureFormatsTier1,
   WGPUFeatureName_TextureFormatsTier2,
   GPU_WEBGPU_FEATURE_NORM16,
-  WGPUFeatureName_IndirectFirstInstance
+  WGPUFeatureName_IndirectFirstInstance,
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  (WGPUFeatureName)WGPUNativeFeature_TextureAdapterSpecificFormatFeatures,
+  (WGPUFeatureName)WGPUNativeFeature_VertexWritableStorage,
+#endif
 };
 
 static GPUAdapterType
@@ -577,6 +581,14 @@ webgpu_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
 
   outCaps->colorAttachment = !wideNorm || tier1 || legacyUnorm16;
 
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  if (legacyUnorm16
+      && !webgpu_hasAdapterFeature(adapter,
+                                    (WGPUFeatureName)WGPUNativeFeature_TextureAdapterSpecificFormatFeatures)) {
+    outCaps->colorAttachment = false;
+  }
+#endif
+
   if (format == GPU_FORMAT_R8_SNORM
       || format == GPU_FORMAT_RG8_SNORM
       || format == GPU_FORMAT_RGBA8_SNORM) {
@@ -779,7 +791,7 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   WGPURequestDeviceCallbackInfo callbackInfo   = WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
   WGPUDeviceDescriptor          descriptor     = WGPU_DEVICE_DESCRIPTOR_INIT;
   WGPULimits                    requiredLimits = WGPU_LIMITS_INIT;
-  WGPUFeatureName               requiredFeatures[20];
+  WGPUFeatureName               requiredFeatures[22];
   GPUAdapterWebGPU             *native;
   WebGPUDeviceRequest          *request;
   uint64_t                      supportedMask;

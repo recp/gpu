@@ -210,6 +210,7 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
   uint32_t                       ai;
   uint32_t                       nativeBinding;
   uint32_t                       cleanupIndex;
+  bool                           vertexWritable;
 
   native          = gpu_webgpuDevice(device);
   entries         = GPUGetBindGroupLayoutEntries(layout, &count);
@@ -226,8 +227,31 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
 
   immutableCount = 0u;
   nativeCount    = 0u;
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  vertexWritable = wgpuDeviceHasFeature(native->device,
+                                         (WGPUFeatureName)WGPUNativeFeature_VertexWritableStorage);
+#else
+  vertexWritable = false;
+#endif
 
   for (countIndex = 0u; countIndex < count; countIndex++) {
+    if ((entries[countIndex].visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0u
+        && (entries[countIndex].bindingType == GPU_BINDING_STORAGE_BUFFER
+            || (entries[countIndex].bindingType == GPU_BINDING_STORAGE_TEXTURE
+                && entries[countIndex].storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_READ_ONLY))
+        && !vertexWritable) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+    if (entries[countIndex].bindingType == GPU_BINDING_STORAGE_TEXTURE
+        && entries[countIndex].storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY
+        && !wgpuDeviceHasFeature(native->device,
+                                  (WGPUFeatureName)WGPUNativeFeature_TextureAdapterSpecificFormatFeatures)) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+#endif
+
     if (entries[countIndex].arrayCount > UINT32_MAX - nativeCount
         || (entries[countIndex].immutableSampler
             && entries[countIndex].arrayCount > UINT32_MAX - immutableCount)) {
