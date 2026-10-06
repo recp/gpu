@@ -13,6 +13,41 @@ endif()
 
 if(GPU_BUILD_TESTS)
   if(GPU_BUILD_METAL AND CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    add_executable(gpu-native-host-lifecycle
+      ${PROJECT_SOURCE_DIR}/tests/validation/native-host/main.m
+      ${PROJECT_SOURCE_DIR}/samples/shell/apple/NativeHost.m
+      ${PROJECT_SOURCE_DIR}/samples/common/apple.m
+      ${PROJECT_SOURCE_DIR}/samples/common/sample_orbit.c
+    )
+    target_compile_options(gpu-native-host-lifecycle PRIVATE
+      -Wall -Wextra -Werror
+      $<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>
+    )
+    target_link_libraries(gpu-native-host-lifecycle PRIVATE
+      gpu
+      "-framework AppKit"
+      "-framework CoreGraphics"
+      "-framework ImageIO"
+      "-framework QuartzCore"
+    )
+    set_target_properties(gpu-native-host-lifecycle PROPERTIES
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+      OBJC_STANDARD 11
+      OBJC_STANDARD_REQUIRED YES
+      OBJC_EXTENSIONS NO
+    )
+    add_test(NAME metal-native-host-lifecycle
+             COMMAND gpu-native-host-lifecycle)
+    set_tests_properties(metal-native-host-lifecycle PROPERTIES
+      ENVIRONMENT "MTL_DEBUG_LAYER=1"
+      PASS_REGULAR_EXPRESSION "native host lifecycle passed"
+      LABELS "interactive;metal"
+      RUN_SERIAL TRUE
+      TIMEOUT 15
+    )
+
     add_executable(gpu-metal-sparse-support-contract
       ${PROJECT_SOURCE_DIR}/src/backend/mt/impl/device.m
       ${PROJECT_SOURCE_DIR}/tests/validation/metal-sparse-support/main.m
