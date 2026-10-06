@@ -1,3 +1,5 @@
+include(cmake/stdlib.cmake)
+
 if(GPU_BUILD_SAMPLES AND
    ((GPU_BUILD_WEBGPU AND EMSCRIPTEN) OR
     (WIN32 AND GPU_BUILD_DX12) OR

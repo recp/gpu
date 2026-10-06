@@ -42,8 +42,8 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     message(FATAL_ERROR
       "WebGPU samples require a non-empty USL STDLIB_VERSION.")
   endif()
-  file(GLOB_RECURSE GPU_USL_STDLIB_SOURCES CONFIGURE_DEPENDS
-       "${GPU_USL_STDLIB_PATH}/*.usl")
+  gpu_sample_stdlib_dependencies(GPU_USL_STDLIB_DEPENDENCIES
+    "${GPU_USL_STDLIB_PATH}")
 
   if(EXISTS "${GPU_ASSETKIT_ROOT}/CMakeLists.txt")
     include(ExternalProject)
@@ -165,10 +165,7 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_WEBGPU AND EMSCRIPTEN)
     endif()
     set(artifactDependencies)
     if(GPU_WEBGPU_SAMPLE_USES_STDLIB)
-      list(APPEND artifactDependencies
-        "${GPU_USL_STDLIB_PATH}/STDLIB_VERSION"
-        ${GPU_USL_STDLIB_SOURCES}
-      )
+      list(APPEND artifactDependencies ${GPU_USL_STDLIB_DEPENDENCIES})
     endif()
 
     configure_file(

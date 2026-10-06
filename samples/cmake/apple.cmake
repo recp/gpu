@@ -136,10 +136,13 @@ function(gpu_apple_gallery_sample sampleDir)
     set(fixtureSource "${shaderDir}/${shaderStem}.usl")
     set(artifact "${shaderDir}/${shaderStem}.us")
     set(shaderEnvironment USL_EMIT_BYTECODE=1 USL_NO_BACKEND_SIDECAR=1)
+    set(shaderDependencies)
 
     if(GPU_SAMPLE_USES_STDLIB)
       list(APPEND shaderEnvironment
         "USL_STDLIB_PATH=${GPU_USL_ROOT}/stdlib")
+      gpu_sample_stdlib_dependencies(shaderDependencies
+        "${GPU_USL_ROOT}/stdlib")
     endif()
     foreach(capability IN LISTS GPU_SAMPLE_CAPS)
       string(REPLACE "=" ";" capabilityPair "${capability}")
@@ -161,7 +164,7 @@ function(gpu_apple_gallery_sample sampleDir)
               $<TARGET_FILE:gpu-usl-fixture>
               metal
               "${fixtureSource}"
-      DEPENDS gpu-usl-fixture "${shaderSource}"
+      DEPENDS gpu-usl-fixture "${shaderSource}" ${shaderDependencies}
       VERBATIM
     )
     list(APPEND artifactOutputs "${artifact}")

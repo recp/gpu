@@ -42,6 +42,16 @@ if(GPU_BUILD_TESTS)
   get_property(GPU_GENERATOR_IS_MULTI_CONFIG GLOBAL
                PROPERTY GENERATOR_IS_MULTI_CONFIG)
 
+  if(NOT CMAKE_CROSSCOMPILING AND TARGET gpu-usl-fixture)
+    add_test(NAME gpu-stdlib-artifacts
+      COMMAND ${CMAKE_COMMAND}
+        "-DGPU_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DGPU_TEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/stdlib-artifacts"
+        "-DGPU_TEST_FIXTURE=$<TARGET_FILE:gpu-usl-fixture>"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/stdlib_artifacts.cmake"
+    )
+  endif()
+
   if(WIN32)
     set(runtimeStageCommands)
     set(runtimeStageDependencies)

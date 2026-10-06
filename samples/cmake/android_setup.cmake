@@ -167,9 +167,12 @@ if(GPU_BUILD_ANDROID_SAMPLES)
         "${_gpu_android_dir}/${_gpu_android_shader_name}.us")
     set(_gpu_android_environment
         USL_EMIT_BYTECODE=1)
+    set(_gpu_android_dependencies)
     if(GPU_ANDROID_SHADER_USES_STDLIB)
       list(APPEND _gpu_android_environment
         "USL_STDLIB_PATH=${GPU_USL_ROOT}/stdlib")
+      gpu_sample_stdlib_dependencies(_gpu_android_dependencies
+        "${GPU_USL_ROOT}/stdlib")
     endif()
     if(GPU_ANDROID_SHADER_CAPS)
       list(APPEND _gpu_android_environment
@@ -213,6 +216,7 @@ if(GPU_BUILD_ANDROID_SAMPLES)
         "${GPU_USL_HOST_PACKER}"
         "${PROJECT_SOURCE_DIR}/cmake/PackUSLArtifact.cmake"
         "${_gpu_android_shader_source}"
+        ${_gpu_android_dependencies}
       VERBATIM
     )
     add_custom_target(${target}-artifact DEPENDS "${_gpu_android_us}")

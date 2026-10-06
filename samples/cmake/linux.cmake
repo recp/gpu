@@ -68,6 +68,7 @@ function(gpu_linux_gallery_artifact target
   set(fixtureSource "${shaderDir}/${shaderStem}.usl")
   set(artifact "${shaderDir}/${shaderStem}.us")
   set(shaderEnvironment USL_EMIT_BYTECODE=1 USL_NO_BACKEND_SIDECAR=1)
+  set(shaderDependencies)
   set(packCommands
     COMMAND "${CMAKE_COMMAND}"
             "-DGPU_USL_PACKER=$<TARGET_FILE:gpu-uslpack>"
@@ -81,6 +82,8 @@ function(gpu_linux_gallery_artifact target
   if(usesStdlib)
     list(APPEND shaderEnvironment
       "USL_STDLIB_PATH=${GPU_USL_ROOT}/stdlib")
+    gpu_sample_stdlib_dependencies(shaderDependencies
+      "${GPU_USL_ROOT}/stdlib")
   endif()
   if(shaderCaps)
     list(APPEND shaderEnvironment "USL_TARGET_CAPS=${shaderCaps}")
@@ -114,6 +117,7 @@ function(gpu_linux_gallery_artifact target
       gpu-usl-fixture
       gpu-uslpack
       "${shaderSource}"
+      ${shaderDependencies}
       "${PROJECT_SOURCE_DIR}/cmake/PackUSLArtifact.cmake"
     VERBATIM
   )

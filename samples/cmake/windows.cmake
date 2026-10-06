@@ -121,12 +121,15 @@ function(gpu_windows_gallery_artifact sampleId
   set(fixtureSource "${shaderDir}/${shaderStem}.usl")
   set(artifact "${shaderDir}/${shaderStem}.us")
   set(shaderEnvironment USL_EMIT_BYTECODE=1 USL_NO_BACKEND_SIDECAR=1)
+  set(shaderDependencies)
   set(runtimeCommands)
   set(runtimeDependencies)
 
   if(usesStdlib)
     list(APPEND shaderEnvironment
       "USL_STDLIB_PATH=${GPU_USL_ROOT}/stdlib")
+    gpu_sample_stdlib_dependencies(shaderDependencies
+      "${GPU_USL_ROOT}/stdlib")
   endif()
   if(shaderCaps)
     list(APPEND shaderEnvironment "USL_TARGET_CAPS=${shaderCaps}")
@@ -154,7 +157,8 @@ function(gpu_windows_gallery_artifact sampleId
             $<TARGET_FILE:gpu-usl-fixture>
             dx12
             "${fixtureSource}"
-    DEPENDS gpu-usl-fixture "${shaderSource}" ${runtimeDependencies}
+    DEPENDS gpu-usl-fixture "${shaderSource}"
+            ${shaderDependencies} ${runtimeDependencies}
     VERBATIM
   )
   set(${outArtifact} "${artifact}" PARENT_SCOPE)
