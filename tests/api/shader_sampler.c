@@ -269,22 +269,29 @@ gpu_test_source_sampler_draw(GPUDevice *device, const char *bytecodePath) {
         && layoutEntries[layoutIndex].visibility == GPU_SHADER_STAGE_FRAGMENT_BIT) {
       foundUniform = true;
     }
-
-    if (layoutEntries[layoutIndex].binding == 2u
-        && layoutEntries[layoutIndex].bindingType == GPU_BINDING_SAMPLER
-        && layoutEntries[layoutIndex].visibility == GPU_SHADER_STAGE_FRAGMENT_BIT
-        && layoutEntries[layoutIndex].immutableSampler
-        && layoutEntries[layoutIndex].immutableSamplerDesc.maxAnisotropy == 8u) {
-      foundImmutableSampler = true;
-    }
   }
 
-  if (layoutEntryCount != 2u + (uint32_t)webgpu
-      || !foundTexture || !foundUniform
-      || foundImmutableSampler != webgpu) {
+  if (layoutEntryCount != 2u || !foundTexture || !foundUniform) {
     fprintf(stderr, "source sampler shader layout mismatch\n");
     ok = 0;
     goto cleanup;
+  }
+
+  if (webgpu) {
+    layoutEntries = GPUGetBindGroupLayoutEntries(shaderLayout->bindGroupLayouts[0],
+                                                 &layoutEntryCount);
+    foundImmutableSampler = layoutEntries && layoutEntryCount == 1u
+                            && layoutEntries[0].binding == 0u
+                            && layoutEntries[0].bindingType == GPU_BINDING_SAMPLER
+                            && layoutEntries[0].visibility == GPU_SHADER_STAGE_FRAGMENT_BIT
+                            && layoutEntries[0].immutableSampler
+                            && layoutEntries[0].immutableSamplerDesc.maxAnisotropy == 8u;
+
+    if (!foundImmutableSampler) {
+      fprintf(stderr, "source sampler immutable layout mismatch\n");
+      ok = 0;
+      goto cleanup;
+    }
   }
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
