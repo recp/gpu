@@ -57,7 +57,7 @@
   CGSize drawableSize;
 
   if ([keyPath isEqualToString:@"bounds"]) {
-    newFrame     = [change[NSKeyValueChangeNewKey] CGRectValue];
+    newFrame     = [(CALayer *)object bounds];
     drawableSize = CGSizeMake(newFrame.size.width * backingScaleFactor,
                               newFrame.size.height * backingScaleFactor);
 
