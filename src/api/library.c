@@ -2760,6 +2760,11 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice         *device,
       }
     }
   } else if (api->backend == GPU_BACKEND_METAL) {
+    if (device->uslCubeGradFixup
+        && us_cap_atom_text(&targetAtoms[targetAtomCount++], "metal_cube_grad_fixup") != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
     if (device->uslTargetVersion >= 401u
         && us_cap_atom_text(&targetAtoms[targetAtomCount++], "msl4_1") != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;

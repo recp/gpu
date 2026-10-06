@@ -1184,6 +1184,10 @@ mt_createDevice(GPUAdapter   *__restrict adapter,
   device->inst    = adapter->inst;
   device->adapter = adapter;
 
+  if (@available(macOS 12.0, iOS 15.0, *)) {
+    device->uslCubeGradFixup = adapterMT->appleFamily1;
+  }
+
   if (@available(macOS 13.0, iOS 16.0, *)) {
     apple7 = [adapterMT->device supportsFamily:MTLGPUFamilyApple7];
 
