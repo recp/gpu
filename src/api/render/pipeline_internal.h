@@ -51,6 +51,12 @@ struct GPURenderPipeline {
 };
 
 GPU_HIDE
+GPUResult
+gpuCreateRenderPipeline(GPUDevice                         *device,
+                        const GPURenderPipelineCreateInfo *info,
+                        GPURenderPipeline                **outPipeline);
+
+GPU_HIDE
 GPURenderPipeline*
 gpuCreateRenderPipelineDesc(GPUApi *api, GPUFormat pixelFormat, bool mesh);
 

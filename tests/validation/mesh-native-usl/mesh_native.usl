@@ -1,3 +1,6 @@
+#function_constant(7)
+spec const PIPELINE_MARKER: bool = false
+
 struct MeshVertex {
   position: float4 #position
 }

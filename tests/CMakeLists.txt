@@ -2,6 +2,7 @@ if(GPU_BUILD_ANDROID_TESTS)
   add_executable(gpu-android-vulkan-test
     ${PROJECT_SOURCE_DIR}/tests/android/vulkan.c
     ${PROJECT_SOURCE_DIR}/tests/api/copy.c
+    ${PROJECT_SOURCE_DIR}/tests/api/constants.c
     ${PROJECT_SOURCE_DIR}/tests/api/lod.c
     ${PROJECT_SOURCE_DIR}/tests/api/mipmaps.c
     ${PROJECT_SOURCE_DIR}/tests/api/runner.c
@@ -131,6 +132,13 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     "${PROJECT_SOURCE_DIR}/tests/api/lod.usl"
   )
   add_custom_target(gpu-api-lod-fixture DEPENDS ${GPU_API_LOD_USL_FIXTURE})
+  gpu_add_usl_fixtures(
+    GPU_API_CONSTANTS_USL_FIXTURE
+    "${GPU_API_DEFAULT_BACKEND}"
+    api-constants
+    "${PROJECT_SOURCE_DIR}/tests/api/constants.usl"
+  )
+  add_custom_target(gpu-api-constants-fixture DEPENDS ${GPU_API_CONSTANTS_USL_FIXTURE})
   add_custom_target(
     gpu-api-dx12-binding-plan-fixture
     DEPENDS ${GPU_API_DX12_BINDING_PLAN_USL_FIXTURE}
@@ -794,6 +802,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/api/main.c
     ${PROJECT_SOURCE_DIR}/tests/api/memory.c
     ${PROJECT_SOURCE_DIR}/tests/api/lod.c
+    ${PROJECT_SOURCE_DIR}/tests/api/constants.c
     ${PROJECT_SOURCE_DIR}/tests/api/metal_vertex_slots.c
     ${PROJECT_SOURCE_DIR}/tests/api/msaa.c
     ${PROJECT_SOURCE_DIR}/tests/api/multigpu.c
@@ -828,7 +837,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     target_compile_definitions(gpu-api-test PRIVATE GPU_TEST_METAL_ERRORS=1)
   endif()
   add_dependencies(gpu-api-test gpu-api-fixtures)
-  add_dependencies(gpu-api-test gpu-api-lod-fixture)
+  add_dependencies(gpu-api-test gpu-api-lod-fixture gpu-api-constants-fixture)
   add_dependencies(gpu-api-test gpu-api-dx12-binding-plan-fixture)
   add_dependencies(gpu-api-test gpu-api-msaa-fixture)
   add_dependencies(gpu-api-test gpu-api-atomic64-fixture)
@@ -906,6 +915,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
             ${GPU_API_DEFAULT_BACKEND}
   )
   set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
+    "GPU_CONSTANTS_USL_PATH=${GPU_API_CONSTANTS_USL_FIXTURE}"
     "GPU_LOD_USL_PATH=${GPU_API_LOD_USL_FIXTURE}"
     "GPU_MSAA_USL_PATH=${GPU_API_MSAA_USL_FIXTURE}"
     "GPU_SUBGROUP_RELATIVE_USL_PATH=${GPU_API_SUBGROUP_RELATIVE_USL_FIXTURE}"

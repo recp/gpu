@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "../constants_internal.h"
 #include "../../common.h"
 #include "../../backend/mt/binding_limits.h"
 #include "pipeline_internal.h"
@@ -636,6 +637,8 @@ gpu_renderPipelineExtensions(GPUDevice                                 *device,
 
         intersection = (const GPUIntersectionFunctionPipelineEXT *)chain;
         break;
+      case GPU_STRUCTURE_TYPE_PIPELINE_CONSTANTS:
+        break;
       default:
         return GPU_ERROR_INVALID_ARGUMENT;
     }
@@ -819,12 +822,13 @@ gpuPipelineSetSampleCount(GPURenderPipeline *__restrict pipeline,
   api->render.sampleCount(pipeline, sampleCount);
 }
 
-GPU_EXPORT
+GPU_HIDE
 GPUResult
-GPUCreateRenderPipeline(GPUDevice                         *__restrict device,
+gpuCreateRenderPipeline(GPUDevice                         *__restrict device,
                         const GPURenderPipelineCreateInfo *__restrict info,
                         GPURenderPipeline                **__restrict outPipeline) {
   GPUPipelineCacheKey                       cacheKey;
+  const GPUPipelineConstants               *constants;
   GPUApi                                   *api;
   GPURenderPipelineState                   *state;
   GPURenderPipeline                        *pipeline;
@@ -993,10 +997,11 @@ GPUCreateRenderPipeline(GPUDevice                         *__restrict device,
     goto ready;
   }
 
-  vertexFunc   = mesh ? NULL : gpuShaderFunction(info->library, info->vertexEntry);
-  fragmentFunc = gpuShaderFunction(info->library, info->fragmentEntry);
-  taskFunc     = mesh && mesh->taskEntry ? gpuShaderFunction(info->library, mesh->taskEntry) : NULL;
-  meshFunc     = mesh ? gpuShaderFunction(info->library, mesh->meshEntry) : NULL;
+  constants    = gpuPipelineConstants(info->chain.pNext);
+  vertexFunc   = mesh ? NULL : gpuShaderVariant(info->library, info->vertexEntry, constants);
+  fragmentFunc = gpuShaderVariant(info->library, info->fragmentEntry, constants);
+  taskFunc     = mesh && mesh->taskEntry ? gpuShaderVariant(info->library, mesh->taskEntry, constants) : NULL;
+  meshFunc     = mesh ? gpuShaderVariant(info->library, mesh->meshEntry, constants) : NULL;
 
   if ((!mesh && !vertexFunc) || !fragmentFunc
       || (mesh && (!meshFunc || (mesh->taskEntry && !taskFunc)))) {
@@ -1158,4 +1163,37 @@ GPUDestroyRenderPipeline(GPURenderPipeline *pipeline) {
   }
 
   free(pipeline);
+}
+
+GPU_EXPORT
+GPUResult
+GPUCreateRenderPipeline(GPUDevice                         *device,
+                        const GPURenderPipelineCreateInfo *info,
+                        GPURenderPipeline                **outPipeline) {
+  GPURenderPipelineCreateInfo snapshot;
+  GPUPreparedConstants        prepared;
+  GPUResult                   result;
+
+  if (!outPipeline) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outPipeline = NULL;
+
+  if (!info || !info->library) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = gpuPrepareConstants(info->library, info->chain.pNext, false, &prepared);
+
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  snapshot             = *info;
+  snapshot.chain.pNext = prepared.chain;
+  result               = gpuCreateRenderPipeline(device, &snapshot, outPipeline);
+  free(prepared.values);
+
+  return result;
 }

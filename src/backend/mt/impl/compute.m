@@ -109,10 +109,11 @@ mt_newComputePipeline(void) {
 GPU_HIDE
 void
 mt_setComputeFunction(GPUComputePipeline *pipeline, GPUShaderFunction *func) {
-  MTComputePipelineDesc         *desc;
-  MTShaderFunction              *function;
+  MTComputePipelineDesc            *desc;
+  MTShaderFunction                 *function;
 #if MT_HAS_METAL4
-  MTL4LibraryFunctionDescriptor *function4;
+  MTL4LibraryFunctionDescriptor     *function4;
+  MTL4SpecializedFunctionDescriptor *specialized;
 #endif
 
   if (!pipeline || !pipeline->_priv || !func) {
@@ -129,7 +130,16 @@ mt_setComputeFunction(GPUComputePipeline *pipeline, GPUShaderFunction *func) {
     function4.library = function->library;
     function4.name    = function->name;
     [desc->function4 release];
-    desc->function4 = function4;
+
+    if (function->constants) {
+      specialized                    = [MTL4SpecializedFunctionDescriptor new];
+      specialized.functionDescriptor = function4;
+      specialized.constantValues     = function->constants;
+      [function4 release];
+      desc->function4 = specialized;
+    } else {
+      desc->function4 = function4;
+    }
   }
 #endif
 }

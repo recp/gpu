@@ -27,8 +27,8 @@ main(int argc, char **argv) {
   uint32_t              adapterCount;
   int                   ok;
 
-  if (argc > 2) {
-    fprintf(stderr, "usage: %s [lod.us]\n", argv[0]);
+  if (argc > 3) {
+    fprintf(stderr, "usage: %s [lod.us [constants.us]]\n", argv[0]);
     return 2;
   }
 
@@ -67,8 +67,13 @@ main(int argc, char **argv) {
   ok = gpu_test_copy(device);
   ok = gpu_test_sampler(device) && ok;
 
-  if (argc == 2)
+  if (argc >= 2) {
     ok = gpu_test_lod(device, argv[1]) && ok;
+  }
+
+  if (argc == 3) {
+    ok = gpu_test_constants(device, argv[2]) && ok;
+  }
 
   GPUDestroyDevice(device);
   GPUDestroyInstance(instance);

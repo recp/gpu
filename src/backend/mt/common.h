@@ -128,9 +128,10 @@ typedef struct GPUDeviceMT {
 } GPUDeviceMT;
 
 typedef struct MTShaderFunction {
-  id<MTLFunction> function;
-  id<MTLLibrary>  library;
-  NSString       *name;
+  id<MTLFunction>           function;
+  id<MTLLibrary>            library;
+  NSString                 *name;
+  MTLFunctionConstantValues *constants;
 } MTShaderFunction;
 
 typedef struct MTComputePipelineDesc {

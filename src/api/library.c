@@ -178,6 +178,8 @@ gpu_clearShaderMetadata(GPUShaderLibrary *library) {
   library->_resourceBindings = NULL;
   library->_staticSamplers   = NULL;
   library->_ptxInfo          = NULL;
+  library->_constants        = NULL;
+  library->_constantCount    = 0u;
   memset(&library->_reflection, 0, sizeof(library->_reflection));
 }
 
@@ -1712,6 +1714,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
   GPUShaderEntryInfoList           *entryInfo;
   uint8_t                          *metadata;
   char                             *textCursor;
+  size_t                            constantOffset;
   size_t                            entryInfoOffset;
   size_t                            entryResourceOffset;
   size_t                            resourceBindingOffset;
@@ -1738,7 +1741,8 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
   }
 
   runtimeInfo = &usReflection->runtime;
-  flags       = USL_BYTECODE_RUNTIME_INFO_FLAG_ENTRY_OVERFLOW
+  flags       = USL_BYTECODE_RUNTIME_INFO_FLAG_SPEC_CONSTANT_OVERFLOW
+                | USL_BYTECODE_RUNTIME_INFO_FLAG_ENTRY_OVERFLOW
                 | USL_BYTECODE_RUNTIME_INFO_FLAG_RESOURCE_OVERFLOW
                 | USL_BYTECODE_RUNTIME_INFO_FLAG_STATIC_SAMPLER_OVERFLOW
                 | USL_BYTECODE_RUNTIME_INFO_FLAG_SAMPLED_TEXTURE_PAIR_OVERFLOW
@@ -1748,6 +1752,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
       || (runtimeInfo->flags & flags) != 0u
       || runtimeInfo->entry_point_count > USL_RUNTIME_MAX_ENTRY_POINTS
       || runtimeInfo->resource_count > USL_RUNTIME_MAX_RESOURCES
+      || runtimeInfo->spec_constant_count > USL_RUNTIME_MAX_SPEC_CONSTANTS
       || runtimeInfo->static_sampler_count > USL_RUNTIME_MAX_STATIC_SAMPLERS
       || runtimeInfo->sampled_texture_pair_count >
         USL_RUNTIME_MAX_SAMPLED_TEXTURE_PAIRS) {
@@ -1830,11 +1835,17 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
   totalSize = 0u;
 
   if (!gpu_reserveMetadata(&totalSize,
-                           _Alignof(GPUShaderEntryInfoList),
-                           sizeof(*entryInfo),
-                           runtimeInfo->entry_point_count,
-                           sizeof(entryInfo->entries[0]),
-                           &entryInfoOffset)
+                           _Alignof(USLRuntimeSpecConstant),
+                           0u,
+                           runtimeInfo->spec_constant_count,
+                           sizeof(USLRuntimeSpecConstant),
+                           &constantOffset)
+      || !gpu_reserveMetadata(&totalSize,
+                              _Alignof(GPUShaderEntryInfoList),
+                              sizeof(*entryInfo),
+                              runtimeInfo->entry_point_count,
+                              sizeof(entryInfo->entries[0]),
+                              &entryInfoOffset)
       || !gpu_reserveMetadata(&totalSize,
                               _Alignof(GPUShaderResourceReflection),
                               0u,
@@ -2271,6 +2282,17 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
   }
 
   gpu_clearShaderMetadata(library);
+
+  if (constantOffset != SIZE_MAX) {
+    library->_constants = (USLRuntimeSpecConstant *)(metadata + constantOffset);
+  }
+
+  library->_constantCount = runtimeInfo->spec_constant_count;
+
+  if (library->_constantCount > 0u) {
+    memcpy(library->_constants, runtimeInfo->spec_constants,
+           (size_t)library->_constantCount * sizeof(*library->_constants));
+  }
 
   library->_metadata         = metadata;
   library->_entryInfo        = entryInfo;

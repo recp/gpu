@@ -46,6 +46,15 @@ run_sampler(void *ctx) {
 }
 
 static int
+run_constants(void *ctx) {
+  const char *path;
+
+  path = getenv("GPU_CONSTANTS_USL_PATH");
+
+  return !path || gpu_test_constants(((GPUApiTestContext *)ctx)->device, path);
+}
+
+static int
 run_bindgroup(void *ctx) {
   return gpu_test_bindgroup(((GPUApiTestContext *)ctx)->device);
 }
@@ -417,7 +426,7 @@ main(int argc, char **argv) {
   GPUInstanceCreateInfo instanceInfo  = {0};
   GPURuntimeConfig      runtimeConfig = {0};
   GPUApiTestContext     ctx;
-  GPUApiTest            tests[39];
+  GPUApiTest            tests[40];
   GPUInstance          *instance;
   GPUAdapter           *adapter;
   GPUDevice            *device;
@@ -631,6 +640,8 @@ main(int argc, char **argv) {
   tests[38] = (GPUApiTest){
     "dx12-binding-plan", run_dx12_binding_plan, &ctx
   };
+
+  tests[39] = (GPUApiTest){ "constants", run_constants, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

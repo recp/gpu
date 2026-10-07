@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "../impl.h"
+#include "constants.h"
 
 static const uint8_t webgpu_zeroPushConstants[GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT];
 
@@ -28,6 +29,8 @@ static GPUResult
 webgpu_createComputePipeline(GPUDevice                          *device,
                              const GPUComputePipelineCreateInfo *info,
                              GPUComputePipeline                 *pipeline) {
+  WGPUConstantEntry              constantEntries[USL_RUNTIME_MAX_SPEC_CONSTANTS];
+  char                          constantIDs[USL_RUNTIME_MAX_SPEC_CONSTANTS][11];
   WGPUComputePipelineDescriptor descriptor = WGPU_COMPUTE_PIPELINE_DESCRIPTOR_INIT;
   GPUComputePipelineWebGPU     *state;
   GPUDeviceWebGPU              *native;
@@ -73,6 +76,9 @@ webgpu_createComputePipeline(GPUDevice                          *device,
   descriptor.layout             = state->layout.layout;
   descriptor.compute.module     = info->library->_priv;
   descriptor.compute.entryPoint = gpu_webgpuString(info->entryPoint);
+
+  descriptor.compute.constantCount = webgpu_pipelineConstants(info->chain.pNext, constantEntries, constantIDs);
+  descriptor.compute.constants     = descriptor.compute.constantCount ? constantEntries : NULL;
 
   if (!(state->pipeline = wgpuDeviceCreateComputePipeline(native->device, &descriptor))) {
     gpu_webgpuDestroyPipelineLayout(&state->layout);

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "constants_internal.h"
 #include "../common.h"
 #include "buffer_internal.h"
 #include "cmdqueue_internal.h"
@@ -150,6 +151,10 @@ gpu_computePipelineExtensions(GPUDevice                                 *device,
   intersection = NULL;
 
   for (chain = info->chain.pNext; chain; chain = chain->pNext) {
+    if (chain->sType == GPU_STRUCTURE_TYPE_PIPELINE_CONSTANTS) {
+      continue;
+    }
+
     if (chain->sType != GPU_STRUCTURE_TYPE_INTERSECTION_FUNCTION_PIPELINE_EXT
         || intersection
         || (chain->structSize != 0u
@@ -277,9 +282,8 @@ gpuSetComputeAccelerationStructure(GPUComputePassEncoder       *pass,
   api->compute.accelerationStructure(pass, structure, index);
 }
 
-GPU_EXPORT
-GPUResult
-GPUCreateComputePipeline(GPUDevice                          *__restrict device,
+static GPUResult
+gpu_createComputePipeline(GPUDevice                          *__restrict device,
                          const GPUComputePipelineCreateInfo *__restrict info,
                          GPUComputePipeline                **__restrict outPipeline) {
   GPUPipelineCacheKey                      cacheKey;
@@ -287,6 +291,7 @@ GPUCreateComputePipeline(GPUDevice                          *__restrict device,
   GPUComputePipelineState                 *state;
   GPUComputePipeline                      *pipeline;
   GPUShaderFunction                       *function;
+  const GPUPipelineConstants              *constants;
   GPUApi                                  *api;
   const GPUIntersectionFunctionPipelineEXT *intersection;
   GPUResult                                result;
@@ -359,6 +364,7 @@ GPUCreateComputePipeline(GPUDevice                          *__restrict device,
     }
   }
 
+  constants  = gpuPipelineConstants(info->chain.pNext);
   entries[0] = info->entryPoint;
 
   if (!gpuPipelineLayoutMatchesShaderEntries(info->layout,
@@ -414,7 +420,7 @@ GPUCreateComputePipeline(GPUDevice                          *__restrict device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
-    if (!(function = gpuShaderFunction(info->library, info->entryPoint))) {
+    if (!(function = gpuShaderVariant(info->library, info->entryPoint, constants))) {
       gpuPipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
@@ -920,4 +926,37 @@ GPUEndComputePass(GPUComputePassEncoder *pass) {
                                pass->_timestampEndIndex,
                                false);
   }
+}
+
+GPU_EXPORT
+GPUResult
+GPUCreateComputePipeline(GPUDevice                          *device,
+                         const GPUComputePipelineCreateInfo *info,
+                         GPUComputePipeline                **outPipeline) {
+  GPUComputePipelineCreateInfo snapshot;
+  GPUPreparedConstants         prepared;
+  GPUResult                    result;
+
+  if (!outPipeline) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outPipeline = NULL;
+
+  if (!info || !info->library) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = gpuPrepareConstants(info->library, info->chain.pNext, true, &prepared);
+
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  snapshot             = *info;
+  snapshot.chain.pNext = prepared.chain;
+  result               = gpu_createComputePipeline(device, &snapshot, outPipeline);
+  free(prepared.values);
+
+  return result;
 }

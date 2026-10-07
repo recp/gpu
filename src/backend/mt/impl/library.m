@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../../../api/constants_internal.h"
 
 static const MTLCompareFunction mt_compareFunctions[] = {
   [GPU_COMPARE_NEVER]         = MTLCompareFunctionNever,
@@ -46,6 +47,7 @@ mt_destroyFunction(GPUShaderFunction *function) {
   native = function->_priv;
 
   if (native) {
+    [native->constants release];
     [native->name release];
     [native->library release];
     [native->function release];
@@ -152,17 +154,112 @@ mt_newLibraryWithSource(GPUDevice  *device,
   return library;
 }
 
-GPU_HIDE
-GPUShaderFunction*
-mt_newFunction(GPUShaderLibrary *lib, const char *name) {
-  GPUShaderFunction *func;
-  MTShaderFunction  *native;
-  id<MTLFunction>    mtFunc;
-  NSString          *mtName;
+static GPUShaderFunction*
+mt_newVariant(GPUShaderLibrary           *lib,
+              const char                 *name,
+              const GPUPipelineConstants *constants) {
+  GPUShaderFunction           *func;
+  MTShaderFunction            *native;
+  const USLRuntimeSpecConstant *source;
+  const GPUConstant           *value;
+  MTLFunctionConstantValues   *values;
+  id<MTLFunction>              mtFunc;
+  NSString                    *mtName;
+  NSError                     *error;
+  uint64_t                     unsignedValue;
+  int64_t                      signedValue;
+  uint32_t                     i;
+  float                        floatValue;
+  _Float16                     halfValue;
+  bool                         boolValue;
 
   mtName = [NSString stringWithUTF8String:name];
+  values = nil;
+  error  = nil;
 
-  if (!(mtFunc = [(id<MTLLibrary>)lib->_priv newFunctionWithName:mtName])) {
+  if (lib->_constantCount > 0u) {
+    values = [MTLFunctionConstantValues new];
+
+    for (i = 0u; i < lib->_constantCount; i++) {
+      source = &lib->_constants[i];
+
+      if (!source->has_default) {
+        continue;
+      }
+
+      signedValue   = source->default_int;
+      unsignedValue = source->default_uint;
+      floatValue    = (float)source->default_float;
+      halfValue     = (_Float16)source->default_float;
+      boolValue     = signedValue != 0;
+
+      switch (source->type.kind) {
+        case USL_RUNTIME_TYPE_BOOL:
+          [values setConstantValue:&boolValue type:MTLDataTypeBool atIndex:source->function_constant_id];
+          break;
+        case USL_RUNTIME_TYPE_I8:
+          [values setConstantValue:&signedValue type:MTLDataTypeChar atIndex:source->function_constant_id];
+          break;
+        case USL_RUNTIME_TYPE_I16:
+          [values setConstantValue:&signedValue type:MTLDataTypeShort atIndex:source->function_constant_id];
+          break;
+        case USL_RUNTIME_TYPE_I32:
+          [values setConstantValue:&signedValue type:MTLDataTypeInt atIndex:source->function_constant_id];
+          break;
+        case USL_RUNTIME_TYPE_I64:
+          [values setConstantValue:&signedValue type:MTLDataTypeLong atIndex:source->function_constant_id];
+          break;
+        case USL_RUNTIME_TYPE_U8:
+          [values setConstantValue:&unsignedValue type:MTLDataTypeUChar atIndex:source->function_constant_id];
+          break;
+        case USL_RUNTIME_TYPE_U16:
+          [values setConstantValue:&unsignedValue type:MTLDataTypeUShort atIndex:source->function_constant_id];
+          break;
+        case USL_RUNTIME_TYPE_U32:
+          [values setConstantValue:&unsignedValue type:MTLDataTypeUInt atIndex:source->function_constant_id];
+          break;
+        case USL_RUNTIME_TYPE_U64:
+          [values setConstantValue:&unsignedValue type:MTLDataTypeULong atIndex:source->function_constant_id];
+          break;
+        case USL_RUNTIME_TYPE_F16:
+          [values setConstantValue:&halfValue type:MTLDataTypeHalf atIndex:source->function_constant_id];
+          break;
+        case USL_RUNTIME_TYPE_F32:
+          [values setConstantValue:&floatValue type:MTLDataTypeFloat atIndex:source->function_constant_id];
+          break;
+        default: break;
+      }
+    }
+  }
+
+  if (constants) {
+    for (i = 0u; i < constants->constantCount; i++) {
+      value = &constants->pConstants[i];
+
+      switch (value->type) {
+        case GPU_CONSTANT_BOOL:
+          [values setConstantValue:&value->value.boolean type:MTLDataTypeBool atIndex:value->id];
+          break;
+        case GPU_CONSTANT_I32:
+          [values setConstantValue:&value->value.i32 type:MTLDataTypeInt atIndex:value->id];
+          break;
+        case GPU_CONSTANT_U32:
+          [values setConstantValue:&value->value.u32 type:MTLDataTypeUInt atIndex:value->id];
+          break;
+        case GPU_CONSTANT_F32:
+          [values setConstantValue:&value->value.f32 type:MTLDataTypeFloat atIndex:value->id];
+          break;
+        default: break;
+      }
+    }
+  }
+
+  mtFunc = values
+             ? [(id<MTLLibrary>)lib->_priv newFunctionWithName:mtName constantValues:values error:&error]
+             : [(id<MTLLibrary>)lib->_priv newFunctionWithName:mtName];
+
+  if (!mtFunc) {
+    [values release];
     return NULL;
   }
 
@@ -172,15 +269,18 @@ mt_newFunction(GPUShaderLibrary *lib, const char *name) {
   if (!func || !native) {
     free(native);
     free(func);
+    [values release];
     [mtFunc release];
     return NULL;
   }
 
-  native->function = mtFunc;
-  native->library  = [(id<MTLLibrary>)lib->_priv retain];
-  native->name     = [mtName copy];
+  native->constants = values;
+  native->function  = mtFunc;
+  native->library   = [(id<MTLLibrary>)lib->_priv retain];
+  native->name      = [mtName copy];
 
   if (!native->library || !native->name) {
+    [native->constants release];
     [native->name release];
     [native->library release];
     [native->function release];
@@ -192,6 +292,12 @@ mt_newFunction(GPUShaderLibrary *lib, const char *name) {
   func->_priv = native;
 
   return func;
+}
+
+GPU_HIDE
+GPUShaderFunction*
+mt_newFunction(GPUShaderLibrary *lib, const char *name) {
+  return mt_newVariant(lib, name, NULL);
 }
 
 GPU_HIDE
@@ -318,6 +424,7 @@ void
 mt_initLibrary(GPUApiLibrary *api) {
   api->newLibraryWithSource = mt_newLibraryWithSource;
   api->newFunction          = mt_newFunction;
+  api->newVariant           = mt_newVariant;
   api->destroyFunction      = mt_destroyFunction;
   api->destroyLibrary       = mt_destroyLibrary;
 }

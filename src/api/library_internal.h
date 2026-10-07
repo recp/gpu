@@ -19,6 +19,8 @@
 
 #include "../common.h"
 
+typedef struct USLRuntimeSpecConstant USLRuntimeSpecConstant;
+
 typedef struct GPUStaticSamplerDesc {
   uint32_t logicalIndex;
   uint32_t minFilter;
@@ -126,7 +128,9 @@ struct GPUShaderLibrary {
   void                           *_entryInfo;
   void                           *_entryResources;
   void                           *_resourceBindings;
+  USLRuntimeSpecConstant         *_constants;
   GPUShaderReflection             _reflection;
+  uint32_t                        _constantCount;
 };
 
 struct GPUShaderFunction {

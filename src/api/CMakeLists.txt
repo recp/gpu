@@ -4,6 +4,7 @@ target_sources(gpu PRIVATE
   cmd/cmdbuf.c
   cmd/cmdque.c
   compute.c
+  constants.c
   descr/descriptor.c
   device.c
   execution_graph.c

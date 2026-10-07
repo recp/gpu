@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "../impl.h"
+#include "constants.h"
 
 static const WGPUPrimitiveTopology webgpu_topologies[] = {
   [GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST]  = WGPUPrimitiveTopology_TriangleList,
@@ -209,6 +210,8 @@ webgpu_createPipeline(GPUDevice                         *device,
                       const GPURenderPipelineCreateInfo *info,
                       uint32_t                           requiredBindGroupMask,
                       GPURenderPipeline                 *pipeline) {
+  WGPUConstantEntry            constantEntries[USL_RUNTIME_MAX_SPEC_CONSTANTS];
+  char                        constantIDs[USL_RUNTIME_MAX_SPEC_CONSTANTS][11];
   WGPURenderPipelineDescriptor descriptor = WGPU_RENDER_PIPELINE_DESCRIPTOR_INIT;
   WGPUFragmentState            fragment   = WGPU_FRAGMENT_STATE_INIT;
   WGPUColorTargetState         targets[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
@@ -410,6 +413,11 @@ webgpu_createPipeline(GPUDevice                         *device,
   fragment.targetCount = info->colorTargetCount;
   fragment.targets     = targets;
   descriptor.fragment  = &fragment;
+
+  descriptor.vertex.constantCount = webgpu_pipelineConstants(info->chain.pNext, constantEntries, constantIDs);
+  descriptor.vertex.constants     = descriptor.vertex.constantCount ? constantEntries : NULL;
+  fragment.constantCount          = descriptor.vertex.constantCount;
+  fragment.constants              = descriptor.vertex.constants;
 
   state->pipeline = wgpuDeviceCreateRenderPipeline(native->device, &descriptor);
   free(vertexBuffers);

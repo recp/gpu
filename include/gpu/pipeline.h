@@ -32,6 +32,39 @@ typedef struct GPUPipelineLayout GPUPipelineLayout;
 typedef struct GPUPipelineCache  GPUPipelineCache;
 typedef struct GPUDevice         GPUDevice;
 
+typedef enum GPUConstantType {
+  GPU_CONSTANT_BOOL = 1,
+  GPU_CONSTANT_I32,
+  GPU_CONSTANT_U32,
+  GPU_CONSTANT_F32,
+  GPU_CONSTANT_I64,
+  GPU_CONSTANT_U64,
+  GPU_CONSTANT_F64
+} GPUConstantType;
+
+typedef union GPUConstantValue {
+  int64_t  i64;
+  uint64_t u64;
+  double   f64;
+  int32_t  i32;
+  uint32_t u32;
+  float    f32;
+  bool     boolean;
+} GPUConstantValue;
+
+typedef struct GPUConstant {
+  GPUConstantValue value;
+  uint32_t         id;
+  GPUConstantType  type;
+} GPUConstant;
+
+/* one value per id, shared by the selected render/compute stages. */
+typedef struct GPUPipelineConstants {
+  GPUChainedStruct   chain;
+  const GPUConstant *pConstants;
+  uint32_t           constantCount;
+} GPUPipelineConstants;
+
 typedef enum GPUPrimitiveTopology {
   GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST  = 0,
   GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP = 1,

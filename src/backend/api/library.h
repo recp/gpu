@@ -42,6 +42,10 @@ typedef struct GPUApiLibrary {
 
   GPUShaderFunction * (*newFunction)(GPUShaderLibrary *lib, const char *name);
 
+  GPUShaderFunction* (*newVariant)(GPUShaderLibrary           *lib,
+                                  const char                 *name,
+                                  const GPUPipelineConstants *constants);
+
   void (*destroyFunction)(GPUShaderFunction *function);
 
   void (*destroyLibrary)(GPUShaderLibrary *lib);

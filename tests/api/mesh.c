@@ -136,10 +136,48 @@ mesh_pixels_match(const uint8_t pixels[MESH_PIXEL_BYTES], int meshOnly) {
 }
 
 static int
+check_mesh_constants(GPUDevice *device, const GPURenderPipelineCreateInfo *base) {
+  GPURenderPipelineCreateInfo info;
+  GPUMeshPipelineEXT          mesh;
+  GPUPipelineConstants        constants = {0};
+  GPUConstant                 value = {.value.boolean = false, .id = 7u, .type = GPU_CONSTANT_BOOL};
+  GPURenderPipeline          *first = NULL;
+  GPURenderPipeline          *same  = NULL;
+  int                         ok;
+
+  info = *base;
+  mesh = *(const GPUMeshPipelineEXT *)base->chain.pNext;
+
+  constants.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CONSTANTS;
+  constants.chain.structSize = sizeof(constants);
+  constants.pConstants       = &value;
+  constants.constantCount    = 1u;
+  mesh.chain.pNext           = &constants.chain;
+  info.chain.pNext           = &mesh.chain;
+
+  ok = GPUCreateRenderPipeline(device, &info, &first) == GPU_OK;
+
+  mesh.chain.pNext       = NULL;
+  constants.chain.pNext  = &mesh.chain;
+  info.chain.pNext       = &constants.chain;
+
+  ok = ok && GPUCreateRenderPipeline(device, &info, &same) == GPU_OK && same == first;
+  GPUDestroyRenderPipeline(same);
+  GPUDestroyRenderPipeline(first);
+
+  if (ok) {
+    puts("mesh/constants: both chain orders reuse the same native pipeline");
+  }
+
+  return ok;
+}
+
+static int
 test_mesh_draw(GPUDevice  *device,
                const void *artifact,
                uint64_t    artifactSize,
-               int         meshOnly) {
+               int         meshOnly,
+               GPUBackend  backend) {
   const TaskParams             taskParams = {
     .meshGroups = {1u, 1u, 1u, 0u},
     .offset     = {0.0f, 0.0f, 0.0f, 0.0f},
@@ -297,6 +335,13 @@ test_mesh_draw(GPUDevice  *device,
 
   GPUDestroyRenderPipeline(cachedPipeline);
   cachedPipeline     = NULL;
+
+  if ((backend == GPU_BACKEND_METAL || backend == GPU_BACKEND_VULKAN)
+      && !check_mesh_constants(device, &pipelineInfo)) {
+    fprintf(stderr, "mesh/constants chain order failed\n");
+    goto cleanup;
+  }
+
   pipelineInfo.cache = NULL;
   GPUDestroyRenderPipeline(pipeline);
 
@@ -595,7 +640,7 @@ main(int argc, char **argv) {
     return 1;
   }
 
-  ok = test_mesh_draw(device, artifact, artifactSize, meshOnly);
+  ok = test_mesh_draw(device, artifact, artifactSize, meshOnly, backend);
   GPUDestroyDevice(device);
   GPUDestroyInstance(instance);
   free(artifact);

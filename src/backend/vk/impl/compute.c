@@ -20,6 +20,7 @@
 #include "../../../api/descr/descriptor_internal.h"
 #include "../../../api/library_internal.h"
 #include "pipeline_cache.h"
+#include "constants.h"
 
 static GPUComputeEncoderVk*
 vk__computeEncoder(GPUComputePassEncoder *encoder) {
@@ -31,6 +32,9 @@ GPUResult
 vk_createComputePipeline(GPUDevice                          *device,
                          const GPUComputePipelineCreateInfo *info,
                          GPUComputePipeline                 *pipeline) {
+  VkSpecializationMapEntry        constantEntries[USL_RUNTIME_MAX_SPEC_CONSTANTS];
+  uint32_t                       constantData[USL_RUNTIME_MAX_SPEC_CONSTANTS];
+  VkSpecializationInfo           constants = {0};
   VkPipelineShaderStageCreateInfo stage        = {0};
   VkComputePipelineCreateInfo     pipelineInfo = {0};
   GPUDeviceVk                    *deviceVk;
@@ -77,6 +81,9 @@ vk_createComputePipeline(GPUDevice                          *device,
     free(state);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
+  vk_pipelineConstants(info->chain.pNext, &constants, constantEntries, constantData);
+  stage.pSpecializationInfo = constants.mapEntryCount ? &constants : NULL;
 
   stage.sType         = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   stage.stage         = VK_SHADER_STAGE_COMPUTE_BIT;

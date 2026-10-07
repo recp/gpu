@@ -147,18 +147,27 @@ mt_fillBlendDescriptor4(MTL4RenderPipelineColorAttachmentDescriptor *desc,
   desc.writeMask                   = mt_colorWriteMask(blend->writeMask);
 }
 
-static MTL4LibraryFunctionDescriptor*
+static MTL4FunctionDescriptor*
 mt_functionDescriptor4(const MTShaderFunction *function) {
+  MTL4LibraryFunctionDescriptor     *descriptor;
+  MTL4SpecializedFunctionDescriptor *specialized;
+
   if (!function || !function->library || !function->name) {
     return nil;
   }
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
-    MTL4LibraryFunctionDescriptor *descriptor;
-
     descriptor         = [MTL4LibraryFunctionDescriptor new];
     descriptor.library = function->library;
     descriptor.name    = function->name;
+
+    if (function->constants) {
+      specialized                    = [MTL4SpecializedFunctionDescriptor new];
+      specialized.functionDescriptor = descriptor;
+      specialized.constantValues     = function->constants;
+      [descriptor release];
+      return specialized;
+    }
 
     return descriptor;
   }

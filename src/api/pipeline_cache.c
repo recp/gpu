@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "constants_internal.h"
 #include "compute_internal.h"
 #include "descr/descriptor_internal.h"
 #include "execution_graph_internal.h"
@@ -91,8 +92,10 @@ struct GPUPipelineCompileJob {
   GPUColorTargetState        *colorTargets;
   GPUVertexBufferLayout      *bufferLayouts;
   GPUVertexAttribute         *attributes;
+  GPUConstant                *values;
   GPUDepthStencilState        depthStencil;
   GPUMeshPipelineEXT          mesh;
+  GPUPipelineConstants        constants;
   GPURenderPipelineCreateInfo info;
   uint64_t                    id;
   GPUPipelineCompileJobState  state;
@@ -241,6 +244,33 @@ gpu_pipelineKeyWriteDepthStencil(GPUPipelineKeyWriter       *writer,
 }
 
 static void
+gpu_pipelineKeyWriteConstants(GPUPipelineKeyWriter   *writer,
+                              const GPUChainedStruct *chain) {
+  const GPUPipelineConstants *constants;
+  const GPUConstant          *value;
+  uint32_t                    count;
+  uint32_t                    i;
+
+  constants = gpuPipelineConstants(chain);
+  count     = constants ? constants->constantCount : 0u;
+  GPU_PIPELINE_KEY_WRITE(writer, count);
+
+  for (i = 0u; i < count; i++) {
+    value = &constants->pConstants[i];
+    GPU_PIPELINE_KEY_WRITE(writer, value->id);
+    GPU_PIPELINE_KEY_WRITE(writer, value->type);
+
+    switch (value->type) {
+      case GPU_CONSTANT_BOOL: GPU_PIPELINE_KEY_WRITE(writer, value->value.boolean); break;
+      case GPU_CONSTANT_I32:  GPU_PIPELINE_KEY_WRITE(writer, value->value.i32); break;
+      case GPU_CONSTANT_U32:  GPU_PIPELINE_KEY_WRITE(writer, value->value.u32); break;
+      case GPU_CONSTANT_F32:  GPU_PIPELINE_KEY_WRITE(writer, value->value.f32); break;
+      default: writer->valid = false; break;
+    }
+  }
+}
+
+static void
 gpu_pipelineKeyWriteRenderInfo(GPUPipelineKeyWriter              *writer,
                                const GPURenderPipelineCreateInfo *info) {
   const GPUMeshPipelineEXT    *mesh;
@@ -256,12 +286,13 @@ gpu_pipelineKeyWriteRenderInfo(GPUPipelineKeyWriter              *writer,
 
   layout       = (uintptr_t)info->layout;
   library      = (uintptr_t)info->library;
-  mesh         = info->chain.pNext ? (const GPUMeshPipelineEXT *)info->chain.pNext : NULL;
+  mesh         = gpuPipelineMesh(info->chain.pNext);
   pipelineType = mesh ? GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT
                       : GPU_STRUCTURE_TYPE_NONE;
   GPU_PIPELINE_KEY_WRITE(writer, layout);
   GPU_PIPELINE_KEY_WRITE(writer, library);
   GPU_PIPELINE_KEY_WRITE(writer, pipelineType);
+  gpu_pipelineKeyWriteConstants(writer, info->chain.pNext);
 
   if (mesh) {
     gpu_pipelineKeyWriteString(writer, mesh->taskEntry ? mesh->taskEntry : "");
@@ -324,6 +355,7 @@ gpu_pipelineKeyWriteComputeInfo(GPUPipelineKeyWriter               *writer,
   GPU_PIPELINE_KEY_WRITE(writer, layout);
   GPU_PIPELINE_KEY_WRITE(writer, library);
   gpu_pipelineKeyWriteString(writer, info->entryPoint);
+  gpu_pipelineKeyWriteConstants(writer, info->chain.pNext);
 }
 
 static void
@@ -444,10 +476,6 @@ gpu_buildComputePipelineKey(const GPUComputePipelineCreateInfo *info,
   outKey->size     = 0u;
   outKey->hash     = 0u;
   outKey->ownsData = false;
-
-  if (info->chain.pNext) {
-    return false;
-  }
 
   writer.data     = outKey->inlineData;
   writer.offset   = 0u;
@@ -785,6 +813,7 @@ gpu_destroyPipelineJob(GPUPipelineCompileJob *job) {
   }
 
   GPUDestroyRenderPipeline(job->pipeline);
+  free(job->values);
   free(job->attributes);
   free(job->bufferLayouts);
   free(job->colorTargets);
@@ -799,12 +828,13 @@ gpu_destroyPipelineJob(GPUPipelineCompileJob *job) {
 static GPUPipelineCompileJob*
 gpu_createPipelineJob(GPUPipelineCache                  *cache,
                       const GPURenderPipelineCreateInfo *info) {
-  GPUPipelineCompileJob    *job;
-  const GPUMeshPipelineEXT *mesh;
-  uint32_t                  attributeCount;
-  uint32_t                  cursor;
-  uint32_t                  i;
-  uint32_t                  k;
+  GPUPipelineCompileJob     *job;
+  const GPUPipelineConstants *constants;
+  const GPUMeshPipelineEXT   *mesh;
+  uint32_t                    attributeCount;
+  uint32_t                    cursor;
+  uint32_t                    i;
+  uint32_t                    k;
 
   if (!(job = calloc(1, sizeof(*job)))) {
     return NULL;
@@ -820,8 +850,22 @@ gpu_createPipelineJob(GPUPipelineCache                  *cache,
     return NULL;
   }
 
-  if (info->chain.pNext) {
-    mesh           = (const GPUMeshPipelineEXT *)info->chain.pNext;
+  mesh      = gpuPipelineMesh(info->chain.pNext);
+  constants = gpuPipelineConstants(info->chain.pNext);
+
+  if (constants && constants->constantCount > 0u) {
+    if (!(job->values = malloc((size_t)constants->constantCount * sizeof(*job->values)))) {
+      gpu_destroyPipelineJob(job);
+      return NULL;
+    }
+
+    memcpy(job->values, constants->pConstants,
+           (size_t)constants->constantCount * sizeof(*job->values));
+    job->constants            = *constants;
+    job->constants.pConstants = job->values;
+  }
+
+  if (mesh) {
     job->taskEntry = gpu_pipelineCacheDupString(mesh->taskEntry);
     job->meshEntry = gpu_pipelineCacheDupString(mesh->meshEntry);
 
@@ -894,7 +938,12 @@ gpu_createPipelineJob(GPUPipelineCache                  *cache,
   job->info.fragmentEntry         = job->fragmentEntry;
   job->info.pColorTargets         = job->colorTargets;
   job->info.vertex.pBufferLayouts = job->bufferLayouts;
-  job->info.chain.pNext           = info->chain.pNext ? &job->mesh.chain : NULL;
+  job->info.chain.pNext           = mesh ? &job->mesh.chain : NULL;
+
+  if (job->values) {
+    job->constants.chain.pNext = job->info.chain.pNext;
+    job->info.chain.pNext      = &job->constants.chain;
+  }
 
   if (info->pDepthStencilState) {
     job->depthStencil            = *info->pDepthStencilState;
@@ -919,20 +968,16 @@ gpu_pipelineInfoCanCopy(const GPURenderPipelineCreateInfo *info) {
     return false;
   }
 
-  if ((extension = info->chain.pNext)) {
+  mesh = gpuPipelineMesh(info->chain.pNext);
+
+  for (extension = info->chain.pNext; extension; extension = extension->pNext) {
     if (extension->sType != GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT
-        || (extension->structSize != 0u
-            && extension->structSize < sizeof(GPUMeshPipelineEXT))
-        || extension->pNext) {
+        && extension->sType != GPU_STRUCTURE_TYPE_PIPELINE_CONSTANTS) {
       return false;
     }
+  }
 
-    mesh = (const GPUMeshPipelineEXT *)extension;
-
-    if (!mesh->meshEntry) {
-      return false;
-    }
-  } else if (!info->vertexEntry) {
+  if (mesh ? !mesh->meshEntry : !info->vertexEntry) {
     return false;
   }
 
@@ -982,7 +1027,7 @@ gpu_pipelineCacheWorkerRun(GPUPipelineCache *cache) {
     gpu_pipelineCacheUnlock(cache);
 
     pipeline = NULL;
-    result   = GPUCreateRenderPipeline(cache->device, &job->info, &pipeline);
+    result   = gpuCreateRenderPipeline(cache->device, &job->info, &pipeline);
 
     gpu_pipelineCacheLock(cache);
     job->pipeline = pipeline;
@@ -1293,6 +1338,71 @@ gpuRecordPipelineCompile(GPUDevice *device, GPUPipelineCache *cache) {
   gpu_pipelineCacheUnlock(cache);
 }
 
+static GPUResult
+gpu_compileRenderPipelineAsync(GPUDevice                         *__restrict device,
+                              GPUPipelineCache                  *__restrict cache,
+                              const GPURenderPipelineCreateInfo *__restrict info,
+                              GPUPipelineCompileHandle          *__restrict outHandle) {
+  GPUPipelineCompileJob *job;
+
+  if (!outHandle) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  outHandle->id = 0;
+
+  if (!device || !cache || cache->device != device
+      || !gpu_pipelineInfoCanCopy(info) || info->layout->_device != device
+      || info->library->_device != device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!(job = gpu_createPipelineJob(cache, info))) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  gpu_deviceCacheLock(device);
+  job->id = device->_nextPipelineCompileId++;
+
+  if (job->id == 0u) {
+    job->id = device->_nextPipelineCompileId++;
+  }
+
+  gpu_pipelineCacheLock(cache);
+
+  if (cache->jobCount == cache->maxEntries) {
+    gpu_pipelineCacheUnlock(cache);
+    gpu_deviceCacheUnlock(device);
+    gpu_destroyPipelineJob(job);
+    return GPU_ERROR_INSUFFICIENT_CAPACITY;
+  }
+
+  if (!gpu_pipelineCacheStartWorker(cache)) {
+    gpu_pipelineCacheUnlock(cache);
+    gpu_deviceCacheUnlock(device);
+    gpu_destroyPipelineJob(job);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  job->allNext = cache->jobs;
+  cache->jobs  = job;
+
+  if (cache->queueTail) {
+    cache->queueTail->queueNext = job;
+  } else {
+    cache->queueHead = job;
+  }
+
+  cache->queueTail  = job;
+  cache->jobCount++;
+  outHandle->id = job->id;
+  gpu_pipelineCacheSignal(cache);
+  gpu_pipelineCacheUnlock(cache);
+  gpu_deviceCacheUnlock(device);
+
+  return GPU_OK;
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreatePipelineCache(GPUDevice                        *__restrict device,
@@ -1522,72 +1632,6 @@ GPUPrewarmRenderPipelines(GPUDevice                         *__restrict device,
 
 GPU_EXPORT
 GPUResult
-GPUCompileRenderPipelineAsync(GPUDevice                         *__restrict device,
-                              GPUPipelineCache                  *__restrict cache,
-                              const GPURenderPipelineCreateInfo *__restrict info,
-                              GPUPipelineCompileHandle          *__restrict outHandle) {
-  GPUPipelineCompileJob *job;
-
-  if (!outHandle) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  outHandle->id = 0;
-
-  if (!device || !cache || cache->device != device
-      || !gpu_pipelineInfoCanCopy(info) || info->layout->_device != device
-      || info->library->_device != device) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  if (!(job = gpu_createPipelineJob(cache, info))) {
-    return GPU_ERROR_OUT_OF_MEMORY;
-  }
-
-  gpu_deviceCacheLock(device);
-  job->id = device->_nextPipelineCompileId++;
-
-  if (job->id == 0u) {
-    job->id = device->_nextPipelineCompileId++;
-  }
-
-  gpu_pipelineCacheLock(cache);
-
-  if (cache->jobCount == cache->maxEntries) {
-    gpu_pipelineCacheUnlock(cache);
-    gpu_deviceCacheUnlock(device);
-    gpu_destroyPipelineJob(job);
-    return GPU_ERROR_INSUFFICIENT_CAPACITY;
-  }
-
-  if (!gpu_pipelineCacheStartWorker(cache)) {
-    gpu_pipelineCacheUnlock(cache);
-    gpu_deviceCacheUnlock(device);
-    gpu_destroyPipelineJob(job);
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-
-  job->allNext = cache->jobs;
-  cache->jobs  = job;
-
-  if (cache->queueTail) {
-    cache->queueTail->queueNext = job;
-  } else {
-    cache->queueHead = job;
-  }
-
-  cache->queueTail  = job;
-  cache->jobCount++;
-  outHandle->id = job->id;
-  gpu_pipelineCacheSignal(cache);
-  gpu_pipelineCacheUnlock(cache);
-  gpu_deviceCacheUnlock(device);
-
-  return GPU_OK;
-}
-
-GPU_EXPORT
-GPUResult
 GPUPollRenderPipelineCompile(GPUDevice                *__restrict device,
                              GPUPipelineCompileHandle             handle,
                              GPUPipelineCompileStatus *__restrict outStatus,
@@ -1649,4 +1693,38 @@ GPUPollRenderPipelineCompile(GPUDevice                *__restrict device,
   gpu_deviceCacheUnlock(device);
 
   return GPU_ERROR_INVALID_ARGUMENT;
+}
+
+GPU_EXPORT
+GPUResult
+GPUCompileRenderPipelineAsync(GPUDevice                         *device,
+                              GPUPipelineCache                  *cache,
+                              const GPURenderPipelineCreateInfo *info,
+                              GPUPipelineCompileHandle          *outHandle) {
+  GPURenderPipelineCreateInfo snapshot;
+  GPUPreparedConstants        prepared;
+  GPUResult                   result;
+
+  if (!outHandle) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  outHandle->id = 0u;
+
+  if (!info || !info->library) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = gpuPrepareConstants(info->library, info->chain.pNext, false, &prepared);
+
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  snapshot             = *info;
+  snapshot.chain.pNext = prepared.chain;
+  result               = gpu_compileRenderPipelineAsync(device, cache, &snapshot, outHandle);
+  free(prepared.values);
+
+  return result;
 }

@@ -110,6 +110,9 @@ int
 gpu_test_sampler(GPUDevice *device);
 
 int
+gpu_test_constants(GPUDevice *device, const char *bytecodePath);
+
+int
 gpu_test_lod(GPUDevice *device, const char *bytecodePath);
 
 int

@@ -19,6 +19,7 @@
 #include "../../../api/library_internal.h"
 #include "../../../api/render/pipeline_internal.h"
 #include "pipeline_cache.h"
+#include "constants.h"
 
 static const VkPrimitiveTopology vk_topologies[] = {
   [GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST]  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
@@ -359,6 +360,9 @@ vk_createRenderPipeline(GPUDevice                         *device,
                         const GPURenderPipelineCreateInfo *info,
                         uint32_t                           requiredBindGroupMask,
                         GPURenderPipeline                 *pipeline) {
+  VkSpecializationMapEntry            constantEntries[USL_RUNTIME_MAX_SPEC_CONSTANTS];
+  uint32_t                           constantData[USL_RUNTIME_MAX_SPEC_CONSTANTS];
+  VkSpecializationInfo               constants = {0};
   GPUDeviceVk                       *deviceVk;
   GPUShaderLibraryVk                *library;
   GPUPipelineLayoutVk               *layout;
@@ -395,6 +399,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkResult                                        result;
   uint32_t                                        vertexAttributeCount;
   uint32_t                                        stageCount;
+  uint32_t                                        stageIndex;
   VkSampleCountFlagBits                           sampleCount;
 
   if (!device || !device->_priv || !info || !pipeline
@@ -616,6 +621,12 @@ vk_createRenderPipeline(GPUDevice                         *device,
   stages[stageCount].module = library->module;
   stages[stageCount].pName  = info->fragmentEntry;
   stageCount++;
+
+  vk_pipelineConstants(info->chain.pNext, &constants, constantEntries, constantData);
+
+  for (stageIndex = 0u; stageIndex < stageCount; stageIndex++) {
+    stages[stageIndex].pSpecializationInfo = constants.mapEntryCount ? &constants : NULL;
+  }
 
   vertexInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
   vertexInput.vertexBindingDescriptionCount   = info->vertex.bufferLayoutCount;
