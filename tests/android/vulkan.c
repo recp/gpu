@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
-#include <gpu/gpu.h>
-
-#include <stdio.h>
-
-int gpu_test_copy(GPUDevice *device);
+#include "../api/test.h"
 
 int
-main(void) {
+main(int argc, char **argv) {
   GPUInstanceCreateInfo instanceInfo = {0};
   GPUAdapterProperties  properties   = {0};
   GPUInstance          *instance;
@@ -31,10 +27,16 @@ main(void) {
   uint32_t              adapterCount;
   int                   ok;
 
+  if (argc > 2) {
+    fprintf(stderr, "usage: %s [lod.us]\n", argv[0]);
+    return 2;
+  }
+
   instanceInfo.chain.sType      = GPU_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instanceInfo.chain.structSize = sizeof(instanceInfo);
   instanceInfo.label            = "android-vulkan-test";
   instanceInfo.preferredBackend = GPU_BACKEND_VULKAN;
+  instanceInfo.enableValidation = getenv("GPU_ANDROID_VALIDATION") != NULL;
   instance                      = NULL;
 
   if (GPUCreateInstance(&instanceInfo, &instance) != GPU_OK || !instance) {
@@ -61,17 +63,22 @@ main(void) {
   }
 
   printf("android: %s\n", properties.name ? properties.name : "Vulkan adapter");
+  fflush(stdout);
   ok = gpu_test_copy(device);
+  ok = gpu_test_sampler(device) && ok;
+
+  if (argc == 2)
+    ok = gpu_test_lod(device, argv[1]) && ok;
 
   GPUDestroyDevice(device);
   GPUDestroyInstance(instance);
 
   if (!ok) {
-    fprintf(stderr, "android: copy/blit/mipmap validation failed\n");
+    fprintf(stderr, "android: Vulkan validation failed\n");
     return 1;
   }
 
-  puts("android: copy/blit/mipmap validation passed");
+  puts("android: copy/blit/mipmap/sampler validation passed");
 
   return 0;
 }

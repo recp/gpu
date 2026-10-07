@@ -2,7 +2,10 @@ if(GPU_BUILD_ANDROID_TESTS)
   add_executable(gpu-android-vulkan-test
     ${PROJECT_SOURCE_DIR}/tests/android/vulkan.c
     ${PROJECT_SOURCE_DIR}/tests/api/copy.c
+    ${PROJECT_SOURCE_DIR}/tests/api/lod.c
     ${PROJECT_SOURCE_DIR}/tests/api/mipmaps.c
+    ${PROJECT_SOURCE_DIR}/tests/api/runner.c
+    ${PROJECT_SOURCE_DIR}/tests/api/sampler.c
     ${PROJECT_SOURCE_DIR}/tests/api/texture_transfer.c
   )
   target_include_directories(gpu-android-vulkan-test PRIVATE
