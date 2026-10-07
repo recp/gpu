@@ -597,8 +597,11 @@ check_copy_pass_validation(GPUDevice *device) {
                              textureBytes,
                              sizeof(textureBytes)) == GPU_OK
        && memcmp(pixels, bufferCopyBytes, sizeof(pixels)) == 0
-       && copy_test_rows_equal(pixels, textureBytes)
-       && GPUWaitFence(fence, 0u) == GPU_OK;
+       && copy_test_rows_equal(pixels, textureBytes);
+
+  /* readback completes gpu writes; the public fence also waits for callbacks. */
+  if (GPUWaitFence(fence, UINT64_MAX) != GPU_OK)
+    ok = 0;
 
   if (!ok) {
     fprintf(stderr, "copy pass readback mismatch\n");
