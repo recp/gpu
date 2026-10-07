@@ -309,6 +309,7 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
 
         if (!(sampler = gpu_webgpuCreateSampler(device,
                                                 &entries[entryIndex].immutableSamplerDesc,
+                                                NULL,
                                                 NULL))) {
           goto fail;
         }

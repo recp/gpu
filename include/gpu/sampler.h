@@ -61,6 +61,13 @@ typedef struct GPUSamplerCreateInfo {
   GPUSamplerDesc   desc;
 } GPUSamplerCreateInfo;
 
+/* optional lod range; chain to GPUSamplerCreateInfo. */
+typedef struct GPUSamplerLODClamp {
+  GPUChainedStruct chain;
+  float            minLOD;
+  float            maxLOD;
+} GPUSamplerLODClamp;
+
 GPU_EXPORT
 GPUResult
 GPUCreateSampler(GPUDevice                  *__restrict device,

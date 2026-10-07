@@ -27,6 +27,11 @@ struct GPUSampler {
   GPUSamplerDesc desc;
 };
 
+static inline const GPUSamplerLODClamp*
+gpuSamplerLODClamp(const GPUSamplerCreateInfo *info) {
+  return info ? (const GPUSamplerLODClamp *)info->chain.pNext : NULL;
+}
+
 static inline GPUApi*
 gpuSamplerApi(const GPUSampler *sampler) {
   return sampler ? gpuDeviceApi(sampler->device) : NULL;

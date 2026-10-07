@@ -75,7 +75,10 @@ webgpu_createSampler(GPUApi          *__restrict api,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  if (!(sampler->_priv = gpu_webgpuCreateSampler(device, &info->desc, info->label))) {
+  if (!(sampler->_priv = gpu_webgpuCreateSampler(device,
+                                                &info->desc,
+                                                info->label,
+                                                gpuSamplerLODClamp(info)))) {
     free(sampler);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -99,9 +102,10 @@ webgpu_destroySampler(GPUSampler *__restrict sampler) {
 }
 
 WGPUSampler
-gpu_webgpuCreateSampler(GPUDevice            *device,
-                        const GPUSamplerDesc *desc,
-                        const char           *label) {
+gpu_webgpuCreateSampler(GPUDevice                *device,
+                       const GPUSamplerDesc     *desc,
+                       const char               *label,
+                       const GPUSamplerLODClamp *lod) {
   WGPUSamplerDescriptor descriptor = WGPU_SAMPLER_DESCRIPTOR_INIT;
   GPUDeviceWebGPU      *native;
 
@@ -124,6 +128,11 @@ gpu_webgpuCreateSampler(GPUDevice            *device,
   descriptor.compare       = desc->compareEnable
                                ? webgpu_compareFunction(desc->compare)
                                : WGPUCompareFunction_Undefined;
+
+  if (lod) {
+    descriptor.lodMinClamp = lod->minLOD;
+    descriptor.lodMaxClamp = lod->maxLOD;
+  }
 
   return wgpuDeviceCreateSampler(native->device, &descriptor);
 }

@@ -565,6 +565,7 @@ mt_createTextureView(GPUTexture                     *__restrict texture,
   MTLTextureViewDescriptor *descriptor;
 #endif
   MTLTextureType            nativeViewType;
+  float                     minLOD;
 #if MT_HAS_METAL4
   GPUResult                 result;
 #endif
@@ -580,12 +581,14 @@ mt_createTextureView(GPUTexture                     *__restrict texture,
   nativeTexture  = mt_nativeTexture(texture);
   nativeViewType = mt_textureViewType(info->viewType, texture->sampleCount);
   nativeView     = nil;
+  minLOD         = gpuTextureViewMinLOD(info);
   fullView       = info->format == texture->format
                    && nativeTexture.textureType == nativeViewType
                    && info->baseMipLevel == 0
                    && info->mipLevelCount == texture->mipLevelCount
                    && info->baseArrayLayer == 0
-                   && info->arrayLayerCount == gpuTextureArrayLayerCount(texture);
+                   && info->arrayLayerCount == gpuTextureArrayLayerCount(texture)
+                   && minLOD == 0.0f;
 
   if (!(view = calloc(1, sizeof(*view) + sizeof(*slot)))) {
     return GPU_ERROR_OUT_OF_MEMORY;
@@ -597,7 +600,7 @@ mt_createTextureView(GPUTexture                     *__restrict texture,
   if (!fullView) {
     deviceMT = texture->device->_priv;
 
-    if (deviceMT && deviceMT->commandMode == MTCommandMode4) {
+    if (deviceMT && (deviceMT->commandMode == MTCommandMode4 || minLOD != 0.0f)) {
       if (@available(macOS 26.0, iOS 26.0, *)) {
         descriptor             = [MTLTextureViewDescriptor new];
         descriptor.pixelFormat = mt_format(info->format);
@@ -606,23 +609,44 @@ mt_createTextureView(GPUTexture                     *__restrict texture,
                                              info->mipLevelCount);
         descriptor.sliceRange  = NSMakeRange(info->baseArrayLayer,
                                              info->arrayLayerCount);
-        result                 = mt_acquireTextureView(deviceMT,
-                                                       nativeTexture,
-                                                       descriptor,
-                                                       slot,
-                                                       &view->_gpuResourceID);
-        [descriptor release];
+#if defined(__MAC_27_0) && defined(__IPHONE_27_0)
+        if (@available(macOS 27.0, iOS 27.0, *)) {
+          descriptor.minLOD = minLOD;
+        }
+#endif
 
-        if (result != GPU_OK) {
-          free(view);
-          return result;
+        if (deviceMT->commandMode == MTCommandMode4) {
+          result = mt_acquireTextureView(deviceMT,
+                                         nativeTexture,
+                                         descriptor,
+                                         slot,
+                                         &view->_gpuResourceID);
+
+          if (result != GPU_OK) {
+            [descriptor release];
+            free(view);
+            return result;
+          }
         }
 
-        if ((texture->usage &
-             (GPU_TEXTURE_USAGE_COLOR_TARGET |
-              GPU_TEXTURE_USAGE_DEPTH_STENCIL |
-              GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT)) == 0u) {
+        if (minLOD != 0.0f) {
+          nativeView = [nativeTexture newTextureViewWithDescriptor:descriptor];
+        } else if ((texture->usage &
+                    (GPU_TEXTURE_USAGE_COLOR_TARGET |
+                     GPU_TEXTURE_USAGE_DEPTH_STENCIL |
+                     GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT)) == 0u) {
           nativeView = [nativeTexture retain];
+        }
+
+        [descriptor release];
+
+        if (minLOD != 0.0f && !nativeView) {
+          if (slot->page) {
+            mt_releaseTextureView(texture->device->_priv, slot);
+          }
+
+          free(view);
+          return GPU_ERROR_BACKEND_FAILURE;
         }
       }
     }

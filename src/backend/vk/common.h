@@ -207,6 +207,7 @@ typedef struct GPUAdapterVk {
   bool                                                  computeDerivativeQuads;
   bool                                                  computeDerivativeLinear;
   bool                                                  shaderUntypedPointers;
+  bool                                                  imageViewMinLod;
   bool                                                  indirectMemoryCopy;
   bool                                                  indirectMemoryToTextureCopy;
   bool                                                  executionGraph;

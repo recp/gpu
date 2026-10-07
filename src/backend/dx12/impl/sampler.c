@@ -261,8 +261,9 @@ dx12_createSampler(GPUApi          *__restrict api,
                    const GPUSamplerCreateInfo *info,
                    bool                        staticIfSupported,
                    GPUSampler                **outSampler) {
-  GPUStaticSamplerDesc staticDesc = {0};
-  D3D12_SAMPLER_DESC   desc = {0};
+  GPUStaticSamplerDesc      staticDesc = {0};
+  D3D12_SAMPLER_DESC        desc       = {0};
+  const GPUSamplerLODClamp *lod;
 
   GPU__UNUSED(api);
   GPU__UNUSED(staticIfSupported);
@@ -288,6 +289,12 @@ dx12_createSampler(GPUApi          *__restrict api,
   desc.ComparisonFunc = info->desc.compareEnable
                         ? dx12__compareFunction(info->desc.compare) : D3D12_COMPARISON_FUNC_NEVER;
   desc.MaxLOD         = D3D12_FLOAT32_MAX;
+  lod                 = gpuSamplerLODClamp(info);
+
+  if (lod) {
+    desc.MinLOD = lod->minLOD;
+    desc.MaxLOD = lod->maxLOD;
+  }
 
   return dx12__createSampler(device, &desc, outSampler);
 }

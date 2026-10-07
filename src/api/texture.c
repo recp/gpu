@@ -20,6 +20,8 @@
 #include "pass/blit_internal.h"
 #include "texture_internal.h"
 
+#include <math.h>
+
 static bool
 gpuIsTextureDimensionValid(GPUTextureDimension dimension) {
   return dimension == GPU_TEXTURE_DIMENSION_1D
@@ -422,9 +424,10 @@ GPUResult
 GPUCreateTextureView(GPUTexture                     *__restrict texture,
                      const GPUTextureViewCreateInfo *__restrict info,
                      GPUTextureView                **__restrict outView) {
-  GPUApi         *api;
-  GPUTextureView *view;
-  GPUResult       result;
+  const GPUTextureViewMinLODEXT *lod;
+  GPUApi                       *api;
+  GPUTextureView               *view;
+  GPUResult                     result;
 
   if (!outView) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -458,6 +461,22 @@ GPUCreateTextureView(GPUTexture                     *__restrict texture,
       || info->baseArrayLayer >= texture->depthOrLayers
       || info->arrayLayerCount > texture->depthOrLayers - info->baseArrayLayer) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  lod = info->chain.pNext;
+
+  if (lod && (lod->chain.sType != GPU_STRUCTURE_TYPE_TEXTURE_VIEW_MIN_LOD_EXT
+              || lod->chain.structSize < sizeof(*lod)
+              || lod->chain.pNext
+              || !isfinite(lod->minLOD) || lod->minLOD < 0.0f
+              || lod->minLOD > (float)(info->baseMipLevel + info->mipLevelCount - 1u))) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (lod && lod->minLOD != 0.0f
+      && (texture->sampleCount != 1u
+          || !GPUIsFeatureEnabled(texture->device, GPU_FEATURE_TEXTURE_VIEW_MIN_LOD))) {
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   if (!(api = gpuDeviceApi(texture->device)) || !api->texture.createView) {

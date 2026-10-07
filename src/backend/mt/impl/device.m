@@ -1069,6 +1069,13 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
       }
 
       return false;
+    case GPU_FEATURE_TEXTURE_VIEW_MIN_LOD:
+#if defined(__MAC_27_0) && defined(__IPHONE_27_0)
+      if (@available(macOS 27.0, iOS 27.0, *)) {
+        return true;
+      }
+#endif
+      return false;
     case GPU_FEATURE_INTERSECTION_FUNCTION_TABLE:
       device = adapterMT->device;
 

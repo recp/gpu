@@ -187,7 +187,8 @@ vk_createSampler(GPUApi          *__restrict api,
                  const GPUSamplerCreateInfo *info,
                  bool                        staticIfSupported,
                  GPUSampler                **outSampler) {
-  VkSamplerCreateInfo samplerInfo = {0};
+  VkSamplerCreateInfo      samplerInfo = {0};
+  const GPUSamplerLODClamp *lod;
 
   GPU__UNUSED(api);
   GPU__UNUSED(staticIfSupported);
@@ -197,6 +198,12 @@ vk_createSampler(GPUApi          *__restrict api,
   }
 
   vk_fillSamplerInfo(&info->desc, &samplerInfo);
+  lod = gpuSamplerLODClamp(info);
+
+  if (lod) {
+    samplerInfo.minLod = lod->minLOD;
+    samplerInfo.maxLod = lod->maxLOD;
+  }
 
   return vk__createSampler(device,
                            &samplerInfo,

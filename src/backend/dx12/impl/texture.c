@@ -392,7 +392,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
       srv->ViewDimension                 = D3D12_SRV_DIMENSION_TEXTURE1D;
       srv->Texture1D.MostDetailedMip     = info->baseMipLevel;
       srv->Texture1D.MipLevels           = info->mipLevelCount;
-      srv->Texture1D.ResourceMinLODClamp = 0.0f;
+      srv->Texture1D.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
 
       return true;
     case GPU_TEXTURE_VIEW_1D_ARRAY:
@@ -401,7 +401,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
       srv->Texture1DArray.MipLevels           = info->mipLevelCount;
       srv->Texture1DArray.FirstArraySlice     = info->baseArrayLayer;
       srv->Texture1DArray.ArraySize           = info->arrayLayerCount;
-      srv->Texture1DArray.ResourceMinLODClamp = 0.0f;
+      srv->Texture1DArray.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
 
       return true;
     case GPU_TEXTURE_VIEW_2D:
@@ -418,7 +418,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
       srv->Texture2D.MostDetailedMip     = info->baseMipLevel;
       srv->Texture2D.MipLevels           = info->mipLevelCount;
       srv->Texture2D.PlaneSlice          = 0u;
-      srv->Texture2D.ResourceMinLODClamp = 0.0f;
+      srv->Texture2D.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
 
       return true;
     case GPU_TEXTURE_VIEW_2D_ARRAY:
@@ -428,7 +428,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
       srv->Texture2DArray.FirstArraySlice     = info->baseArrayLayer;
       srv->Texture2DArray.ArraySize           = info->arrayLayerCount;
       srv->Texture2DArray.PlaneSlice          = 0u;
-      srv->Texture2DArray.ResourceMinLODClamp = 0.0f;
+      srv->Texture2DArray.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
 
       return true;
     case GPU_TEXTURE_VIEW_CUBE:
@@ -443,7 +443,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
         srv->Texture2DArray.FirstArraySlice     = info->baseArrayLayer;
         srv->Texture2DArray.ArraySize           = info->arrayLayerCount;
         srv->Texture2DArray.PlaneSlice          = 0u;
-        srv->Texture2DArray.ResourceMinLODClamp = 0.0f;
+        srv->Texture2DArray.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
 
         return true;
       }
@@ -451,7 +451,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
       srv->ViewDimension                   = D3D12_SRV_DIMENSION_TEXTURECUBE;
       srv->TextureCube.MostDetailedMip     = info->baseMipLevel;
       srv->TextureCube.MipLevels           = info->mipLevelCount;
-      srv->TextureCube.ResourceMinLODClamp = 0.0f;
+      srv->TextureCube.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
 
       return true;
     case GPU_TEXTURE_VIEW_CUBE_ARRAY:
@@ -467,7 +467,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
         srv->Texture2DArray.FirstArraySlice     = info->baseArrayLayer;
         srv->Texture2DArray.ArraySize           = info->arrayLayerCount;
         srv->Texture2DArray.PlaneSlice          = 0u;
-        srv->Texture2DArray.ResourceMinLODClamp = 0.0f;
+        srv->Texture2DArray.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
 
         return true;
       }
@@ -477,14 +477,14 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
       srv->TextureCubeArray.MipLevels           = info->mipLevelCount;
       srv->TextureCubeArray.First2DArrayFace    = info->baseArrayLayer;
       srv->TextureCubeArray.NumCubes            = info->arrayLayerCount / 6u;
-      srv->TextureCubeArray.ResourceMinLODClamp = 0.0f;
+      srv->TextureCubeArray.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
 
       return true;
     case GPU_TEXTURE_VIEW_3D:
       srv->ViewDimension                 = D3D12_SRV_DIMENSION_TEXTURE3D;
       srv->Texture3D.MostDetailedMip     = info->baseMipLevel;
       srv->Texture3D.MipLevels           = info->mipLevelCount;
-      srv->Texture3D.ResourceMinLODClamp = 0.0f;
+      srv->Texture3D.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
 
       return true;
     default:

@@ -227,10 +227,11 @@ mt_createSampler(GPUApi          *__restrict api,
                  const GPUSamplerCreateInfo *info,
                  bool                        staticIfSupported,
                  GPUSampler                **outSampler) {
-  GPUDeviceMT          *deviceMT;
-  MTLSamplerDescriptor *desc;
-  GPUSampler           *sampler;
-  id<MTLSamplerState>   state;
+  GPUDeviceMT              *deviceMT;
+  MTLSamplerDescriptor     *desc;
+  const GPUSamplerLODClamp *lod;
+  GPUSampler               *sampler;
+  id<MTLSamplerState>       state;
 
   (void)api;
   (void)staticIfSupported;
@@ -253,6 +254,13 @@ mt_createSampler(GPUApi          *__restrict api,
   desc.compareFunction = info->desc.compareEnable
                          ? mt_samplerCompareFunction(info->desc.compare)
                          : MTLCompareFunctionNever;
+
+  lod = gpuSamplerLODClamp(info);
+
+  if (lod) {
+    desc.lodMinClamp = lod->minLOD;
+    desc.lodMaxClamp = lod->maxLOD;
+  }
 
   state = [deviceMT->device newSamplerStateWithDescriptor:desc];
   [desc release];

@@ -1441,14 +1441,19 @@ GPUResult
 vk_createTextureView(GPUTexture                     *__restrict texture,
                      const GPUTextureViewCreateInfo *__restrict info,
                      GPUTextureView                **__restrict outView) {
-  VkImageViewCreateInfo   viewInfo        = {0};
-  VkFramebufferCreateInfo framebufferInfo = {0};
-  GPUTextureVk           *textureVk;
-  GPUTextureView         *view;
-  GPUTextureViewVk       *native;
-  bool                    attachmentView;
+  VkImageViewCreateInfo          viewInfo        = {0};
+  VkFramebufferCreateInfo        framebufferInfo = {0};
+#ifdef VK_EXT_image_view_min_lod
+  VkImageViewMinLodCreateInfoEXT minLodInfo      = {0};
+#endif
+  GPUTextureVk                  *textureVk;
+  GPUTextureView                *view;
+  GPUTextureViewVk              *native;
+  float                          minLOD;
+  bool                           attachmentView;
 
   textureVk = texture ? texture->_priv : NULL;
+  minLOD    = gpuTextureViewMinLOD(info);
 
   if (!texture || !textureVk || !textureVk->image || !info || !outView || info->format != texture->format
       || !vk__imageViewType(info->viewType, &viewInfo.viewType) || !vk_formatFromGPU(info->format, &viewInfo.format)) {
@@ -1463,6 +1468,16 @@ vk_createTextureView(GPUTexture                     *__restrict texture,
   viewInfo.subresourceRange.levelCount     = info->mipLevelCount;
   viewInfo.subresourceRange.baseArrayLayer = info->baseArrayLayer;
   viewInfo.subresourceRange.layerCount     = info->arrayLayerCount;
+
+  if (minLOD != 0.0f) {
+#ifdef VK_EXT_image_view_min_lod
+    minLodInfo.sType  = VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT;
+    minLodInfo.minLod = minLOD;
+    viewInfo.pNext    = &minLodInfo;
+#else
+    return GPU_ERROR_UNSUPPORTED;
+#endif
+  }
 
   if (!(view = calloc(1, sizeof(*view) + sizeof(*native)))) {
     return GPU_ERROR_OUT_OF_MEMORY;

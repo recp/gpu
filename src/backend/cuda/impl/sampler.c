@@ -22,9 +22,10 @@ cuda_createSampler(GPUApi          *__restrict api,
                    const GPUSamplerCreateInfo *info,
                    bool                        staticIfSupported,
                    GPUSampler                **outSampler) {
-  CUDA_TEXTURE_DESC  desc;
-  GPUSamplerCuda    *native;
-  GPUSampler        *sampler;
+  CUDA_TEXTURE_DESC         desc;
+  const GPUSamplerLODClamp *lod;
+  GPUSamplerCuda           *native;
+  GPUSampler               *sampler;
 
   GPU__UNUSED(api);
   GPU__UNUSED(device);
@@ -38,6 +39,13 @@ cuda_createSampler(GPUApi          *__restrict api,
 
   if (!cuda_samplerTextureDesc(&info->desc, &desc)) {
     return GPU_ERROR_UNSUPPORTED;
+  }
+
+  lod = gpuSamplerLODClamp(info);
+
+  if (lod) {
+    desc.minMipmapLevelClamp = lod->minLOD;
+    desc.maxMipmapLevelClamp = lod->maxLOD;
   }
 
   if (!(sampler = calloc(1, sizeof(*sampler) + sizeof(*native)))) {

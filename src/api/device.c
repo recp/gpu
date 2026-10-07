@@ -137,7 +137,7 @@ gpu_reportDeviceLostOnce(GPUDevice *device) {
 static bool
 gpu_knownFeature(GPUFeature feature) {
   return feature >= GPU_FEATURE_COMPUTE
-         && feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
+         && feature <= GPU_FEATURE_TEXTURE_VIEW_MIN_LOD;
 }
 
 static bool
@@ -263,7 +263,7 @@ gpu_adapterSupportsMask(const GPUAdapter *adapter, uint64_t requiredMask) {
   GPUFeature feature;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
+       feature <= GPU_FEATURE_TEXTURE_VIEW_MIN_LOD;
        feature = (GPUFeature)(feature + 1)) {
     bit = gpu_featureBit(feature);
 
@@ -378,7 +378,7 @@ gpu_supportedFeatureMask(const GPUAdapter *adapter) {
   mask = 0;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE;
+       feature <= GPU_FEATURE_TEXTURE_VIEW_MIN_LOD;
        feature = (GPUFeature)(feature + 1)) {
     if (gpu_adapterSupportsFeature(adapter, feature)) {
       mask |= gpu_featureBit(feature);
@@ -399,7 +399,7 @@ gpu_fillFeatureSet(uint64_t       mask,
   count = 0u;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_INTERSECTION_FUNCTION_TABLE
+       feature <= GPU_FEATURE_TEXTURE_VIEW_MIN_LOD
          && count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & gpu_featureBit(feature)) {

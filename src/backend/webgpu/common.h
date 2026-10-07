@@ -197,9 +197,10 @@ WGPUPresentMode
 gpu_webgpuPresentMode(GPUPresentMode mode);
 
 WGPUSampler
-gpu_webgpuCreateSampler(GPUDevice            *device,
-                        const GPUSamplerDesc *desc,
-                        const char           *label);
+gpu_webgpuCreateSampler(GPUDevice                *device,
+                       const GPUSamplerDesc     *desc,
+                       const char               *label,
+                       const GPUSamplerLODClamp *lod);
 
 GPUResult
 gpu_webgpuCreatePipelineLayout(GPUDevice               *device,

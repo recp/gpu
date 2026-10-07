@@ -35,7 +35,14 @@ run_queue(void *ctx) {
 
 static int
 run_sampler(void *ctx) {
-  return gpu_test_sampler(((GPUApiTestContext *)ctx)->device);
+  GPUDevice  *device;
+  const char *path;
+
+  device = ((GPUApiTestContext *)ctx)->device;
+  path   = getenv("GPU_LOD_USL_PATH");
+
+  return gpu_test_sampler(device)
+         && (!path || gpu_test_lod(device, path));
 }
 
 static int

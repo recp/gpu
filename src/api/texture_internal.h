@@ -58,6 +58,14 @@ GPUResult
 gpuValidateTextureCreateInfo(const GPUDevice            *device,
                              const GPUTextureCreateInfo *info);
 
+static inline float
+gpuTextureViewMinLOD(const GPUTextureViewCreateInfo *info) {
+  const GPUTextureViewMinLODEXT *lod;
+
+  lod = info ? (const GPUTextureViewMinLODEXT *)info->chain.pNext : NULL;
+  return lod ? lod->minLOD : 0.0f;
+}
+
 static inline uint32_t
 gpuTextureArrayLayerCount(const GPUTexture *texture) {
   if (!texture) {

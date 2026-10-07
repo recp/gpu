@@ -450,6 +450,12 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
     return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
   }
 
+#ifdef VK_EXT_image_view_min_lod
+  if (strcmp(name, VK_EXT_IMAGE_VIEW_MIN_LOD_EXTENSION_NAME) == 0) {
+    return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_TEXTURE_VIEW_MIN_LOD);
+  }
+#endif
+
   if (strcmp(name, VK_KHR_16BIT_STORAGE_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
   }
@@ -930,6 +936,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDevicePresentWaitFeaturesKHR              presentWaitFeatures         = {0};
   VkPhysicalDeviceFeatures2                           presentFeatures2            = {0};
 #endif
+#ifdef VK_EXT_image_view_min_lod
+  VkPhysicalDeviceImageViewMinLodFeaturesEXT           minLodFeatures              = {0};
+  VkPhysicalDeviceFeatures2                           minLodFeatures2             = {0};
+#endif
   VkPhysicalDeviceBufferDeviceAddressFeatures         bufferAddressFeatures       = {0};
   VkPhysicalDeviceFeatures2                           bufferAddressFeatures2      = {0};
 #ifdef VK_EXT_descriptor_buffer
@@ -1032,6 +1042,9 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool atomic64Extension;
   bool atomic64Core;
   bool descriptorCore;
+#ifdef VK_EXT_image_view_min_lod
+  bool minLodExtension = false;
+#endif
   bool bufferAddressExtension;
   bool bufferAddressCore;
 #ifdef VK_EXT_descriptor_buffer
@@ -1299,6 +1312,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 
       VK__ADD_EXT_IF(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
                      float16Extension = true);
+
+#ifdef VK_EXT_image_view_min_lod
+      if (!strcmp(VK_EXT_IMAGE_VIEW_MIN_LOD_EXTENSION_NAME, extensions[i].extensionName)) {
+        minLodExtension = true;
+      }
+#endif
 
       if (!strcmp(VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
                   extensions[i].extensionName)) {
@@ -1855,6 +1874,22 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     }
   }
 #endif
+#ifdef VK_EXT_image_view_min_lod
+  if (getFeatures2 && minLodExtension) {
+    minLodFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_MIN_LOD_FEATURES_EXT;
+    minLodFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    minLodFeatures2.pNext = &minLodFeatures;
+    getFeatures2(raw, &minLodFeatures2);
+
+    adapterVk->imageViewMinLod = minLodFeatures.minLod == VK_TRUE;
+
+    if (adapterVk->imageViewMinLod
+        && !vk_addDeviceExtension(adapterVk, VK_EXT_IMAGE_VIEW_MIN_LOD_EXTENSION_NAME)) {
+      goto fail;
+    }
+  }
+#endif
+
   if (getFeatures2 && (bufferAddressCore || bufferAddressExtension)) {
     bufferAddressFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
     bufferAddressFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -2562,6 +2597,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->computeDerivativeLinear;
     case GPU_FEATURE_BUFFER_DEVICE_ADDRESS:
       return adapterVk->bufferDeviceAddress;
+    case GPU_FEATURE_TEXTURE_VIEW_MIN_LOD:
+      return adapterVk->imageViewMinLod;
     case GPU_FEATURE_INDIRECT_MEMORY_COPY:
       return adapterVk->indirectMemoryCopy;
     case GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY:
@@ -2802,6 +2839,9 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
 #endif
 #ifdef VK_AMDX_shader_enqueue
   VkPhysicalDeviceShaderEnqueueFeaturesAMDX           executionGraphFeatures   = {0};
+#endif
+#ifdef VK_EXT_image_view_min_lod
+  VkPhysicalDeviceImageViewMinLodFeaturesEXT           minLodFeatures           = {0};
 #endif
   VkDeviceCreateInfo deviceCI = {0};
   GPUDevice               *device;
@@ -3108,6 +3148,15 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
     dynamicFeatures.dynamicRendering = VK_TRUE;
     deviceCI.pNext                   = &dynamicFeatures;
   }
+
+#ifdef VK_EXT_image_view_min_lod
+  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_TEXTURE_VIEW_MIN_LOD)) {
+    minLodFeatures.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_MIN_LOD_FEATURES_EXT;
+    minLodFeatures.pNext  = (void *)deviceCI.pNext;
+    minLodFeatures.minLod = VK_TRUE;
+    deviceCI.pNext        = &minLodFeatures;
+  }
+#endif
 
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u) {
     float16Features.sType         = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;

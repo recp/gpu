@@ -97,6 +97,12 @@ typedef struct GPUTextureViewCreateInfo {
   uint32_t           arrayLayerCount;
 } GPUTextureViewCreateInfo;
 
+/* absolute texture mip threshold; requires GPU_FEATURE_TEXTURE_VIEW_MIN_LOD for nonzero values. */
+typedef struct GPUTextureViewMinLODEXT {
+  GPUChainedStruct chain;
+  float            minLOD;
+} GPUTextureViewMinLODEXT;
+
 typedef struct GPUTextureWriteRegion {
   GPUTextureAspect aspect;
   uint32_t         width;

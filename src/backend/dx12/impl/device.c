@@ -1380,6 +1380,8 @@ dx12_supportsFeature(const GPUAdapter *__restrict adapter,
       return adapterDX12->executionGraph;
     case GPU_FEATURE_SAMPLER_FEEDBACK:
       return adapterDX12->samplerFeedbackTier != 0u;
+    case GPU_FEATURE_TEXTURE_VIEW_MIN_LOD:
+      return true;
     case GPU_FEATURE_VARIABLE_RATE_SHADING:
       return adapterDX12->vrsTier != D3D12_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED;
     case GPU_FEATURE_SUBGROUPS:

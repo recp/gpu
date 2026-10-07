@@ -18,6 +18,8 @@
 #include "device_internal.h"
 #include "sampler_internal.h"
 
+#include <math.h>
+
 static int
 gpu_samplerDescIsValid(const GPUSamplerDesc *desc) {
   if (!desc) {
@@ -50,8 +52,9 @@ GPUCreateSampler(GPUDevice                  *__restrict device,
                  const GPUSamplerCreateInfo *__restrict info,
                  bool                                   staticIfSupported,
                  GPUSampler                **__restrict outSampler) {
-  GPUApi   *api;
-  GPUResult result;
+  const GPUSamplerLODClamp *lod;
+  GPUApi                  *api;
+  GPUResult                result;
 
   if (!outSampler) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -73,6 +76,16 @@ GPUCreateSampler(GPUDevice                  *__restrict device,
   }
 
   if (!gpu_samplerDescIsValid(&info->desc)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  lod = gpuSamplerLODClamp(info);
+
+  if (lod && (lod->chain.sType != GPU_STRUCTURE_TYPE_SAMPLER_LOD_CLAMP
+              || lod->chain.structSize < sizeof(*lod)
+              || lod->chain.pNext
+              || !isfinite(lod->minLOD) || !isfinite(lod->maxLOD)
+              || lod->minLOD < 0.0f || lod->maxLOD < lod->minLOD)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
