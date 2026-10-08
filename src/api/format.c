@@ -19,7 +19,7 @@
 #define GPU_TEXEL(BYTES)       {BYTES, 1u, 1u}
 #define GPU_BLOCK(BYTES, W, H) {BYTES, W, H}
 
-static const GPUFormatLayout gpu_formatLayouts[GPU_FORMAT_COUNT] = {
+static const FormatLayout    gpu_formatLayouts[GPU_FORMAT_COUNT] = {
   [GPU_FORMAT_R8_UNORM]               = GPU_TEXEL(1u),
   [GPU_FORMAT_R8_SNORM]               = GPU_TEXEL(1u),
   [GPU_FORMAT_R8_UINT]                = GPU_TEXEL(1u),
@@ -126,14 +126,14 @@ _Static_assert(GPU_ARRAY_LEN(gpu_formatLayouts) == GPU_FORMAT_COUNT,
                "format layout table must cover GPUFormat");
 
 static bool
-gpuFormatDataLayoutForLayout(const GPUFormatLayout *formatLayout,
-                             uint32_t               width,
-                             uint32_t               height,
-                             uint32_t               depth,
-                             uint32_t               layerCount,
-                             uint32_t               bytesPerRow,
-                             uint32_t               rowsPerImage,
-                             GPUFormatDataLayout   *outLayout) {
+formatDataLayoutForLayout(const FormatLayout    *formatLayout,
+                          uint32_t               width,
+                          uint32_t               height,
+                          uint32_t               depth,
+                          uint32_t               layerCount,
+                          uint32_t               bytesPerRow,
+                          uint32_t               rowsPerImage,
+                          FormatDataLayout      *outLayout) {
   uint64_t bytesPerImage;
   uint64_t imageCount;
   uint64_t imageRows;
@@ -223,8 +223,8 @@ gpuFormatDataLayoutForLayout(const GPUFormatLayout *formatLayout,
 
 GPU_HIDE
 bool
-gpuFormatLayout(GPUFormat format, GPUFormatLayout *outLayout) {
-  GPUFormatLayout layout;
+gpuFormatLayout(GPUFormat format, FormatLayout    *outLayout) {
+  FormatLayout    layout;
 
   if (!outLayout || format <= GPU_FORMAT_UNDEFINED || format >= GPU_FORMAT_COUNT) {
     return false;
@@ -243,9 +243,9 @@ gpuFormatLayout(GPUFormat format, GPUFormatLayout *outLayout) {
 
 GPU_HIDE
 bool
-gpuFormatResolveCopyAspect(GPUFormat         format,
-                           GPUTextureAspect  aspect,
-                           GPUTextureAspect *outAspect) {
+formatResolveCopyAspect(GPUFormat         format,
+                        GPUTextureAspect  aspect,
+                        GPUTextureAspect *outAspect) {
   GPUTextureAspect resolved;
 
   if (!outAspect
@@ -299,30 +299,30 @@ gpuFormatResolveCopyAspect(GPUFormat         format,
 
 GPU_HIDE
 bool
-gpuFormatAspectLayout(GPUFormat        format,
-                      GPUTextureAspect aspect,
-                      GPUFormatLayout *outLayout) {
+formatAspectLayout(GPUFormat        format,
+                   GPUTextureAspect aspect,
+                   FormatLayout    *outLayout) {
   GPUTextureAspect resolved;
 
-  if (!outLayout || !gpuFormatResolveCopyAspect(format, aspect, &resolved)) {
+  if (!outLayout || !formatResolveCopyAspect(format, aspect, &resolved)) {
     return false;
   }
 
   if (resolved == GPU_TEXTURE_ASPECT_STENCIL_ONLY) {
-    *outLayout = (GPUFormatLayout)GPU_TEXEL(1u);
+    *outLayout = (FormatLayout)GPU_TEXEL(1u);
     return true;
   }
 
   if (resolved == GPU_TEXTURE_ASPECT_DEPTH_ONLY) {
     switch (format) {
       case GPU_FORMAT_DEPTH16_UNORM:
-        *outLayout = (GPUFormatLayout)GPU_TEXEL(2u);
+        *outLayout = (FormatLayout)GPU_TEXEL(2u);
         return true;
 
       case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
       case GPU_FORMAT_DEPTH32_FLOAT:
       case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
-        *outLayout = (GPUFormatLayout)GPU_TEXEL(4u);
+        *outLayout = (FormatLayout)GPU_TEXEL(4u);
         return true;
 
       default:
@@ -345,61 +345,61 @@ gpuBlockCount(uint32_t extent, uint32_t blockExtent) {
 
 GPU_HIDE
 bool
-gpuFormatDataLayout(GPUFormat            format,
-                    uint32_t             width,
-                    uint32_t             height,
-                    uint32_t             depth,
-                    uint32_t             layerCount,
-                    uint32_t             bytesPerRow,
-                    uint32_t             rowsPerImage,
-                    GPUFormatDataLayout *outLayout) {
-  GPUFormatLayout layout;
+formatDataLayout(GPUFormat            format,
+                 uint32_t             width,
+                 uint32_t             height,
+                 uint32_t             depth,
+                 uint32_t             layerCount,
+                 uint32_t             bytesPerRow,
+                 uint32_t             rowsPerImage,
+                 FormatDataLayout    *outLayout) {
+  FormatLayout    layout;
 
   return gpuFormatLayout(format, &layout)
-         && gpuFormatDataLayoutForLayout(&layout,
-                                         width,
-                                         height,
-                                         depth,
-                                         layerCount,
-                                         bytesPerRow,
-                                         rowsPerImage,
-                                         outLayout);
+         && formatDataLayoutForLayout(&layout,
+                                      width,
+                                      height,
+                                      depth,
+                                      layerCount,
+                                      bytesPerRow,
+                                      rowsPerImage,
+                                      outLayout);
 }
 
 GPU_HIDE
 bool
-gpuFormatAspectDataLayout(GPUFormat            format,
-                          GPUTextureAspect     aspect,
-                          uint32_t             width,
-                          uint32_t             height,
-                          uint32_t             depth,
-                          uint32_t             layerCount,
-                          uint32_t             bytesPerRow,
-                          uint32_t             rowsPerImage,
-                          GPUFormatDataLayout *outLayout) {
-  GPUFormatLayout layout;
+formatAspectDataLayout(GPUFormat            format,
+                       GPUTextureAspect     aspect,
+                       uint32_t             width,
+                       uint32_t             height,
+                       uint32_t             depth,
+                       uint32_t             layerCount,
+                       uint32_t             bytesPerRow,
+                       uint32_t             rowsPerImage,
+                       FormatDataLayout    *outLayout) {
+  FormatLayout    layout;
 
-  return gpuFormatAspectLayout(format, aspect, &layout)
-         && gpuFormatDataLayoutForLayout(&layout,
-                                         width,
-                                         height,
-                                         depth,
-                                         layerCount,
-                                         bytesPerRow,
-                                         rowsPerImage,
-                                         outLayout);
+  return formatAspectLayout(format, aspect, &layout)
+         && formatDataLayoutForLayout(&layout,
+                                      width,
+                                      height,
+                                      depth,
+                                      layerCount,
+                                      bytesPerRow,
+                                      rowsPerImage,
+                                      outLayout);
 }
 
 GPU_HIDE
 bool
-gpuFormatCopyAligned(GPUFormat format,
-                     uint32_t  x,
-                     uint32_t  y,
-                     uint32_t  width,
-                     uint32_t  height,
-                     uint32_t  mipWidth,
-                     uint32_t  mipHeight) {
-  GPUFormatLayout layout;
+formatCopyAligned(GPUFormat format,
+                  uint32_t  x,
+                  uint32_t  y,
+                  uint32_t  width,
+                  uint32_t  height,
+                  uint32_t  mipWidth,
+                  uint32_t  mipHeight) {
+  FormatLayout    layout;
 
   if (!gpuFormatLayout(format, &layout)
       || x > mipWidth || width > mipWidth - x

@@ -23,28 +23,28 @@ extern "C" {
 #include <gpu/common.h>
 #include <gpu/gpu.h>
 
-struct GPUApi;
+struct Api;
 struct GPUInstance;
 
 typedef void (*GPUBackendAdapterRequestCallback)(GPUResult result, GPUAdapter *adapter, void *userData);
 typedef void (*GPUBackendDeviceRequestCallback)(GPUResult result, GPUDevice *device, void *userData);
 
-typedef struct GPUQueueCreateInfo {
+typedef struct QueueCreateInfo {
   GPUQueueFlagBits flags;
   GPUQueueFlagBits optionalFlags;
   uint32_t         count;
-} GPUQueueCreateInfo;
+} QueueCreateInfo;
 
-typedef enum GPUBackendSubgroupOperationFlagBits {
+typedef enum BackendSubgroupOperationFlagBits {
   GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT                   = 1u << 0,
   GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT                 = 1u << 1,
   GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT        = 1u << 2,
   GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_NATIVE_BIT = 1u << 3
-} GPUBackendSubgroupOperationFlagBits;
+} BackendSubgroupOperationFlagBits;
 
-typedef uint32_t GPUBackendSubgroupOperationFlags;
+typedef uint32_t BackendSubgroupOperationFlags;
 
-typedef struct GPUApiDevice {
+typedef struct ApiDevice {
   GPUResult
   (*requestAdapter)(GPUInstance                     *inst,
                     GPUPowerPreference               powerPreference,
@@ -69,7 +69,7 @@ typedef struct GPUApiDevice {
   bool
   (*supportsSubgroupOperations)(const GPUAdapter     *__restrict adapter,
                                 GPUShaderStageFlags              stage,
-                                GPUBackendSubgroupOperationFlags operations);
+                                BackendSubgroupOperationFlags    operations);
 
   void (*getLimits)(const GPUAdapter *__restrict adapter, GPULimits *__restrict outLimits);
 
@@ -85,13 +85,13 @@ typedef struct GPUApiDevice {
 
   GPUDevice *
   (*createDevice)(GPUAdapter   *__restrict adapter,
-                  const GPUQueueCreateInfo queCI[],
+                  const QueueCreateInfo    queCI[],
                   uint32_t                 nQueCI,
                   uint64_t                 enabledFeatureMask);
 
   GPUResult
   (*requestDevice)(GPUAdapter                     *adapter,
-                   const GPUQueueCreateInfo        queCI[],
+                   const QueueCreateInfo           queCI[],
                    uint32_t                        nQueCI,
                    uint64_t                        enabledFeatureMask,
                    GPUBackendDeviceRequestCallback callback,
@@ -100,7 +100,7 @@ typedef struct GPUApiDevice {
   GPUResult (*waitIdle)(GPUDevice *__restrict device);
 
   void (*destroyDevice)(GPUDevice *__restrict device);
-} GPUApiDevice;
+} ApiDevice;
 
 #ifdef __cplusplus
 }

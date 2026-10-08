@@ -100,7 +100,7 @@ enum {
 #  define vk_setDebugName(device, objectType, objectHandle, label) ((void)0)
 #endif
 
-typedef struct GPUInstanceVk {
+typedef struct InstanceVk {
   VkInstance inst;
   uint32_t   apiVersion;
 #if GPU_BUILD_WITH_VALIDATION || GPU_BUILD_WITH_DEBUG_MARKERS
@@ -131,9 +131,9 @@ typedef struct GPUInstanceVk {
   PFN_vkCmdInsertDebugUtilsLabelEXT   CmdInsertDebugUtilsLabelEXT;
   PFN_vkSetDebugUtilsObjectNameEXT    SetDebugUtilsObjectNameEXT;
 #endif
-} GPUInstanceVk;
+} InstanceVk;
 
-typedef struct GPUAdapterVk {
+typedef struct AdapterVk {
   char                                                 *extensionNames[64];
   VkQueueFamilyProperties                              *queueFamilyProps;
 #ifdef VK_KHR_cooperative_matrix
@@ -147,7 +147,7 @@ typedef struct GPUAdapterVk {
 #endif
   VkPhysicalDeviceProperties                            props;
   VkPhysicalDeviceFeatures                              features;
-  GPUMeshLimits                                         meshLimits;
+  MeshLimits                                            meshLimits;
   GPUShadingRateFlagsEXT                                vrsRates;
   GPUShadingRateCombinerFlagsEXT                        vrsCombiners;
   VkExtent2D                                            minVRSTexelSize;
@@ -213,11 +213,11 @@ typedef struct GPUAdapterVk {
   bool                                                  executionGraph;
   VkQueueFlags                                          indirectCopyQueues;
   bool                                                  negativeViewport;
-} GPUAdapterVk;
+} AdapterVk;
 
-typedef struct GPUDeviceVk {
-  struct GPUClassicRenderPassVk                 *classicRenderPasses;
-  struct GPUClassicFramebufferVk                *classicFramebuffers;
+typedef struct DeviceVk {
+  struct ClassicRenderPassVk                    *classicRenderPasses;
+  struct ClassicFramebufferVk                   *classicFramebuffers;
   GPUQueue                                     **createdQueues;
   PFN_vkCmdBeginRenderingKHR                     beginRendering;
   PFN_vkCmdEndRenderingKHR                       endRendering;
@@ -324,9 +324,9 @@ typedef struct GPUDeviceVk {
   pthread_mutex_t                                classicRenderLock;
 #endif
   bool                                           classicRenderLockInitialized;
-} GPUDeviceVk;
+} DeviceVk;
 
-typedef struct GPUBufferVk {
+typedef struct BufferVk {
   void          *mapped;
   VkDevice       device;
   VkBuffer       buffer;
@@ -335,9 +335,9 @@ typedef struct GPUBufferVk {
   bool           coherent;
   bool           ownsMemory;
   bool           sparse;
-} GPUBufferVk;
+} BufferVk;
 
-typedef struct GPUHeapVk {
+typedef struct HeapVk {
   void                 *mapped;
   VkDevice              device;
   VkDeviceMemory        memory;
@@ -345,11 +345,11 @@ typedef struct GPUHeapVk {
   VkMemoryPropertyFlags memoryFlags;
   uint32_t              memoryTypeIndex;
   bool                  coherent;
-} GPUHeapVk;
+} HeapVk;
 
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
-typedef struct GPUAccelerationStructureVk {
-  GPUDeviceVk                              *gpuDevice;
+typedef struct AccelerationStructureVk {
+  DeviceVk                                 *gpuDevice;
   GPUBuffer                                *instanceBuffer;
   VkAccelerationStructureGeometryKHR       *geometries;
   VkAccelerationStructureBuildRangeInfoKHR *ranges;
@@ -360,25 +360,25 @@ typedef struct GPUAccelerationStructureVk {
   VkDeviceAddress                           address;
   uint64_t                                  instanceCapacity;
   uint32_t                                  geometryCapacity;
-} GPUAccelerationStructureVk;
+} AccelerationStructureVk;
 
-typedef struct GPUAccelerationStructureEncoderVk {
+typedef struct AccelerationStructureEncoderVk {
   VkCommandBuffer command;
   bool            debugLabelActive;
-} GPUAccelerationStructureEncoderVk;
+} AccelerationStructureEncoderVk;
 #endif
 
 #ifdef __APPLE__
-typedef struct GPUTransferChunkVk {
+typedef struct TransferChunkVk {
   GPUBuffer                 *buffer;
-  struct GPUTransferChunkVk *next;
+  struct TransferChunkVk    *next;
   uint64_t                   offset;
   uint64_t                   capacity;
-} GPUTransferChunkVk;
+} TransferChunkVk;
 #endif
 
-typedef struct GPUTextureVk {
-  GPUDeviceVk                    *gpuDevice;
+typedef struct TextureVk {
+  DeviceVk                       *gpuDevice;
   VkImageLayout                  *layouts;
   VkDevice                        device;
   VkImage                         image;
@@ -400,16 +400,16 @@ typedef struct GPUTextureVk {
   bool                            indirectCopyDst;
   bool                            indirectCopyPending;
 #endif
-} GPUTextureVk;
+} TextureVk;
 
-typedef struct GPUDescriptorPoolVk {
-  struct GPUDescriptorPoolVk *next;
+typedef struct DescriptorPoolVk {
+  struct DescriptorPoolVk    *next;
   VkDescriptorPool            pool;
-} GPUDescriptorPoolVk;
+} DescriptorPoolVk;
 
 #ifdef VK_EXT_descriptor_buffer
-typedef struct GPUDescriptorBufferChunkVk {
-  struct GPUDescriptorBufferChunkVk *next;
+typedef struct DescriptorBufferChunkVk {
+  struct DescriptorBufferChunkVk    *next;
   void                              *mapped;
   VkBuffer                           buffer;
   VkDeviceMemory                     memory;
@@ -417,24 +417,24 @@ typedef struct GPUDescriptorBufferChunkVk {
   VkDeviceSize                       allocationSize;
   uint64_t                           usedSlots;
   bool                               coherent;
-} GPUDescriptorBufferChunkVk;
+} DescriptorBufferChunkVk;
 
-typedef struct GPUDescriptorBindingVk {
+typedef struct DescriptorBindingVk {
   VkSampler       *immutableSamplers;
   VkDeviceSize     offset;
   VkDeviceSize     size;
   VkDescriptorType type;
   uint32_t         binding;
   uint32_t         count;
-} GPUDescriptorBindingVk;
+} DescriptorBindingVk;
 #endif
 
-typedef struct GPUBindGroupLayoutVk {
-  GPUDescriptorPoolVk        *descriptorPools;
+typedef struct BindGroupLayoutVk {
+  DescriptorPoolVk           *descriptorPools;
 #ifdef VK_EXT_descriptor_buffer
-  GPUDescriptorBufferChunkVk *descriptorChunks;
-  GPUDescriptorBindingVk     *descriptorBindings;
-  GPUDeviceVk                *gpuDevice;
+  DescriptorBufferChunkVk    *descriptorChunks;
+  DescriptorBindingVk        *descriptorBindings;
+  DeviceVk                   *gpuDevice;
 #endif
   uint32_t                   *dynamicOrder;
   VkSampler                  *immutableSamplers;
@@ -462,19 +462,19 @@ typedef struct GPUBindGroupLayoutVk {
   bool                        poolLockInitialized;
   bool                        descriptorBuffer;
   VkDescriptorPoolSize        poolSizes[GPU_VK_DESCRIPTOR_POOL_TYPE_COUNT];
-} GPUBindGroupLayoutVk;
+} BindGroupLayoutVk;
 
-typedef struct GPUPipelineLayoutVk {
+typedef struct PipelineLayoutVk {
   VkDevice         device;
   VkPipelineLayout layout;
   bool             descriptorBuffer;
-} GPUPipelineLayoutVk;
+} PipelineLayoutVk;
 
-typedef struct GPUBindGroupVk {
-  GPUBindGroupLayoutVk       *layout;
-  GPUDescriptorPoolVk        *pool;
+typedef struct BindGroupVk {
+  BindGroupLayoutVk          *layout;
+  DescriptorPoolVk           *pool;
 #ifdef VK_EXT_descriptor_buffer
-  GPUDescriptorBufferChunkVk *descriptorChunk;
+  DescriptorBufferChunkVk    *descriptorChunk;
 #endif
   VkDevice                    device;
   VkDescriptorSet             set;
@@ -482,43 +482,43 @@ typedef struct GPUBindGroupVk {
   VkDeviceSize                descriptorOffset;
   uint32_t                    descriptorSlot;
 #endif
-} GPUBindGroupVk;
+} BindGroupVk;
 
-typedef struct GPUDescriptorStateVk {
-  GPUPipelineLayoutVk        *pipelineLayout;
-  GPUBindGroupVk             *groups[GPU_ENCODER_MAX_BIND_GROUPS];
+typedef struct DescriptorStateVk {
+  PipelineLayoutVk           *pipelineLayout;
+  BindGroupVk                *groups[GPU_ENCODER_MAX_BIND_GROUPS];
 #ifdef VK_EXT_descriptor_buffer
-  GPUDescriptorBufferChunkVk *chunks[GPU_ENCODER_MAX_BIND_GROUPS];
+  DescriptorBufferChunkVk    *chunks[GPU_ENCODER_MAX_BIND_GROUPS];
 #endif
   uint32_t                    dynamicOffsets[GPU_VK_MAX_DYNAMIC_OFFSETS];
 #ifdef VK_EXT_descriptor_buffer
   uint32_t                    chunkCount;
 #endif
-} GPUDescriptorStateVk;
+} DescriptorStateVk;
 
-typedef struct GPUSemaphoreVk {
+typedef struct SemaphoreVk {
   VkDevice    device;
   VkSemaphore semaphore;
-} GPUSemaphoreVk;
+} SemaphoreVk;
 
-typedef struct GPUQueueVk         GPUQueueVk;
-typedef struct GPUCommandBufferVk GPUCommandBufferVk;
-typedef struct GPUSwapchainVk     GPUSwapchainVk;
-typedef struct GPUFrameSyncVk     GPUFrameSyncVk;
-typedef struct GPUTextureViewVk   GPUTextureViewVk;
+typedef struct QueueVk            QueueVk;
+typedef struct CommandBufferVk    CommandBufferVk;
+typedef struct SwapchainVk        SwapchainVk;
+typedef struct FrameSyncVk        FrameSyncVk;
+typedef struct TextureViewVk      TextureViewVk;
 
 enum {
   GPU_VK_GRAPH_INIT_TRACK_COUNT = 8u
 };
 
-typedef struct GPUExecutionGraphInputChunkVk GPUExecutionGraphInputChunkVk;
+typedef struct ExecutionGraphInputChunkVk    ExecutionGraphInputChunkVk;
 
-typedef struct GPURenderPassVk {
-  GPUSwapchainVk                                 *swapchain;
-  GPUTextureViewVk                               *colorViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
-  GPUTextureViewVk                               *resolveViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
-  GPUTextureViewVk                               *depthStencilView;
-  GPUTextureViewVk                               *shadingRateView;
+typedef struct RenderPassVk {
+  SwapchainVk                                    *swapchain;
+  TextureViewVk                                  *colorViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  TextureViewVk                                  *resolveViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
+  TextureViewVk                                  *depthStencilView;
+  TextureViewVk                                  *shadingRateView;
   VkRenderPass                                    renderPass;
   VkFramebuffer                                   framebuffer;
   VkRenderingAttachmentInfoKHR                    colorAttachments[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
@@ -533,35 +533,35 @@ typedef struct GPURenderPassVk {
   uint32_t                                        colorCount;
   uint32_t                                        clearValueCount;
   bool                                            dynamic;
-} GPURenderPassVk;
+} RenderPassVk;
 
-typedef struct GPURenderEncoderVk {
-  GPUDeviceVk         *device;
-  GPURenderPassVk     *renderPass;
+typedef struct RenderEncoderVk {
+  DeviceVk            *device;
+  RenderPassVk        *renderPass;
   GPUBuffer           *indexBuffer;
   VkCommandBuffer      command;
   VkPipelineLayout     pipelineLayout;
-  GPUDescriptorStateVk descriptors;
+  DescriptorStateVk    descriptors;
   VkDeviceSize         indexOffset;
   VkExtent2D           extent;
   GPUIndexType         indexType;
   bool                 indexBound;
   bool                 debugLabelActive;
-} GPURenderEncoderVk;
+} RenderEncoderVk;
 
-typedef struct GPUComputeEncoderVk {
+typedef struct ComputeEncoderVk {
   GPUExecutionGraphEXT         *executionGraph;
   GPUExecutionGraphInstanceEXT *executionGraphInstance;
   VkCommandBuffer               command;
   VkPipelineLayout              pipelineLayout;
-  GPUDescriptorStateVk          descriptors;
+  DescriptorStateVk             descriptors;
   VkPipelineBindPoint           bindPoint;
   bool                          debugLabelActive;
-} GPUComputeEncoderVk;
+} ComputeEncoderVk;
 
 #if defined(VK_KHR_acceleration_structure) && \
     defined(VK_KHR_ray_tracing_pipeline)
-typedef struct GPUShaderTableVk {
+typedef struct ShaderTableVk {
   VkDevice                        device;
   VkBuffer                        buffer;
   VkDeviceMemory                  memory;
@@ -569,47 +569,47 @@ typedef struct GPUShaderTableVk {
   VkStridedDeviceAddressRegionKHR miss;
   VkStridedDeviceAddressRegionKHR hit;
   VkStridedDeviceAddressRegionKHR callable;
-} GPUShaderTableVk;
+} ShaderTableVk;
 
-typedef struct GPURayTracingEncoderVk {
+typedef struct RayTracingEncoderVk {
   VkCommandBuffer      command;
   VkPipelineLayout     pipelineLayout;
-  GPUDescriptorStateVk descriptors;
+  DescriptorStateVk    descriptors;
   bool                 debugLabelActive;
-} GPURayTracingEncoderVk;
+} RayTracingEncoderVk;
 #endif
 
-struct GPUCommandBufferVk {
-  GPUQueueVk                            *owner;
-  GPUCommandBufferVk                    *next;
-  GPUCommandBufferVk                    *poolNext;
-  GPUCommandBufferVk                    *pendingNext;
-  GPUSwapchainVk                        *presentSwapchain;
-  GPUFrameSyncVk                        *completionSync;
-  GPUExecutionGraphInputChunkVk         *graphInputChunks;
+struct CommandBufferVk {
+  QueueVk                               *owner;
+  CommandBufferVk                       *next;
+  CommandBufferVk                       *poolNext;
+  CommandBufferVk                       *pendingNext;
+  SwapchainVk                           *presentSwapchain;
+  FrameSyncVk                           *completionSync;
+  ExecutionGraphInputChunkVk            *graphInputChunks;
   GPUExecutionGraphInstanceEXT          *graphInitializations[GPU_VK_GRAPH_INIT_TRACK_COUNT];
 #ifdef __APPLE__
-  GPUTransferChunkVk                    *transferChunks;
+  TransferChunkVk                       *transferChunks;
 #endif
   VkCommandBuffer                        command;
   VkFence                                fence;
   VkFence                                submitFence;
   VkQueryPool                            frameTimeQueries;
-  GPURenderPassDesc                      renderPass;
-  GPURenderPassVk                        renderPassState;
+  RenderPassDesc                         renderPass;
+  RenderPassVk                           renderPassState;
   GPURenderPassEncoder                   renderEncoder;
-  GPURenderEncoderVk                     renderState;
+  RenderEncoderVk                        renderState;
   GPUComputePassEncoder                  computeEncoder;
-  GPUComputeEncoderVk                    computeState;
+  ComputeEncoderVk                       computeState;
   GPUTransferPassEncoder                 copyEncoder;
 #if defined(VK_KHR_acceleration_structure) && \
     defined(VK_KHR_ray_tracing_pipeline)
   GPURayTracingPassEncoderEXT            rayTracingEncoder;
-  GPURayTracingEncoderVk                 rayTracingState;
+  RayTracingEncoderVk                    rayTracingState;
 #endif
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   GPUAccelerationStructurePassEncoderEXT rayQueryEncoder;
-  GPUAccelerationStructureEncoderVk      rayQueryState;
+  AccelerationStructureEncoderVk         rayQueryState;
 #endif
   GPUCommandBuffer                       commandBuffer;
   uint32_t                               graphInitializationCount;
@@ -625,23 +625,23 @@ enum {
   GPU_VK_TRANSFER_SLOT_COUNT       = 8
 };
 
-typedef struct GPUTransferSlotVk {
+typedef struct TransferSlotVk {
   GPUBuffer      *uploadStaging;
   VkCommandBuffer command;
   VkFence         fence;
   uint64_t        uploadCapacity;
   uint64_t        uploadUsed;
   bool            pending;
-} GPUTransferSlotVk;
+} TransferSlotVk;
 
-struct GPUQueueVk {
+struct QueueVk {
   GPUQueue           *queue;
-  GPUCommandBufferVk *commands;
-  GPUCommandBufferVk *freeCommands;
-  GPUCommandBufferVk *pendingHead;
-  GPUCommandBufferVk *pendingTail;
+  CommandBufferVk    *commands;
+  CommandBufferVk    *freeCommands;
+  CommandBufferVk    *pendingHead;
+  CommandBufferVk    *pendingTail;
   GPUBuffer          *readbackStaging;
-  GPUTransferSlotVk   transferSlots[GPU_VK_TRANSFER_SLOT_COUNT];
+  TransferSlotVk      transferSlots[GPU_VK_TRANSFER_SLOT_COUNT];
   VkQueue             queRaw;
   VkCommandPool       commandPool;
 #if defined(_WIN32) || defined(WIN32)
@@ -668,24 +668,24 @@ struct GPUQueueVk {
   bool                transferUpload;
 };
 
-typedef struct GPUSurfaceVk {
+typedef struct SurfaceVk {
   void        *metalLayer;
   VkInstance   inst;
   VkSurfaceKHR surface;
   uint32_t     formats[GPU_FORMAT_COUNT];
   uint32_t     presentModes[GPU_PRESENT_MODE_IMMEDIATE + 1u];
-} GPUSurfaceVk;
+} SurfaceVk;
 
-struct GPUFrameSyncVk {
-  GPUSwapchainVk *swapchain;
+struct FrameSyncVk {
+  SwapchainVk    *swapchain;
   VkSemaphore     imageAvailable;
   VkFence         fence;
   uint32_t        pendingCommandCount;
 };
 
-struct GPUTextureViewVk {
-  GPUSwapchainVk    *swapchain;
-  GPUTextureVk      *texture;
+struct TextureViewVk {
+  SwapchainVk       *swapchain;
+  TextureVk         *texture;
   VkImageLayout     *layout;
   VkDevice           device;
   VkImage            image;
@@ -701,13 +701,13 @@ struct GPUTextureViewVk {
   uint32_t           layerCount;
 };
 
-typedef struct GPUSamplerVk {
+typedef struct SamplerVk {
   VkDevice  device;
   VkSampler sampler;
-} GPUSamplerVk;
+} SamplerVk;
 
-typedef struct GPUShaderLayoutVk {
-  GPUPipelineLayoutVk  *baseLayout;
+typedef struct ShaderLayoutVk {
+  PipelineLayoutVk     *baseLayout;
   VkSampler            *samplers;
   VkDevice              device;
   VkPipelineLayout      layout;
@@ -719,45 +719,45 @@ typedef struct GPUShaderLayoutVk {
   uint32_t              samplerGroup;
   bool                  ownsLayout;
   bool                  descriptorBuffer;
-} GPUShaderLayoutVk;
+} ShaderLayoutVk;
 
 #if defined(VK_KHR_acceleration_structure) && \
     defined(VK_KHR_ray_tracing_pipeline)
-typedef struct GPURayTracingPipelineVk {
-  GPUShaderLayoutVk shaderLayout;
+typedef struct RayTracingPipelineVk {
+  ShaderLayoutVk    shaderLayout;
   VkDevice          device;
   VkPipeline        pipeline;
   uint32_t          groupHandleSize;
   uint32_t          groupHandleAlignment;
   uint32_t          groupBaseAlignment;
-} GPURayTracingPipelineVk;
+} RayTracingPipelineVk;
 #endif
 
-typedef struct GPURenderPipelineVk {
-  GPUShaderLayoutVk shaderLayout;
+typedef struct RenderPipelineVk {
+  ShaderLayoutVk    shaderLayout;
   VkDevice          device;
   VkPipeline        pipeline;
   VkRenderPass      renderPass;
-} GPURenderPipelineVk;
+} RenderPipelineVk;
 
-typedef struct GPUComputePipelineVk {
-  GPUShaderLayoutVk shaderLayout;
+typedef struct ComputePipelineVk {
+  ShaderLayoutVk    shaderLayout;
   VkDevice          device;
   VkPipeline        pipeline;
-} GPUComputePipelineVk;
+} ComputePipelineVk;
 
-struct GPUSwapchainVk {
+struct SwapchainVk {
   GPUDevice        *gpuDevice;
   GPUSwapchain     *gpuSwapchain;
-  GPUQueueVk       *queue;
-  GPUSurfaceVk     *surface;
+  QueueVk          *queue;
+  SurfaceVk        *surface;
   VkImage          *images;
   VkImageView      *imageViews;
   VkFramebuffer    *framebuffers;
   GPUTexture       *textures;
   GPUTextureView   *textureViews;
-  GPUTextureViewVk *nativeViews;
-  GPUFrameSyncVk   *frameSync;
+  TextureViewVk    *nativeViews;
+  FrameSyncVk      *frameSync;
   VkSemaphore      *renderFinished;
   VkDevice          device;
   VkPhysicalDevice  physicalDevice;
@@ -780,10 +780,10 @@ struct GPUSwapchainVk {
   bool              frameSubmitted;
 };
 
-typedef struct GPUShaderLibraryVk {
+typedef struct ShaderLibraryVk {
   VkDevice       device;
   VkShaderModule module;
-} GPUShaderLibraryVk;
+} ShaderLibraryVk;
 
 GPU_HIDE
 void
@@ -791,7 +791,7 @@ vk_fillSamplerInfo(const GPUSamplerDesc *desc, VkSamplerCreateInfo *outInfo);
 
 GPU_HIDE
 void
-vk_fillStaticSamplerInfo(const GPUStaticSamplerDesc *desc,
+vk_fillStaticSamplerInfo(const StaticSamplerDesc    *desc,
                          VkSamplerCreateInfo        *outInfo);
 
 GPU_HIDE
@@ -800,25 +800,25 @@ vk_createShaderLayout(GPUDevice              *device,
                       GPUPipelineLayout      *layout,
                       const GPUShaderLibrary *library,
                       uint64_t                entryMask,
-                      GPUShaderLayoutVk      *outLayout);
+                      ShaderLayoutVk         *outLayout);
 
 GPU_HIDE
 void
-vk_destroyShaderLayout(GPUShaderLayoutVk *layout);
+vk_destroyShaderLayout(ShaderLayoutVk    *layout);
 
 GPU_HIDE
 void
-vk_invalidateClassicFramebuffers(GPUDeviceVk *device, VkImageView view);
+vk_invalidateClassicFramebuffers(DeviceVk    *device, VkImageView view);
 
 GPU_HIDE
 void
-vk_destroyClassicRenderTargets(GPUDeviceVk *device);
+vk_destroyClassicRenderTargets(DeviceVk    *device);
 
 GPU_HIDE
 void
 vk_bindShaderSamplers(VkCommandBuffer          command,
                       VkPipelineBindPoint      bindPoint,
-                      const GPUShaderLayoutVk *layout);
+                      const ShaderLayoutVk    *layout);
 
 GPU_HIDE
 bool
@@ -843,7 +843,7 @@ vk_formatToGPU(VkFormat format);
 
 GPU_HIDE
 void
-vk_pipelineBarrier(GPUDeviceVk                 *device,
+vk_pipelineBarrier(DeviceVk                    *device,
                    VkCommandBuffer              command,
                    VkPipelineStageFlags         srcStages,
                    VkPipelineStageFlags         dstStages,
@@ -854,7 +854,7 @@ vk_pipelineBarrier(GPUDeviceVk                 *device,
 
 GPU_HIDE
 VkPipelineStageFlags
-vk_barrierStages(const GPUDeviceVk *device, GPUPipelineStageMask stages);
+vk_barrierStages(const DeviceVk    *device, GPUPipelineStageMask stages);
 
 GPU_HIDE
 VkAccessFlags
@@ -875,13 +875,13 @@ vk_textureBarrierLayout(const GPUTexture *texture,
 GPU_HIDE
 void
 vk_transitionView(VkCommandBuffer   command,
-                  GPUTextureViewVk *view,
+                  TextureViewVk    *view,
                   VkImageLayout     nextLayout);
 
 GPU_HIDE
 bool
 vk_transitionTexture(VkCommandBuffer command,
-                     GPUTextureVk   *texture,
+                     TextureVk      *texture,
                      uint32_t        baseMip,
                      uint32_t        mipCount,
                      uint32_t        baseLayer,
@@ -892,7 +892,7 @@ vk_transitionTexture(VkCommandBuffer command,
 GPU_HIDE
 bool
 vk_transitionTextureIndirectCopy(VkCommandBuffer command,
-                                 GPUTextureVk   *texture,
+                                 TextureVk      *texture,
                                  uint32_t        baseMip,
                                  uint32_t        mipCount,
                                  uint32_t        baseLayer,
@@ -902,7 +902,7 @@ vk_transitionTextureIndirectCopy(VkCommandBuffer command,
 GPU_HIDE
 bool
 vk_transitionTextureBarrier(VkCommandBuffer      command,
-                            GPUTextureVk        *texture,
+                            TextureVk           *texture,
                             uint32_t             baseMip,
                             uint32_t             mipCount,
                             uint32_t             baseLayer,
@@ -915,7 +915,7 @@ vk_transitionTextureBarrier(VkCommandBuffer      command,
 
 GPU_HIDE
 void
-vk_setTextureLayout(GPUTextureVk *texture,
+vk_setTextureLayout(TextureVk    *texture,
                     uint32_t      baseMip,
                     uint32_t      mipCount,
                     uint32_t      baseLayer,
@@ -924,15 +924,15 @@ vk_setTextureLayout(GPUTextureVk *texture,
 
 GPU_HIDE
 bool
-vk_restoreFrameFence(GPUSwapchainVk *swapchain, GPUFrameSyncVk *sync);
+vk_restoreFrameFence(SwapchainVk    *swapchain, FrameSyncVk    *sync);
 
 GPU_HIDE
 bool
-vk_waitFrameCompletion(GPUFrameSyncVk *sync);
+vk_waitFrameCompletion(FrameSyncVk    *sync);
 
 GPU_HIDE
 VkResult
-vk_presentSwapchain(GPUSwapchainVk *swapchain,
+vk_presentSwapchain(SwapchainVk    *swapchain,
                     VkQueue         queue,
                     VkSemaphore     waitSemaphore,
                     uint32_t        imageIndex);
@@ -957,7 +957,7 @@ vk_abortTransfer(GPUQueue *queue);
 
 GPU_HIDE
 void
-vk_waitSwapchainIdle(GPUSwapchainVk *swapchain);
+vk_waitSwapchainIdle(SwapchainVk    *swapchain);
 
 GPU_HIDE
 bool
@@ -969,7 +969,7 @@ vk_resetQuerySet(GPUCommandBuffer *cmdb, GPUQuerySet *set);
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
 
-static inline GPUInstanceVk*
+static inline InstanceVk*
 vk_debugInstance(GPUDevice *device) {
   return device && device->inst ? device->inst->_priv : NULL;
 }
@@ -979,11 +979,11 @@ vk_beginDebugLabel(GPUDevice      *device,
                    VkCommandBuffer command,
                    const char     *label) {
   VkDebugUtilsLabelEXT info = {0};
-  GPUInstanceVk       *instance;
+  InstanceVk          *instance;
 
   instance = vk_debugInstance(device);
 
-  if (!gpuDeviceDebugMarkersEnabled(device) || !command
+  if (!deviceDebugMarkersEnabled(device) || !command
       || !label || label[0] == '\0' || !instance
       || !instance->CmdBeginDebugUtilsLabelEXT) {
     return false;
@@ -998,7 +998,7 @@ vk_beginDebugLabel(GPUDevice      *device,
 
 static inline void
 vk_endDebugLabel(GPUDevice *device, VkCommandBuffer command) {
-  GPUInstanceVk *instance;
+  InstanceVk    *instance;
 
   instance = vk_debugInstance(device);
 
@@ -1013,13 +1013,13 @@ vk_setDebugName(GPUDevice   *device,
                 uint64_t     objectHandle,
                 const char  *label) {
   VkDebugUtilsObjectNameInfoEXT info = {0};
-  GPUInstanceVk                *instance;
-  GPUDeviceVk                  *deviceVk;
+  InstanceVk                   *instance;
+  DeviceVk                     *deviceVk;
 
   instance = vk_debugInstance(device);
   deviceVk = device ? device->_priv : NULL;
 
-  if (!gpuDeviceDebugMarkersEnabled(device) || objectHandle == 0u
+  if (!deviceDebugMarkersEnabled(device) || objectHandle == 0u
       || !label || label[0] == '\0' || !instance || !deviceVk
       || !instance->SetDebugUtilsObjectNameEXT) {
     return;
@@ -1035,7 +1035,7 @@ vk_setDebugName(GPUDevice   *device,
 #endif
 
 static inline void
-vk_setSwapchainStatus(GPUSwapchainVk *swapchain, VkResult result) {
+vk_setSwapchainStatus(SwapchainVk    *swapchain, VkResult result) {
   GPUSwapchainStatus status;
 
   switch (result) {
@@ -1056,7 +1056,7 @@ vk_setSwapchainStatus(GPUSwapchainVk *swapchain, VkResult result) {
       break;
   }
 
-  gpuSwapchainSetStatus(swapchain ? swapchain->gpuSwapchain : NULL, status);
+  swapchainSetStatus(swapchain ? swapchain->gpuSwapchain : NULL, status);
 }
 
 #endif /* vk_common_h */

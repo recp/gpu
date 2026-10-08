@@ -17,12 +17,12 @@
 #include "common.h"
 #include "impl.h"
 
-static GPUApi webgpu = {
+static Api    webgpu = {
   .backend = GPU_BACKEND_WEBGPU
 };
 
 GPU_HIDE
-GPUApi*
+Api*
 backend_webgpu(void) {
   if (!webgpu.initialized) {
     webgpu_initDevice(&webgpu.device);

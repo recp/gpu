@@ -23,11 +23,11 @@ extern "C" {
 #include <gpu/common.h>
 #include <gpu/gpu.h>
 
-struct GPUApi;
+struct Api;
 
-typedef struct GPUApiSwapchain {
+typedef struct ApiSwapchain {
   GPUSwapchain *
-  (*createSwapchain)(struct GPUApi                *__restrict api,
+  (*createSwapchain)(struct Api                   *__restrict api,
                      struct GPUDevice             *__restrict device,
                      struct GPUQueue              *__restrict cmdQue,
                      const GPUSwapchainCreateInfo *__restrict info);
@@ -35,7 +35,7 @@ typedef struct GPUApiSwapchain {
   GPUResult (*resizeSwapchain)(GPUSwapchain *swapchain, GPUExtent2D size);
 
   void (*destroySwapchain)(GPUSwapchain *swapchain);
-} GPUApiSwapchain;
+} ApiSwapchain;
 
 #ifdef __cplusplus
 }

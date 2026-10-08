@@ -39,7 +39,7 @@ typedef struct MarkerFixture {
   GPUCommandBuffer cmdb;
   GPUQueue         queue;
   GPUDevice        device;
-  GPUApi           api;
+  Api              api;
 } MarkerFixture;
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS

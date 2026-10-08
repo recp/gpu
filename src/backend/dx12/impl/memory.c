@@ -27,9 +27,9 @@ dx12_createHeap(GPUDevice               *device,
                 const GPUHeapCreateInfo *info,
                 GPUHeap                **outHeap) {
   D3D12_HEAP_DESC  desc = {0};
-  GPUDeviceDX12   *deviceDX12;
+  DeviceDX12      *deviceDX12;
   GPUHeap         *heap;
-  GPUHeapDX12     *native;
+  HeapDX12        *native;
   uint64_t         alignment;
   uint64_t         nativeSize;
   uint64_t         compatibility;
@@ -74,7 +74,7 @@ dx12_createHeap(GPUDevice               *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native        = (GPUHeapDX12 *)(heap + 1);
+  native        = (HeapDX12 *)(heap + 1);
   native->type  = D3D12_HEAP_TYPE_DEFAULT;
   native->flags = heapFlags;
 
@@ -104,7 +104,7 @@ dx12_createHeap(GPUDevice               *device,
 
 static void
 dx12_destroyHeap(GPUHeap *heap) {
-  GPUHeapDX12 *native;
+  HeapDX12    *native;
 
   if (!heap) {
     return;
@@ -122,14 +122,14 @@ dx12_destroyHeap(GPUHeap *heap) {
 static GPUResult
 dx12_submitSparse(GPUQueue                       *queueHandle,
                   const GPUQueueSparseSubmitInfo *info) {
-  GPUQueueDX12                  *queue;
+  QueueDX12                     *queue;
   ID3D12Fence                   *waitFence;
   const GPUSparseBufferMapping  *bufferMapping;
-  GPUBufferDX12                 *buffer;
-  GPUHeapDX12                   *bufferHeap;
+  BufferDX12                    *buffer;
+  HeapDX12                      *bufferHeap;
   const GPUSparseTextureMapping *textureMapping;
-  GPUTextureDX12                *texture;
-  GPUHeapDX12                   *textureHeap;
+  TextureDX12                   *texture;
+  HeapDX12                      *textureHeap;
   ID3D12Fence                   *signalFence;
   uint64_t                       tileCount64;
   HRESULT                        result;
@@ -286,7 +286,7 @@ GPU_HIDE
 uint64_t
 dx12_memoryCompatibility(GPUDevice                 *device,
                          const D3D12_RESOURCE_DESC *desc) {
-  GPUDeviceDX12 *deviceDX12;
+  DeviceDX12    *deviceDX12;
 
   if (!device || !(deviceDX12 = device->_priv) || !desc) {
     return 0u;
@@ -310,7 +310,7 @@ dx12_memoryCompatibility(GPUDevice                 *device,
 
 GPU_HIDE
 void
-dx12_initMemory(GPUApiMemory *api) {
+dx12_initMemory(ApiMemory    *api) {
   api->getBufferRequirements        = dx12_getBufferMemoryRequirements;
   api->getTextureRequirements       = dx12_getTextureMemoryRequirements;
   api->getSparseBufferRequirements  = dx12_getSparseBufferRequirements;

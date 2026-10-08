@@ -101,7 +101,7 @@ mt_writeTextureBlit(GPUQueue                    *queue,
                     GPUTexture                  *texture,
                     const GPUTextureWriteRegion *region,
                     const void                  *data,
-                    const GPUFormatDataLayout   *dataLayout,
+                    const FormatDataLayout      *dataLayout,
                     MTLBlitOption                option) {
   MTLSize                   size;
   id<MTLBlitCommandEncoder> blit;
@@ -180,13 +180,13 @@ mt_writeSparseTexture4(GPUQueue                    *queue,
                        GPUTexture                  *texture,
                        const GPUTextureWriteRegion *region,
                        const void                  *data,
-                       const GPUFormatDataLayout   *dataLayout) {
+                       const FormatDataLayout      *dataLayout) {
   GPUCommandBuffer             *submitList[1];
   GPUQueueSubmitInfo            submitInfo = {0};
   MTLSize                       size;
   GPUCommandBuffer             *cmdb;
   MTCommandQueue               *nativeQueue;
-  GPUHeapMT                    *nativeHeap;
+  HeapMT                       *nativeHeap;
   id<MTL4ComputeCommandEncoder> encoder;
   id<MTLTexture>                nativeTexture;
   id<MTLBuffer>                 upload;
@@ -287,7 +287,7 @@ mt_writeSparseTexture4(GPUQueue                    *queue,
 GPU_HIDE
 id<MTLTexture>
 mt_nativeTexture(GPUTexture *texture) {
-  GPUTextureMT *native;
+  TextureMT    *native;
 
   if (!texture || !texture->_priv) {
     return nil;
@@ -305,11 +305,11 @@ mt_nativeTexture(GPUTexture *texture) {
 GPU_HIDE
 id<MTLTexture>
 mt_copyTexture(GPUTexture *texture, GPUTextureAspect aspect) {
-  GPUTextureMT    *native;
+  TextureMT       *native;
   GPUTextureAspect resolved;
 
   if (!texture || !texture->_priv
-      || !gpuFormatResolveCopyAspect(texture->format, aspect, &resolved)) {
+      || !formatResolveCopyAspect(texture->format, aspect, &resolved)) {
     return nil;
   }
 
@@ -340,7 +340,7 @@ mt_copyOption(GPUFormat format, GPUTextureAspect aspect) {
 
   if ((format != GPU_FORMAT_DEPTH24_UNORM_STENCIL8
        && format != GPU_FORMAT_DEPTH32_FLOAT_STENCIL8)
-      || !gpuFormatResolveCopyAspect(format, aspect, &resolved)) {
+      || !formatResolveCopyAspect(format, aspect, &resolved)) {
     return MTLBlitOptionNone;
   }
 
@@ -356,7 +356,7 @@ mt_createTextureDescriptor(GPUDevice                  *device,
                            MTLStorageMode              storageMode,
                            MTLTextureDescriptor      **outDesc,
                            MTLPixelFormat             *outStencilCopyFormat) {
-  GPUDeviceMT          *deviceMT;
+  DeviceMT             *deviceMT;
   MTLTextureDescriptor *desc;
   MTLPixelFormat        stencilCopyFormat;
   uint32_t              sampleCount;
@@ -423,7 +423,7 @@ mt_wrapTexture(GPUDevice                  *device,
                GPUTexture                **outTexture) {
   id<MTLTexture> stencilCopyView;
   GPUTexture    *texture;
-  GPUTextureMT  *native;
+  TextureMT     *native;
 
   if (!device || !info || !nativeTexture || !outTexture) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -440,7 +440,7 @@ mt_wrapTexture(GPUDevice                  *device,
   }
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-  if (gpuDeviceDebugMarkersEnabled(device)
+  if (deviceDebugMarkersEnabled(device)
       && info->label && info->label[0] != '\0') {
     nativeTexture.label = [NSString stringWithUTF8String:info->label];
   }
@@ -451,7 +451,7 @@ mt_wrapTexture(GPUDevice                  *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native                  = (GPUTextureMT *)(texture + 1);
+  native                  = (TextureMT *)(texture + 1);
   native->texture         = nativeTexture;
   native->stencilCopyView = stencilCopyView;
   texture->_priv          = native;
@@ -475,7 +475,7 @@ GPUResult
 mt_createTexture(GPUDevice                  *__restrict device,
                  const GPUTextureCreateInfo *__restrict info,
                  GPUTexture                **__restrict outTexture) {
-  GPUDeviceMT          *deviceMT;
+  DeviceMT             *deviceMT;
   MTLTextureDescriptor *desc;
   id<MTLTexture>        nativeTexture;
   MTLPixelFormat        stencilCopyFormat;
@@ -534,7 +534,7 @@ mt_createTexture(GPUDevice                  *__restrict device,
 GPU_HIDE
 void
 mt_destroyTexture(GPUTexture *__restrict texture) {
-  GPUTextureMT *native;
+  TextureMT    *native;
 
   if (!texture) {
     return;
@@ -561,7 +561,7 @@ mt_createTextureView(GPUTexture                     *__restrict texture,
   MTTextureViewSlot        *slot;
   GPUTextureView           *view;
 #if MT_HAS_METAL4
-  GPUDeviceMT              *deviceMT;
+  DeviceMT                 *deviceMT;
   MTLTextureViewDescriptor *descriptor;
 #endif
   MTLTextureType            nativeViewType;
@@ -581,13 +581,13 @@ mt_createTextureView(GPUTexture                     *__restrict texture,
   nativeTexture  = mt_nativeTexture(texture);
   nativeViewType = mt_textureViewType(info->viewType, texture->sampleCount);
   nativeView     = nil;
-  minLOD         = gpuTextureViewMinLOD(info);
+  minLOD         = textureViewMinLOD(info);
   fullView       = info->format == texture->format
                    && nativeTexture.textureType == nativeViewType
                    && info->baseMipLevel == 0
                    && info->mipLevelCount == texture->mipLevelCount
                    && info->baseArrayLayer == 0
-                   && info->arrayLayerCount == gpuTextureArrayLayerCount(texture)
+                   && info->arrayLayerCount == textureArrayLayerCount(texture)
                    && minLOD == 0.0f;
 
   if (!(view = calloc(1, sizeof(*view) + sizeof(*slot)))) {
@@ -718,7 +718,7 @@ mt_writeTexture(GPUQueue                    *__restrict queue,
                 const GPUTextureWriteRegion *__restrict region,
                 const void                  *__restrict data,
                 uint64_t                                sizeBytes) {
-  GPUFormatDataLayout dataLayout;
+  FormatDataLayout    dataLayout;
   MTLRegion           mtRegion;
   id<MTLTexture>      nativeTexture;
   const uint8_t      *bytes;
@@ -730,21 +730,21 @@ mt_writeTexture(GPUQueue                    *__restrict queue,
   uint32_t            i;
 
   if (!texture || !texture->_priv || !region || !data
-      || !gpuFormatResolveCopyAspect(texture->format,
-                                     region->aspect,
-                                     &resolved)) {
+      || !formatResolveCopyAspect(texture->format,
+                                  region->aspect,
+                                  &resolved)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!gpuFormatAspectDataLayout(texture->format,
-                                 region->aspect,
-                                 region->width,
-                                 region->height,
-                                 region->depth,
-                                 region->layerCount,
-                                 region->bytesPerRow,
-                                 region->rowsPerImage,
-                                 &dataLayout)
+  if (!formatAspectDataLayout(texture->format,
+                              region->aspect,
+                              region->width,
+                              region->height,
+                              region->depth,
+                              region->layerCount,
+                              region->bytesPerRow,
+                              region->rowsPerImage,
+                              &dataLayout)
       || sizeBytes < dataLayout.requiredBytes
       || dataLayout.bytesPerImage > NSUIntegerMax) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -823,13 +823,13 @@ mt_writeTexture(GPUQueue                    *__restrict queue,
 
 GPU_HIDE
 void
-mt_initDepthStencil(GPUApiDepthStencil *api) {
+mt_initDepthStencil(ApiDepthStencil    *api) {
   api->reserved = NULL;
 }
 
 GPU_HIDE
 void
-mt_initTexture(GPUApiTexture *api) {
+mt_initTexture(ApiTexture    *api) {
   api->create      = mt_createTexture;
   api->destroy     = mt_destroyTexture;
   api->createView  = mt_createTextureView;

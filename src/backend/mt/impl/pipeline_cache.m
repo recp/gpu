@@ -189,7 +189,7 @@ mt_nativeCache(GPUPipelineCache *cache) {
 #if MT_HAS_METAL4
 
 static GPUResult
-mt_createCache4(GPUDeviceMT                      *device,
+mt_createCache4(DeviceMT                         *device,
                 const GPUPipelineCacheCreateInfo *info,
                 NSString                         *path,
                 MTPipelineCache                  *native) {
@@ -283,12 +283,12 @@ static GPUResult
 mt_createCache(GPUDevice                        *device,
                const GPUPipelineCacheCreateInfo *info,
                GPUPipelineCache                 *cache) {
-  GPUCacheFileGuard           guard;
+  CacheFileGuard              guard;
   MTLBinaryArchiveDescriptor *descriptor;
   id<MTLBinaryArchive>        archive;
   NSFileManager              *fileManager;
   MTPipelineCache            *native;
-  GPUDeviceMT                *deviceMT;
+  DeviceMT                   *deviceMT;
   NSString                   *path;
   NSURL                      *directoryURL;
   NSURL                      *url;
@@ -323,12 +323,12 @@ mt_createCache(GPUDevice                        *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
-    if (!gpuCacheFileBegin(url.fileSystemRepresentation, &guard)) {
+    if (!cacheFileBegin(url.fileSystemRepresentation, &guard)) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
     if (!(native = calloc(1, sizeof(*native)))) {
-      gpuCacheFileEnd(&guard);
+      cacheFileEnd(&guard);
       return GPU_ERROR_OUT_OF_MEMORY;
     }
 
@@ -347,12 +347,12 @@ mt_createCache(GPUDevice                        *device,
         [native->compiler release];
         [native->url release];
         free(native);
-        gpuCacheFileEnd(&guard);
+        cacheFileEnd(&guard);
         return result;
       }
 
       cache->_priv = native;
-      gpuCacheFileEnd(&guard);
+      cacheFileEnd(&guard);
 
       return GPU_OK;
     }
@@ -394,7 +394,7 @@ mt_createCache(GPUDevice                        *device,
       NSLog(@"Failed to create Metal pipeline cache: %@", error);
       [native->lookupArchive release];
       free(native);
-      gpuCacheFileEnd(&guard);
+      cacheFileEnd(&guard);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -408,7 +408,7 @@ mt_createCache(GPUDevice                        *device,
       [archive release];
       [native->lookupArchive release];
       free(native);
-      gpuCacheFileEnd(&guard);
+      cacheFileEnd(&guard);
       return GPU_ERROR_OUT_OF_MEMORY;
     }
 
@@ -417,7 +417,7 @@ mt_createCache(GPUDevice                        *device,
     }
 
     cache->_priv = native;
-    gpuCacheFileEnd(&guard);
+    cacheFileEnd(&guard);
 
     return GPU_OK;
   }
@@ -427,7 +427,7 @@ mt_createCache(GPUDevice                        *device,
 
 static void
 mt_storeCache(MTPipelineCache *native) {
-  GPUCacheFileGuard guard;
+  CacheFileGuard    guard;
   char             *metadataTemporaryBytes;
   char             *temporaryBytes;
   NSFileManager    *fileManager;
@@ -443,22 +443,22 @@ mt_storeCache(MTPipelineCache *native) {
     return;
   }
 
-  if (!gpuCacheFileBegin(native->url.fileSystemRepresentation, &guard)) {
+  if (!cacheFileBegin(native->url.fileSystemRepresentation, &guard)) {
     return;
   }
 
   metadataPath           = mt_metadataPath(native->url.path);
-  temporaryBytes         = gpuCacheFileTemporaryPath(native->url.fileSystemRepresentation,
-                                                     native);
-  metadataTemporaryBytes = gpuCacheFileTemporaryPath(metadataPath.fileSystemRepresentation,
-                                                     native);
+  temporaryBytes         = cacheFileTemporaryPath(native->url.fileSystemRepresentation,
+                                                  native);
+  metadataTemporaryBytes = cacheFileTemporaryPath(metadataPath.fileSystemRepresentation,
+                                                  native);
   temporaryPath          = temporaryBytes ? [NSString stringWithUTF8String:temporaryBytes] : nil;
   metadataTemporaryPath  = metadataTemporaryBytes ? [NSString stringWithUTF8String:metadataTemporaryBytes] : nil;
 
   if (!temporaryPath || !metadataTemporaryPath) {
     free(metadataTemporaryBytes);
     free(temporaryBytes);
-    gpuCacheFileEnd(&guard);
+    cacheFileEnd(&guard);
     return;
   }
 
@@ -493,15 +493,15 @@ mt_storeCache(MTPipelineCache *native) {
   }
 
   if (serialized
-      && !gpuCacheFileReplace(temporaryURL.fileSystemRepresentation,
-                              native->url.fileSystemRepresentation)) {
+      && !cacheFileReplace(temporaryURL.fileSystemRepresentation,
+                           native->url.fileSystemRepresentation)) {
     NSLog(@"Failed to replace Metal pipeline cache at %@", native->url.path);
     serialized = false;
   }
 
   if (serialized
-      && !gpuCacheFileReplace(metadataURL.fileSystemRepresentation,
-                              metadataPath.fileSystemRepresentation)) {
+      && !cacheFileReplace(metadataURL.fileSystemRepresentation,
+                           metadataPath.fileSystemRepresentation)) {
     NSLog(@"Failed to replace Metal pipeline cache metadata at %@", metadataPath);
     serialized = false;
   }
@@ -515,7 +515,7 @@ mt_storeCache(MTPipelineCache *native) {
 
   free(metadataTemporaryBytes);
   free(temporaryBytes);
-  gpuCacheFileEnd(&guard);
+  cacheFileEnd(&guard);
 }
 
 static void
@@ -545,7 +545,7 @@ mt_destroyCache(GPUPipelineCache *cache) {
 
 GPU_HIDE
 GPUResult
-mt_initPipelineCompiler(GPUDeviceMT *device) {
+mt_initPipelineCompiler(DeviceMT    *device) {
   if (!device || device->commandMode != MTCommandMode4) {
     return GPU_OK;
   }
@@ -576,7 +576,7 @@ mt_initPipelineCompiler(GPUDeviceMT *device) {
 
 GPU_HIDE
 void
-mt_destroyPipelineCompiler(GPUDeviceMT *device) {
+mt_destroyPipelineCompiler(DeviceMT    *device) {
   if (!device) {
     return;
   }
@@ -696,7 +696,7 @@ mt_addComputeCache(GPUPipelineCache             *cache,
 GPU_HIDE
 id
 mt_compileRenderPipeline4(GPUPipelineCache *cache,
-                          GPUDeviceMT      *device,
+                          DeviceMT         *device,
                           id                descriptor,
                           NSError         **error) {
 #if MT_HAS_METAL4
@@ -763,7 +763,7 @@ mt_compileRenderPipeline4(GPUPipelineCache *cache,
 GPU_HIDE
 id
 mt_compileComputePipeline4(GPUPipelineCache *cache,
-                           GPUDeviceMT      *device,
+                           DeviceMT         *device,
                            id                descriptor,
                            NSError         **error) {
 #if MT_HAS_METAL4
@@ -829,7 +829,7 @@ mt_compileComputePipeline4(GPUPipelineCache *cache,
 
 GPU_HIDE
 void
-mt_initPipelineCache(GPUApiPipelineCache *api) {
+mt_initPipelineCache(ApiPipelineCache    *api) {
   api->create  = mt_createCache;
   api->destroy = mt_destroyCache;
 }

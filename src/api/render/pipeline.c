@@ -29,7 +29,7 @@
 #define GPU_RENDER_PIPELINE_MAX_COLOR_TARGETS 8u
 
 static bool
-gpu_blendStateIsValid(const GPUBlendState *blend) {
+blendStateIsValid(const GPUBlendState *blend) {
   return (uint32_t)blend->color.srcFactor <= GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA
          && (uint32_t)blend->color.dstFactor <= GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA
          && (uint32_t)blend->alpha.srcFactor <= GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA
@@ -41,8 +41,8 @@ gpu_blendStateIsValid(const GPUBlendState *blend) {
 }
 
 static bool
-gpu_depthStencilStateIsValid(GPUFormat                   format,
-                             const GPUDepthStencilState *state) {
+depthStencilStateIsValid(GPUFormat                   format,
+                         const GPUDepthStencilState *state) {
   bool hasDepth;
   bool hasStencil;
 
@@ -89,8 +89,8 @@ gpu_depthStencilStateIsValid(GPUFormat                   format,
 }
 
 static GPUResult
-gpu_validatePipelineFormats(const GPUDevice                   *device,
-                            const GPURenderPipelineCreateInfo *info) {
+validatePipelineFormats(const GPUDevice                   *device,
+                        const GPURenderPipelineCreateInfo *info) {
   GPUFormatCapabilities caps;
   GPUResult             result;
   uint32_t              sampleCount;
@@ -133,15 +133,15 @@ gpu_validatePipelineFormats(const GPUDevice                   *device,
 }
 
 static bool
-gpu_bindingTypeIsBuffer(GPUBindingType type) {
+bindingTypeIsBuffer(GPUBindingType type) {
   return type == GPU_BINDING_UNIFORM_BUFFER
          || type == GPU_BINDING_READ_ONLY_STORAGE_BUFFER
          || type == GPU_BINDING_STORAGE_BUFFER;
 }
 
 static GPUResult
-gpu_metalVertexResourceSlotMask(const GPURenderPipelineCreateInfo *info,
-                                uint32_t                          *outMask) {
+metalVertexResourceSlotMask(const GPURenderPipelineCreateInfo *info,
+                            uint32_t                          *outMask) {
   GPUShaderReflection                reflection;
   const GPUShaderResourceReflection *resource;
   GPUShaderStageFlags                stage;
@@ -152,17 +152,17 @@ gpu_metalVertexResourceSlotMask(const GPURenderPipelineCreateInfo *info,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!gpuShaderLibraryHasEntryResourceInfo(info->library)) {
-    *outMask = gpuPipelineLayoutBackendSlotMask(info->layout,
-                                                GPUBindKindBuffer,
-                                                GPU_SHADER_STAGE_VERTEX_BIT);
+  if (!shaderLibraryHasEntryResourceInfo(info->library)) {
+    *outMask = pipelineLayoutBackendSlotMask(info->layout,
+                                             GPUBindKindBuffer,
+                                             GPU_SHADER_STAGE_VERTEX_BIT);
     return GPU_OK;
   }
 
-  if (!gpuShaderEntryView(info->library,
-                          info->vertexEntry,
-                          &stage,
-                          &reflection)
+  if (!shaderEntryView(info->library,
+                       info->vertexEntry,
+                       &stage,
+                       &reflection)
       || stage != GPU_SHADER_STAGE_VERTEX_BIT) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -174,16 +174,16 @@ gpu_metalVertexResourceSlotMask(const GPURenderPipelineCreateInfo *info,
 
     resource = &reflection.pResources[i];
 
-    if (!gpu_bindingTypeIsBuffer(resource->bindingType)
+    if (!bindingTypeIsBuffer(resource->bindingType)
         || (resource->visibility & GPU_SHADER_STAGE_VERTEX_BIT) == 0u) {
       continue;
     }
 
     binding = resource->binding;
 
-    if (!gpuGetShaderResourceBackendBinding(info->library,
-                                            resource,
-                                            &binding)
+    if (!getShaderResourceBackendBinding(info->library,
+                                         resource,
+                                         &binding)
         || binding >= MT_BIND_GROUP_BUFFER_COUNT) {
       return GPU_ERROR_UNSUPPORTED;
     }
@@ -197,8 +197,8 @@ gpu_metalVertexResourceSlotMask(const GPURenderPipelineCreateInfo *info,
 }
 
 static GPUResult
-gpu_validateMetalVertexBindings(const GPUApi                      *api,
-                                const GPURenderPipelineCreateInfo *info) {
+validateMetalVertexBindings(const Api                         *api,
+                            const GPURenderPipelineCreateInfo *info) {
   GPUResult result;
   uint32_t  resourceSlotMask;
   uint32_t  i;
@@ -208,7 +208,7 @@ gpu_validateMetalVertexBindings(const GPUApi                      *api,
     return GPU_OK;
   }
 
-  result = gpu_metalVertexResourceSlotMask(info, &resourceSlotMask);
+  result = metalVertexResourceSlotMask(info, &resourceSlotMask);
 
   if (result != GPU_OK) {
     return result;
@@ -231,19 +231,19 @@ gpu_validateMetalVertexBindings(const GPUApi                      *api,
 }
 
 static bool
-gpu_vertexFormatIsValid(GPUVertexFormat format) {
+vertexFormatIsValid(GPUVertexFormat format) {
   return (uint32_t)format > GPU_VERTEX_FORMAT_UNDEFINED
          && (uint32_t)format < GPU_VERTEX_FORMAT_COUNT;
 }
 
 static bool
-gpu_vertexStepModeIsValid(GPUVertexStepMode mode) {
+vertexStepModeIsValid(GPUVertexStepMode mode) {
   return mode == GPU_VERTEX_STEP_MODE_VERTEX
          || mode == GPU_VERTEX_STEP_MODE_INSTANCE;
 }
 
 static bool
-gpu_vertexStateIsValid(const GPUVertexState *state) {
+vertexStateIsValid(const GPUVertexState *state) {
   const GPUVertexBufferLayout *layout;
   uint32_t                     i;
   uint32_t                     j;
@@ -263,7 +263,7 @@ gpu_vertexStateIsValid(const GPUVertexState *state) {
   for (i = 0; i < state->bufferLayoutCount; i++) {
     layout = &state->pBufferLayouts[i];
 
-    if (!gpu_vertexStepModeIsValid(layout->stepMode)) {
+    if (!vertexStepModeIsValid(layout->stepMode)) {
       return false;
     }
 
@@ -272,7 +272,7 @@ gpu_vertexStateIsValid(const GPUVertexState *state) {
     }
 
     for (j = 0; j < layout->attributeCount; j++) {
-      if (!gpu_vertexFormatIsValid(layout->pAttributes[j].format)) {
+      if (!vertexFormatIsValid(layout->pAttributes[j].format)) {
         return false;
       }
     }
@@ -281,10 +281,10 @@ gpu_vertexStateIsValid(const GPUVertexState *state) {
   return true;
 }
 
-static GPUVertexDescriptor*
-gpu_createVertexDescriptorFromState(GPUApi               *api,
-                                    const GPUVertexState *state) {
-  GPUVertexDescriptor         *desc;
+static VertexDescriptor*
+createVertexDescriptorFromState(Api                  *api,
+                                const GPUVertexState *state) {
+  VertexDescriptor            *desc;
   const GPUVertexBufferLayout *layout;
   const GPUVertexAttribute    *attr;
   uint32_t                     i;
@@ -301,7 +301,7 @@ gpu_createVertexDescriptorFromState(GPUApi               *api,
       || !api->vertex.vertexDesc)
     return NULL;
 
-  if (!(desc = gpuCreateVertexDesc(api)))
+  if (!(desc = createVertexDesc(api)))
     return NULL;
 
   for (i = 0; i < state->bufferLayoutCount; i++) {
@@ -312,21 +312,21 @@ gpu_createVertexDescriptorFromState(GPUApi               *api,
       return NULL;
     }
 
-    gpuVertexDescLayout(api,
-                        desc,
-                        i,
-                        layout->strideBytes,
-                        layout->stepMode);
+    vertexDescLayout(api,
+                     desc,
+                     i,
+                     layout->strideBytes,
+                     layout->stepMode);
 
     for (j = 0; j < layout->attributeCount; j++) {
       attr = &layout->pAttributes[j];
 
-      gpuVertexDescAttrib(api,
-                          desc,
-                          attr->shaderLocation,
-                          attr->format,
-                          attr->offset,
-                          i);
+      vertexDescAttrib(api,
+                       desc,
+                       attr->shaderLocation,
+                       attr->format,
+                       attr->offset,
+                       i);
     }
   }
 
@@ -334,7 +334,7 @@ gpu_createVertexDescriptorFromState(GPUApi               *api,
 }
 
 static bool
-gpu_primitiveTopologyIsValid(GPUPrimitiveTopology topology) {
+primitiveTopologyIsValid(GPUPrimitiveTopology topology) {
   return topology == GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
          || topology == GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP
          || topology == GPU_PRIMITIVE_TOPOLOGY_LINE_LIST
@@ -343,44 +343,44 @@ gpu_primitiveTopologyIsValid(GPUPrimitiveTopology topology) {
 }
 
 static bool
-gpu_cullModeIsValid(GPUCullMode mode) {
+cullModeIsValid(GPUCullMode mode) {
   return mode == GPU_CULL_MODE_NONE
          || mode == GPU_CULL_MODE_FRONT
          || mode == GPU_CULL_MODE_BACK;
 }
 
 static bool
-gpu_frontFaceIsValid(GPUFrontFace face) {
+frontFaceIsValid(GPUFrontFace face) {
   return face == GPU_FRONT_FACE_CCW
          || face == GPU_FRONT_FACE_CW;
 }
 
 static bool
-gpu_renderPipelineEntriesMatchStages(const GPURenderPipelineCreateInfo *info,
-                                     const GPUMeshPipelineEXT          *mesh) {
+renderPipelineEntriesMatchStages(const GPURenderPipelineCreateInfo *info,
+                                 const GPUMeshPipelineEXT          *mesh) {
   GPUShaderStageFlags stage;
 
   if (mesh) {
     if (mesh->taskEntry
-        && gpuGetShaderLibraryEntryStage(info->library, mesh->taskEntry, &stage)
+        && getShaderLibraryEntryStage(info->library, mesh->taskEntry, &stage)
         && stage != GPU_SHADER_STAGE_TASK_BIT) {
       return false;
     }
 
-    if (gpuGetShaderLibraryEntryStage(info->library, mesh->meshEntry, &stage)
+    if (getShaderLibraryEntryStage(info->library, mesh->meshEntry, &stage)
         && stage != GPU_SHADER_STAGE_MESH_BIT) {
       return false;
     }
   } else {
-    if (gpuGetShaderLibraryEntryStage(info->library,
-                                      info->vertexEntry,
-                                      &stage)
+    if (getShaderLibraryEntryStage(info->library,
+                                   info->vertexEntry,
+                                   &stage)
         && stage != GPU_SHADER_STAGE_VERTEX_BIT) {
       return false;
     }
   }
 
-  if (gpuGetShaderLibraryEntryStage(info->library, info->fragmentEntry, &stage)
+  if (getShaderLibraryEntryStage(info->library, info->fragmentEntry, &stage)
       && stage != GPU_SHADER_STAGE_FRAGMENT_BIT) {
     return false;
   }
@@ -389,9 +389,9 @@ gpu_renderPipelineEntriesMatchStages(const GPURenderPipelineCreateInfo *info,
 }
 
 static GPUResult
-gpu_resolveMeshPayloadSize(const GPURenderPipelineCreateInfo *info,
-                           const GPUMeshPipelineEXT          *mesh,
-                           uint32_t                          *outSizeBytes) {
+resolveMeshPayloadSize(const GPURenderPipelineCreateInfo *info,
+                       const GPUMeshPipelineEXT          *mesh,
+                       uint32_t                          *outSizeBytes) {
   const char *taskType;
   const char *meshType;
   uint32_t    taskSize;
@@ -413,11 +413,11 @@ gpu_resolveMeshPayloadSize(const GPURenderPipelineCreateInfo *info,
   meshType  = NULL;
   taskSize  = 0u;
   meshSize  = 0u;
-  meshKnown = gpuGetShaderLibraryPayloadInfo(info->library,
-                                             mesh->meshEntry,
-                                             GPU_SHADER_STAGE_MESH_BIT,
-                                             &meshSize,
-                                             &meshType) != 0;
+  meshKnown = getShaderLibraryPayloadInfo(info->library,
+                                          mesh->meshEntry,
+                                          GPU_SHADER_STAGE_MESH_BIT,
+                                          &meshSize,
+                                          &meshType) != 0;
 
   if (!mesh->taskEntry) {
     return mesh->payloadSizeBytes == 0u && (!meshKnown || meshSize == 0u)
@@ -425,11 +425,11 @@ gpu_resolveMeshPayloadSize(const GPURenderPipelineCreateInfo *info,
              : GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  taskKnown = gpuGetShaderLibraryPayloadInfo(info->library,
-                                             mesh->taskEntry,
-                                             GPU_SHADER_STAGE_TASK_BIT,
-                                             &taskSize,
-                                             &taskType) != 0;
+  taskKnown = getShaderLibraryPayloadInfo(info->library,
+                                          mesh->taskEntry,
+                                          GPU_SHADER_STAGE_TASK_BIT,
+                                          &taskSize,
+                                          &taskType) != 0;
 
   if (taskKnown != meshKnown) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -461,9 +461,9 @@ gpu_resolveMeshPayloadSize(const GPURenderPipelineCreateInfo *info,
 }
 
 static bool
-gpu_workgroupFits(const uint32_t size[3],
-                  const uint32_t limit[3],
-                  uint32_t       maxInvocations) {
+workgroupFits(const uint32_t size[3],
+              const uint32_t limit[3],
+              uint32_t       maxInvocations) {
   uint64_t invocations;
   uint32_t i;
 
@@ -483,12 +483,12 @@ gpu_workgroupFits(const uint32_t size[3],
 }
 
 static GPUResult
-gpu_validateMeshInterface(const GPUDevice                   *device,
-                          const GPURenderPipelineCreateInfo *info,
-                          const GPUMeshPipelineEXT          *mesh,
-                          uint32_t                           payloadSizeBytes) {
+validateMeshInterface(const GPUDevice                   *device,
+                      const GPURenderPipelineCreateInfo *info,
+                      const GPUMeshPipelineEXT          *mesh,
+                      uint32_t                           payloadSizeBytes) {
   uint32_t             workgroupSize[3];
-  const GPUMeshLimits *limits;
+  const MeshLimits    *limits;
   uint32_t             topology;
   uint32_t             maxVertices;
   uint32_t             maxPrimitives;
@@ -500,25 +500,25 @@ gpu_validateMeshInterface(const GPUDevice                   *device,
   limits = &device->meshLimits;
 
   if (mesh->taskEntry
-      && gpuGetShaderLibraryWorkgroupSize(info->library,
-                                          mesh->taskEntry,
-                                          GPU_SHADER_STAGE_TASK_BIT,
-                                          workgroupSize)) {
+      && getShaderLibraryWorkgroupSize(info->library,
+                                       mesh->taskEntry,
+                                       GPU_SHADER_STAGE_TASK_BIT,
+                                       workgroupSize)) {
     if (!limits->maxTaskWorkgroupInvocations
-        || !gpu_workgroupFits(workgroupSize,
-                              limits->taskWorkgroupSize,
-                              limits->maxTaskWorkgroupInvocations)) {
+        || !workgroupFits(workgroupSize,
+                          limits->taskWorkgroupSize,
+                          limits->maxTaskWorkgroupInvocations)) {
       return GPU_ERROR_UNSUPPORTED;
     }
   }
 
-  if (gpuGetShaderLibraryWorkgroupSize(info->library,
-                                       mesh->meshEntry,
-                                       GPU_SHADER_STAGE_MESH_BIT,
-                                       workgroupSize)
-      && !gpu_workgroupFits(workgroupSize,
-                            limits->meshWorkgroupSize,
-                            limits->maxMeshWorkgroupInvocations)) {
+  if (getShaderLibraryWorkgroupSize(info->library,
+                                    mesh->meshEntry,
+                                    GPU_SHADER_STAGE_MESH_BIT,
+                                    workgroupSize)
+      && !workgroupFits(workgroupSize,
+                        limits->meshWorkgroupSize,
+                        limits->maxMeshWorkgroupInvocations)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -527,11 +527,11 @@ gpu_validateMeshInterface(const GPUDevice                   *device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!gpuGetShaderLibraryMeshOutputInfo(info->library,
-                                         mesh->meshEntry,
-                                         &topology,
-                                         &maxVertices,
-                                         &maxPrimitives)) {
+  if (!getShaderLibraryMeshOutputInfo(info->library,
+                                      mesh->meshEntry,
+                                      &topology,
+                                      &maxVertices,
+                                      &maxPrimitives)) {
     return GPU_OK;
   }
 
@@ -565,10 +565,10 @@ gpu_validateMeshInterface(const GPUDevice                   *device,
 }
 
 static void
-gpu_setMeshPipelineInfo(GPURenderPipeline        *pipeline,
-                        const GPUShaderLibrary   *library,
-                        const GPUMeshPipelineEXT *mesh,
-                        uint32_t                  payloadSizeBytes) {
+setMeshPipelineInfo(GPURenderPipeline        *pipeline,
+                    const GPUShaderLibrary   *library,
+                    const GPUMeshPipelineEXT *mesh,
+                    uint32_t                  payloadSizeBytes) {
   if (!pipeline) {
     return;
   }
@@ -588,23 +588,23 @@ gpu_setMeshPipelineInfo(GPURenderPipeline        *pipeline,
   }
 
   if (mesh->taskEntry) {
-    gpuGetShaderLibraryWorkgroupSize(library,
-                                     mesh->taskEntry,
-                                     GPU_SHADER_STAGE_TASK_BIT,
-                                     pipeline->_taskWorkgroupSize);
+    getShaderLibraryWorkgroupSize(library,
+                                  mesh->taskEntry,
+                                  GPU_SHADER_STAGE_TASK_BIT,
+                                  pipeline->_taskWorkgroupSize);
   }
 
-  gpuGetShaderLibraryWorkgroupSize(library,
-                                   mesh->meshEntry,
-                                   GPU_SHADER_STAGE_MESH_BIT,
-                                   pipeline->_meshWorkgroupSize);
+  getShaderLibraryWorkgroupSize(library,
+                                mesh->meshEntry,
+                                GPU_SHADER_STAGE_MESH_BIT,
+                                pipeline->_meshWorkgroupSize);
 }
 
 static GPUResult
-gpu_renderPipelineExtensions(GPUDevice                                 *device,
-                             const GPURenderPipelineCreateInfo         *info,
-                             const GPUMeshPipelineEXT                 **outMesh,
-                             const GPUIntersectionFunctionPipelineEXT **outIntersection) {
+renderPipelineExtensions(GPUDevice                                 *device,
+                         const GPURenderPipelineCreateInfo         *info,
+                         const GPUMeshPipelineEXT                 **outMesh,
+                         const GPUIntersectionFunctionPipelineEXT **outIntersection) {
   const GPUChainedStruct                   *chain;
   const GPUMeshPipelineEXT                 *mesh;
   const GPUIntersectionFunctionPipelineEXT *intersection;
@@ -680,8 +680,8 @@ gpu_renderPipelineExtensions(GPUDevice                                 *device,
 }
 
 static bool
-gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info,
-                            bool                               mesh) {
+pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info,
+                        bool                               mesh) {
   uint32_t i;
 
   if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE
@@ -698,12 +698,12 @@ gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info,
           && info->depthStencilFormat == GPU_FORMAT_UNDEFINED))
     return false;
 
-  if (!gpu_vertexStateIsValid(&info->vertex))
+  if (!vertexStateIsValid(&info->vertex))
     return false;
 
-  if (!gpu_primitiveTopologyIsValid(info->primitiveTopology)
-      || !gpu_cullModeIsValid(info->cullMode)
-      || !gpu_frontFaceIsValid(info->frontFace))
+  if (!primitiveTopologyIsValid(info->primitiveTopology)
+      || !cullModeIsValid(info->cullMode)
+      || !frontFaceIsValid(info->frontFace))
     return false;
 
   if (mesh
@@ -723,15 +723,15 @@ gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info,
       && info->multisample.sampleMask != UINT32_MAX)
     return false;
 
-  if (!gpu_depthStencilStateIsValid(info->depthStencilFormat,
-                                    info->pDepthStencilState))
+  if (!depthStencilStateIsValid(info->depthStencilFormat,
+                                info->pDepthStencilState))
     return false;
 
   for (i = 0; i < info->colorTargetCount; i++) {
     if (info->pColorTargets[i].format == GPU_FORMAT_UNDEFINED)
       return false;
 
-    if (!gpu_blendStateIsValid(&info->pColorTargets[i].blend))
+    if (!blendStateIsValid(&info->pColorTargets[i].blend))
       return false;
   }
 
@@ -740,7 +740,7 @@ gpu_pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info,
 
 GPU_HIDE
 GPURenderPipeline*
-gpuCreateRenderPipelineDesc(GPUApi *api, GPUFormat pixelFormat, bool mesh) {
+createRenderPipelineDesc(Api    *api, GPUFormat pixelFormat, bool mesh) {
   if (!api || !api->render.newRenderPipeline)
     return NULL;
 
@@ -748,12 +748,12 @@ gpuCreateRenderPipelineDesc(GPUApi *api, GPUFormat pixelFormat, bool mesh) {
 }
 
 GPU_HIDE
-GPURenderPipelineState*
-gpuCompileRenderPipelineState(GPUDevice         *__restrict device,
-                              GPURenderPipeline *__restrict pipeline) {
-  GPUApi *api;
+RenderPipelineState*
+compileRenderPipelineState(GPUDevice         *__restrict device,
+                           GPURenderPipeline *__restrict pipeline) {
+  Api    *api;
 
-  if (!device || !pipeline || !(api = gpuDeviceApi(device))
+  if (!device || !pipeline || !(api = deviceApi(device))
       || pipeline->_api != api || !api->render.newRenderState)
     return NULL;
 
@@ -762,10 +762,10 @@ gpuCompileRenderPipelineState(GPUDevice         *__restrict device,
 
 GPU_HIDE
 void
-gpuPipelineSetFunction(GPURenderPipeline *__restrict pipeline,
-                       GPUShaderFunction *__restrict func,
-                       GPUFunctionType               functionType) {
-  GPUApi *api;
+pipelineSetFunction(GPURenderPipeline *__restrict pipeline,
+                    ShaderFunction    *__restrict func,
+                    FunctionType                  functionType) {
+  Api    *api;
 
   if (!pipeline || !(api = pipeline->_api) || !api->render.setFunction)
     return;
@@ -775,10 +775,10 @@ gpuPipelineSetFunction(GPURenderPipeline *__restrict pipeline,
 
 GPU_HIDE
 void
-gpuPipelineSetColorFormat(GPURenderPipeline *__restrict pipeline,
-                          uint32_t                      index,
-                          GPUFormat                     pixelFormat) {
-  GPUApi *api;
+pipelineSetColorFormat(GPURenderPipeline *__restrict pipeline,
+                       uint32_t                      index,
+                       GPUFormat                     pixelFormat) {
+  Api    *api;
 
   if (!pipeline || !(api = pipeline->_api) || !api->render.colorFormat)
     return;
@@ -788,9 +788,9 @@ gpuPipelineSetColorFormat(GPURenderPipeline *__restrict pipeline,
 
 GPU_HIDE
 void
-gpuPipelineSetDepthFormat(GPURenderPipeline *__restrict pipeline,
-                          GPUFormat                     pixelFormat) {
-  GPUApi *api;
+pipelineSetDepthFormat(GPURenderPipeline *__restrict pipeline,
+                       GPUFormat                     pixelFormat) {
+  Api    *api;
 
   if (!pipeline || !(api = pipeline->_api) || !api->render.depthFormat)
     return;
@@ -800,9 +800,9 @@ gpuPipelineSetDepthFormat(GPURenderPipeline *__restrict pipeline,
 
 GPU_HIDE
 void
-gpuPipelineSetStencilFormat(GPURenderPipeline *__restrict pipeline,
-                            GPUFormat                     pixelFormat) {
-  GPUApi *api;
+pipelineSetStencilFormat(GPURenderPipeline *__restrict pipeline,
+                         GPUFormat                     pixelFormat) {
+  Api    *api;
 
   if (!pipeline || !(api = pipeline->_api) || !api->render.stencilFormat)
     return;
@@ -812,9 +812,9 @@ gpuPipelineSetStencilFormat(GPURenderPipeline *__restrict pipeline,
 
 GPU_HIDE
 void
-gpuPipelineSetSampleCount(GPURenderPipeline *__restrict pipeline,
-                          uint32_t                      sampleCount) {
-  GPUApi *api;
+pipelineSetSampleCount(GPURenderPipeline *__restrict pipeline,
+                       uint32_t                      sampleCount) {
+  Api    *api;
 
   if (!pipeline || !(api = pipeline->_api) || !api->render.sampleCount)
     return;
@@ -824,21 +824,21 @@ gpuPipelineSetSampleCount(GPURenderPipeline *__restrict pipeline,
 
 GPU_HIDE
 GPUResult
-gpuCreateRenderPipeline(GPUDevice                         *__restrict device,
-                        const GPURenderPipelineCreateInfo *__restrict info,
-                        GPURenderPipeline                **__restrict outPipeline) {
-  GPUPipelineCacheKey                       cacheKey;
+createRenderPipeline(GPUDevice                         *__restrict device,
+                     const GPURenderPipelineCreateInfo *__restrict info,
+                     GPURenderPipeline                **__restrict outPipeline) {
+  PipelineCacheKey                          cacheKey;
   const GPUPipelineConstants               *constants;
-  GPUApi                                   *api;
-  GPURenderPipelineState                   *state;
+  Api                                      *api;
+  RenderPipelineState                      *state;
   GPURenderPipeline                        *pipeline;
   const GPUMeshPipelineEXT                 *mesh;
   const GPUIntersectionFunctionPipelineEXT *intersection;
-  GPUVertexDescriptor                      *vertexDesc;
-  GPUShaderFunction                        *vertexFunc;
-  GPUShaderFunction                        *fragmentFunc;
-  GPUShaderFunction                        *taskFunc;
-  GPUShaderFunction                        *meshFunc;
+  VertexDescriptor                         *vertexDesc;
+  ShaderFunction                           *vertexFunc;
+  ShaderFunction                           *fragmentFunc;
+  ShaderFunction                           *taskFunc;
+  ShaderFunction                           *meshFunc;
   GPUFormat                                 colorFormat;
   GPUResult                                 result;
   uint32_t                                  i;
@@ -861,69 +861,69 @@ gpuCreateRenderPipeline(GPUDevice                         *__restrict device,
   if (info->cache && info->cache->device != device)
     return GPU_ERROR_INVALID_ARGUMENT;
 
-  result = gpu_renderPipelineExtensions(device,
-                                        info,
-                                        &mesh,
-                                        &intersection);
+  result = renderPipelineExtensions(device,
+                                    info,
+                                    &mesh,
+                                    &intersection);
 
   if (result != GPU_OK)
     return result;
 
-  if (!gpu_pipelineInfoIsSupported(info, mesh != NULL))
+  if (!pipelineInfoIsSupported(info, mesh != NULL))
     return GPU_ERROR_INVALID_ARGUMENT;
 
-  result = gpu_validatePipelineFormats(device, info);
+  result = validatePipelineFormats(device, info);
 
   if (result != GPU_OK)
     return result;
 
-  if (!(api = gpuDeviceApi(device)))
+  if (!(api = deviceApi(device)))
     return GPU_ERROR_BACKEND_FAILURE;
 
   if (!mesh) {
-    result = gpu_validateMetalVertexBindings(api, info);
+    result = validateMetalVertexBindings(api, info);
 
     if (result != GPU_OK)
       return result;
   }
 
   if (info->cache && !intersection) {
-    result = gpuPipelineCacheFindRender(info->cache,
-                                        info,
-                                        &cacheKey,
-                                        &pipeline);
+    result = pipelineCacheFindRender(info->cache,
+                                     info,
+                                     &cacheKey,
+                                     &pipeline);
 
     if (result != GPU_OK) {
       return result;
     }
 
     if (pipeline) {
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      pipelineCacheReleaseKey(&cacheKey);
 
       *outPipeline = pipeline;
       return GPU_OK;
     }
   }
 
-  if (!gpu_renderPipelineEntriesMatchStages(info, mesh)) {
-    gpuPipelineCacheReleaseKey(&cacheKey);
+  if (!renderPipelineEntriesMatchStages(info, mesh)) {
+    pipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  result = gpu_resolveMeshPayloadSize(info, mesh, &payloadSizeBytes);
+  result = resolveMeshPayloadSize(info, mesh, &payloadSizeBytes);
 
   if (result != GPU_OK) {
-    gpuPipelineCacheReleaseKey(&cacheKey);
+    pipelineCacheReleaseKey(&cacheKey);
     return result;
   }
 
-  result = gpu_validateMeshInterface(device,
-                                     info,
-                                     mesh,
-                                     payloadSizeBytes);
+  result = validateMeshInterface(device,
+                                 info,
+                                 mesh,
+                                 payloadSizeBytes);
 
   if (result != GPU_OK) {
-    gpuPipelineCacheReleaseKey(&cacheKey);
+    pipelineCacheReleaseKey(&cacheKey);
     return result;
   }
 
@@ -939,27 +939,27 @@ gpuCreateRenderPipeline(GPUDevice                         *__restrict device,
     entries[entryCount++] = mesh->meshEntry;
     entries[entryCount++] = info->fragmentEntry;
 
-    if (!gpuPipelineLayoutMatchesShaderEntries(info->layout,
-                                               info->library,
-                                               entries,
-                                               entryCount,
-                                               GPU_SHADER_STAGE_TASK_BIT
+    if (!pipelineLayoutMatchesShaderEntries(info->layout,
+                                            info->library,
+                                            entries,
+                                            entryCount,
+                                            GPU_SHADER_STAGE_TASK_BIT
                                                  | GPU_SHADER_STAGE_MESH_BIT
                                                  | GPU_SHADER_STAGE_FRAGMENT_BIT,
-                                               &requiredBindGroupMask)) {
-      gpuPipelineCacheReleaseKey(&cacheKey);
+                                            &requiredBindGroupMask)) {
+      pipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   } else {
     const char *vertexEntries[] = {info->vertexEntry, info->fragmentEntry};
 
-    if (!gpuPipelineLayoutMatchesShaderEntries(info->layout,
-                                               info->library,
-                                               vertexEntries,
-                                               (uint32_t)GPU_ARRAY_LEN(vertexEntries),
-                                               GPU_SHADER_STAGE_VERTEX_BIT | GPU_SHADER_STAGE_FRAGMENT_BIT,
-                                               &requiredBindGroupMask)) {
-      gpuPipelineCacheReleaseKey(&cacheKey);
+    if (!pipelineLayoutMatchesShaderEntries(info->layout,
+                                            info->library,
+                                            vertexEntries,
+                                            (uint32_t)GPU_ARRAY_LEN(vertexEntries),
+                                            GPU_SHADER_STAGE_VERTEX_BIT | GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                            &requiredBindGroupMask)) {
+      pipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
@@ -967,22 +967,22 @@ gpuCreateRenderPipeline(GPUDevice                         *__restrict device,
   sampleCount = info->multisample.sampleCount > 0 ? info->multisample.sampleCount : 1u;
 
   if (intersection && api->render.createPipeline) {
-    gpuPipelineCacheReleaseKey(&cacheKey);
+    pipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_UNSUPPORTED;
   }
 
   if (api->render.createPipeline) {
     if (!(pipeline = calloc(1, sizeof(*pipeline)))) {
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      pipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_OUT_OF_MEMORY;
     }
 
     pipeline->_api      = api;
     pipeline->_refCount = 1u;
-    gpu_setMeshPipelineInfo(pipeline,
-                            info->library,
-                            mesh,
-                            payloadSizeBytes);
+    setMeshPipelineInfo(pipeline,
+                        info->library,
+                        mesh,
+                        payloadSizeBytes);
     result = api->render.createPipeline(device,
                                         info,
                                         requiredBindGroupMask,
@@ -990,101 +990,101 @@ gpuCreateRenderPipeline(GPUDevice                         *__restrict device,
 
     if (result != GPU_OK) {
       free(pipeline);
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      pipelineCacheReleaseKey(&cacheKey);
       return result;
     }
 
     goto ready;
   }
 
-  constants    = gpuPipelineConstants(info->chain.pNext);
-  vertexFunc   = mesh ? NULL : gpuShaderVariant(info->library, info->vertexEntry, constants);
-  fragmentFunc = gpuShaderVariant(info->library, info->fragmentEntry, constants);
-  taskFunc     = mesh && mesh->taskEntry ? gpuShaderVariant(info->library, mesh->taskEntry, constants) : NULL;
-  meshFunc     = mesh ? gpuShaderVariant(info->library, mesh->meshEntry, constants) : NULL;
+  constants    = pipelineConstants(info->chain.pNext);
+  vertexFunc   = mesh ? NULL : shaderVariant(info->library, info->vertexEntry, constants);
+  fragmentFunc = shaderVariant(info->library, info->fragmentEntry, constants);
+  taskFunc     = mesh && mesh->taskEntry ? shaderVariant(info->library, mesh->taskEntry, constants) : NULL;
+  meshFunc     = mesh ? shaderVariant(info->library, mesh->meshEntry, constants) : NULL;
 
   if ((!mesh && !vertexFunc) || !fragmentFunc
       || (mesh && (!meshFunc || (mesh->taskEntry && !taskFunc)))) {
-    gpuDestroyShaderFunction(info->library, vertexFunc);
-    gpuDestroyShaderFunction(info->library, fragmentFunc);
-    gpuDestroyShaderFunction(info->library, taskFunc);
-    gpuDestroyShaderFunction(info->library, meshFunc);
-    gpuPipelineCacheReleaseKey(&cacheKey);
+    destroyShaderFunction(info->library, vertexFunc);
+    destroyShaderFunction(info->library, fragmentFunc);
+    destroyShaderFunction(info->library, taskFunc);
+    destroyShaderFunction(info->library, meshFunc);
+    pipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   colorFormat = info->colorTargetCount > 0u ? info->pColorTargets[0].format : GPU_FORMAT_UNDEFINED;
 
-  if (!(pipeline = gpuCreateRenderPipelineDesc(api, colorFormat, mesh != NULL))) {
-    gpuDestroyShaderFunction(info->library, vertexFunc);
-    gpuDestroyShaderFunction(info->library, fragmentFunc);
-    gpuDestroyShaderFunction(info->library, taskFunc);
-    gpuDestroyShaderFunction(info->library, meshFunc);
-    gpuPipelineCacheReleaseKey(&cacheKey);
+  if (!(pipeline = createRenderPipelineDesc(api, colorFormat, mesh != NULL))) {
+    destroyShaderFunction(info->library, vertexFunc);
+    destroyShaderFunction(info->library, fragmentFunc);
+    destroyShaderFunction(info->library, taskFunc);
+    destroyShaderFunction(info->library, meshFunc);
+    pipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   pipeline->_api      = api;
   pipeline->_refCount = 1u;
-  gpu_setMeshPipelineInfo(pipeline,
-                          info->library,
-                          mesh,
-                          payloadSizeBytes);
+  setMeshPipelineInfo(pipeline,
+                      info->library,
+                      mesh,
+                      payloadSizeBytes);
 
   if (mesh) {
     if (taskFunc)
-      gpuPipelineSetFunction(pipeline, taskFunc, GPU_FUNCTION_TASK);
+      pipelineSetFunction(pipeline, taskFunc, GPU_FUNCTION_TASK);
 
-    gpuPipelineSetFunction(pipeline, meshFunc, GPU_FUNCTION_MESH);
+    pipelineSetFunction(pipeline, meshFunc, GPU_FUNCTION_MESH);
   } else {
-    gpuPipelineSetFunction(pipeline, vertexFunc, GPU_FUNCTION_VERT);
+    pipelineSetFunction(pipeline, vertexFunc, GPU_FUNCTION_VERT);
   }
 
-  gpuPipelineSetFunction(pipeline, fragmentFunc, GPU_FUNCTION_FRAG);
-  gpuDestroyShaderFunction(info->library, vertexFunc);
-  gpuDestroyShaderFunction(info->library, fragmentFunc);
-  gpuDestroyShaderFunction(info->library, taskFunc);
-  gpuDestroyShaderFunction(info->library, meshFunc);
+  pipelineSetFunction(pipeline, fragmentFunc, GPU_FUNCTION_FRAG);
+  destroyShaderFunction(info->library, vertexFunc);
+  destroyShaderFunction(info->library, fragmentFunc);
+  destroyShaderFunction(info->library, taskFunc);
+  destroyShaderFunction(info->library, meshFunc);
 
   if (intersection) {
-    result = gpuAttachRenderIntersectionFunctions(device,
-                                                  info->library,
-                                                  intersection,
-                                                  pipeline);
+    result = attachRenderIntersectionFunctions(device,
+                                               info->library,
+                                               intersection,
+                                               pipeline);
 
     if (result != GPU_OK) {
       GPUDestroyRenderPipeline(pipeline);
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      pipelineCacheReleaseKey(&cacheKey);
       return result;
     }
   }
 
   if (!mesh) {
-    vertexDesc = gpu_createVertexDescriptorFromState(api, &info->vertex);
+    vertexDesc = createVertexDescriptorFromState(api, &info->vertex);
 
     if (info->vertex.bufferLayoutCount > 0 && !vertexDesc) {
       GPUDestroyRenderPipeline(pipeline);
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      pipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
 
     if (vertexDesc)
-      gpuPipelineSetVertexDesc(pipeline, vertexDesc);
+      pipelineSetVertexDesc(pipeline, vertexDesc);
 
     gpuDestroyVertexDesc(api, vertexDesc);
   }
 
   for (i = 0; i < info->colorTargetCount; i++)
-    gpuPipelineSetColorFormat(pipeline, i, info->pColorTargets[i].format);
+    pipelineSetColorFormat(pipeline, i, info->pColorTargets[i].format);
 
   if (info->depthStencilFormat != GPU_FORMAT_UNDEFINED) {
     if (info->depthStencilFormat != GPU_FORMAT_STENCIL8)
-      gpuPipelineSetDepthFormat(pipeline, info->depthStencilFormat);
+      pipelineSetDepthFormat(pipeline, info->depthStencilFormat);
 
     if (info->depthStencilFormat == GPU_FORMAT_STENCIL8
         || info->depthStencilFormat == GPU_FORMAT_DEPTH24_UNORM_STENCIL8
         || info->depthStencilFormat == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8)
-      gpuPipelineSetStencilFormat(pipeline, info->depthStencilFormat);
+      pipelineSetStencilFormat(pipeline, info->depthStencilFormat);
   }
 
   if (info->pDepthStencilState)
@@ -1100,15 +1100,15 @@ gpuCreateRenderPipeline(GPUDevice                         *__restrict device,
     pipeline->_colorTargetBlends[i]  = info->pColorTargets[i].blend;
   }
 
-  gpuPipelineSetSampleCount(pipeline, sampleCount);
+  pipelineSetSampleCount(pipeline, sampleCount);
 
   pipeline->_cache = info->cache;
-  state            = gpuCompileRenderPipelineState(device, pipeline);
+  state            = compileRenderPipelineState(device, pipeline);
   pipeline->_cache = NULL;
 
   if (!state) {
     GPUDestroyRenderPipeline(pipeline);
-    gpuPipelineCacheReleaseKey(&cacheKey);
+    pipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -1130,14 +1130,14 @@ ready:
   pipeline->_primitiveTopology     = info->primitiveTopology;
   pipeline->_cullMode              = info->cullMode;
   pipeline->_frontFace             = info->frontFace;
-  gpuGetPipelineLayoutPushConstants(info->layout,
-                                    &pipeline->_pushConstantSizeBytes,
-                                    &pipeline->_pushConstantStages);
+  getPipelineLayoutPushConstants(info->layout,
+                                 &pipeline->_pushConstantSizeBytes,
+                                 &pipeline->_pushConstantStages);
 
   if (info->cache && !intersection) {
-    pipeline = gpuPipelineCacheStoreRender(info->cache, &cacheKey, pipeline);
+    pipeline = pipelineCacheStoreRender(info->cache, &cacheKey, pipeline);
   } else {
-    gpuRecordPipelineCompile(device, info->cache);
+    recordPipelineCompile(device, info->cache);
   }
 
   *outPipeline = pipeline;
@@ -1148,12 +1148,12 @@ ready:
 GPU_EXPORT
 void
 GPUDestroyRenderPipeline(GPURenderPipeline *pipeline) {
-  GPUApi *api;
+  Api    *api;
 
   if (!pipeline)
     return;
 
-  if (!gpuReleaseRenderPipeline(pipeline)) {
+  if (!releaseRenderPipeline(pipeline)) {
     return;
   }
 
@@ -1171,7 +1171,7 @@ GPUCreateRenderPipeline(GPUDevice                         *device,
                         const GPURenderPipelineCreateInfo *info,
                         GPURenderPipeline                **outPipeline) {
   GPURenderPipelineCreateInfo snapshot;
-  GPUPreparedConstants        prepared;
+  PreparedConstants           prepared;
   GPUResult                   result;
 
   if (!outPipeline) {
@@ -1184,7 +1184,7 @@ GPUCreateRenderPipeline(GPUDevice                         *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  result = gpuPrepareConstants(info->library, info->chain.pNext, false, &prepared);
+  result = prepareConstants(info->library, info->chain.pNext, false, &prepared);
 
   if (result != GPU_OK) {
     return result;
@@ -1192,7 +1192,7 @@ GPUCreateRenderPipeline(GPUDevice                         *device,
 
   snapshot             = *info;
   snapshot.chain.pNext = prepared.chain;
-  result               = gpuCreateRenderPipeline(device, &snapshot, outPipeline);
+  result               = createRenderPipeline(device, &snapshot, outPipeline);
   free(prepared.values);
 
   return result;

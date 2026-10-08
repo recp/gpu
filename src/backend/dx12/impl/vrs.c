@@ -20,7 +20,7 @@
 static void
 dx12_getVRSCapabilities(const GPUAdapter      *adapter,
                         GPUVRSCapabilitiesEXT *outCaps) {
-  GPUAdapterDX12 *native;
+  AdapterDX12    *native;
 
   native = adapter ? adapter->_priv : NULL;
 
@@ -48,6 +48,6 @@ dx12_getVRSCapabilities(const GPUAdapter      *adapter,
 
 GPU_HIDE
 void
-dx12_initVRS(GPUApiVRS *api) {
+dx12_initVRS(ApiVRS    *api) {
   api->getCapabilities = dx12_getVRSCapabilities;
 }

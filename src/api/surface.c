@@ -19,7 +19,7 @@
 #include "surface_internal.h"
 
 static bool
-gpuIsSingleHandleSurfaceType(GPUSurfaceType type) {
+isSingleHandleSurfaceType(GPUSurfaceType type) {
   return type == GPU_SURFACE_WINDOWS_HWND
          || type == GPU_SURFACE_WINDOWS_COREWINDOW
          || type == GPU_SURFACE_APPLE_NSVIEW
@@ -29,9 +29,9 @@ gpuIsSingleHandleSurfaceType(GPUSurfaceType type) {
 }
 
 static bool
-gpuParseSurfaceCreateInfo(GPUInstance                *inst,
-                          const GPUSurfaceCreateInfo *info,
-                          GPUSurfaceNativeInfo       *out) {
+parseSurfaceCreateInfo(GPUInstance                *inst,
+                       const GPUSurfaceCreateInfo *info,
+                       SurfaceNativeInfo          *out) {
   const GPUChainedStruct            *chain;
   const GPUNativeSurfaceCreateInfo  *nativeInfo;
   const GPUSurfaceXlibCreateInfo    *xlibInfo;
@@ -52,7 +52,7 @@ gpuParseSurfaceCreateInfo(GPUInstance                *inst,
                 && chain->structSize < sizeof(*nativeInfo))
             || !nativeInfo->adapter || nativeInfo->adapter->inst != inst
             || !nativeInfo->nativeHandle
-            || !gpuIsSingleHandleSurfaceType(nativeInfo->type)
+            || !isSingleHandleSurfaceType(nativeInfo->type)
             || !(nativeInfo->scale > 0.0f)) {
           return false;
         }
@@ -122,8 +122,8 @@ GPUResult
 GPUCreateSurface(GPUInstance                *__restrict inst,
                  const GPUSurfaceCreateInfo *__restrict info,
                  GPUSurface                **__restrict outSurface) {
-  GPUSurfaceNativeInfo nativeInfo;
-  GPUApi              *api;
+  SurfaceNativeInfo    nativeInfo;
+  Api                 *api;
 
   if (!outSurface) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -144,11 +144,11 @@ GPUCreateSurface(GPUInstance                *__restrict inst,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!gpuParseSurfaceCreateInfo(inst, info, &nativeInfo)) {
+  if (!parseSurfaceCreateInfo(inst, info, &nativeInfo)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuInstanceApi(inst))) {
+  if (!(api = instanceApi(inst))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -201,13 +201,13 @@ GPUCreateSurfaceFromNative(GPUInstance *__restrict inst,
 GPU_EXPORT
 void
 GPUDestroySurface(GPUSurface *__restrict surface) {
-  GPUApi *api;
+  Api    *api;
 
   if (!surface) {
     return;
   }
 
-  if (!(api = gpuSurfaceApi(surface))) {
+  if (!(api = surfaceApi(surface))) {
     return;
   }
 
@@ -221,7 +221,7 @@ GPUResult
 GPUGetSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
                           const GPUSurface       *__restrict surface,
                           GPUSurfaceCapabilities *__restrict outCaps) {
-  GPUApi   *api;
+  Api      *api;
   GPUResult result;
   bool      fifoSupported;
 
@@ -231,7 +231,7 @@ GPUGetSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
 
   memset(outCaps, 0, sizeof(*outCaps));
 
-  if (!(api = gpuSurfaceApi(surface))) {
+  if (!(api = surfaceApi(surface))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 

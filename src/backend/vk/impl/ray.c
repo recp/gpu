@@ -40,12 +40,12 @@ static const VkShaderStageFlagBits vk_rayStages[] = {
 
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
 
-static GPUAccelerationStructureVk*
+static AccelerationStructureVk*
 vk_rayStructure(GPUAccelerationStructureEXT *structure) {
   return structure ? structure->_priv : NULL;
 }
 
-static GPUAccelerationStructureEncoderVk*
+static AccelerationStructureEncoderVk*
 vk_rayEncoder(GPUAccelerationStructurePassEncoderEXT *pass) {
   return pass ? pass->_priv : NULL;
 }
@@ -189,7 +189,7 @@ vk_rayFillInstances(VkAccelerationStructureGeometryKHR *geometry,
 }
 
 static bool
-vk_rayEnsureGeometryCapacity(GPUAccelerationStructureVk *native,
+vk_rayEnsureGeometryCapacity(AccelerationStructureVk    *native,
                              uint32_t                    count) {
   VkAccelerationStructureGeometryKHR       *geometries;
   VkAccelerationStructureBuildRangeInfoKHR *ranges;
@@ -236,7 +236,7 @@ vk_rayEnsureGeometryCapacity(GPUAccelerationStructureVk *native,
 
 static bool
 vk_rayEnsureInstanceBuffer(GPUDevice                  *device,
-                           GPUAccelerationStructureVk *native,
+                           AccelerationStructureVk    *native,
                            uint64_t                    sizeBytes) {
   GPUBufferCreateInfo info = {0};
   GPUBuffer          *buffer;
@@ -277,7 +277,7 @@ vk_rayEnsureInstanceBuffer(GPUDevice                  *device,
 }
 
 static bool
-vk_rayPrepareBLAS(GPUAccelerationStructureVk                 *native,
+vk_rayPrepareBLAS(AccelerationStructureVk                    *native,
                   const GPUAccelerationStructureBuildInfoEXT *info) {
   uint32_t count;
   uint32_t i;
@@ -300,13 +300,13 @@ vk_rayPrepareBLAS(GPUAccelerationStructureVk                 *native,
 
 static bool
 vk_rayPrepareTLAS(GPUDevice                                  *device,
-                  GPUAccelerationStructureVk                 *native,
+                  AccelerationStructureVk                    *native,
                   const GPUAccelerationStructureBuildInfoEXT *info) {
   VkMappedMemoryRange                        range = {0};
   VkAccelerationStructureInstanceKHR        *instances;
-  GPUBufferVk                               *instanceBuffer;
+  BufferVk                                  *instanceBuffer;
   const GPUAccelerationStructureInstanceEXT *src;
-  GPUAccelerationStructureVk                *structure;
+  AccelerationStructureVk                   *structure;
   uint64_t                                   sizeBytes;
   uint32_t                                   i;
 
@@ -368,7 +368,7 @@ vk_rayPrepareTLAS(GPUDevice                                  *device,
 }
 
 static void
-vk_rayDestroyState(GPUAccelerationStructureVk *native) {
+vk_rayDestroyState(AccelerationStructureVk    *native) {
   if (!native) {
     return;
   }
@@ -396,7 +396,7 @@ vk_rayDestroyState(GPUAccelerationStructureVk *native) {
 }
 
 static void
-vk_rayBuildBarrier(const GPUDeviceVk *deviceVk, VkCommandBuffer command) {
+vk_rayBuildBarrier(const DeviceVk    *deviceVk, VkCommandBuffer command) {
   VkMemoryBarrier      barrier = {0};
   VkPipelineStageFlags dstStages;
 
@@ -504,7 +504,7 @@ vk_rayAddStage(VkPipelineShaderStageCreateInfo *stages,
 }
 
 static void
-vk_rayDestroyPipelineState(GPURayTracingPipelineVk *native) {
+vk_rayDestroyPipelineState(RayTracingPipelineVk    *native) {
   if (!native) {
     return;
   }
@@ -522,9 +522,9 @@ vk_createRayTracingPipeline(GPUDevice                                *device,
                             const GPURayTracingPipelineCreateInfoEXT *info,
                             GPURayTracingPipelineEXT                 *pipeline) {
   VkRayTracingPipelineCreateInfoKHR     pipelineInfo = {0};
-  GPUDeviceVk                          *deviceVk;
-  GPUShaderLibraryVk                   *library;
-  GPURayTracingPipelineVk              *native;
+  DeviceVk                             *deviceVk;
+  ShaderLibraryVk                      *library;
+  RayTracingPipelineVk                 *native;
   VkPipelineShaderStageCreateInfo      *stages;
   VkRayTracingShaderGroupCreateInfoKHR *groups;
   const GPURayTracingShaderGroupEXT    *group;
@@ -568,10 +568,10 @@ vk_createRayTracingPipeline(GPUDevice                                *device,
 
   for (entryIndex = 0u; entryIndex < info->groupCount; entryIndex++) {
     group = &info->pGroups[entryIndex];
-    entryMask |= gpuShaderEntryBit(info->library, group->generalEntry);
-    entryMask |= gpuShaderEntryBit(info->library, group->closestHitEntry);
-    entryMask |= gpuShaderEntryBit(info->library, group->anyHitEntry);
-    entryMask |= gpuShaderEntryBit(info->library, group->intersectionEntry);
+    entryMask |= shaderEntryBit(info->library, group->generalEntry);
+    entryMask |= shaderEntryBit(info->library, group->closestHitEntry);
+    entryMask |= shaderEntryBit(info->library, group->anyHitEntry);
+    entryMask |= shaderEntryBit(info->library, group->intersectionEntry);
   }
 
   if (entryMask == 0u) {
@@ -720,7 +720,7 @@ invalid:
 
 static void
 vk_destroyRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
-  GPURayTracingPipelineVk *native;
+  RayTracingPipelineVk    *native;
 
   native = pipeline ? pipeline->_priv : NULL;
   vk_rayDestroyPipelineState(native);
@@ -731,7 +731,7 @@ vk_destroyRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
 }
 
 static void
-vk_rayDestroyShaderTableState(GPUShaderTableVk *native) {
+vk_rayDestroyShaderTableState(ShaderTableVk    *native) {
   if (!native) {
     return;
   }
@@ -799,9 +799,9 @@ vk_createShaderTable(GPUDevice                         *device,
   VkMemoryAllocateInfo      allocationInfo  = {0};
   VkBufferDeviceAddressInfo addressInfo     = {0};
   VkMappedMemoryRange       mappedRange     = {0};
-  GPUDeviceVk              *deviceVk;
-  GPURayTracingPipelineVk  *pipeline;
-  GPUShaderTableVk         *native;
+  DeviceVk                 *deviceVk;
+  RayTracingPipelineVk     *pipeline;
+  ShaderTableVk            *native;
   uint8_t                  *handles;
   uint8_t                  *mapped;
   VkDeviceSize              rayGenerationOffset;
@@ -1053,7 +1053,7 @@ vk_createShaderTable(GPUDevice                         *device,
 
 static void
 vk_destroyShaderTable(GPUShaderTableEXT *table) {
-  GPUShaderTableVk *native;
+  ShaderTableVk    *native;
 
   native = table ? table->_priv : NULL;
   vk_rayDestroyShaderTableState(native);
@@ -1065,9 +1065,9 @@ vk_destroyShaderTable(GPUShaderTableEXT *table) {
 
 static GPURayTracingPassEncoderEXT*
 vk_beginRayTracingPass(GPUCommandBuffer *cmdb, const char *label) {
-  GPUCommandBufferVk          *command;
+  CommandBufferVk             *command;
   GPURayTracingPassEncoderEXT *pass;
-  GPURayTracingEncoderVk      *native;
+  RayTracingEncoderVk         *native;
 
   command = cmdb ? cmdb->_priv : NULL;
 
@@ -1080,7 +1080,7 @@ vk_beginRayTracingPass(GPUCommandBuffer *cmdb, const char *label) {
   memset(pass, 0, sizeof(*pass));
   memset(native, 0, sizeof(*native));
   native->command          = command->command;
-  native->debugLabelActive = vk_beginDebugLabel(gpuCommandBufferDevice(cmdb),
+  native->debugLabelActive = vk_beginDebugLabel(commandBufferDevice(cmdb),
                                                 native->command,
                                                 label);
   pass->_priv              = native;
@@ -1091,8 +1091,8 @@ vk_beginRayTracingPass(GPUCommandBuffer *cmdb, const char *label) {
 static void
 vk_bindRayTracingPipeline(GPURayTracingPassEncoderEXT *pass,
                           GPURayTracingPipelineEXT    *pipeline) {
-  GPURayTracingEncoderVk  *native;
-  GPURayTracingPipelineVk *pipelineVk;
+  RayTracingEncoderVk     *native;
+  RayTracingPipelineVk    *pipelineVk;
 
   native     = pass ? pass->_priv : NULL;
   pipelineVk = pipeline ? pipeline->_priv : NULL;
@@ -1123,9 +1123,9 @@ vk_dispatchRays(GPURayTracingPassEncoderEXT *pass,
                 uint32_t                     width,
                 uint32_t                     height,
                 uint32_t                     depth) {
-  GPURayTracingEncoderVk *native;
-  GPUShaderTableVk       *tableVk;
-  GPUDeviceVk            *deviceVk;
+  RayTracingEncoderVk    *native;
+  ShaderTableVk          *tableVk;
+  DeviceVk               *deviceVk;
 
   native   = pass ? pass->_priv : NULL;
   tableVk  = table ? table->_priv : NULL;
@@ -1148,7 +1148,7 @@ vk_dispatchRays(GPURayTracingPassEncoderEXT *pass,
 
 static void
 vk_endRayTracingPass(GPURayTracingPassEncoderEXT *pass) {
-  GPURayTracingEncoderVk *native;
+  RayTracingEncoderVk    *native;
 
   native = pass ? pass->_priv : NULL;
 
@@ -1178,7 +1178,7 @@ vk_getAccelerationStructureSizes(GPUDevice                                  *dev
   VkAccelerationStructureBuildSizesInfoKHR    sizes     = {0};
   VkAccelerationStructureGeometryKHR          stackGeometries[GPU_VK_RAY_STACK_GEOMETRY_COUNT];
   uint32_t                                    stackCounts[GPU_VK_RAY_STACK_GEOMETRY_COUNT];
-  GPUDeviceVk                                *deviceVk;
+  DeviceVk                                   *deviceVk;
   VkAccelerationStructureGeometryKHR         *geometries;
   uint32_t                                   *counts;
   uint32_t                                    geometryCount;
@@ -1246,8 +1246,8 @@ GPUResult
 vk_createAccelerationStructure(GPUDevice                                   *device,
                                const GPUAccelerationStructureCreateInfoEXT *info,
                                GPUAccelerationStructureEXT                 *structure) {
-  GPUDeviceVk                                *deviceVk;
-  GPUAccelerationStructureVk                 *native;
+  DeviceVk                                   *deviceVk;
+  AccelerationStructureVk                    *native;
   VkBufferCreateInfo                          bufferInfo      = {0};
   VkMemoryAllocateFlagsInfo                   allocationFlags = {0};
   VkMemoryAllocateInfo                        allocationInfo  = {0};
@@ -1361,7 +1361,7 @@ vk_createAccelerationStructure(GPUDevice                                   *devi
 GPU_HIDE
 void
 vk_destroyAccelerationStructure(GPUAccelerationStructureEXT *structure) {
-  GPUAccelerationStructureVk *native;
+  AccelerationStructureVk    *native;
 
   native = vk_rayStructure(structure);
   vk_rayDestroyState(native);
@@ -1374,9 +1374,9 @@ vk_destroyAccelerationStructure(GPUAccelerationStructureEXT *structure) {
 GPU_HIDE
 GPUAccelerationStructurePassEncoderEXT*
 vk_beginAccelerationStructurePass(GPUCommandBuffer *cmdb, const char *label) {
-  GPUCommandBufferVk                     *command;
+  CommandBufferVk                        *command;
   GPUAccelerationStructurePassEncoderEXT *pass;
-  GPUAccelerationStructureEncoderVk      *native;
+  AccelerationStructureEncoderVk         *native;
   GPUDevice                              *device;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -1407,10 +1407,10 @@ vk_buildAccelerationStructure(GPUAccelerationStructurePassEncoderEXT     *pass,
                               GPUBuffer                                  *scratchBuffer,
                               uint64_t                                    scratchOffset) {
   VkAccelerationStructureBuildGeometryInfoKHR     buildInfo = {0};
-  GPUAccelerationStructureEncoderVk              *encoder;
-  GPUAccelerationStructureVk                     *native;
-  GPUAccelerationStructureVk                     *source;
-  GPUDeviceVk                                    *deviceVk;
+  AccelerationStructureEncoderVk                 *encoder;
+  AccelerationStructureVk                        *native;
+  AccelerationStructureVk                        *source;
+  DeviceVk                                       *deviceVk;
   const VkAccelerationStructureBuildRangeInfoKHR *ranges;
   VkDeviceAddress                                 scratchAddress;
   uint32_t                                        geometryCount;
@@ -1469,7 +1469,7 @@ vk_buildAccelerationStructure(GPUAccelerationStructurePassEncoderEXT     *pass,
 GPU_HIDE
 void
 vk_endAccelerationStructurePass(GPUAccelerationStructurePassEncoderEXT *pass) {
-  GPUAccelerationStructureEncoderVk *native;
+  AccelerationStructureEncoderVk    *native;
 
   native = vk_rayEncoder(pass);
 
@@ -1487,7 +1487,7 @@ vk_endAccelerationStructurePass(GPUAccelerationStructurePassEncoderEXT *pass) {
 
 GPU_HIDE
 void
-vk_initRayQuery(GPUApiRayQuery *api) {
+vk_initRayQuery(ApiRayQuery    *api) {
   api->getSizes  = vk_getAccelerationStructureSizes;
   api->create    = vk_createAccelerationStructure;
   api->destroy   = vk_destroyAccelerationStructure;
@@ -1500,7 +1500,7 @@ vk_initRayQuery(GPUApiRayQuery *api) {
 
 GPU_HIDE
 void
-vk_initRayQuery(GPUApiRayQuery *api) {
+vk_initRayQuery(ApiRayQuery    *api) {
   memset(api, 0, sizeof(*api));
 }
 
@@ -1511,7 +1511,7 @@ vk_initRayQuery(GPUApiRayQuery *api) {
 
 GPU_HIDE
 void
-vk_initRayTracing(GPUApiRayTracing *api) {
+vk_initRayTracing(ApiRayTracing    *api) {
   api->createPipeline     = vk_createRayTracingPipeline;
   api->destroyPipeline    = vk_destroyRayTracingPipeline;
   api->createShaderTable  = vk_createShaderTable;
@@ -1527,7 +1527,7 @@ vk_initRayTracing(GPUApiRayTracing *api) {
 
 GPU_HIDE
 void
-vk_initRayTracing(GPUApiRayTracing *api) {
+vk_initRayTracing(ApiRayTracing    *api) {
   memset(api, 0, sizeof(*api));
 }
 

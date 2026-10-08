@@ -144,7 +144,7 @@ mt_prepareArgumentState(GPUCommandBuffer *cmdb,
                         MTArgumentState  *state,
                         const char       *label) {
 #if MT_HAS_METAL4
-  GPUDeviceMT                 *deviceMT;
+  DeviceMT                    *deviceMT;
   NSError                     *error;
   MTL4ArgumentTableDescriptor *desc;
 
@@ -173,7 +173,7 @@ mt_prepareArgumentState(GPUCommandBuffer *cmdb,
     desc.maxSamplerStateBindCount = MT_ARGUMENT_SAMPLER_COUNT;
     desc.initializeBindings       = YES;
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-    if (gpuDeviceDebugMarkersEnabled(cmdb->_queue->_device)
+    if (deviceDebugMarkersEnabled(cmdb->_queue->_device)
         && label && label[0] != '\0') {
       desc.label = [NSString stringWithUTF8String:label];
     }
@@ -333,7 +333,7 @@ mt_setArgumentAccelerationStructure(GPUCommandBuffer            *cmdb,
                                     GPUAccelerationStructureEXT *structure,
                                     uint32_t                     index) {
 #if MT_HAS_METAL4
-  GPUAccelerationStructureMT *native;
+  AccelerationStructureMT    *native;
 
   if (!state || !state->table || !structure
       || index >= MT_ARGUMENT_BUFFER_COUNT) {
@@ -371,7 +371,7 @@ mt_reserveUpload(GPUCommandBuffer *cmdb,
   MTCommandBuffer *native;
   MTUploadChunk   *chunk;
   MTUploadChunk   *candidate;
-  GPUDeviceMT     *deviceMT;
+  DeviceMT        *deviceMT;
   uint64_t         alignedOffset;
   uint64_t         capacity;
   uint64_t         offset;
@@ -434,15 +434,15 @@ mt_reserveUpload(GPUCommandBuffer *cmdb,
       return false;
     }
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-    if (gpuDeviceDebugMarkersEnabled(cmdb->_queue->_device)) {
+    if (deviceDebugMarkersEnabled(cmdb->_queue->_device)) {
       chunk->buffer.label = @"gpu-command-upload";
     }
 #endif
     chunk->capacity = capacity;
     chunk->next     = native->uploads;
     native->uploads = chunk;
-    gpuDeviceRecordHotPathAlloc(cmdb->_queue->_device,
-                                sizeof(*chunk) + capacity);
+    deviceRecordHotPathAlloc(cmdb->_queue->_device,
+                             sizeof(*chunk) + capacity);
     alignedOffset = 0u;
   }
 
@@ -677,7 +677,7 @@ GPUResult
 mt_createQuerySet(GPUDevice                   *device,
                   const GPUQuerySetCreateInfo *info,
                   GPUQuerySet                 *set) {
-  GPUDeviceMT                      *deviceMT;
+  DeviceMT                         *deviceMT;
   MTQuerySet                       *native;
   MTLCounterSampleBufferDescriptor *desc;
   id<MTLCounterSampleBuffer>        sampleBuffer;
@@ -723,7 +723,7 @@ mt_createQuerySet(GPUDevice                   *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-    if (gpuDeviceDebugMarkersEnabled(device)
+    if (deviceDebugMarkersEnabled(device)
         && info->label && info->label[0] != '\0') {
       native->visibility.label = [NSString stringWithUTF8String:info->label];
     }
@@ -749,7 +749,7 @@ mt_createQuerySet(GPUDevice                   *device,
                                                                 error:&error];
       [heapDesc release];
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-      if (native->modern && gpuDeviceDebugMarkersEnabled(device)
+      if (native->modern && deviceDebugMarkersEnabled(device)
           && info->label && info->label[0] != '\0') {
         [(id<MTL4CounterHeap>)native->modern
           setLabel:[NSString stringWithUTF8String:info->label]];
@@ -785,7 +785,7 @@ mt_createQuerySet(GPUDevice                   *device,
   desc.sampleCount = (NSUInteger)info->count;
   desc.storageMode = MTLStorageModePrivate;
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-  if (gpuDeviceDebugMarkersEnabled(device)
+  if (deviceDebugMarkersEnabled(device)
       && info->label && info->label[0] != '\0') {
     desc.label = [NSString stringWithUTF8String:info->label];
   }
@@ -1058,7 +1058,7 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
 
 GPU_HIDE
 void
-mt_initCmdBuff(GPUApiCommandBuffer *api) {
+mt_initCmdBuff(ApiCommandBuffer    *api) {
   api->presentDrawable     = mt_cmdBufDrawable;
   api->createQuerySet      = mt_createQuerySet;
   api->destroyQuerySet     = mt_destroyQuerySet;

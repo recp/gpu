@@ -55,7 +55,7 @@ static GPUAdapterIdentity   gOwnershipIdentity;
 static GPUAdapterIdentity   gOwnershipPeerIdentity;
 static GPUDevice            gOwnershipDevice;
 static GPUSurface           gOwnershipSurface;
-static GPUSurfaceNativeInfo gOwnershipSurfaceInfo;
+static SurfaceNativeInfo    gOwnershipSurfaceInfo;
 static uint32_t             gOwnershipAdapterCalls;
 static uint32_t             gOwnershipAdapterDestroyCalls;
 static uint32_t             gOwnershipAdapterSelectCalls;
@@ -116,7 +116,7 @@ get_validation_surface_capabilities(const GPUAdapter       *__restrict adapter,
 }
 
 static GPUSwapchain*
-create_validation_swapchain(GPUApi                       *__restrict api,
+create_validation_swapchain(Api                          *__restrict api,
                             GPUDevice                    *__restrict device,
                             GPUQueue                     *__restrict queue,
                             const GPUSwapchainCreateInfo *__restrict info) {
@@ -171,7 +171,7 @@ static GPUResult
 get_ownership_properties(const GPUAdapter     *__restrict adapter,
                          GPUAdapterProperties *__restrict outProps) {
   outProps->name           = "scoped-adapter";
-  outProps->backend        = gpuAdapterApi(adapter)->backend;
+  outProps->backend        = adapterApi(adapter)->backend;
   outProps->type           = GPU_ADAPTER_TYPE_INTEGRATED;
   outProps->executionFlags = GPU_EXECUTION_GRAPHICS_BIT |
                              GPU_EXECUTION_COMPUTE_BIT;
@@ -226,7 +226,7 @@ get_ownership_format_capabilities(const GPUAdapter      *__restrict adapter,
 
 static GPUDevice*
 create_ownership_device(GPUAdapter    *__restrict adapter,
-                        const GPUQueueCreateInfo *queueInfos,
+                        const QueueCreateInfo    *queueInfos,
                         uint32_t                  queueInfoCount,
                         uint64_t                  enabledFeatureMask) {
   (void)queueInfos;
@@ -260,9 +260,9 @@ wait_ownership_device(GPUDevice *__restrict device) {
 }
 
 static GPUSurface*
-create_ownership_surface(GPUApi                     *__restrict api,
+create_ownership_surface(Api                        *__restrict api,
                          GPUInstance                *__restrict instance,
-                         const GPUSurfaceNativeInfo *__restrict info) {
+                         const SurfaceNativeInfo    *__restrict info) {
   (void)api;
   (void)instance;
 
@@ -302,7 +302,7 @@ get_ownership_surface_capabilities(const GPUAdapter       *__restrict adapter,
 }
 
 static void
-destroy_ownership_instance(GPUApi      *__restrict api,
+destroy_ownership_instance(Api         *__restrict api,
                            GPUInstance *__restrict instance) {
   (void)api;
   (void)instance;
@@ -321,10 +321,10 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   GPUFormatCapabilities       formatCaps;
   GPUAdapterIdentity          identity;
   GPUSurfaceCapabilities      surfaceCaps;
-  GPUApi                      scopedApi;
+  Api                         scopedApi;
   GPUInstance                 instance      = {0};
   GPUInstance                 otherInstance = {0};
-  GPUApi                     *activeApi;
+  Api                        *activeApi;
   GPUAdapter                 *adapter;
   GPUDevice                  *device;
   GPUSurface                 *surface;
@@ -332,7 +332,7 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   uint32_t                    i;
   bool                        sameDevice;
 
-  if (!(activeApi = gpuInstanceApi(activeInstance))) {
+  if (!(activeApi = instanceApi(activeInstance))) {
     fprintf(stderr, "instance ownership has no instance api\n");
     return 0;
   }
@@ -597,12 +597,12 @@ check_secondary_backend_instance(const GPUInstance *activeInstance) {
   GPUBackend            backend;
   GPUResult             result;
 
-  if (!activeInstance || !gpuInstanceApi(activeInstance)) {
+  if (!activeInstance || !instanceApi(activeInstance)) {
     fprintf(stderr, "secondary backend test has no active instance api\n");
     return 0;
   }
 
-  backend = gpuInstanceApi(activeInstance)->backend;
+  backend = instanceApi(activeInstance)->backend;
 
   if (backend == GPU_BACKEND_METAL) {
     backend = GPU_BACKEND_VULKAN;
@@ -623,9 +623,9 @@ check_secondary_backend_instance(const GPUInstance *activeInstance) {
   }
 
   if (result != GPU_OK || !instance
-      || !gpuInstanceApi(instance)
-      || gpuInstanceApi(instance)->backend != backend
-      || gpuInstanceApi(instance) == gpuInstanceApi(activeInstance)) {
+      || !instanceApi(instance)
+      || instanceApi(instance)->backend != backend
+      || instanceApi(instance) == instanceApi(activeInstance)) {
     fprintf(stderr, "secondary backend instance selection failed\n");
     return 0;
   }
@@ -710,7 +710,7 @@ submit_scoped_cmdbs(GPUQueue                *__restrict queue,
 }
 
 static GPUFrame*
-begin_scoped_frame(GPUApi       *__restrict api,
+begin_scoped_frame(Api          *__restrict api,
                    GPUSwapchain *__restrict swapchain) {
   (void)api;
   (void)swapchain;
@@ -731,7 +731,7 @@ begin_scoped_frame(GPUApi       *__restrict api,
 }
 
 static void
-end_scoped_frame(GPUApi   *__restrict api,
+end_scoped_frame(Api      *__restrict api,
                  GPUFrame *__restrict frame) {
   (void)api;
   (void)frame;
@@ -744,16 +744,16 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   GPUCommandBuffer   aliasCmdb      = {0};
   GPUCommandBuffer   batch[2]       = {0};
   GPUQueueSubmitInfo submitInfo     = {0};
-  GPUTransientChunk  transientChunk = {0};
-  GPUApi             scopedApi;
+  TransientChunk     transientChunk = {0};
+  Api                scopedApi;
   GPUDevice          device    = {0};
   GPUSwapchain       swapchain = {0};
-  GPUApi            *api;
+  Api               *api;
   GPUQueue          *queue;
   GPUCommandBuffer  *cmdb;
   GPUFrame          *frame;
 
-  if (!(api = gpuDeviceApi(activeDevice))) {
+  if (!(api = deviceApi(activeDevice))) {
     fprintf(stderr, "queue/frame dispatch has no device api\n");
     return 0;
   }
@@ -1494,7 +1494,7 @@ check_swapchain_create_validation(GPUDevice *device) {
   GPUSurface             scopedSurface   = {0};
   GPUSurface             surface         = {0};
   GPUSwapchainCreateInfo info            = {0};
-  GPUApi                 scopedApi;
+  Api                    scopedApi;
   GPUSwapchain          *swapchain;
 
   if (!device) {
@@ -1511,7 +1511,7 @@ check_swapchain_create_validation(GPUDevice *device) {
     return 0;
   }
 
-  scopedApi = *gpuDeviceApi(device);
+  scopedApi = *deviceApi(device);
   scopedApi.device.getFormatCapabilities = get_validation_format_capabilities;
   scopedApi.surface.getCapabilities      = get_validation_surface_capabilities;
   scopedApi.cmdque.getCommandQueue       = get_scoped_queue;
@@ -1634,26 +1634,26 @@ check_swapchain_create_validation(GPUDevice *device) {
     return 0;
   }
 
-  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
+  swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
 
   if (GPUGetSwapchainStatus(swapchain) != GPU_SWAPCHAIN_STATUS_UNAVAILABLE) {
     fprintf(stderr, "temporary swapchain status was not recorded\n");
     return 0;
   }
 
-  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_READY);
+  swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_READY);
 
   if (GPUGetSwapchainStatus(swapchain) != GPU_SWAPCHAIN_STATUS_READY) {
     fprintf(stderr, "temporary swapchain status did not clear\n");
     return 0;
   }
 
-  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SUBOPTIMAL);
-  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_READY);
-  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_OUT_OF_DATE);
-  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SUBOPTIMAL);
-  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
-  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_OUT_OF_DATE);
+  swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SUBOPTIMAL);
+  swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_READY);
+  swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_OUT_OF_DATE);
+  swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SUBOPTIMAL);
+  swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
+  swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_OUT_OF_DATE);
 
   if (GPUGetSwapchainStatus(swapchain) != GPU_SWAPCHAIN_STATUS_SURFACE_LOST) {
     fprintf(stderr, "sticky swapchain status was downgraded\n");
@@ -2190,7 +2190,7 @@ check_device_destroy_waits_for_submission(GPUAdapter *adapter) {
 
 static int
 check_queue_submit_ex_semaphore(GPUDevice *device) {
-  GPUApi                 *api;
+  Api                    *api;
   GPUQueue               *queue;
   GPUCommandBuffer       *cmdb;
   GPUCommandBuffer       *buffers[1];
@@ -2205,7 +2205,7 @@ check_queue_submit_ex_semaphore(GPUDevice *device) {
   GPUQueueSubmitExInfo    submitInfo = {0};
   int                     ok;
 
-  api = gpuDeviceApi(device);
+  api = deviceApi(device);
 
   if (!api || !api->cmdque.createSemaphore || !api->cmdque.submitEx) {
     return 1;

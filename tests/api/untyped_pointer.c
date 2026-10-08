@@ -32,7 +32,7 @@ gpu_test_untyped_pointer(GPUDevice *device, const char *bytecodePath) {
 
   uint32_t                     values[GPU_UNTYPED_POINTER_VALUE_COUNT] = {0};
 
-  GPUApi                      *api;
+  Api                         *api;
   GPUQueue                    *queue        = NULL;
   GPUShaderLibrary            *library      = NULL;
   GPUShaderLayout             *shaderLayout = NULL;
@@ -50,7 +50,7 @@ gpu_test_untyped_pointer(GPUDevice *device, const char *bytecodePath) {
   uint32_t                     expected;
   bool                         submitAttempted = false;
 
-  if (!(api = gpuDeviceApi(device)) || api->backend != GPU_BACKEND_VULKAN) {
+  if (!(api = deviceApi(device)) || api->backend != GPU_BACKEND_VULKAN) {
     return 1;
   }
 

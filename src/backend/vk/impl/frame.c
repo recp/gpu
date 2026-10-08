@@ -17,9 +17,9 @@
 #include "../common.h"
 
 static bool
-vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
+vk__presentAcquiredFrame(SwapchainVk    *swapchain) {
   VkSubmitInfo         submitInfo = {0};
-  GPUFrameSyncVk      *sync;
+  FrameSyncVk         *sync;
   VkSemaphore          renderFinished;
   VkPipelineStageFlags waitStage;
   VkResult             result;
@@ -61,7 +61,7 @@ vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
 
 GPU_HIDE
 bool
-vk_restoreFrameFence(GPUSwapchainVk *swapchain, GPUFrameSyncVk *sync) {
+vk_restoreFrameFence(SwapchainVk    *swapchain, FrameSyncVk    *sync) {
   VkFenceCreateInfo info = {0};
   VkFence           replacement;
 
@@ -95,9 +95,9 @@ vk_restoreFrameFence(GPUSwapchainVk *swapchain, GPUFrameSyncVk *sync) {
 
 GPU_HIDE
 GPUFrame*
-vk_beginFrame(GPUApi *api, GPUSwapchain *swapchainObj) {
-  GPUSwapchainVk *swapchain;
-  GPUFrameSyncVk *sync;
+vk_beginFrame(Api    *api, GPUSwapchain *swapchainObj) {
+  SwapchainVk    *swapchain;
+  FrameSyncVk    *sync;
   GPUFrame       *frame;
   VkResult        result;
   uint32_t        imageIndex;
@@ -107,7 +107,7 @@ vk_beginFrame(GPUApi *api, GPUSwapchain *swapchainObj) {
   swapchain = swapchainObj ? swapchainObj->_priv : NULL;
 
   if (!swapchain || swapchain->imageCount == 0u) {
-    gpuSwapchainSetStatus(swapchainObj, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
+    swapchainSetStatus(swapchainObj, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
     return NULL;
   }
 
@@ -168,8 +168,8 @@ vk_beginFrame(GPUApi *api, GPUSwapchain *swapchainObj) {
 
 GPU_HIDE
 void
-vk_endFrame(GPUApi *api, GPUFrame *frame) {
-  GPUSwapchainVk *swapchain;
+vk_endFrame(Api    *api, GPUFrame *frame) {
+  SwapchainVk    *swapchain;
 
   GPU__UNUSED(api);
 
@@ -193,8 +193,8 @@ vk_endFrame(GPUApi *api, GPUFrame *frame) {
 GPU_HIDE
 bool
 vk_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  GPUCommandBufferVk *command;
-  GPUSwapchainVk     *swapchain;
+  CommandBufferVk    *command;
+  SwapchainVk        *swapchain;
 
   command   = cmdb ? cmdb->_priv : NULL;
   swapchain = frame ? frame->_priv : NULL;
@@ -215,13 +215,13 @@ vk_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
 
 GPU_HIDE
 void
-vk_initFrame(GPUApiFrame *api) {
+vk_initFrame(ApiFrame    *api) {
   api->beginFrame = vk_beginFrame;
   api->endFrame   = vk_endFrame;
 }
 
 GPU_HIDE
 void
-vk_initCmdbuf(GPUApiCommandBuffer *api) {
+vk_initCmdbuf(ApiCommandBuffer    *api) {
   api->presentDrawable = vk_schedulePresent;
 }

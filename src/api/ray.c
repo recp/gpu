@@ -52,15 +52,15 @@ static const GPUShaderStageFlags GPU_RAY_TRACING_STAGE_FLAGS_EXT =
   GPU_SHADER_STAGE_INTERSECTION_BIT;
 
 static bool
-gpu_rayTypeValid(GPUAccelerationStructureTypeEXT type) {
+rayTypeValid(GPUAccelerationStructureTypeEXT type) {
   return type == GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT
          || type == GPU_ACCELERATION_STRUCTURE_TOP_LEVEL_EXT;
 }
 
 static bool
-gpu_rayChainValid(const GPUChainedStruct *chain,
-                  GPUStructureType        type,
-                  size_t                  size) {
+rayChainValid(const GPUChainedStruct *chain,
+              GPUStructureType        type,
+              size_t                  size) {
   return chain
          && (chain->sType == GPU_STRUCTURE_TYPE_NONE || chain->sType == type)
          && (chain->structSize == 0u || chain->structSize >= size)
@@ -68,11 +68,11 @@ gpu_rayChainValid(const GPUChainedStruct *chain,
 }
 
 static bool
-gpu_rayRangeValid(const GPUBuffer *buffer,
-                  uint64_t         offset,
-                  uint64_t         count,
-                  uint64_t         stride,
-                  uint64_t         elementSize) {
+rayRangeValid(const GPUBuffer *buffer,
+              uint64_t         offset,
+              uint64_t         count,
+              uint64_t         stride,
+              uint64_t         elementSize) {
   uint64_t sizeBytes;
 
   if (!buffer || count == 0u || stride < elementSize
@@ -82,27 +82,27 @@ gpu_rayRangeValid(const GPUBuffer *buffer,
 
   sizeBytes = (count - 1u) * stride + elementSize;
 
-  return gpuBufferRangeValid(buffer, offset, sizeBytes);
+  return bufferRangeValid(buffer, offset, sizeBytes);
 }
 
 static bool
-gpu_rayTriangleValid(GPUDevice                                         *device,
-                     const GPUAccelerationStructureTriangleGeometryEXT *geometry) {
+rayTriangleValid(GPUDevice                                         *device,
+                 const GPUAccelerationStructureTriangleGeometryEXT *geometry) {
   uint64_t indexSize;
 
   if (!geometry || !geometry->vertexBuffer
       || geometry->vertexBuffer->device != device
-      || !gpuBufferHasUsage(geometry->vertexBuffer,
-                            GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT)
+      || !bufferHasUsage(geometry->vertexBuffer,
+                         GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT)
       || geometry->vertexFormat != GPU_VERTEX_FORMAT_FLOAT32X3
       || geometry->vertexCount == 0u
       || geometry->vertexStride < 12u
       || (geometry->flags & ~GPU_ACCELERATION_STRUCTURE_GEOMETRY_FLAGS_EXT) != 0u
-      || !gpu_rayRangeValid(geometry->vertexBuffer,
-                            geometry->vertexOffset,
-                            geometry->vertexCount,
-                            geometry->vertexStride,
-                            12u)) {
+      || !rayRangeValid(geometry->vertexBuffer,
+                        geometry->vertexOffset,
+                        geometry->vertexCount,
+                        geometry->vertexStride,
+                        12u)) {
     return false;
   }
 
@@ -113,8 +113,8 @@ gpu_rayTriangleValid(GPUDevice                                         *device,
   }
 
   if (geometry->indexBuffer->device != device
-      || !gpuBufferHasUsage(geometry->indexBuffer,
-                            GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT)
+      || !bufferHasUsage(geometry->indexBuffer,
+                         GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT)
       || geometry->indexCount < 3u || geometry->indexCount % 3u != 0u
       || (geometry->indexType != GPU_INDEX_TYPE_UINT16
           && geometry->indexType != GPU_INDEX_TYPE_UINT32)) {
@@ -123,49 +123,49 @@ gpu_rayTriangleValid(GPUDevice                                         *device,
 
   indexSize = geometry->indexType == GPU_INDEX_TYPE_UINT32 ? 4u : 2u;
 
-  return gpu_rayRangeValid(geometry->indexBuffer,
-                           geometry->indexOffset,
-                           geometry->indexCount,
-                           indexSize,
-                           indexSize);
+  return rayRangeValid(geometry->indexBuffer,
+                       geometry->indexOffset,
+                       geometry->indexCount,
+                       indexSize,
+                       indexSize);
 }
 
 static bool
-gpu_rayAABBValid(GPUDevice                                     *device,
-                 const GPUAccelerationStructureAABBGeometryEXT *geometry) {
+rayAABBValid(GPUDevice                                     *device,
+             const GPUAccelerationStructureAABBGeometryEXT *geometry) {
   return geometry && geometry->buffer
          && geometry->buffer->device == device
-         && gpuBufferHasUsage(geometry->buffer,
-                              GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT)
+         && bufferHasUsage(geometry->buffer,
+                           GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT)
          && geometry->stride >= 24u && geometry->stride % 8u == 0u
          && (geometry->flags & ~GPU_ACCELERATION_STRUCTURE_GEOMETRY_FLAGS_EXT) == 0u
-         && gpu_rayRangeValid(geometry->buffer,
-                              geometry->offset,
-                              geometry->count,
-                              geometry->stride,
-                              24u);
+         && rayRangeValid(geometry->buffer,
+                          geometry->offset,
+                          geometry->count,
+                          geometry->stride,
+                          24u);
 }
 
 static bool
-gpu_rayGeometryValid(GPUDevice                                 *device,
-                     const GPUAccelerationStructureGeometryEXT *geometry) {
+rayGeometryValid(GPUDevice                                 *device,
+                 const GPUAccelerationStructureGeometryEXT *geometry) {
   if (!geometry) {
     return false;
   }
 
   switch (geometry->type) {
     case GPU_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_EXT:
-      return gpu_rayTriangleValid(device, &geometry->triangles);
+      return rayTriangleValid(device, &geometry->triangles);
     case GPU_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_EXT:
-      return gpu_rayAABBValid(device, &geometry->aabbs);
+      return rayAABBValid(device, &geometry->aabbs);
     default:
       return false;
   }
 }
 
 static bool
-gpu_rayInstanceValid(GPUDevice                                 *device,
-                     const GPUAccelerationStructureInstanceEXT *instance) {
+rayInstanceValid(GPUDevice                                 *device,
+                 const GPUAccelerationStructureInstanceEXT *instance) {
   if (!instance || !instance->structure
       || instance->structure->device != device
       || instance->structure->type != GPU_ACCELERATION_STRUCTURE_BOTTOM_LEVEL_EXT
@@ -182,16 +182,16 @@ gpu_rayInstanceValid(GPUDevice                                 *device,
 }
 
 static GPUResult
-gpu_validateRayBuildInfo(GPUDevice                                  *device,
-                         const GPUAccelerationStructureBuildInfoEXT *info) {
+validateRayBuildInfo(GPUDevice                                  *device,
+                     const GPUAccelerationStructureBuildInfoEXT *info) {
   uint32_t i;
   uint32_t j;
 
   if (!device || !info
-      || !gpu_rayChainValid(&info->chain,
-                            GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_INFO_EXT,
-                            sizeof(*info))
-      || !gpu_rayTypeValid(info->type)
+      || !rayChainValid(&info->chain,
+                        GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_INFO_EXT,
+                        sizeof(*info))
+      || !rayTypeValid(info->type)
       || (info->flags & ~GPU_ACCELERATION_STRUCTURE_BUILD_FLAGS_EXT) != 0u
       || (info->mode != GPU_ACCELERATION_STRUCTURE_BUILD_EXT
           && info->mode != GPU_ACCELERATION_STRUCTURE_UPDATE_EXT)) {
@@ -216,7 +216,7 @@ gpu_validateRayBuildInfo(GPUDevice                                  *device,
     }
 
     for (i = 0u; i < info->bottomLevel.geometryCount; i++) {
-      if (!gpu_rayGeometryValid(device, &info->bottomLevel.pGeometries[i])) {
+      if (!rayGeometryValid(device, &info->bottomLevel.pGeometries[i])) {
         return GPU_ERROR_INVALID_ARGUMENT;
       }
     }
@@ -226,7 +226,7 @@ gpu_validateRayBuildInfo(GPUDevice                                  *device,
     }
 
     for (j = 0u; j < info->topLevel.instanceCount; j++) {
-      if (!gpu_rayInstanceValid(device, &info->topLevel.pInstances[j])) {
+      if (!rayInstanceValid(device, &info->topLevel.pInstances[j])) {
         return GPU_ERROR_INVALID_ARGUMENT;
       }
     }
@@ -236,17 +236,17 @@ gpu_validateRayBuildInfo(GPUDevice                                  *device,
 }
 
 static bool
-gpu_intersectionFunctionStageValid(GPUShaderStageFlags stage,
-                                   GPUShaderStageFlags allowed) {
+intersectionFunctionStageValid(GPUShaderStageFlags stage,
+                               GPUShaderStageFlags allowed) {
   return stage != 0u
          && (stage & (stage - 1u)) == 0u
          && (stage & allowed) != 0u;
 }
 
 static bool
-gpu_intersectionFunctionListValid(const GPUShaderLibrary                   *library,
-                                  const GPUIntersectionFunctionPipelineEXT *info,
-                                  GPUShaderStageFlags                       allowedStages) {
+intersectionFunctionListValid(const GPUShaderLibrary                   *library,
+                              const GPUIntersectionFunctionPipelineEXT *info,
+                              GPUShaderStageFlags                       allowedStages) {
   const GPUIntersectionFunctionEXT *function;
   const GPUIntersectionFunctionEXT *previous;
   GPUShaderStageFlags               reflectedStage;
@@ -263,13 +263,13 @@ gpu_intersectionFunctionListValid(const GPUShaderLibrary                   *libr
     function = &info->pFunctions[i];
 
     if (!function->entryPoint || function->entryPoint[0] == '\0'
-        || !gpu_intersectionFunctionStageValid(function->stage, allowedStages)) {
+        || !intersectionFunctionStageValid(function->stage, allowedStages)) {
       return false;
     }
 
-    if (gpuGetShaderLibraryEntryStage(library,
-                                      function->entryPoint,
-                                      &reflectedStage)
+    if (getShaderLibraryEntryStage(library,
+                                   function->entryPoint,
+                                   &reflectedStage)
         && reflectedStage != GPU_SHADER_STAGE_INTERSECTION_BIT) {
       return false;
     }
@@ -288,18 +288,18 @@ gpu_intersectionFunctionListValid(const GPUShaderLibrary                   *libr
 }
 
 static bool
-gpu_rayTracingGeneralStageValid(GPUShaderStageFlags stage) {
+rayTracingGeneralStageValid(GPUShaderStageFlags stage) {
   return stage != 0u
          && (stage & (stage - 1u)) == 0u
          && (stage & GPU_RAY_TRACING_GENERAL_STAGE_FLAGS_EXT) != 0u;
 }
 
 static bool
-gpu_rayTracingEntryStage(const GPUShaderLibrary *library,
-                         const char             *entry,
-                         GPUShaderStageFlags     requested,
-                         GPUShaderStageFlags     expected,
-                         GPUShaderStageFlags    *outStage) {
+rayTracingEntryStage(const GPUShaderLibrary *library,
+                     const char             *entry,
+                     GPUShaderStageFlags     requested,
+                     GPUShaderStageFlags     expected,
+                     GPUShaderStageFlags    *outStage) {
   GPUShaderStageFlags reflected;
 
   if (!library || !entry || !entry[0] || !outStage) {
@@ -308,7 +308,7 @@ gpu_rayTracingEntryStage(const GPUShaderLibrary *library,
 
   reflected = 0u;
 
-  if (gpuGetShaderLibraryEntryStage(library, entry, &reflected)) {
+  if (getShaderLibraryEntryStage(library, entry, &reflected)) {
     if ((requested && requested != reflected)
         || (expected && expected != reflected)) {
       return false;
@@ -332,9 +332,9 @@ gpu_rayTracingEntryStage(const GPUShaderLibrary *library,
 }
 
 static bool
-gpu_rayTracingGroupValid(const GPUShaderLibrary            *library,
-                         const GPURayTracingShaderGroupEXT *group,
-                         GPUShaderStageFlags               *outGeneralStage) {
+rayTracingGroupValid(const GPUShaderLibrary            *library,
+                     const GPURayTracingShaderGroupEXT *group,
+                     GPUShaderStageFlags               *outGeneralStage) {
   GPUShaderStageFlags stage;
 
   if (!library || !group || !outGeneralStage) {
@@ -350,12 +350,12 @@ gpu_rayTracingGroupValid(const GPUShaderLibrary            *library,
         return false;
       }
 
-      if (!gpu_rayTracingEntryStage(library,
-                                    group->generalEntry,
-                                    group->generalStage,
-                                    0u,
-                                    &stage)
-          || !gpu_rayTracingGeneralStageValid(stage)) {
+      if (!rayTracingEntryStage(library,
+                                group->generalEntry,
+                                group->generalStage,
+                                0u,
+                                &stage)
+          || !rayTracingGeneralStageValid(stage)) {
         return false;
       }
 
@@ -370,20 +370,20 @@ gpu_rayTracingGroupValid(const GPUShaderLibrary            *library,
       }
 
       if (group->closestHitEntry
-          && !gpu_rayTracingEntryStage(library,
-                                       group->closestHitEntry,
-                                       0u,
-                                       GPU_SHADER_STAGE_CLOSEST_HIT_BIT,
-                                       &stage)) {
+          && !rayTracingEntryStage(library,
+                                   group->closestHitEntry,
+                                   0u,
+                                   GPU_SHADER_STAGE_CLOSEST_HIT_BIT,
+                                   &stage)) {
         return false;
       }
 
       return !group->anyHitEntry
-             || gpu_rayTracingEntryStage(library,
-                                         group->anyHitEntry,
-                                         0u,
-                                         GPU_SHADER_STAGE_ANY_HIT_BIT,
-                                         &stage);
+             || rayTracingEntryStage(library,
+                                     group->anyHitEntry,
+                                     0u,
+                                     GPU_SHADER_STAGE_ANY_HIT_BIT,
+                                     &stage);
 
     case GPU_RAY_TRACING_SHADER_GROUP_PROCEDURAL_HIT_EXT:
       if (group->generalEntry || group->generalStage
@@ -391,23 +391,23 @@ gpu_rayTracingGroupValid(const GPUShaderLibrary            *library,
         return false;
       }
 
-      if (!gpu_rayTracingEntryStage(library,
-                                    group->intersectionEntry,
-                                    0u,
-                                    GPU_SHADER_STAGE_INTERSECTION_BIT,
-                                    &stage)
+      if (!rayTracingEntryStage(library,
+                                group->intersectionEntry,
+                                0u,
+                                GPU_SHADER_STAGE_INTERSECTION_BIT,
+                                &stage)
           || (group->closestHitEntry
-              && !gpu_rayTracingEntryStage(library,
-                                           group->closestHitEntry,
-                                           0u,
-                                           GPU_SHADER_STAGE_CLOSEST_HIT_BIT,
-                                           &stage))
+              && !rayTracingEntryStage(library,
+                                       group->closestHitEntry,
+                                       0u,
+                                       GPU_SHADER_STAGE_CLOSEST_HIT_BIT,
+                                       &stage))
           || (group->anyHitEntry
-              && !gpu_rayTracingEntryStage(library,
-                                           group->anyHitEntry,
-                                           0u,
-                                           GPU_SHADER_STAGE_ANY_HIT_BIT,
-                                           &stage))) {
+              && !rayTracingEntryStage(library,
+                                       group->anyHitEntry,
+                                       0u,
+                                       GPU_SHADER_STAGE_ANY_HIT_BIT,
+                                       &stage))) {
         return false;
       }
 
@@ -418,7 +418,7 @@ gpu_rayTracingGroupValid(const GPUShaderLibrary            *library,
 }
 
 static uint32_t
-gpu_rayTracingGroupEntryCount(const GPURayTracingShaderGroupEXT *group) {
+rayTracingGroupEntryCount(const GPURayTracingShaderGroupEXT *group) {
   if (!group) {
     return 0u;
   }
@@ -430,9 +430,9 @@ gpu_rayTracingGroupEntryCount(const GPURayTracingShaderGroupEXT *group) {
 }
 
 static void
-gpu_rayTracingGroupEntries(const GPURayTracingShaderGroupEXT *group,
-                           const char                       **entries,
-                           uint32_t                          *index) {
+rayTracingGroupEntries(const GPURayTracingShaderGroupEXT *group,
+                       const char                       **entries,
+                       uint32_t                          *index) {
   if (group->generalEntry)
     entries[(*index)++] = group->generalEntry;
 
@@ -447,14 +447,14 @@ gpu_rayTracingGroupEntries(const GPURayTracingShaderGroupEXT *group,
 }
 
 static void
-gpu_accumulateRayInterface(const GPUShaderLibrary *library,
-                           const char             *entry,
-                           GPUShaderStageFlags     stage,
-                           uint32_t               *maxPayloadSizeBytes,
-                           uint32_t               *maxHitAttributeSizeBytes,
-                           bool                   *payloadMetadataMissing,
-                           bool                   *hitMetadataMissing,
-                           bool                   *callableMetadataMissing) {
+accumulateRayInterface(const GPUShaderLibrary *library,
+                       const char             *entry,
+                       GPUShaderStageFlags     stage,
+                       uint32_t               *maxPayloadSizeBytes,
+                       uint32_t               *maxHitAttributeSizeBytes,
+                       bool                   *payloadMetadataMissing,
+                       bool                   *hitMetadataMissing,
+                       bool                   *callableMetadataMissing) {
   uint32_t payloadSizeBytes;
   uint32_t hitAttributeSizeBytes;
   uint32_t callableDataSizeBytes;
@@ -473,12 +473,12 @@ gpu_accumulateRayInterface(const GPUShaderLibrary *library,
   requireHitAttribute = stage == GPU_SHADER_STAGE_CLOSEST_HIT_BIT
                         || stage == GPU_SHADER_STAGE_ANY_HIT_BIT;
   requireCallableData = stage == GPU_SHADER_STAGE_CALLABLE_BIT;
-  reflected           = gpuGetShaderLibraryRayInterfaceInfo(library,
-                                                            entry,
-                                                            stage,
-                                                            &payloadSizeBytes,
-                                                            &hitAttributeSizeBytes,
-                                                            &callableDataSizeBytes) != 0;
+  reflected           = getShaderLibraryRayInterfaceInfo(library,
+                                                         entry,
+                                                         stage,
+                                                         &payloadSizeBytes,
+                                                         &hitAttributeSizeBytes,
+                                                         &callableDataSizeBytes) != 0;
 
   if (requirePayload && (!reflected || payloadSizeBytes == 0u)) {
     *payloadMetadataMissing = true;
@@ -499,14 +499,14 @@ gpu_accumulateRayInterface(const GPUShaderLibrary *library,
 }
 
 static bool
-gpu_resolveRayInterfaceLimits(const GPUShaderLibrary            *library,
-                              const GPURayTracingShaderGroupEXT *groups,
-                              const GPUShaderStageFlags         *generalStages,
-                              uint32_t                           groupCount,
-                              uint32_t                           requestedPayloadSizeBytes,
-                              uint32_t                           requestedHitAttributeSizeBytes,
-                              uint32_t                          *outPayloadSizeBytes,
-                              uint32_t                          *outHitAttributeSizeBytes) {
+resolveRayInterfaceLimits(const GPUShaderLibrary            *library,
+                          const GPURayTracingShaderGroupEXT *groups,
+                          const GPUShaderStageFlags         *generalStages,
+                          uint32_t                           groupCount,
+                          uint32_t                           requestedPayloadSizeBytes,
+                          uint32_t                           requestedHitAttributeSizeBytes,
+                          uint32_t                          *outPayloadSizeBytes,
+                          uint32_t                          *outHitAttributeSizeBytes) {
   const GPURayTracingShaderGroupEXT *group;
   uint32_t                           reflectedPayloadSizeBytes;
   uint32_t                           reflectedHitAttributeSizeBytes;
@@ -528,41 +528,41 @@ gpu_resolveRayInterfaceLimits(const GPUShaderLibrary            *library,
     if (group->type == GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT) {
       stage = generalStages[i];
 
-      gpu_accumulateRayInterface(library,
-                                 group->generalEntry,
-                                 stage,
-                                 &reflectedPayloadSizeBytes,
-                                 &reflectedHitAttributeSizeBytes,
-                                 &payloadMetadataMissing,
-                                 &hitMetadataMissing,
-                                 &callableMetadataMissing);
+      accumulateRayInterface(library,
+                             group->generalEntry,
+                             stage,
+                             &reflectedPayloadSizeBytes,
+                             &reflectedHitAttributeSizeBytes,
+                             &payloadMetadataMissing,
+                             &hitMetadataMissing,
+                             &callableMetadataMissing);
       continue;
     }
 
-    gpu_accumulateRayInterface(library,
-                               group->closestHitEntry,
-                               GPU_SHADER_STAGE_CLOSEST_HIT_BIT,
-                               &reflectedPayloadSizeBytes,
-                               &reflectedHitAttributeSizeBytes,
-                               &payloadMetadataMissing,
-                               &hitMetadataMissing,
-                               &callableMetadataMissing);
-    gpu_accumulateRayInterface(library,
-                               group->anyHitEntry,
-                               GPU_SHADER_STAGE_ANY_HIT_BIT,
-                               &reflectedPayloadSizeBytes,
-                               &reflectedHitAttributeSizeBytes,
-                               &payloadMetadataMissing,
-                               &hitMetadataMissing,
-                               &callableMetadataMissing);
-    gpu_accumulateRayInterface(library,
-                               group->intersectionEntry,
-                               GPU_SHADER_STAGE_INTERSECTION_BIT,
-                               &reflectedPayloadSizeBytes,
-                               &reflectedHitAttributeSizeBytes,
-                               &payloadMetadataMissing,
-                               &hitMetadataMissing,
-                               &callableMetadataMissing);
+    accumulateRayInterface(library,
+                           group->closestHitEntry,
+                           GPU_SHADER_STAGE_CLOSEST_HIT_BIT,
+                           &reflectedPayloadSizeBytes,
+                           &reflectedHitAttributeSizeBytes,
+                           &payloadMetadataMissing,
+                           &hitMetadataMissing,
+                           &callableMetadataMissing);
+    accumulateRayInterface(library,
+                           group->anyHitEntry,
+                           GPU_SHADER_STAGE_ANY_HIT_BIT,
+                           &reflectedPayloadSizeBytes,
+                           &reflectedHitAttributeSizeBytes,
+                           &payloadMetadataMissing,
+                           &hitMetadataMissing,
+                           &callableMetadataMissing);
+    accumulateRayInterface(library,
+                           group->intersectionEntry,
+                           GPU_SHADER_STAGE_INTERSECTION_BIT,
+                           &reflectedPayloadSizeBytes,
+                           &reflectedHitAttributeSizeBytes,
+                           &payloadMetadataMissing,
+                           &hitMetadataMissing,
+                           &callableMetadataMissing);
   }
 
   if ((requestedPayloadSizeBytes == 0u && payloadMetadataMissing)
@@ -586,8 +586,8 @@ gpu_resolveRayInterfaceLimits(const GPUShaderLibrary            *library,
 }
 
 static void
-gpu_releaseRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
-  GPUApi *api;
+releaseRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
+  Api    *api;
 
   if (!pipeline) {
     return;
@@ -613,10 +613,10 @@ gpu_releaseRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
 }
 
 static bool
-gpu_shaderTableRecordValid(const GPURayTracingPipelineEXT *pipeline,
-                           const GPUShaderTableRecordEXT  *record,
-                           GPURayTracingShaderGroupTypeEXT type,
-                           GPUShaderStageFlags             stage) {
+shaderTableRecordValid(const GPURayTracingPipelineEXT *pipeline,
+                       const GPUShaderTableRecordEXT  *record,
+                       GPURayTracingShaderGroupTypeEXT type,
+                       GPUShaderStageFlags             stage) {
   uint32_t index;
 
   if (!pipeline || !record || record->groupIndex >= pipeline->groupCount) {
@@ -631,26 +631,26 @@ gpu_shaderTableRecordValid(const GPURayTracingPipelineEXT *pipeline,
 
 GPU_HIDE
 GPUResult
-gpuAttachComputeIntersectionFunctions(GPUDevice                                *device,
-                                      GPUShaderLibrary                         *library,
-                                      const GPUIntersectionFunctionPipelineEXT *info,
-                                      GPUComputePipeline                       *pipeline) {
-  GPUShaderFunction **functions;
-  GPUApi             *api;
+attachComputeIntersectionFunctions(GPUDevice                                *device,
+                                   GPUShaderLibrary                         *library,
+                                   const GPUIntersectionFunctionPipelineEXT *info,
+                                   GPUComputePipeline                       *pipeline) {
+  ShaderFunction    **functions;
+  Api                *api;
   GPUResult           result;
   uint32_t            created;
   uint32_t            i;
 
   if (!device || !library || !pipeline
-      || !gpu_intersectionFunctionListValid(library,
-                                            info,
-                                            GPU_SHADER_STAGE_COMPUTE_BIT)) {
+      || !intersectionFunctionListValid(library,
+                                        info,
+                                        GPU_SHADER_STAGE_COMPUTE_BIT)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   if (!GPUIsFeatureEnabled(device,
                            GPU_FEATURE_INTERSECTION_FUNCTION_TABLE)
-      || !(api = gpuDeviceApi(device))
+      || !(api = deviceApi(device))
       || !api->compute.setIntersectionFunctions) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -662,8 +662,8 @@ gpuAttachComputeIntersectionFunctions(GPUDevice                                *
   created = 0u;
 
   for (; created < info->functionCount; created++) {
-    if (!(functions[created] = gpuShaderFunction(library,
-                                                 info->pFunctions[created].entryPoint))) {
+    if (!(functions[created] = shaderFunction(library,
+                                              info->pFunctions[created].entryPoint))) {
       result = GPU_ERROR_INVALID_ARGUMENT;
       goto cleanup;
     }
@@ -675,7 +675,7 @@ gpuAttachComputeIntersectionFunctions(GPUDevice                                *
 
 cleanup:
   for (i = 0u; i < created; i++) {
-    gpuDestroyShaderFunction(library, functions[i]);
+    destroyShaderFunction(library, functions[i]);
   }
 
   free(functions);
@@ -685,27 +685,27 @@ cleanup:
 
 GPU_HIDE
 GPUResult
-gpuAttachRenderIntersectionFunctions(GPUDevice                                *device,
-                                     GPUShaderLibrary                         *library,
-                                     const GPUIntersectionFunctionPipelineEXT *info,
-                                     GPURenderPipeline                        *pipeline) {
-  GPUShaderFunction  **functions;
+attachRenderIntersectionFunctions(GPUDevice                                *device,
+                                  GPUShaderLibrary                         *library,
+                                  const GPUIntersectionFunctionPipelineEXT *info,
+                                  GPURenderPipeline                        *pipeline) {
+  ShaderFunction     **functions;
   GPUShaderStageFlags *stages;
-  GPUApi              *api;
+  Api                 *api;
   GPUResult            result;
   uint32_t             created;
   uint32_t             i;
 
   if (!device || !library || !pipeline
-      || !gpu_intersectionFunctionListValid(library,
-                                            info,
-                                            GPU_SHADER_STAGE_VERTEX_BIT | GPU_SHADER_STAGE_FRAGMENT_BIT)) {
+      || !intersectionFunctionListValid(library,
+                                        info,
+                                        GPU_SHADER_STAGE_VERTEX_BIT | GPU_SHADER_STAGE_FRAGMENT_BIT)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   if (!GPUIsFeatureEnabled(device,
                            GPU_FEATURE_INTERSECTION_FUNCTION_TABLE)
-      || !(api = gpuDeviceApi(device))
+      || !(api = deviceApi(device))
       || !api->render.setIntersectionFunctions) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -722,8 +722,8 @@ gpuAttachRenderIntersectionFunctions(GPUDevice                                *d
   created = 0u;
 
   for (; created < info->functionCount; created++) {
-    functions[created] = gpuShaderFunction(library,
-                                           info->pFunctions[created].entryPoint);
+    functions[created] = shaderFunction(library,
+                                        info->pFunctions[created].entryPoint);
     stages[created]    = info->pFunctions[created].stage;
 
     if (!functions[created]) {
@@ -739,7 +739,7 @@ gpuAttachRenderIntersectionFunctions(GPUDevice                                *d
 
 cleanup:
   for (i = 0u; i < created; i++) {
-    gpuDestroyShaderFunction(library, functions[i]);
+    destroyShaderFunction(library, functions[i]);
   }
 
   free(stages);
@@ -750,7 +750,7 @@ cleanup:
 
 GPU_HIDE
 void
-gpuRetainRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
+retainRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
   if (!pipeline) {
     return;
   }
@@ -766,7 +766,7 @@ GPUResult
 GPUGetAccelerationStructureSizesEXT(GPUDevice                                  *device,
                                     const GPUAccelerationStructureBuildInfoEXT *info,
                                     GPUAccelerationStructureSizesEXT           *outSizes) {
-  GPUApi   *api;
+  Api      *api;
   GPUResult result;
 
   if (!outSizes) {
@@ -775,7 +775,7 @@ GPUGetAccelerationStructureSizesEXT(GPUDevice                                  *
 
   memset(outSizes, 0, sizeof(*outSizes));
 
-  result = gpu_validateRayBuildInfo(device, info);
+  result = validateRayBuildInfo(device, info);
 
   if (result != GPU_OK) {
     return result;
@@ -785,7 +785,7 @@ GPUGetAccelerationStructureSizesEXT(GPUDevice                                  *
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->rayQuery.getSizes) {
+  if (!(api = deviceApi(device)) || !api->rayQuery.getSizes) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -798,7 +798,7 @@ GPUCreateAccelerationStructureEXT(GPUDevice                                   *d
                                   const GPUAccelerationStructureCreateInfoEXT *info,
                                   GPUAccelerationStructureEXT                **outStructure) {
   GPUAccelerationStructureEXT *structure;
-  GPUApi                      *api;
+  Api                         *api;
   GPUResult                    result;
 
   if (!outStructure) {
@@ -808,10 +808,10 @@ GPUCreateAccelerationStructureEXT(GPUDevice                                   *d
   *outStructure = NULL;
 
   if (!device || !info || info->sizeBytes == 0u
-      || !gpu_rayTypeValid(info->type)
-      || !gpu_rayChainValid(&info->chain,
-                            GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_EXT,
-                            sizeof(*info))) {
+      || !rayTypeValid(info->type)
+      || !rayChainValid(&info->chain,
+                        GPU_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_EXT,
+                        sizeof(*info))) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -819,7 +819,7 @@ GPUCreateAccelerationStructureEXT(GPUDevice                                   *d
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->rayQuery.create) {
+  if (!(api = deviceApi(device)) || !api->rayQuery.create) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -845,13 +845,13 @@ GPUCreateAccelerationStructureEXT(GPUDevice                                   *d
 GPU_EXPORT
 void
 GPUDestroyAccelerationStructureEXT(GPUAccelerationStructureEXT *structure) {
-  GPUApi *api;
+  Api    *api;
 
   if (!structure) {
     return;
   }
 
-  api = gpuDeviceApi(structure->device);
+  api = deviceApi(structure->device);
 
   if (api && api->rayQuery.destroy) {
     api->rayQuery.destroy(structure);
@@ -866,20 +866,20 @@ GPUBeginAccelerationStructurePassEXT(GPUCommandBuffer *cmdb,
                                      const char       *label) {
   GPUAccelerationStructurePassEncoderEXT *pass;
   GPUDevice                              *device;
-  GPUApi                                 *api;
+  Api                                    *api;
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return NULL;
   }
 
-  device = gpuCommandBufferDevice(cmdb);
+  device = commandBufferDevice(cmdb);
 
   if (!device || !GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_QUERY)
-      || !(api = gpuDeviceApi(device)) || !api->rayQuery.beginPass) {
+      || !(api = deviceApi(device)) || !api->rayQuery.beginPass) {
     return NULL;
   }
 
-  label = gpuDeviceDebugLabel(device, label);
+  label = deviceDebugLabel(device, label);
 
   if (!(pass = api->rayQuery.beginPass(cmdb, label))) {
     return NULL;
@@ -904,14 +904,14 @@ GPUBuildAccelerationStructureEXT(GPUAccelerationStructurePassEncoderEXT     *pas
 
   if (!pass || pass->ended || !dst || dst->device != pass->device
       || !scratchBuffer || scratchBuffer->device != pass->device
-      || !gpuBufferHasUsage(scratchBuffer,
-                            GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT)
-      || !gpuBufferOffsetValid(scratchBuffer, scratchOffset)
+      || !bufferHasUsage(scratchBuffer,
+                         GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT)
+      || !bufferOffsetValid(scratchBuffer, scratchOffset)
       || scratchOffset == scratchBuffer->sizeBytes) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  result = gpu_validateRayBuildInfo(pass->device, info);
+  result = validateRayBuildInfo(pass->device, info);
 
   if (result != GPU_OK) {
     return result;
@@ -957,7 +957,7 @@ GPUCreateIntersectionFunctionTableEXT(GPUDevice                                 
                                       GPUIntersectionFunctionTableEXT                **outTable) {
   GPUIntersectionFunctionTableEXT *table;
   GPUDevice                       *pipelineDevice;
-  GPUApi                          *api;
+  Api                             *api;
   GPUResult                        result;
   bool                             compute;
 
@@ -968,9 +968,9 @@ GPUCreateIntersectionFunctionTableEXT(GPUDevice                                 
   *outTable = NULL;
 
   if (!device || !info
-      || !gpu_rayChainValid(&info->chain,
-                            GPU_STRUCTURE_TYPE_INTERSECTION_FUNCTION_TABLE_CREATE_INFO_EXT,
-                            sizeof(*info))
+      || !rayChainValid(&info->chain,
+                        GPU_STRUCTURE_TYPE_INTERSECTION_FUNCTION_TABLE_CREATE_INFO_EXT,
+                        sizeof(*info))
       || (info->computePipeline == NULL) == (info->renderPipeline == NULL)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -986,8 +986,8 @@ GPUCreateIntersectionFunctionTableEXT(GPUDevice                                 
   } else {
     pipelineDevice = info->renderPipeline->_layout ? info->renderPipeline->_layout->_device : NULL;
 
-    if (!gpu_intersectionFunctionStageValid(info->stage,
-                                            GPU_SHADER_STAGE_VERTEX_BIT | GPU_SHADER_STAGE_FRAGMENT_BIT)
+    if (!intersectionFunctionStageValid(info->stage,
+                                        GPU_SHADER_STAGE_VERTEX_BIT | GPU_SHADER_STAGE_FRAGMENT_BIT)
         || (info->stage == GPU_SHADER_STAGE_VERTEX_BIT
             && info->renderPipeline->_mesh)) {
       return GPU_ERROR_INVALID_ARGUMENT;
@@ -1000,7 +1000,7 @@ GPUCreateIntersectionFunctionTableEXT(GPUDevice                                 
 
   if (!GPUIsFeatureEnabled(device,
                            GPU_FEATURE_INTERSECTION_FUNCTION_TABLE)
-      || !(api = gpuDeviceApi(device))
+      || !(api = deviceApi(device))
       || !api->rayQuery.createIntersectionFunctionTable) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -1022,9 +1022,9 @@ GPUCreateIntersectionFunctionTableEXT(GPUDevice                                 
   }
 
   if (compute) {
-    gpuRetainComputePipeline(info->computePipeline);
+    retainComputePipeline(info->computePipeline);
   } else {
-    gpuRetainRenderPipeline(info->renderPipeline);
+    retainRenderPipeline(info->renderPipeline);
   }
 
   *outTable = table;
@@ -1055,7 +1055,7 @@ GPUSetIntersectionFunctionTableBufferEXT(GPUIntersectionFunctionTableEXT *table,
                                          GPUBuffer                       *buffer,
                                          uint64_t                         offset) {
   if (!table || (buffer && (buffer->device != table->device
-                            || !gpuBufferOffsetValid(buffer, offset)))
+                            || !bufferOffsetValid(buffer, offset)))
       || (!buffer && offset != 0u)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -1119,9 +1119,9 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
   GPURayTracingShaderGroupTypeEXT   *groupTypes;
   GPUShaderStageFlags               *generalStages;
   const char                       **entries;
-  GPUApi                            *api;
+  Api                               *api;
   GPURayTracingPipelineCreateInfoEXT resolvedInfo;
-  GPUPipelineCacheKey                cacheKey;
+  PipelineCacheKey                   cacheKey;
   uint32_t                           entryCount;
   uint32_t                           entryIndex;
   uint32_t                           requiredBindGroupMask;
@@ -1142,9 +1142,9 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
   if (!device || !info || !info->library || !info->layout
       || !info->pGroups || info->groupCount == 0u
       || info->maxRecursionDepth == 0u
-      || !gpu_rayChainValid(&info->chain,
-                            GPU_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_EXT,
-                            sizeof(*info))
+      || !rayChainValid(&info->chain,
+                        GPU_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_EXT,
+                        sizeof(*info))
       || info->library->_device != device
       || info->layout->_device != device
       || (info->cache && info->cache->device != device)) {
@@ -1160,7 +1160,7 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->rayTracing.createPipeline) {
+  if (!(api = deviceApi(device)) || !api->rayTracing.createPipeline) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -1170,7 +1170,7 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
   for (i = 0u; i < info->groupCount; i++) {
     uint32_t count;
 
-    count = gpu_rayTracingGroupEntryCount(&info->pGroups[i]);
+    count = rayTracingGroupEntryCount(&info->pGroups[i]);
 
     if (count == 0u || entryCount > UINT32_MAX - count) {
       return GPU_ERROR_INVALID_ARGUMENT;
@@ -1199,9 +1199,9 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
   entryIndex = 0u;
 
   for (j = 0u; j < info->groupCount; j++) {
-    if (!gpu_rayTracingGroupValid(info->library,
-                                  &info->pGroups[j],
-                                  &generalStages[j])) {
+    if (!rayTracingGroupValid(info->library,
+                              &info->pGroups[j],
+                              &generalStages[j])) {
       free(groupTypes);
       free(generalStages);
       free(entries);
@@ -1210,30 +1210,30 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
 
     groupTypes[j] = info->pGroups[j].type;
     hasRayGeneration |= generalStages[j] == GPU_SHADER_STAGE_RAY_GENERATION_BIT;
-    gpu_rayTracingGroupEntries(&info->pGroups[j], entries, &entryIndex);
+    rayTracingGroupEntries(&info->pGroups[j], entries, &entryIndex);
   }
 
   if (!hasRayGeneration
-      || !gpuPipelineLayoutMatchesShaderEntries(info->layout,
-                                                info->library,
-                                                entries,
-                                                entryCount,
-                                                GPU_RAY_TRACING_STAGE_FLAGS_EXT,
-                                                &requiredBindGroupMask)) {
+      || !pipelineLayoutMatchesShaderEntries(info->layout,
+                                             info->library,
+                                             entries,
+                                             entryCount,
+                                             GPU_RAY_TRACING_STAGE_FLAGS_EXT,
+                                             &requiredBindGroupMask)) {
     free(groupTypes);
     free(generalStages);
     free(entries);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!gpu_resolveRayInterfaceLimits(info->library,
-                                     info->pGroups,
-                                     generalStages,
-                                     info->groupCount,
-                                     info->maxPayloadSizeBytes,
-                                     info->maxHitAttributeSizeBytes,
-                                     &maxPayloadSizeBytes,
-                                     &maxHitAttributeSizeBytes)) {
+  if (!resolveRayInterfaceLimits(info->library,
+                                 info->pGroups,
+                                 generalStages,
+                                 info->groupCount,
+                                 info->maxPayloadSizeBytes,
+                                 info->maxHitAttributeSizeBytes,
+                                 &maxPayloadSizeBytes,
+                                 &maxHitAttributeSizeBytes)) {
     free(groupTypes);
     free(generalStages);
     free(entries);
@@ -1249,10 +1249,10 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
   }
 
   if (info->cache && !info->chain.pNext) {
-    result = gpuPipelineCacheFindRay(info->cache,
-                                     info,
-                                     &cacheKey,
-                                     &pipeline);
+    result = pipelineCacheFindRay(info->cache,
+                                  info,
+                                  &cacheKey,
+                                  &pipeline);
 
     if (result != GPU_OK) {
       free(groupTypes);
@@ -1262,7 +1262,7 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
     }
 
     if (pipeline) {
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      pipelineCacheReleaseKey(&cacheKey);
       free(groupTypes);
       free(generalStages);
       free(entries);
@@ -1274,7 +1274,7 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
   free(entries);
 
   if (!(pipeline = calloc(1, sizeof(*pipeline)))) {
-    gpuPipelineCacheReleaseKey(&cacheKey);
+    pipelineCacheReleaseKey(&cacheKey);
     free(groupTypes);
     free(generalStages);
     return GPU_ERROR_OUT_OF_MEMORY;
@@ -1298,15 +1298,15 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
   result = api->rayTracing.createPipeline(device, &resolvedInfo, pipeline);
 
   if (result != GPU_OK) {
-    gpuPipelineCacheReleaseKey(&cacheKey);
-    gpu_releaseRayTracingPipeline(pipeline);
+    pipelineCacheReleaseKey(&cacheKey);
+    releaseRayTracingPipeline(pipeline);
     return result;
   }
 
   if (info->cache && !info->chain.pNext) {
-    pipeline = gpuPipelineCacheStoreRay(info->cache, &cacheKey, pipeline);
+    pipeline = pipelineCacheStoreRay(info->cache, &cacheKey, pipeline);
   } else {
-    gpuRecordPipelineCompile(device, info->cache);
+    recordPipelineCompile(device, info->cache);
   }
 
   *outPipeline = pipeline;
@@ -1317,7 +1317,7 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
 GPU_EXPORT
 void
 GPUDestroyRayTracingPipelineEXT(GPURayTracingPipelineEXT *pipeline) {
-  gpu_releaseRayTracingPipeline(pipeline);
+  releaseRayTracingPipeline(pipeline);
 }
 
 GPU_EXPORT
@@ -1326,7 +1326,7 @@ GPUCreateShaderTableEXT(GPUDevice                         *device,
                         const GPUShaderTableCreateInfoEXT *info,
                         GPUShaderTableEXT                **outTable) {
   GPUShaderTableEXT             *table;
-  GPUApi                        *api;
+  Api                           *api;
   const GPUShaderTableRecordEXT *record;
   GPUResult                      result;
   uint32_t                       i;
@@ -1341,13 +1341,13 @@ GPUCreateShaderTableEXT(GPUDevice                         *device,
 
   if (!device || !info || !info->pipeline
       || info->pipeline->device != device
-      || !gpu_rayChainValid(&info->chain,
-                            GPU_STRUCTURE_TYPE_SHADER_TABLE_CREATE_INFO_EXT,
-                            sizeof(*info))
-      || !gpu_shaderTableRecordValid(info->pipeline,
-                                     info->pRayGenerationRecord,
-                                     GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT,
-                                     GPU_SHADER_STAGE_RAY_GENERATION_BIT)
+      || !rayChainValid(&info->chain,
+                        GPU_STRUCTURE_TYPE_SHADER_TABLE_CREATE_INFO_EXT,
+                        sizeof(*info))
+      || !shaderTableRecordValid(info->pipeline,
+                                 info->pRayGenerationRecord,
+                                 GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT,
+                                 GPU_SHADER_STAGE_RAY_GENERATION_BIT)
       || (info->missRecordCount > 0u && !info->pMissRecords)
       || (info->hitGroupRecordCount > 0u && !info->pHitGroupRecords)
       || (info->callableRecordCount > 0u && !info->pCallableRecords)) {
@@ -1355,10 +1355,10 @@ GPUCreateShaderTableEXT(GPUDevice                         *device,
   }
 
   for (i = 0u; i < info->missRecordCount; i++) {
-    if (!gpu_shaderTableRecordValid(info->pipeline,
-                                    &info->pMissRecords[i],
-                                    GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT,
-                                    GPU_SHADER_STAGE_MISS_BIT)) {
+    if (!shaderTableRecordValid(info->pipeline,
+                                &info->pMissRecords[i],
+                                GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT,
+                                GPU_SHADER_STAGE_MISS_BIT)) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
@@ -1373,10 +1373,10 @@ GPUCreateShaderTableEXT(GPUDevice                         *device,
   }
 
   for (k = 0u; k < info->callableRecordCount; k++) {
-    if (!gpu_shaderTableRecordValid(info->pipeline,
-                                    &info->pCallableRecords[k],
-                                    GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT,
-                                    GPU_SHADER_STAGE_CALLABLE_BIT)) {
+    if (!shaderTableRecordValid(info->pipeline,
+                                &info->pCallableRecords[k],
+                                GPU_RAY_TRACING_SHADER_GROUP_GENERAL_EXT,
+                                GPU_SHADER_STAGE_CALLABLE_BIT)) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
@@ -1401,7 +1401,7 @@ GPUCreateShaderTableEXT(GPUDevice                         *device,
     return result;
   }
 
-  gpuRetainRayTracingPipeline(info->pipeline);
+  retainRayTracingPipeline(info->pipeline);
 
   *outTable = table;
 
@@ -1412,7 +1412,7 @@ GPU_EXPORT
 void
 GPUDestroyShaderTableEXT(GPUShaderTableEXT *table) {
   GPURayTracingPipelineEXT *pipeline;
-  GPUApi                   *api;
+  Api                      *api;
 
   if (!table) {
     return;
@@ -1426,7 +1426,7 @@ GPUDestroyShaderTableEXT(GPUShaderTableEXT *table) {
   }
 
   free(table);
-  gpu_releaseRayTracingPipeline(pipeline);
+  releaseRayTracingPipeline(pipeline);
 }
 
 GPU_EXPORT
@@ -1434,21 +1434,21 @@ GPURayTracingPassEncoderEXT*
 GPUBeginRayTracingPassEXT(GPUCommandBuffer *cmdb, const char *label) {
   GPURayTracingPassEncoderEXT *pass;
   GPUDevice                   *device;
-  GPUApi                      *api;
+  Api                         *api;
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return NULL;
   }
 
-  device = gpuCommandBufferDevice(cmdb);
+  device = commandBufferDevice(cmdb);
 
   if (!device
       || !GPUIsFeatureEnabled(device, GPU_FEATURE_RAY_TRACING_PIPELINE)
-      || !(api = gpuDeviceApi(device)) || !api->rayTracing.beginPass) {
+      || !(api = deviceApi(device)) || !api->rayTracing.beginPass) {
     return NULL;
   }
 
-  label = gpuDeviceDebugLabel(device, label);
+  label = deviceDebugLabel(device, label);
 
   if (!(pass = api->rayTracing.beginPass(cmdb, label))) {
     return NULL;
@@ -1467,7 +1467,7 @@ GPU_EXPORT
 void
 GPUBindRayTracingPipelineEXT(GPURayTracingPassEncoderEXT *pass,
                              GPURayTracingPipelineEXT    *pipeline) {
-  GPUApi *api;
+  Api    *api;
 
   if (!pass || pass->ended || !pipeline
       || pipeline->device != pass->device || pipeline->_api != pass->_api
@@ -1475,7 +1475,7 @@ GPUBindRayTracingPipelineEXT(GPURayTracingPassEncoderEXT *pass,
     return;
   }
 
-  gpuFrameStatsRecordBindRequest(pass->stats);
+  frameStatsRecordBindRequest(pass->stats);
 
   if (pass->_pipeline == pipeline) {
     return;
@@ -1492,7 +1492,7 @@ GPUBindRayTracingPipelineEXT(GPURayTracingPassEncoderEXT *pass,
   pass->pipelineLayout = pipeline->layout;
 
   api->rayTracing.bindPipeline(pass, pipeline);
-  gpuFrameStatsRecordBindEmission(pass->stats);
+  frameStatsRecordBindEmission(pass->stats);
   pass->_pipeline             = pipeline;
   pass->requiredBindGroupMask = pipeline->requiredBindGroupMask;
   pass->hasPipeline           = true;
@@ -1505,22 +1505,22 @@ GPUBindRayTracingGroupEXT(GPURayTracingPassEncoderEXT *pass,
                           GPUBindGroup                *group,
                           uint32_t                     dynamicOffsetCount,
                           const uint32_t              *pDynamicOffsets) {
-  GPUApi *api;
+  Api    *api;
 
   if (!pass || pass->ended || !pass->hasPipeline || !group
       || groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS
-      || gpuBindGroupGetDevice(group) != pass->device
-      || !gpuPipelineLayoutAcceptsBindGroup(pass->pipelineLayout,
-                                            groupIndex,
-                                            group)
-      || gpuBindGroupShadowMatches(pass->boundGroups[groupIndex],
-                                   pass->boundDynamicOffsetCounts[groupIndex],
-                                   pass->boundDynamicOffsets[groupIndex],
-                                   group,
-                                   dynamicOffsetCount,
-                                   pDynamicOffsets)) {
+      || bindGroupGetDevice(group) != pass->device
+      || !pipelineLayoutAcceptsBindGroup(pass->pipelineLayout,
+                                         groupIndex,
+                                         group)
+      || bindGroupShadowMatches(pass->boundGroups[groupIndex],
+                                pass->boundDynamicOffsetCounts[groupIndex],
+                                pass->boundDynamicOffsets[groupIndex],
+                                group,
+                                dynamicOffsetCount,
+                                pDynamicOffsets)) {
     if (pass && !pass->ended) {
-      gpuFrameStatsRecordBindRequest(pass->stats);
+      frameStatsRecordBindRequest(pass->stats);
     }
     return;
   }
@@ -1528,15 +1528,15 @@ GPUBindRayTracingGroupEXT(GPURayTracingPassEncoderEXT *pass,
   api = pass->_api;
 
   if (!api || !api->rayTracing.bindGroup
-      || !gpuValidateBindGroupDynamicOffsets(pass->pipelineLayout,
-                                             groupIndex,
-                                             group,
-                                             dynamicOffsetCount,
-                                             pDynamicOffsets)) {
+      || !validateBindGroupDynamicOffsets(pass->pipelineLayout,
+                                          groupIndex,
+                                          group,
+                                          dynamicOffsetCount,
+                                          pDynamicOffsets)) {
     return;
   }
 
-  gpuFrameStatsRecordBindRequest(pass->stats);
+  frameStatsRecordBindRequest(pass->stats);
 
   if (api->rayTracing.bindGroup(pass,
                                 pass->pipelineLayout,
@@ -1545,15 +1545,15 @@ GPUBindRayTracingGroupEXT(GPURayTracingPassEncoderEXT *pass,
                                 dynamicOffsetCount,
                                 pDynamicOffsets)) {
     if (pass->boundGroups[groupIndex] != group) {
-      pass->boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(group);
+      pass->boundGroupLayouts[groupIndex] = bindGroupGetLayout(group);
     }
 
     pass->boundGroups[groupIndex] = group;
-    gpuStoreBindGroupShadow(&pass->boundDynamicOffsetCounts[groupIndex],
-                            pass->boundDynamicOffsets[groupIndex],
-                            dynamicOffsetCount,
-                            pDynamicOffsets);
-    gpuFrameStatsRecordBindEmission(pass->stats);
+    storeBindGroupShadow(&pass->boundDynamicOffsetCounts[groupIndex],
+                         pass->boundDynamicOffsets[groupIndex],
+                         dynamicOffsetCount,
+                         pDynamicOffsets);
+    frameStatsRecordBindEmission(pass->stats);
   }
 }
 
@@ -1564,7 +1564,7 @@ GPUDispatchRaysEXT(GPURayTracingPassEncoderEXT *pass,
                    uint32_t                     width,
                    uint32_t                     height,
                    uint32_t                     depth) {
-  GPUApi *api;
+  Api    *api;
 
   if (!pass || pass->ended || !pass->hasPipeline || !table
       || table->device != pass->device || table->pipeline != pass->_pipeline
@@ -1573,22 +1573,22 @@ GPUDispatchRaysEXT(GPURayTracingPassEncoderEXT *pass,
     return;
   }
 
-  if (!gpuRayDispatchFits(width,
-                          height,
-                          depth,
-                          pass->device->rayTracingLimits.maxDispatchSize,
-                          pass->device->rayTracingLimits.maxDispatchCount)) {
-    gpuDeviceRecordValidationError(pass->device,
-                                   "GPUDispatchRaysEXT skipped: dispatch exceeds device limits");
+  if (!rayDispatchFits(width,
+                       height,
+                       depth,
+                       pass->device->rayTracingLimits.maxDispatchSize,
+                       pass->device->rayTracingLimits.maxDispatchCount)) {
+    deviceRecordValidationError(pass->device,
+                                "GPUDispatchRaysEXT skipped: dispatch exceeds device limits");
     return;
   }
 #if GPU_BUILD_WITH_VALIDATION
-  if (!gpuPipelineLayoutMaskIsBound(pass->pipelineLayout,
-                                    pass->boundGroupLayouts,
-                                    GPU_ENCODER_MAX_BIND_GROUPS,
-                                    pass->requiredBindGroupMask)) {
-    gpuDeviceRecordValidationError(pass->device,
-                                   "GPUDispatchRaysEXT skipped: required bind group is missing");
+  if (!pipelineLayoutMaskIsBound(pass->pipelineLayout,
+                                 pass->boundGroupLayouts,
+                                 GPU_ENCODER_MAX_BIND_GROUPS,
+                                 pass->requiredBindGroupMask)) {
+    deviceRecordValidationError(pass->device,
+                                "GPUDispatchRaysEXT skipped: required bind group is missing");
     return;
   }
 #endif

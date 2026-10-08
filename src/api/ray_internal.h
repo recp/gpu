@@ -28,7 +28,7 @@ struct GPUAccelerationStructureEXT {
 
 struct GPUAccelerationStructurePassEncoderEXT {
   void             *_priv;
-  GPUApi           *_api;
+  Api              *_api;
   GPUDevice        *device;
   GPUCommandBuffer *cmdb;
   bool              ended;
@@ -36,7 +36,7 @@ struct GPUAccelerationStructurePassEncoderEXT {
 
 struct GPUIntersectionFunctionTableEXT {
   void               *_priv;
-  GPUApi             *_api;
+  Api                *_api;
   GPUDevice          *device;
   GPUComputePipeline *computePipeline;
   GPURenderPipeline  *renderPipeline;
@@ -45,7 +45,7 @@ struct GPUIntersectionFunctionTableEXT {
 
 struct GPURayTracingPipelineEXT {
   void                            *_priv;
-  GPUApi                          *_api;
+  Api                             *_api;
   GPUDevice                       *device;
   GPUPipelineLayout               *layout;
   GPURayTracingShaderGroupTypeEXT *groupTypes;
@@ -59,7 +59,7 @@ struct GPURayTracingPipelineEXT {
 
 struct GPUShaderTableEXT {
   void                     *_priv;
-  GPUApi                   *_api;
+  Api                      *_api;
   GPUDevice                *device;
   GPURayTracingPipelineEXT *pipeline;
 };
@@ -67,14 +67,14 @@ struct GPUShaderTableEXT {
 struct GPURayTracingPassEncoderEXT {
   void                  *_priv;
   void                  *_pipeline;
-  GPUApi                *_api;
+  Api                   *_api;
   GPUDevice             *device;
   GPUCommandBuffer      *cmdb;
   GPUFrameStats         *stats;
   GPUPipelineLayout     *pipelineLayout;
   GPUBindGroup          *boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout    *boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
-  GPUDynamicOffsetShadow boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
+  DynamicOffsetShadow    boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t               boundDynamicOffsetCounts[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t               requiredBindGroupMask;
   bool                   hasPipeline;
@@ -83,28 +83,28 @@ struct GPURayTracingPassEncoderEXT {
 
 GPU_HIDE
 void
-gpuRetainRayTracingPipeline(GPURayTracingPipelineEXT *pipeline);
+retainRayTracingPipeline(GPURayTracingPipelineEXT *pipeline);
 
 GPU_HIDE
 GPUResult
-gpuAttachComputeIntersectionFunctions(GPUDevice                                *device,
-                                      GPUShaderLibrary                         *library,
-                                      const GPUIntersectionFunctionPipelineEXT *info,
-                                      GPUComputePipeline                       *pipeline);
+attachComputeIntersectionFunctions(GPUDevice                                *device,
+                                   GPUShaderLibrary                         *library,
+                                   const GPUIntersectionFunctionPipelineEXT *info,
+                                   GPUComputePipeline                       *pipeline);
 
 GPU_HIDE
 GPUResult
-gpuAttachRenderIntersectionFunctions(GPUDevice                                *device,
-                                     GPUShaderLibrary                         *library,
-                                     const GPUIntersectionFunctionPipelineEXT *info,
-                                     GPURenderPipeline                        *pipeline);
+attachRenderIntersectionFunctions(GPUDevice                                *device,
+                                  GPUShaderLibrary                         *library,
+                                  const GPUIntersectionFunctionPipelineEXT *info,
+                                  GPURenderPipeline                        *pipeline);
 
 static inline bool
-gpuRayDispatchFits(uint32_t       width,
-                   uint32_t       height,
-                   uint32_t       depth,
-                   const uint32_t maxSize[3],
-                   uint64_t       maxCount) {
+rayDispatchFits(uint32_t       width,
+                uint32_t       height,
+                uint32_t       depth,
+                const uint32_t maxSize[3],
+                uint64_t       maxCount) {
   if (width == 0u || height == 0u || depth == 0u || maxCount == 0u
       || (maxSize && (width > maxSize[0]
                       || height > maxSize[1]

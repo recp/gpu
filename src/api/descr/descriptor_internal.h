@@ -38,24 +38,24 @@ struct GPUPipelineLayout {
   void      *_priv;
 };
 
-typedef enum GPUBindKind {
+typedef enum BindKind {
   GPUBindKindBuffer                = 0,
   GPUBindKindTexture               = 1,
   GPUBindKindSampler               = 2,
   GPUBindKindSamplerFeedback       = 3,
   GPUBindKindAccelerationStructure = 4,
   GPUBindKindCount
-} GPUBindKind;
+} BindKind;
 
-typedef struct GPUBindGroupLayoutPriv {
+typedef struct BindGroupLayoutPriv {
   GPUBindGroupLayoutEntry *entries;
   uint32_t                *backendBindings;
   uint32_t                 count;
   bool                     hasBackendBindings;
   bool                     bindless;
-} GPUBindGroupLayoutPriv;
+} BindGroupLayoutPriv;
 
-typedef struct GPUBindGroupBindingPriv {
+typedef struct BindGroupBindingPriv {
   union {
     struct {
       GPUBuffer *buffer;
@@ -73,30 +73,30 @@ typedef struct GPUBindGroupBindingPriv {
   uint32_t    layoutEntryIndex;
   uint32_t    dynamicOffsetIndex;
   uint32_t    kindIndex;
-  GPUBindKind kind;
-} GPUBindGroupBindingPriv;
+  BindKind    kind;
+} BindGroupBindingPriv;
 
-typedef struct GPUBindGroupPriv {
+typedef struct BindGroupPriv {
   GPUBindGroupLayout      *layout;
-  GPUBindGroupBindingPriv *bindings;
-  GPUBindGroupBindingPriv *singleBuffer;
+  BindGroupBindingPriv    *bindings;
+  BindGroupBindingPriv    *singleBuffer;
   uint64_t                *updateScratch;
   uint64_t                 hash;
   uint32_t                 count;
   uint32_t                 dynamicOffsetCount;
   GPUShaderStageFlags      singleBufferStages;
   bool                     bindless;
-} GPUBindGroupPriv;
+} BindGroupPriv;
 
-typedef struct GPUPipelineLayoutPriv {
+typedef struct PipelineLayoutPriv {
   GPUBindGroupLayout **bindGroupLayouts;
   uint32_t           **backendBindings;
   uint32_t             bindGroupLayoutCount;
   uint32_t             pushConstantSizeBytes;
   GPUShaderStageFlags  pushConstantStages;
-} GPUPipelineLayoutPriv;
+} PipelineLayoutPriv;
 
-typedef struct GPUBindGroupBindingView {
+typedef struct BindGroupBindingView {
   union {
     GPUBuffer                   *buffer;
     GPUTextureView              *textureView;
@@ -115,123 +115,123 @@ typedef struct GPUBindGroupBindingView {
   uint32_t                arrayCount;
   uint32_t                layoutEntryIndex;
   uint32_t                kindIndex;
-  GPUBindKind             kind;
+  BindKind                kind;
   bool                    hasDynamicOffset;
-} GPUBindGroupBindingView;
+} BindGroupBindingView;
 
 typedef void (*GPUBindGroupBindingFn)(void                          *ctx,
-                                    const GPUBindGroupBindingView *binding);
+                                    const BindGroupBindingView    *binding);
 
 GPU_HIDE
 GPUResult
-gpuInitBindGroupCacheDevice(GPUDevice *device);
+initBindGroupCacheDevice(GPUDevice *device);
 
 GPU_HIDE
 void
-gpuDestroyBindGroupCacheDevice(GPUDevice *device);
+destroyBindGroupCacheDevice(GPUDevice *device);
 
 GPU_HIDE
 int
-gpuForEachBindGroupBinding(GPUBindGroup         *group,
-                           GPUBindGroupBindingFn fn,
-                           void                 *ctx);
+forEachBindGroupBinding(GPUBindGroup         *group,
+                        GPUBindGroupBindingFn fn,
+                        void                 *ctx);
 
 GPU_HIDE
 int
-gpuForEachBindGroupEntry(GPUBindGroup            *group,
-                         uint32_t                 entryCount,
-                         const GPUBindGroupEntry *entries,
-                         GPUBindGroupBindingFn    fn,
-                         void                    *ctx);
+forEachBindGroupEntry(GPUBindGroup            *group,
+                      uint32_t                 entryCount,
+                      const GPUBindGroupEntry *entries,
+                      GPUBindGroupBindingFn    fn,
+                      void                    *ctx);
 
 GPU_HIDE
 int
-gpuForEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout    *pipelineLayout,
-                                             uint32_t              groupIndex,
-                                             GPUBindGroup         *group,
-                                             uint32_t              dynamicOffsetCount,
-                                             const uint32_t       *pDynamicOffsets,
-                                             GPUBindGroupBindingFn fn,
-                                             void                 *ctx);
+forEachBindGroupBindingWithDynamicOffsets(GPUPipelineLayout    *pipelineLayout,
+                                          uint32_t              groupIndex,
+                                          GPUBindGroup         *group,
+                                          uint32_t              dynamicOffsetCount,
+                                          const uint32_t       *pDynamicOffsets,
+                                          GPUBindGroupBindingFn fn,
+                                          void                 *ctx);
 
 GPU_HIDE
 void
-gpuGetPipelineLayoutPushConstants(GPUPipelineLayout   *layout,
-                                  uint32_t            *outSizeBytes,
-                                  GPUShaderStageFlags *outStages);
+getPipelineLayoutPushConstants(GPUPipelineLayout   *layout,
+                               uint32_t            *outSizeBytes,
+                               GPUShaderStageFlags *outStages);
 
 GPU_HIDE
 GPUBindGroupLayout *const *
-gpuGetPipelineLayoutGroups(GPUPipelineLayout *layout, uint32_t *outCount);
+getPipelineLayoutGroups(GPUPipelineLayout *layout, uint32_t *outCount);
 
 GPU_HIDE
 uint32_t
-gpuPipelineLayoutBackendSlotMask(GPUPipelineLayout  *layout,
-                                 GPUBindKind         kind,
-                                 GPUShaderStageFlags stages);
+pipelineLayoutBackendSlotMask(GPUPipelineLayout  *layout,
+                              BindKind            kind,
+                              GPUShaderStageFlags stages);
 
 GPU_HIDE
 const uint32_t*
-gpuGetBindGroupLayoutBackendBindings(GPUBindGroupLayout *layout,
-                                     uint32_t           *outCount);
+getBindGroupLayoutBackendBindings(GPUBindGroupLayout *layout,
+                                  uint32_t           *outCount);
 
 GPU_HIDE
 const uint32_t*
-gpuGetPipelineLayoutBackendBindings(GPUPipelineLayout *layout,
-                                    uint32_t           groupIndex,
-                                    uint32_t          *outCount);
+getPipelineLayoutBackendBindings(GPUPipelineLayout *layout,
+                                 uint32_t           groupIndex,
+                                 uint32_t          *outCount);
 
 GPU_HIDE
 int
-gpuPipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
-                                  uint32_t           groupIndex,
-                                  GPUBindGroup      *group);
+pipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
+                               uint32_t           groupIndex,
+                               GPUBindGroup      *group);
 
 GPU_HIDE
 GPUBindGroupLayout*
-gpuBindGroupGetLayout(GPUBindGroup *group);
+bindGroupGetLayout(GPUBindGroup *group);
 
 GPU_HIDE
 GPUDevice*
-gpuBindGroupGetDevice(GPUBindGroup *group);
+bindGroupGetDevice(GPUBindGroup *group);
 
 GPU_HIDE
 bool
-gpuBindGroupLayoutIsBindless(GPUBindGroupLayout *layout);
+bindGroupLayoutIsBindless(GPUBindGroupLayout *layout);
 
 GPU_HIDE
 int
-gpuValidateBindGroupDynamicOffsets(GPUPipelineLayout *pipelineLayout,
-                                   uint32_t           groupIndex,
-                                   GPUBindGroup      *group,
-                                   uint32_t           dynamicOffsetCount,
-                                   const uint32_t    *dynamicOffsets);
+validateBindGroupDynamicOffsets(GPUPipelineLayout *pipelineLayout,
+                                uint32_t           groupIndex,
+                                GPUBindGroup      *group,
+                                uint32_t           dynamicOffsetCount,
+                                const uint32_t    *dynamicOffsets);
 
 GPU_HIDE
 int
-gpuPipelineLayoutMatchesShaderEntries(GPUPipelineLayout      *pipelineLayout,
-                                      const GPUShaderLibrary *library,
-                                      const char      *const *entryPoints,
-                                      uint32_t                entryPointCount,
-                                      GPUShaderStageFlags     fallbackStages,
-                                      uint32_t               *outRequiredGroupMask);
+pipelineLayoutMatchesShaderEntries(GPUPipelineLayout      *pipelineLayout,
+                                   const GPUShaderLibrary *library,
+                                   const char      *const *entryPoints,
+                                   uint32_t                entryPointCount,
+                                   GPUShaderStageFlags     fallbackStages,
+                                   uint32_t               *outRequiredGroupMask);
 
 #if GPU_BUILD_WITH_VALIDATION
 GPU_HIDE
 int
-gpuPipelineLayoutMaskIsBound(GPUPipelineLayout         *pipelineLayout,
-                             GPUBindGroupLayout *const *boundLayouts,
-                             uint32_t                   boundLayoutCount,
-                             uint32_t                   requiredGroupMask);
+pipelineLayoutMaskIsBound(GPUPipelineLayout         *pipelineLayout,
+                          GPUBindGroupLayout *const *boundLayouts,
+                          uint32_t                   boundLayoutCount,
+                          uint32_t                   requiredGroupMask);
 #endif
 
 static GPU_INLINE bool
-gpuBindGroupShadowMatches(GPUBindGroup   *boundGroup,
-                          uint32_t        boundOffsetCount,
-                          const uint32_t *boundOffsets,
-                          GPUBindGroup   *group,
-                          uint32_t        offsetCount,
-                          const uint32_t *offsets) {
+bindGroupShadowMatches(GPUBindGroup   *boundGroup,
+                       uint32_t        boundOffsetCount,
+                       const uint32_t *boundOffsets,
+                       GPUBindGroup   *group,
+                       uint32_t        offsetCount,
+                       const uint32_t *offsets) {
   if (boundGroup != group || boundOffsetCount != offsetCount
       || offsetCount > GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY) {
     return false;
@@ -268,10 +268,10 @@ gpuBindGroupShadowMatches(GPUBindGroup   *boundGroup,
 }
 
 static GPU_INLINE void
-gpuStoreBindGroupShadow(uint32_t       *boundOffsetCount,
-                        uint32_t       *boundOffsets,
-                        uint32_t        offsetCount,
-                        const uint32_t *offsets) {
+storeBindGroupShadow(uint32_t       *boundOffsetCount,
+                     uint32_t       *boundOffsets,
+                     uint32_t        offsetCount,
+                     const uint32_t *offsets) {
   if (offsetCount > GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY
       || (offsetCount > 0u && !offsets)) {
     *boundOffsetCount = UINT32_MAX;

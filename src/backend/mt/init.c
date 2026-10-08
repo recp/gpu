@@ -17,13 +17,13 @@
 #include "common.h"
 #include "impl.h"
 
-GPUApi mt = {
+Api    mt = {
   .initialized = false,
   .backend     = GPU_BACKEND_METAL,
 };
 
 GPU_HIDE
-GPUApi*
+Api*
 backend_metal(void) {
   if (!mt.initialized) {
     mt_initDevice(&mt.device);

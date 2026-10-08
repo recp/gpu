@@ -30,22 +30,22 @@ enum {
   GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS = 8u
 };
 
-typedef struct GPURenderPipelineState GPURenderPipelineState;
-typedef struct GPURenderPassDesc      GPURenderPassDesc;
+typedef struct RenderPipelineState    RenderPipelineState;
+typedef struct RenderPassDesc         RenderPassDesc;
 typedef struct GPUPipelineLayout      GPUPipelineLayout;
 typedef struct GPUBindGroupLayout     GPUBindGroupLayout;
 typedef struct GPUBindGroup           GPUBindGroup;
 
-typedef enum GPUPrimitiveType {
+typedef enum PrimitiveType {
   GPUPrimitiveTypePoint         = 0,
   GPUPrimitiveTypeLine          = 1,
   GPUPrimitiveTypeLineStrip     = 2,
   GPUPrimitiveTypeTriangle      = 3,
   GPUPrimitiveTypeTriangleStrip = 4
-} GPUPrimitiveType;
+} PrimitiveType;
 
 typedef void (*GPUDrawPrimitivesFn)(GPURenderPassEncoder *rce,
-                                    GPUPrimitiveType      type,
+                                    PrimitiveType         type,
                                     size_t                start,
                                     size_t                count,
                                     uint32_t              instanceCount,
@@ -66,7 +66,7 @@ typedef void (*GPUVertexInputBufferFn)(GPURenderPassEncoder *rce,
 struct GPURenderPassEncoder {
   void                   *_priv;
   void                   *_pipeline;
-  struct GPUApi          *_api;
+  struct Api             *_api;
   GPUDevice              *_device;
   GPUCommandBuffer       *_cmdb;
   GPUFrameStats          *_stats;
@@ -83,11 +83,11 @@ struct GPURenderPassEncoder {
   GPUBuffer              *_vertexBuffers[GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT];
   uint64_t                _indexBufferOffset;
   uint64_t                _vertexBufferOffsets[GPU__RENDER_VERTEX_SHADOW_SLOT_COUNT];
-  GPUDynamicOffsetShadow  _boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
+  DynamicOffsetShadow     _boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t                _boundDynamicOffsetCounts[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUDynamicStateMask     _dynamicStateMask;
   GPUViewport             _viewport;
-  GPUPrimitiveType        _primitiveType;
+  PrimitiveType           _primitiveType;
   GPUIndexType            _indexType;
   GPUScissorRect          _scissor;
   uint32_t                _occlusionQueryIndex;
@@ -113,12 +113,12 @@ struct GPURenderPassEncoder {
   uint8_t                 _pushConstants[4096];
 };
 
-typedef struct GPUApiRCE {
-  GPURenderPassEncoder * (*renderCommandEncoder)(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass);
+typedef struct ApiRCE {
+  GPURenderPassEncoder * (*renderCommandEncoder)(GPUCommandBuffer *cmdb, RenderPassDesc    *pass);
 
   void
   (*setRenderPipelineState)(GPURenderPassEncoder   *rce,
-                            GPURenderPipelineState *pipelineState,
+                            RenderPipelineState    *pipelineState,
                             GPUCullMode             cullMode,
                             GPUFrontFace            frontFace);
 
@@ -174,7 +174,7 @@ typedef struct GPUApiRCE {
 
   void
   (*drawPrimitives)(GPURenderPassEncoder *rce,
-                    GPUPrimitiveType      type,
+                    PrimitiveType         type,
                     size_t                start,
                     size_t                count,
                     uint32_t              instanceCount,
@@ -204,7 +204,7 @@ typedef struct GPUApiRCE {
 
   void
   (*drawPrimitivesIndirect)(GPURenderPassEncoder *rce,
-                            GPUPrimitiveType      type,
+                            PrimitiveType         type,
                             GPUBuffer            *argsBuffer,
                             uint64_t              argsOffset);
 
@@ -212,7 +212,7 @@ typedef struct GPUApiRCE {
 
   bool
   (*multiDrawPrimitivesIndirect)(GPURenderPassEncoder *rce,
-                                 GPUPrimitiveType      type,
+                                 PrimitiveType         type,
                                  GPUBuffer            *argsBuffer,
                                  uint64_t              argsOffset,
                                  uint32_t              drawCount,
@@ -226,7 +226,7 @@ typedef struct GPUApiRCE {
                                    uint32_t              strideBytes);
 
   void (*endEncoding)(GPURenderPassEncoder *rce);
-} GPUApiRCE;
+} ApiRCE;
 
 #ifdef __cplusplus
 }

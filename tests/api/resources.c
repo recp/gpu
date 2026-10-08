@@ -316,17 +316,17 @@ check_buffer_device_dispatch(GPUDevice *activeDevice) {
   GPUQueue            queue        = {0};
   GPUQueue            foreignQueue = {0};
   GPUDevice           device       = {0};
-  GPUApi              scopedApi;
+  Api                 scopedApi;
   uint32_t            source[4] = { 2u, 4u, 6u, 8u };
   uint32_t            result[4] = {0};
   GPUBuffer          *buffer;
 
-  if (!activeDevice || !gpuDeviceApi(activeDevice)) {
+  if (!activeDevice || !deviceApi(activeDevice)) {
     fprintf(stderr, "buffer dispatch has no device api\n");
     return 0;
   }
 
-  scopedApi                 = *gpuDeviceApi(activeDevice);
+  scopedApi                 = *deviceApi(activeDevice);
   scopedApi.buf.create      = create_scoped_buffer;
   scopedApi.buf.destroy     = destroy_scoped_buffer;
   scopedApi.buf.write       = write_scoped_buffer;
@@ -397,15 +397,15 @@ check_texture_transfer_layout(GPUDevice *activeDevice) {
   GPUQueue              queue   = {0};
   GPUTexture            texture = {0};
   GPUDevice             device  = {0};
-  GPUApi                scopedApi;
+  Api                   scopedApi;
   uint8_t               blocks[64] = {0};
 
-  if (!activeDevice || !gpuDeviceApi(activeDevice)) {
+  if (!activeDevice || !deviceApi(activeDevice)) {
     fprintf(stderr, "texture layout has no device api\n");
     return 0;
   }
 
-  scopedApi               = *gpuDeviceApi(activeDevice);
+  scopedApi               = *deviceApi(activeDevice);
   scopedApi.texture.write = write_scoped_texture;
   device._api             = &scopedApi;
   queue._device           = &device;
@@ -495,15 +495,15 @@ check_texture_write_aspects(GPUDevice *activeDevice) {
   GPUQueue              queue   = {0};
   GPUTexture            texture = {0};
   GPUDevice             device  = {0};
-  GPUApi                scopedApi;
+  Api                   scopedApi;
   uint8_t               pixels[64] = {0};
 
-  if (!activeDevice || !gpuDeviceApi(activeDevice)) {
+  if (!activeDevice || !deviceApi(activeDevice)) {
     fprintf(stderr, "texture aspects have no device api\n");
     return 0;
   }
 
-  scopedApi               = *gpuDeviceApi(activeDevice);
+  scopedApi               = *deviceApi(activeDevice);
   scopedApi.texture.write = write_scoped_texture;
   device._api             = &scopedApi;
   queue._device           = &device;
@@ -608,18 +608,18 @@ check_texture_view_format_validation(GPUDevice *activeDevice) {
   GPUTextureViewCreateInfo viewInfo = {0};
   GPUTexture               texture  = {0};
   GPUDevice                device   = {0};
-  GPUApi                   scopedApi;
+  Api                      scopedApi;
   GPUTextureView          *view;
   GPUResult                result;
   uint32_t                 validCount;
   uint32_t                 i;
 
-  if (!activeDevice || !gpuDeviceApi(activeDevice)) {
+  if (!activeDevice || !deviceApi(activeDevice)) {
     fprintf(stderr, "texture view format test has no device api\n");
     return 0;
   }
 
-  scopedApi                     = *gpuDeviceApi(activeDevice);
+  scopedApi                     = *deviceApi(activeDevice);
   scopedApi.texture.createView  = create_scoped_texture_view;
   scopedApi.texture.destroyView = destroy_scoped_texture_view;
   device._api                   = &scopedApi;

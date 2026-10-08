@@ -189,7 +189,7 @@ check_native_errors(void) {
 
 static int
 check_surface_status(GPUDevice *device) {
-  GPUSwapchainMetal    native    = {0};
+  SwapchainMetal       native    = {0};
   GPUSwapchain         swapchain = {0};
   GPUUnavailableLayer *layer = nil;
   uint64_t             offset;
@@ -254,7 +254,7 @@ cleanup:
 
 int
 gpu_test_metal_errors(GPUDevice *device) {
-  if (gpuDeviceApi(device)->backend != GPU_BACKEND_METAL) {
+  if (deviceApi(device)->backend != GPU_BACKEND_METAL) {
     return 1;
   }
 

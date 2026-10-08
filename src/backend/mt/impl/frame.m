@@ -18,18 +18,18 @@
 
 GPU_HIDE
 GPUFrame*
-mt_beginFrame(GPUApi       *__restrict api,
+mt_beginFrame(Api          *__restrict api,
               GPUSwapchain *__restrict swapchain) {
   GPUFrame           *frame;
   GPUTexture         *target;
   GPUTextureView     *targetView;
-  GPUSwapchainMetal  *swapchainMtl;
+  SwapchainMetal     *swapchainMtl;
   id<CAMetalDrawable> drawable;
 
   swapchainMtl = swapchain->_priv;
 
   if (!swapchainMtl || !swapchainMtl->layer) {
-    gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
+    swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
     return NULL;
   }
 
@@ -38,11 +38,11 @@ mt_beginFrame(GPUApi       *__restrict api,
   }
 
   if (!(drawable = [swapchainMtl->layer nextDrawable])) {
-    gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
+    swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
     return NULL;
   }
 
-  gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_READY);
+  swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_READY);
 
   [drawable retain];
   frame      = &swapchainMtl->frame;
@@ -84,9 +84,9 @@ mt_beginFrame(GPUApi       *__restrict api,
 
 GPU_HIDE
 void
-mt_endFrame(GPUApi   *__restrict api,
+mt_endFrame(Api      *__restrict api,
             GPUFrame *__restrict frame) {
-  GPUSwapchainMetal *swapchainMtl;
+  SwapchainMetal    *swapchainMtl;
 
   (void)api;
 
@@ -104,7 +104,7 @@ mt_endFrame(GPUApi   *__restrict api,
 
 GPU_HIDE
 void
-mt_initFrame(GPUApiFrame *api) {
+mt_initFrame(ApiFrame    *api) {
   api->beginFrame = mt_beginFrame;
   api->endFrame   = mt_endFrame;
 }

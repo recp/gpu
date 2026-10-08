@@ -160,7 +160,7 @@ upload_encode(GPURenderPassEncoder *pass,
 
   upload = userData;
 
-  if (gpuDeviceAdvanceFrameSlot(upload->bench->device) != GPU_OK) {
+  if (deviceAdvanceFrameSlot(upload->bench->device) != GPU_OK) {
     return false;
   }
 

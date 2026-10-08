@@ -21,29 +21,29 @@
 #include "../common.h"
 
 #if !GPU_BUILD_WITH_DEBUG_MARKERS
-#  define gpuDeviceDebugMarkersEnabled(device) false
-#  define gpuDeviceDebugLabel(device, label) NULL
+#  define deviceDebugMarkersEnabled(device) false
+#  define deviceDebugLabel(device, label) NULL
 #endif
 
 #if !GPU_BUILD_WITH_VALIDATION
-#  define gpuDeviceValidationEnabled(device) false
-#  define gpuDeviceRecordValidationError(device, message) ((void)0)
+#  define deviceValidationEnabled(device) false
+#  define deviceRecordValidationError(device, message) ((void)0)
 #endif
 
-typedef struct GPUTransientChunk {
+typedef struct TransientChunk {
   GPUBuffer                *buffer;
   void                     *cpuPtr;
-  struct GPUTransientChunk *next;
+  struct TransientChunk    *next;
   uint64_t                  sizeBytes;
   uint64_t                  offset;
   GPUBufferUsageFlags       usage;
   uint32_t                  frameIndex;
   bool                      cpuPtrOwned;
-} GPUTransientChunk;
+} TransientChunk;
 
 typedef struct GPUPipelineCache GPUPipelineCache;
 
-typedef struct GPUMeshLimits {
+typedef struct MeshLimits {
   uint32_t taskWorkgroupSize[3];
   uint32_t meshWorkgroupSize[3];
   uint32_t maxTaskWorkgroupInvocations;
@@ -51,22 +51,22 @@ typedef struct GPUMeshLimits {
   uint32_t maxPayloadSizeBytes;
   uint32_t maxOutputVertices;
   uint32_t maxOutputPrimitives;
-} GPUMeshLimits;
+} MeshLimits;
 
-typedef struct GPURayTracingLimits {
+typedef struct RayTracingLimits {
   uint64_t maxDispatchCount;
   uint32_t maxDispatchSize[3];
   uint32_t maxRecursionDepth;
   uint32_t maxHitAttributeSizeBytes;
-} GPURayTracingLimits;
+} RayTracingLimits;
 
 struct GPUDevice {
   GPUInstance                *inst;
   GPUAdapter                 *adapter;
-  GPUApi                     *_api;
+  Api                        *_api;
   void                       *_priv;
   GPUBuffer                  *transientBuffer;
-  GPUTransientChunk          *transientChunks;
+  TransientChunk             *transientChunks;
   GPUFence                  **transientFrameFences;
   GPUPipelineCache           *_pipelineCaches;
   void                       *_pipelineCacheLock;
@@ -78,8 +78,8 @@ struct GPUDevice {
   GPUFeatureSet               enabledFeatures;
   GPUCacheStats               cacheStats;
   GPUVRSCapabilitiesEXT       vrsCapabilities;
-  GPURayTracingLimits         rayTracingLimits;
-  GPUMeshLimits               meshLimits;
+  RayTracingLimits            rayTracingLimits;
+  MeshLimits                  meshLimits;
   GPURuntimeConfig            runtimeConfig;
   GPUFrameStats               currentFrameStats;
   GPUFrameStats               lastFrameStats;
@@ -118,48 +118,48 @@ struct GPUDevice {
 
 GPU_HIDE
 GPUResult
-gpuDevicePrepareFrame(GPUDevice *device, uint32_t *outFrameIndex);
+devicePrepareFrame(GPUDevice *device, uint32_t *outFrameIndex);
 
 GPU_HIDE
 void
-gpuDeviceActivateFrame(GPUDevice *device, uint32_t frameIndex);
+deviceActivateFrame(GPUDevice *device, uint32_t frameIndex);
 
 GPU_HIDE
 void
-gpuDeviceEndFrame(GPUDevice *device);
+deviceEndFrame(GPUDevice *device);
 
 GPU_HIDE
 void
-gpuDeviceRecordHotPathAlloc(GPUDevice *device, uint64_t sizeBytes);
+deviceRecordHotPathAlloc(GPUDevice *device, uint64_t sizeBytes);
 
 GPU_HIDE
 void
-gpuDeviceRecordHotPathFree(GPUDevice *device, uint64_t sizeBytes);
+deviceRecordHotPathFree(GPUDevice *device, uint64_t sizeBytes);
 
 GPU_HIDE
 void
-gpuDeviceRecordGPUFrameTime(GPUDevice *device, double milliseconds);
+deviceRecordGPUFrameTime(GPUDevice *device, double milliseconds);
 
 GPU_HIDE
 GPUResult
-gpuDeviceFlushTransientUploads(GPUQueue *queue, uint32_t frameIndex);
+deviceFlushTransientUploads(GPUQueue *queue, uint32_t frameIndex);
 
 GPU_HIDE
 void
-gpuDeviceReportError(GPUDevice          *device,
-                     GPUDeviceErrorType  type,
-                     GPUDeviceLostReason lostReason,
-                     GPUResult           result,
-                     const char         *message);
+deviceReportError(GPUDevice          *device,
+                  GPUDeviceErrorType  type,
+                  GPUDeviceLostReason lostReason,
+                  GPUResult           result,
+                  const char         *message);
 
 #if GPU_BUILD_WITH_VALIDATION
 GPU_HIDE
 void
-gpuDeviceRecordValidationError(GPUDevice *device, const char *message);
+deviceRecordValidationError(GPUDevice *device, const char *message);
 #endif
 
 static inline void
-gpuDeviceCacheCounterAdd(uint64_t *counter, uint64_t value) {
+deviceCacheCounterAdd(uint64_t *counter, uint64_t value) {
 #if defined(_WIN32) || defined(WIN32)
   InterlockedExchangeAdd64((volatile LONG64 *)counter, (LONG64)value);
 #else
@@ -168,7 +168,7 @@ gpuDeviceCacheCounterAdd(uint64_t *counter, uint64_t value) {
 }
 
 static inline uint64_t
-gpuDeviceCacheCounterLoad(const uint64_t *counter) {
+deviceCacheCounterLoad(const uint64_t *counter) {
 #if defined(_WIN32) || defined(WIN32)
   return (uint64_t)InterlockedCompareExchange64((volatile LONG64 *)counter,
                                                 0,
@@ -179,7 +179,7 @@ gpuDeviceCacheCounterLoad(const uint64_t *counter) {
 }
 
 static inline void
-gpuDeviceCacheCounterReset(uint64_t *counter) {
+deviceCacheCounterReset(uint64_t *counter) {
 #if defined(_WIN32) || defined(WIN32)
   InterlockedExchange64((volatile LONG64 *)counter, 0);
 #else
@@ -188,27 +188,27 @@ gpuDeviceCacheCounterReset(uint64_t *counter) {
 }
 
 static inline void
-gpuDeviceGetCacheStats(const GPUDevice *device, GPUCacheStats *stats) {
-  stats->bindGroupHits       = gpuDeviceCacheCounterLoad(&device->cacheStats.bindGroupHits);
-  stats->bindGroupMisses     = gpuDeviceCacheCounterLoad(&device->cacheStats.bindGroupMisses);
-  stats->bindGroupCollisions = gpuDeviceCacheCounterLoad(&device->cacheStats.bindGroupCollisions);
-  stats->pipelineHits        = gpuDeviceCacheCounterLoad(&device->cacheStats.pipelineHits);
-  stats->pipelineMisses      = gpuDeviceCacheCounterLoad(&device->cacheStats.pipelineMisses);
-  stats->pipelineCompiles    = gpuDeviceCacheCounterLoad(&device->cacheStats.pipelineCompiles);
+deviceGetCacheStats(const GPUDevice *device, GPUCacheStats *stats) {
+  stats->bindGroupHits       = deviceCacheCounterLoad(&device->cacheStats.bindGroupHits);
+  stats->bindGroupMisses     = deviceCacheCounterLoad(&device->cacheStats.bindGroupMisses);
+  stats->bindGroupCollisions = deviceCacheCounterLoad(&device->cacheStats.bindGroupCollisions);
+  stats->pipelineHits        = deviceCacheCounterLoad(&device->cacheStats.pipelineHits);
+  stats->pipelineMisses      = deviceCacheCounterLoad(&device->cacheStats.pipelineMisses);
+  stats->pipelineCompiles    = deviceCacheCounterLoad(&device->cacheStats.pipelineCompiles);
 }
 
 static inline void
-gpuDeviceResetCacheStats(GPUDevice *device) {
-  gpuDeviceCacheCounterReset(&device->cacheStats.bindGroupHits);
-  gpuDeviceCacheCounterReset(&device->cacheStats.bindGroupMisses);
-  gpuDeviceCacheCounterReset(&device->cacheStats.bindGroupCollisions);
-  gpuDeviceCacheCounterReset(&device->cacheStats.pipelineHits);
-  gpuDeviceCacheCounterReset(&device->cacheStats.pipelineMisses);
-  gpuDeviceCacheCounterReset(&device->cacheStats.pipelineCompiles);
+deviceResetCacheStats(GPUDevice *device) {
+  deviceCacheCounterReset(&device->cacheStats.bindGroupHits);
+  deviceCacheCounterReset(&device->cacheStats.bindGroupMisses);
+  deviceCacheCounterReset(&device->cacheStats.bindGroupCollisions);
+  deviceCacheCounterReset(&device->cacheStats.pipelineHits);
+  deviceCacheCounterReset(&device->cacheStats.pipelineMisses);
+  deviceCacheCounterReset(&device->cacheStats.pipelineCompiles);
 }
 
 static inline GPUResult
-gpuDevicePrepareFrameSlot(GPUDevice *device, uint32_t *outFrameIndex) {
+devicePrepareFrameSlot(GPUDevice *device, uint32_t *outFrameIndex) {
   GPUFence *fence;
   GPUResult result;
   uint32_t  nextFrameIndex;
@@ -247,8 +247,8 @@ gpuDevicePrepareFrameSlot(GPUDevice *device, uint32_t *outFrameIndex) {
 }
 
 static inline void
-gpuDeviceActivateFrameSlot(GPUDevice *device, uint32_t frameIndex) {
-  GPUTransientChunk *chunk;
+deviceActivateFrameSlot(GPUDevice *device, uint32_t frameIndex) {
+  TransientChunk    *chunk;
 
   if (!device || !device->transientConfigured) {
     return;
@@ -272,68 +272,68 @@ gpuDeviceActivateFrameSlot(GPUDevice *device, uint32_t frameIndex) {
 }
 
 static inline GPUResult
-gpuDeviceAdvanceFrameSlot(GPUDevice *device) {
+deviceAdvanceFrameSlot(GPUDevice *device) {
   GPUResult result;
   uint32_t  frameIndex;
 
-  result = gpuDevicePrepareFrameSlot(device, &frameIndex);
+  result = devicePrepareFrameSlot(device, &frameIndex);
 
   if (result != GPU_OK) {
     return result;
   }
 
-  gpuDeviceActivateFrameSlot(device, frameIndex);
+  deviceActivateFrameSlot(device, frameIndex);
 
   return GPU_OK;
 }
 
-static inline GPUApi*
-gpuDeviceApi(const GPUDevice *device) {
+static inline Api*
+deviceApi(const GPUDevice *device) {
   return device ? device->_api : NULL;
 }
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
 static inline bool
-gpuDeviceDebugMarkersEnabled(const GPUDevice *device) {
+deviceDebugMarkersEnabled(const GPUDevice *device) {
   return device && device->runtimeConfig.enableDebugMarkers;
 }
 
 static inline const char*
-gpuDeviceDebugLabel(const GPUDevice *device, const char *label) {
-  return gpuDeviceDebugMarkersEnabled(device) ? label : NULL;
+deviceDebugLabel(const GPUDevice *device, const char *label) {
+  return deviceDebugMarkersEnabled(device) ? label : NULL;
 }
 #endif
 
 static inline void
-gpuFrameStatsRecordBindRequest(GPUFrameStats *stats) {
+frameStatsRecordBindRequest(GPUFrameStats *stats) {
   if (stats) {
     stats->requestedBindCalls++;
   }
 }
 
 static inline void
-gpuFrameStatsRecordBindEmission(GPUFrameStats *stats) {
+frameStatsRecordBindEmission(GPUFrameStats *stats) {
   if (stats) {
     stats->emittedBindCalls++;
   }
 }
 
 static inline void
-gpuFrameStatsRecordStateRequest(GPUFrameStats *stats) {
+frameStatsRecordStateRequest(GPUFrameStats *stats) {
   if (stats) {
     stats->requestedStateCalls++;
   }
 }
 
 static inline void
-gpuFrameStatsRecordStateEmission(GPUFrameStats *stats) {
+frameStatsRecordStateEmission(GPUFrameStats *stats) {
   if (stats) {
     stats->emittedStateCalls++;
   }
 }
 
 static inline void
-gpuFrameStatsRecordDraws(GPUFrameStats *stats, uint32_t drawCount) {
+frameStatsRecordDraws(GPUFrameStats *stats, uint32_t drawCount) {
   if (stats) {
     stats->drawCalls += drawCount;
   }
@@ -341,7 +341,7 @@ gpuFrameStatsRecordDraws(GPUFrameStats *stats, uint32_t drawCount) {
 
 #if GPU_BUILD_WITH_VALIDATION
 static inline bool
-gpuDeviceValidationEnabled(const GPUDevice *device) {
+deviceValidationEnabled(const GPUDevice *device) {
   return device
          && device->runtimeConfig.validationMode != GPU_VALIDATION_OFF;
 }

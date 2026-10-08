@@ -20,10 +20,10 @@ static GPUResult
 cuda_createTexture(GPUDevice                  *__restrict device,
                    const GPUTextureCreateInfo *__restrict info,
                    GPUTexture                **__restrict outTexture) {
-  GPUCudaTexturePlan  plan;
-  GPUCudaFormatInfo   format;
-  GPUDeviceCuda      *deviceNative;
-  GPUTextureCuda     *native;
+  CudaTexturePlan     plan;
+  CudaFormatInfo      format;
+  DeviceCuda         *deviceNative;
+  TextureCuda        *native;
   GPUTexture         *texture;
   CUresult            result;
 
@@ -90,12 +90,12 @@ cuda_createTexture(GPUDevice                  *__restrict device,
 }
 
 static bool
-cuda__textureValid(const GPUTextureCuda *native) {
+cuda__textureValid(const TextureCuda    *native) {
   return native && (native->array || native->mipmap);
 }
 
 static CUresult
-cuda__textureLevel(GPUTextureCuda *native,
+cuda__textureLevel(TextureCuda    *native,
                    uint32_t        mipLevel,
                    CUarray        *outArray) {
   if (outArray) {
@@ -123,8 +123,8 @@ cuda__textureLevel(GPUTextureCuda *native,
 
 static void
 cuda_destroyTexture(GPUTexture *__restrict texture) {
-  GPUTextureCuda *native;
-  GPUDeviceCuda  *device;
+  TextureCuda    *native;
+  DeviceCuda     *device;
 
   native = texture ? texture->_priv : NULL;
   device = texture ? cuda_device(texture->device) : NULL;
@@ -153,12 +153,12 @@ cuda_createTextureView(GPUTexture                     *__restrict texture,
                        const GPUTextureViewCreateInfo *__restrict info,
                        GPUTextureView                **__restrict outView) {
   CUDA_RESOURCE_DESC      desc = {0};
-  GPUCudaTextureViewPlan  plan;
-  GPUCudaFormatInfo       format;
-  GPUTextureCuda         *textureNative;
-  GPUTextureViewCuda     *native;
+  CudaTextureViewPlan     plan;
+  CudaFormatInfo          format;
+  TextureCuda            *textureNative;
+  TextureViewCuda        *native;
   GPUTextureView         *view;
-  GPUDeviceCuda          *device;
+  DeviceCuda             *device;
   CUresult                result;
 
   if (!texture || !info || !outView
@@ -268,8 +268,8 @@ cuda_createTextureView(GPUTexture                     *__restrict texture,
 
 static void
 cuda_destroyTextureView(GPUTextureView *__restrict view) {
-  GPUTextureViewCuda *native;
-  GPUDeviceCuda      *device;
+  TextureViewCuda    *native;
+  DeviceCuda         *device;
   uint32_t            i;
 
   native = view ? view->_priv : NULL;
@@ -321,8 +321,8 @@ cuda_writeTexture(GPUQueue                    *__restrict queue,
                   const void                  *__restrict data,
                   uint64_t                                sizeBytes) {
   CUDA_MEMCPY3D   copy = {0};
-  GPUTextureCuda *native;
-  GPUQueueCuda   *queueNative;
+  TextureCuda    *native;
+  QueueCuda      *queueNative;
   size_t          widthBytes;
   CUresult        result;
 
@@ -385,10 +385,10 @@ cuda_getTextureObject(GPUTextureView          *view,
                       CUtexObject             *outTexture) {
   CUDA_RESOURCE_DESC        resource = {0};
   CUDA_TEXTURE_DESC         effective;
-  GPUCudaTextureCacheEntry *cache;
-  GPUTextureViewCuda       *native;
-  GPUTextureCuda           *textureNative;
-  GPUDeviceCuda            *device;
+  CudaTextureCacheEntry    *cache;
+  TextureViewCuda          *native;
+  TextureCuda              *textureNative;
+  DeviceCuda               *device;
   CUtexObject               texture;
   CUresult                  result;
   uint32_t                  capacity, i;
@@ -491,8 +491,8 @@ cuda_getTextureObject(GPUTextureView          *view,
     native->cache         = cache;
     native->cacheCapacity = capacity;
     native->cacheDynamic  = true;
-    gpuDeviceRecordHotPathAlloc(view->_texture->device,
-                                (uint64_t)capacity * sizeof(*cache));
+    deviceRecordHotPathAlloc(view->_texture->device,
+                             (uint64_t)capacity * sizeof(*cache));
   }
 
   if (native->array) {
@@ -540,7 +540,7 @@ cuda_getTextureObject(GPUTextureView          *view,
 }
 
 void
-cuda_initTexture(GPUApiTexture *api) {
+cuda_initTexture(ApiTexture    *api) {
   api->create      = cuda_createTexture;
   api->destroy     = cuda_destroyTexture;
   api->createView  = cuda_createTextureView;

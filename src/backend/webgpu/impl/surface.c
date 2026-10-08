@@ -132,14 +132,14 @@ webgpu_getCapabilities(const GPUAdapter       *adapter,
                        GPUSurface             *surface,
                        GPUSurfaceCapabilities *outCaps) {
   WGPUSurfaceCapabilities capabilities = WGPU_SURFACE_CAPABILITIES_INIT;
-  GPUAdapterWebGPU       *adapterNative;
-  GPUSurfaceWebGPU       *surfaceNative;
+  AdapterWebGPU          *adapterNative;
+  SurfaceWebGPU          *surfaceNative;
   size_t                  formatIndex;
   size_t                  modeIndex;
   GPUFormat               format;
 
-  adapterNative = gpu_webgpuAdapter(adapter);
-  surfaceNative = gpu_webgpuSurface(surface);
+  adapterNative = webgpuAdapter(adapter);
+  surfaceNative = webgpuSurface(surface);
 
   if (!adapterNative || !adapterNative->adapter
       || !surfaceNative || !surfaceNative->surface || !outCaps) {
@@ -158,7 +158,7 @@ webgpu_getCapabilities(const GPUAdapter       *adapter,
        formatIndex < capabilities.formatCount
        && surfaceNative->formatCount < GPU_WEBGPU_MAX_SURFACE_FORMATS;
        formatIndex++) {
-    format = gpu_webgpuGPUFormat(capabilities.formats[formatIndex]);
+    format = webgpuGPUFormat(capabilities.formats[formatIndex]);
 
     if (format != GPU_FORMAT_UNDEFINED) {
       surfaceNative->formats[surfaceNative->formatCount++] = format;
@@ -208,9 +208,9 @@ webgpu_getCapabilities(const GPUAdapter       *adapter,
 }
 
 static GPUSurface*
-webgpu_createSurface(GPUApi                     *api,
+webgpu_createSurface(Api                        *api,
                      GPUInstance                *instance,
-                     const GPUSurfaceNativeInfo *info) {
+                     const SurfaceNativeInfo    *info) {
   WGPUSurfaceDescriptor                         descriptor = WGPU_SURFACE_DESCRIPTOR_INIT;
 #if defined(__EMSCRIPTEN__)
   WGPUEmscriptenSurfaceSourceCanvasHTMLSelector canvas = WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
@@ -219,12 +219,12 @@ webgpu_createSurface(GPUApi                     *api,
 #elif defined(_WIN32) || defined(WIN32)
   WGPUSurfaceSourceWindowsHWND                  window = WGPU_SURFACE_SOURCE_WINDOWS_HWND_INIT;
 #endif
-  GPUInstanceWebGPU                            *instanceNative;
-  GPUSurfaceWebGPU                             *native;
+  InstanceWebGPU                               *instanceNative;
+  SurfaceWebGPU                                *native;
   GPUSurface                                   *surface;
 
   GPU__UNUSED(api);
-  instanceNative = gpu_webgpuInstance(instance);
+  instanceNative = webgpuInstance(instance);
 
   if (!instanceNative || !instanceNative->instance || !info
       || !info->nativeHandle) {
@@ -236,7 +236,7 @@ webgpu_createSurface(GPUApi                     *api,
     return NULL;
   }
 
-  canvas.selector        = gpu_webgpuString(info->nativeHandle);
+  canvas.selector        = webgpuString(info->nativeHandle);
   descriptor.nextInChain = &canvas.chain;
 #elif defined(__APPLE__)
   if (info->type != GPU_SURFACE_APPLE_NSVIEW
@@ -244,9 +244,9 @@ webgpu_createSurface(GPUApi                     *api,
     return NULL;
   }
 
-  if (!(metalLayer.layer = gpuCreateMetalLayer(info->nativeHandle,
-                                               info->type,
-                                               info->scale))) {
+  if (!(metalLayer.layer = createMetalLayer(info->nativeHandle,
+                                            info->type,
+                                            info->scale))) {
     return NULL;
   }
 
@@ -270,7 +270,7 @@ webgpu_createSurface(GPUApi                     *api,
     free(native);
     free(surface);
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
-    gpuDestroyMetalLayer(metalLayer.layer);
+    destroyMetalLayer(metalLayer.layer);
 #endif
     return NULL;
   }
@@ -278,7 +278,7 @@ webgpu_createSurface(GPUApi                     *api,
   if (!(native->surface = wgpuInstanceCreateSurface(instanceNative->instance,
                                                     &descriptor))) {
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
-    gpuDestroyMetalLayer(metalLayer.layer);
+    destroyMetalLayer(metalLayer.layer);
 #endif
     free(native);
     free(surface);
@@ -297,16 +297,16 @@ webgpu_createSurface(GPUApi                     *api,
 
 static void
 webgpu_destroySurface(GPUSurface *surface) {
-  GPUSurfaceWebGPU *native;
+  SurfaceWebGPU    *native;
 
-  native = gpu_webgpuSurface(surface);
+  native = webgpuSurface(surface);
 
   if (native) {
     if (native->surface) {
       wgpuSurfaceRelease(native->surface);
     }
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
-    gpuDestroyMetalLayer(native->ownedPlatformHandle);
+    destroyMetalLayer(native->ownedPlatformHandle);
 #endif
     free(native);
   }
@@ -315,14 +315,14 @@ webgpu_destroySurface(GPUSurface *surface) {
 }
 
 WGPUTextureFormat
-gpu_webgpuFormat(GPUFormat format) {
+webgpuFormat(GPUFormat format) {
   return (uint32_t)format < GPU_ARRAY_LEN(webgpu_formats)
            ? webgpu_formats[format]
            : WGPUTextureFormat_Undefined;
 }
 
 GPUFormat
-gpu_webgpuGPUFormat(WGPUTextureFormat format) {
+webgpuGPUFormat(WGPUTextureFormat format) {
   GPUFormat candidate;
 
   if (format == WGPUTextureFormat_Undefined) {
@@ -332,7 +332,7 @@ gpu_webgpuGPUFormat(WGPUTextureFormat format) {
   for (candidate = GPU_FORMAT_R8_UNORM;
        candidate < GPU_FORMAT_COUNT;
        candidate++) {
-    if (gpu_webgpuFormat(candidate) == format) {
+    if (webgpuFormat(candidate) == format) {
       return candidate;
     }
   }
@@ -341,7 +341,7 @@ gpu_webgpuGPUFormat(WGPUTextureFormat format) {
 }
 
 WGPUPresentMode
-gpu_webgpuPresentMode(GPUPresentMode mode) {
+webgpuPresentMode(GPUPresentMode mode) {
   switch (mode) {
     case GPU_PRESENT_MODE_MAILBOX:
       return WGPUPresentMode_Mailbox;
@@ -354,7 +354,7 @@ gpu_webgpuPresentMode(GPUPresentMode mode) {
 }
 
 void
-webgpu_initSurface(GPUApiSurface *api) {
+webgpu_initSurface(ApiSurface    *api) {
   api->createSurface   = webgpu_createSurface;
   api->getCapabilities = webgpu_getCapabilities;
   api->destroySurface  = webgpu_destroySurface;

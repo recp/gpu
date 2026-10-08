@@ -22,33 +22,33 @@
 #include <us/compiler.h>
 
 /* owned cold-creation snapshot of the known pipeline extensions. */
-typedef struct GPUPreparedConstants {
+typedef struct PreparedConstants {
   GPUPipelineConstants                 constants;
   GPUMeshPipelineEXT                   mesh;
   GPUIntersectionFunctionPipelineEXT   intersection;
   const GPUChainedStruct              *chain;
   GPUConstant                         *values;
-} GPUPreparedConstants;
+} PreparedConstants;
 
 GPU_HIDE
 GPUResult
-gpuPrepareConstants(const GPUShaderLibrary *library,
-                    const GPUChainedStruct *chain,
-                    bool                    compute,
-                    GPUPreparedConstants   *out);
+prepareConstants(const GPUShaderLibrary *library,
+                 const GPUChainedStruct *chain,
+                 bool                    compute,
+                 PreparedConstants      *out);
 
 GPU_HIDE
 const GPUPipelineConstants*
-gpuPipelineConstants(const GPUChainedStruct *chain);
+pipelineConstants(const GPUChainedStruct *chain);
 
 GPU_HIDE
 const GPUMeshPipelineEXT*
-gpuPipelineMesh(const GPUChainedStruct *chain);
+pipelineMesh(const GPUChainedStruct *chain);
 
 GPU_HIDE
-GPUShaderFunction*
-gpuShaderVariant(GPUShaderLibrary           *library,
-                 const char                 *name,
-                 const GPUPipelineConstants *constants);
+ShaderFunction*
+shaderVariant(GPUShaderLibrary           *library,
+              const char                 *name,
+              const GPUPipelineConstants *constants);
 
 #endif /* gpu_constants_internal_h */

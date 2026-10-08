@@ -124,7 +124,7 @@ int
 main(int argc, char **argv) {
   GPUShaderLibraryCreateInfo info   = {0};
   GPUDevice                  device = {0};
-  GPUApi                     api    = {0};
+  Api                        api    = {0};
   void                      *artifact;
   FILE                      *file;
   GPUShaderLibrary          *library;

@@ -21,19 +21,19 @@
 #include "query_internal.h"
 
 static bool
-gpu_validQueryType(GPUQueryType type) {
+validQueryType(GPUQueryType type) {
   return type == GPU_QUERY_TIMESTAMP
          || type == GPU_QUERY_OCCLUSION
          || type == GPU_QUERY_PIPELINE_STATISTICS;
 }
 
 static bool
-gpu_validPipelineStatsMask(uint32_t mask) {
+validPipelineStatsMask(uint32_t mask) {
   return mask != 0u && (mask & ~GPU_PIPESTAT_ALL) == 0u;
 }
 
 static uint64_t
-gpu_queryResultStride(const GPUQuerySet *set) {
+queryResultStride(const GPUQuerySet *set) {
   if (!set) {
     return 0u;
   }
@@ -50,7 +50,7 @@ gpu_queryResultStride(const GPUQuerySet *set) {
 }
 
 static bool
-gpu_validQueryCreateInfo(const GPUQuerySetCreateInfo *info) {
+validQueryCreateInfo(const GPUQuerySetCreateInfo *info) {
   if (!info) {
     return false;
   }
@@ -64,12 +64,12 @@ gpu_validQueryCreateInfo(const GPUQuerySetCreateInfo *info) {
     return false;
   }
 
-  if (!gpu_validQueryType(info->type) || info->count == 0u) {
+  if (!validQueryType(info->type) || info->count == 0u) {
     return false;
   }
 
   if (info->type == GPU_QUERY_PIPELINE_STATISTICS) {
-    return gpu_validPipelineStatsMask(info->pipelineStatsMask);
+    return validPipelineStatsMask(info->pipelineStatsMask);
   }
 
   return info->pipelineStatsMask == 0u;
@@ -80,7 +80,7 @@ GPUResult
 GPUCreateQuerySet(GPUDevice                   *device,
                   const GPUQuerySetCreateInfo *info,
                   GPUQuerySet                **outSet) {
-  GPUApi      *api;
+  Api         *api;
   GPUQuerySet *set;
   GPUResult    result;
 
@@ -90,7 +90,7 @@ GPUCreateQuerySet(GPUDevice                   *device,
 
   *outSet = NULL;
 
-  if (!device || !gpu_validQueryCreateInfo(info)) {
+  if (!device || !validQueryCreateInfo(info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -104,7 +104,7 @@ GPUCreateQuerySet(GPUDevice                   *device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->cmdbuf.createQuerySet) {
+  if (!(api = deviceApi(device)) || !api->cmdbuf.createQuerySet) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -132,13 +132,13 @@ GPUCreateQuerySet(GPUDevice                   *device,
 GPU_EXPORT
 void
 GPUDestroyQuerySet(GPUQuerySet *set) {
-  GPUApi *api;
+  Api    *api;
 
   if (!set) {
     return;
   }
 
-  if ((api = gpuDeviceApi(set->device)) && api->cmdbuf.destroyQuerySet) {
+  if ((api = deviceApi(set->device)) && api->cmdbuf.destroyQuerySet) {
     api->cmdbuf.destroyQuerySet(set);
   }
 
@@ -150,7 +150,7 @@ GPUResult
 GPUGetTimestampPeriod(GPUQueue *queue,
                       double   *outNanosecondsPerTick) {
   GPUDevice *device;
-  GPUApi    *api;
+  Api       *api;
   GPUResult  result;
 
   if (!outNanosecondsPerTick) {
@@ -169,7 +169,7 @@ GPUGetTimestampPeriod(GPUQueue *queue,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->cmdque.getTimestampPeriod) {
+  if (!(api = deviceApi(device)) || !api->cmdque.getTimestampPeriod) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -194,7 +194,7 @@ GPUBeginOcclusionQuery(GPURenderPassEncoder *pass,
                        GPUQuerySet          *set,
                        uint32_t              queryIndex) {
   GPUDevice *device;
-  GPUApi    *api;
+  Api       *api;
 
   device = pass && pass->_cmdb && pass->_cmdb->_queue
              ? pass->_cmdb->_queue->_device
@@ -206,7 +206,7 @@ GPUBeginOcclusionQuery(GPURenderPassEncoder *pass,
     return;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->cmdbuf.beginOcclusionQuery) {
+  if (!(api = deviceApi(device)) || !api->cmdbuf.beginOcclusionQuery) {
     return;
   }
 
@@ -220,7 +220,7 @@ void
 GPUEndOcclusionQuery(GPURenderPassEncoder *pass) {
   GPUQuerySet *set;
   GPUDevice   *device;
-  GPUApi      *api;
+  Api         *api;
   uint32_t     queryIndex;
 
   set    = pass ? pass->_occlusionQuerySet : NULL;
@@ -233,7 +233,7 @@ GPUEndOcclusionQuery(GPURenderPassEncoder *pass) {
     return;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->cmdbuf.endOcclusionQuery) {
+  if (!(api = deviceApi(device)) || !api->cmdbuf.endOcclusionQuery) {
     return;
   }
 
@@ -249,7 +249,7 @@ GPUBeginPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
                                 GPUQuerySet      *set,
                                 uint32_t          queryIndex) {
   GPUDevice *device;
-  GPUApi    *api;
+  Api       *api;
 
   device = cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
 
@@ -260,7 +260,7 @@ GPUBeginPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
     return;
   }
 
-  if (!(api = gpuDeviceApi(device))
+  if (!(api = deviceApi(device))
       || !api->cmdbuf.beginPipelineStatisticsQuery) {
     return;
   }
@@ -274,7 +274,7 @@ GPU_EXPORT
 void
 GPUEndPipelineStatisticsQuery(GPUCommandBuffer *cmdb, GPUQuerySet *set) {
   GPUDevice *device;
-  GPUApi    *api;
+  Api       *api;
   uint32_t   queryIndex;
 
   device = cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
@@ -285,7 +285,7 @@ GPUEndPipelineStatisticsQuery(GPUCommandBuffer *cmdb, GPUQuerySet *set) {
     return;
   }
 
-  if (!(api = gpuDeviceApi(device))
+  if (!(api = deviceApi(device))
       || !api->cmdbuf.endPipelineStatisticsQuery) {
     return;
   }
@@ -305,7 +305,7 @@ GPUResolveQuerySet(GPUCommandBuffer *cmdb,
                    GPUBuffer        *dstBuffer,
                    uint64_t          dstOffset) {
   GPUDevice *device;
-  GPUApi    *api;
+  Api       *api;
   uint64_t   resultBytes;
   uint64_t   resultStride;
 
@@ -317,22 +317,22 @@ GPUResolveQuerySet(GPUCommandBuffer *cmdb,
           && set->type != GPU_QUERY_OCCLUSION
           && set->type != GPU_QUERY_PIPELINE_STATISTICS)
       || set->device != device || dstBuffer->device != device
-      || !gpuBufferHasUsage(dstBuffer, GPU_BUFFER_USAGE_COPY_DST)
+      || !bufferHasUsage(dstBuffer, GPU_BUFFER_USAGE_COPY_DST)
       || (dstOffset & 7u) != 0u
       || queryCount == 0u || firstQuery > set->count
       || queryCount > set->count - firstQuery) {
     return;
   }
 
-  resultStride = gpu_queryResultStride(set);
+  resultStride = queryResultStride(set);
   resultBytes  = (uint64_t)queryCount * resultStride;
 
   if (resultStride == 0u
-      || !gpuBufferRangeValid(dstBuffer, dstOffset, resultBytes)) {
+      || !bufferRangeValid(dstBuffer, dstOffset, resultBytes)) {
     return;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->cmdbuf.resolveQuerySet) {
+  if (!(api = deviceApi(device)) || !api->cmdbuf.resolveQuerySet) {
     return;
   }
 

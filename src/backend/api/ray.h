@@ -22,7 +22,7 @@ extern "C" {
 
 #include <gpu/ray.h>
 
-typedef struct GPUApiRayQuery {
+typedef struct ApiRayQuery {
   GPUResult
   (*getSizes)(GPUDevice                                  *device,
               const GPUAccelerationStructureBuildInfoEXT *info,
@@ -68,9 +68,9 @@ typedef struct GPUApiRayQuery {
   (*bindRenderIntersectionFunctionTable)(GPURenderPassEncoder            *pass,
                                          uint32_t                         index,
                                          GPUIntersectionFunctionTableEXT *table);
-} GPUApiRayQuery;
+} ApiRayQuery;
 
-typedef struct GPUApiRayTracing {
+typedef struct ApiRayTracing {
   GPUResult
   (*createPipeline)(GPUDevice                                *device,
                     const GPURayTracingPipelineCreateInfoEXT *info,
@@ -102,7 +102,7 @@ typedef struct GPUApiRayTracing {
               uint32_t                     depth);
 
   void (*endPass)(GPURayTracingPassEncoderEXT *pass);
-} GPUApiRayTracing;
+} ApiRayTracing;
 
 #ifdef __cplusplus
 }

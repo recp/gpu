@@ -33,13 +33,13 @@ struct GPUAdapter {
   GPUFeature         supportedFeatureStorage[GPU_FEATURE_TENSOR_RESOURCES_EXT + 1u];
 };
 
-static inline GPUApi*
-gpuAdapterApi(const GPUAdapter *adapter) {
-  return adapter ? gpuInstanceApi(adapter->inst) : NULL;
+static inline Api*
+adapterApi(const GPUAdapter *adapter) {
+  return adapter ? instanceApi(adapter->inst) : NULL;
 }
 
 static inline uint32_t
-gpuAdapterFeatureStateLoad(const GPUAdapter *adapter) {
+adapterFeatureStateLoad(const GPUAdapter *adapter) {
 #if defined(_WIN32) || defined(WIN32)
   return (uint32_t)InterlockedCompareExchange((volatile LONG *)&adapter->supportedFeatureState,
                                               0,
@@ -50,7 +50,7 @@ gpuAdapterFeatureStateLoad(const GPUAdapter *adapter) {
 }
 
 static inline bool
-gpuAdapterFeatureStateBegin(GPUAdapter *adapter) {
+adapterFeatureStateBegin(GPUAdapter *adapter) {
 #if defined(_WIN32) || defined(WIN32)
   return InterlockedCompareExchange((volatile LONG *)&adapter->supportedFeatureState,
                                     1,
@@ -70,7 +70,7 @@ gpuAdapterFeatureStateBegin(GPUAdapter *adapter) {
 }
 
 static inline void
-gpuAdapterFeatureStateComplete(GPUAdapter *adapter) {
+adapterFeatureStateComplete(GPUAdapter *adapter) {
 #if defined(_WIN32) || defined(WIN32)
   InterlockedExchange((volatile LONG *)&adapter->supportedFeatureState, 2);
 #else

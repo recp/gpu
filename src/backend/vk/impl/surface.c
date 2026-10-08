@@ -17,7 +17,7 @@
 #include "../common.h"
 
 static void
-vk_appendSurfaceFormat(GPUSurfaceVk *surface, uint32_t *count, GPUFormat format) {
+vk_appendSurfaceFormat(SurfaceVk    *surface, uint32_t *count, GPUFormat format) {
   uint32_t i;
 
   if (!surface || !count || format <= GPU_FORMAT_UNDEFINED || format >= GPU_FORMAT_COUNT
@@ -35,7 +35,7 @@ vk_appendSurfaceFormat(GPUSurfaceVk *surface, uint32_t *count, GPUFormat format)
 }
 
 static void
-vk_appendPresentMode(GPUSurfaceVk *surface, uint32_t *count, VkPresentModeKHR mode) {
+vk_appendPresentMode(SurfaceVk    *surface, uint32_t *count, VkPresentModeKHR mode) {
   GPUPresentMode gpuMode;
   uint32_t       i;
 
@@ -72,8 +72,8 @@ vk_getSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
                           GPUSurfaceCapabilities *__restrict outCaps) {
   VkSurfaceCapabilitiesKHR caps;
   GPUFormatCapabilities    formatCaps;
-  GPUAdapterVk            *adapterVk;
-  GPUSurfaceVk            *surface;
+  AdapterVk               *adapterVk;
+  SurfaceVk               *surface;
   VkSurfaceFormatKHR      *formats;
   VkPresentModeKHR        *presentModes;
   uint32_t                 formatCount;
@@ -181,7 +181,7 @@ vk_getSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
 
 GPU_HIDE
 GPUSurface*
-vk_createSurface(GPUApi *__restrict api, GPUInstance *__restrict inst, const GPUSurfaceNativeInfo *__restrict info) {
+vk_createSurface(Api    *__restrict api, GPUInstance *__restrict inst, const SurfaceNativeInfo    *__restrict info) {
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
   VkWin32SurfaceCreateInfoKHR   winInfo;
 #endif
@@ -194,10 +194,10 @@ vk_createSurface(GPUApi *__restrict api, GPUInstance *__restrict inst, const GPU
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR)
   VkWaylandSurfaceCreateInfoKHR waylandInfo;
 #endif
-  GPUInstanceVk                *instVk;
+  InstanceVk                   *instVk;
   GPUAdapter                   *adapter;
   GPUSurface                   *gpuSurface;
-  GPUSurfaceVk                 *surface;
+  SurfaceVk                    *surface;
   VkResult                      err;
 
   GPU__UNUSED(api);
@@ -278,9 +278,9 @@ vk_createSurface(GPUApi *__restrict api, GPUInstance *__restrict inst, const GPU
         break;
       }
 
-      surface->metalLayer = gpuCreateMetalLayer(info->nativeHandle,
-                                                info->type,
-                                                info->scale);
+      surface->metalLayer = createMetalLayer(info->nativeHandle,
+                                             info->type,
+                                             info->scale);
 
       if (!surface->metalLayer) {
         break;
@@ -337,7 +337,7 @@ vk_createSurface(GPUApi *__restrict api, GPUInstance *__restrict inst, const GPU
 
   if (err != VK_SUCCESS) {
 #if defined(__APPLE__)
-    gpuDestroyMetalLayer(surface->metalLayer);
+    destroyMetalLayer(surface->metalLayer);
 #endif
     free(surface);
     free(gpuSurface);
@@ -352,7 +352,7 @@ vk_createSurface(GPUApi *__restrict api, GPUInstance *__restrict inst, const GPU
 GPU_HIDE
 void
 vk_destroySurface(GPUSurface *__restrict surface) {
-  GPUSurfaceVk *surfaceVk;
+  SurfaceVk    *surfaceVk;
 
   if (!surface) {
     return;
@@ -365,7 +365,7 @@ vk_destroySurface(GPUSurface *__restrict surface) {
       vkDestroySurfaceKHR(surfaceVk->inst, surfaceVk->surface, NULL);
     }
 #if defined(__APPLE__)
-    gpuDestroyMetalLayer(surfaceVk->metalLayer);
+    destroyMetalLayer(surfaceVk->metalLayer);
 #endif
     free(surfaceVk);
   }
@@ -375,7 +375,7 @@ vk_destroySurface(GPUSurface *__restrict surface) {
 
 GPU_HIDE
 void
-vk_initSurface(GPUApiSurface *apiDevice) {
+vk_initSurface(ApiSurface    *apiDevice) {
   apiDevice->createSurface   = vk_createSurface;
   apiDevice->getCapabilities = vk_getSurfaceCapabilities;
   apiDevice->destroySurface  = vk_destroySurface;

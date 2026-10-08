@@ -24,16 +24,16 @@ extern "C" {
 #include <gpu/gpu.h>
 #include "library.h"
 
-typedef struct GPURenderPipelineState GPURenderPipelineState;
+typedef struct RenderPipelineState    RenderPipelineState;
 
-typedef enum GPUFunctionType {
+typedef enum FunctionType {
   GPU_FUNCTION_VERT = 1,
   GPU_FUNCTION_FRAG = 2,
   GPU_FUNCTION_TASK = 3,
   GPU_FUNCTION_MESH = 4
-} GPUFunctionType;
+} FunctionType;
 
-typedef struct GPUApiRender {
+typedef struct ApiRender {
   GPUResult
   (*createPipeline)(GPUDevice                         *__restrict device,
                     const GPURenderPipelineCreateInfo *__restrict info,
@@ -42,18 +42,18 @@ typedef struct GPUApiRender {
 
   GPURenderPipeline * (*newRenderPipeline)(GPUFormat pixelFormat, bool mesh);
 
-  GPURenderPipelineState * (*newRenderState)(GPUDevice *__restrict device, GPURenderPipeline *__restrict pipeline);
+  RenderPipelineState    * (*newRenderState)(GPUDevice *__restrict device, GPURenderPipeline *__restrict pipeline);
 
   void (*destroyRenderPipeline)(GPURenderPipeline *pipeline);
 
   void
   (*setFunction)(GPURenderPipeline *__restrict pipline,
-                 GPUShaderFunction *__restrict func,
-                 GPUFunctionType               functype);
+                 ShaderFunction    *__restrict func,
+                 FunctionType                  functype);
 
   GPUResult
   (*setIntersectionFunctions)(GPURenderPipeline         *pipeline,
-                              GPUShaderFunction  *const *functions,
+                              ShaderFunction     *const *functions,
                               const GPUShaderStageFlags *stages,
                               uint32_t                   functionCount);
 
@@ -64,7 +64,7 @@ typedef struct GPUApiRender {
   void (*stencilFormat)(GPURenderPipeline *__restrict pipline, GPUFormat pixelFormat);
 
   void (*sampleCount)(GPURenderPipeline *__restrict pipline, uint32_t sampleCount);
-} GPUApiRender;
+} ApiRender;
 
 #ifdef __cplusplus
 }

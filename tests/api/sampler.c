@@ -24,7 +24,7 @@ static uint32_t       gScopedSamplerCreateCalls;
 static uint32_t       gScopedSamplerDestroyCalls;
 
 static GPUResult
-create_scoped_sampler(GPUApi          *__restrict api,
+create_scoped_sampler(Api             *__restrict api,
                       GPUDevice       *__restrict device,
                       const GPUSamplerCreateInfo *info,
                       bool                        staticIfSupported,
@@ -66,14 +66,14 @@ check_sampler_device_dispatch(GPUDevice *activeDevice) {
   GPUSampler          *sampler;
   GPUSamplerCreateInfo info   = {0};
   GPUDevice            device = {0};
-  GPUApi               scopedApi;
+  Api                  scopedApi;
 
-  if (!activeDevice || !gpuDeviceApi(activeDevice)) {
+  if (!activeDevice || !deviceApi(activeDevice)) {
     fprintf(stderr, "sampler dispatch has no device api\n");
     return 0;
   }
 
-  scopedApi                        = *gpuDeviceApi(activeDevice);
+  scopedApi                        = *deviceApi(activeDevice);
   scopedApi.sampler.createSampler  = create_scoped_sampler;
   scopedApi.sampler.destroySampler = destroy_scoped_sampler;
   device._api                      = &scopedApi;

@@ -27,16 +27,16 @@
 #include "ray_internal.h"
 
 #if !GPU_BUILD_WITH_VALIDATION
-#  define gpu_computeValidationError(pass, message) ((void)0)
-#  define gpu_computeBindingsComplete(pass) true
+#  define computeValidationError(pass, message) ((void)0)
+#  define computeBindingsComplete(pass) true
 #endif
 
-typedef struct GPUBindComputeContext {
+typedef struct BindComputeContext {
   GPUComputePassEncoder *pass;
-} GPUBindComputeContext;
+} BindComputeContext;
 
 static GPUDevice*
-gpu_computePassDevice(const GPUComputePassEncoder *pass) {
+computePassDevice(const GPUComputePassEncoder *pass) {
   if (!pass) {
     return NULL;
   }
@@ -52,40 +52,40 @@ gpu_computePassDevice(const GPUComputePassEncoder *pass) {
   return pass->_pipelineLayout ? pass->_pipelineLayout->_device : NULL;
 }
 
-static GPUApi*
-gpu_computePassApi(const GPUComputePassEncoder *pass) {
+static Api*
+computePassApi(const GPUComputePassEncoder *pass) {
   if (pass && pass->_api) {
     return pass->_api;
   }
 
-  return gpuDeviceApi(gpu_computePassDevice(pass));
+  return deviceApi(computePassDevice(pass));
 }
 
 #if GPU_BUILD_WITH_VALIDATION
 static void
-gpu_computeValidationError(const GPUComputePassEncoder *pass,
-                           const char                  *message) {
-  gpuDeviceRecordValidationError(gpu_computePassDevice(pass), message);
+computeValidationError(const GPUComputePassEncoder *pass,
+                       const char                  *message) {
+  deviceRecordValidationError(computePassDevice(pass), message);
 }
 
 static inline bool
-gpu_computeBindingsComplete(const GPUComputePassEncoder *pass) {
-  if (!gpuDeviceValidationEnabled(gpu_computePassDevice(pass))) {
+computeBindingsComplete(const GPUComputePassEncoder *pass) {
+  if (!deviceValidationEnabled(computePassDevice(pass))) {
     return true;
   }
 
-  return gpuPipelineLayoutMaskIsBound(pass->_pipelineLayout,
-                                      pass->_boundGroupLayouts,
-                                      GPU_ENCODER_MAX_BIND_GROUPS,
-                                      pass->_requiredBindGroupMask);
+  return pipelineLayoutMaskIsBound(pass->_pipelineLayout,
+                                   pass->_boundGroupLayouts,
+                                   GPU_ENCODER_MAX_BIND_GROUPS,
+                                   pass->_requiredBindGroupMask);
 }
 #endif
 
 static bool
-gpu_validPushConstantRange(uint32_t    limit,
-                           uint32_t    offset,
-                           uint32_t    sizeBytes,
-                           const void *data) {
+validPushConstantRange(uint32_t    limit,
+                       uint32_t    offset,
+                       uint32_t    sizeBytes,
+                       const void *data) {
   if (sizeBytes == 0u) {
     return true;
   }
@@ -98,15 +98,15 @@ gpu_validPushConstantRange(uint32_t    limit,
 }
 
 static bool
-gpu_validIndirectBatch(GPUBuffer *argsBuffer,
-                       uint64_t   argsOffset,
-                       uint32_t   commandCount,
-                       uint32_t   strideBytes,
-                       uint32_t   commandSize) {
+validIndirectBatch(GPUBuffer *argsBuffer,
+                   uint64_t   argsOffset,
+                   uint32_t   commandCount,
+                   uint32_t   strideBytes,
+                   uint32_t   commandSize) {
   uint64_t maxCommandIndex;
   uint64_t lastCommandOffset;
 
-  if (!gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT)
+  if (!bufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT)
       || (argsOffset & 3u) != 0u
       || commandCount == 0u
       || strideBytes < commandSize
@@ -123,14 +123,14 @@ gpu_validIndirectBatch(GPUBuffer *argsBuffer,
 
   lastCommandOffset = argsOffset + maxCommandIndex * strideBytes;
 
-  return gpuBufferRangeValid(argsBuffer, lastCommandOffset, commandSize);
+  return bufferRangeValid(argsBuffer, lastCommandOffset, commandSize);
 }
 
-static GPUComputePipelineState*
-gpuCompileComputePipelineState(GPUDevice *device, GPUComputePipeline *pipeline) {
-  GPUApi *api;
+static ComputePipelineState*
+compileComputePipelineState(GPUDevice *device, GPUComputePipeline *pipeline) {
+  Api    *api;
 
-  if (!(api = gpuDeviceApi(device)) || !api->compute.newComputeState) {
+  if (!(api = deviceApi(device)) || !api->compute.newComputeState) {
     return NULL;
   }
 
@@ -138,9 +138,9 @@ gpuCompileComputePipelineState(GPUDevice *device, GPUComputePipeline *pipeline) 
 }
 
 static GPUResult
-gpu_computePipelineExtensions(GPUDevice                                 *device,
-                              const GPUComputePipelineCreateInfo        *info,
-                              const GPUIntersectionFunctionPipelineEXT **outIntersection) {
+computePipelineExtensions(GPUDevice                                 *device,
+                          const GPUComputePipelineCreateInfo        *info,
+                          const GPUIntersectionFunctionPipelineEXT **outIntersection) {
   const GPUChainedStruct                    *chain;
   const GPUIntersectionFunctionPipelineEXT *intersection;
 
@@ -177,8 +177,8 @@ gpu_computePipelineExtensions(GPUDevice                                 *device,
 }
 
 static void
-gpuBindComputeBinding(void *ctx, const GPUBindGroupBindingView *binding) {
-  GPUBindComputeContext *bindCtx;
+bindComputeBinding(void *ctx, const BindGroupBindingView    *binding) {
+  BindComputeContext    *bindCtx;
 
   if (!ctx || !binding
       || (binding->visibility & GPU_SHADER_STAGE_COMPUTE_BIT) == 0u) {
@@ -188,39 +188,39 @@ gpuBindComputeBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   bindCtx = ctx;
 
   if (binding->kind == GPUBindKindBuffer && binding->buffer) {
-    gpuSetComputeBuffer(bindCtx->pass,
-                        binding->buffer,
-                        binding->offset,
-                        binding->binding + binding->arrayIndex);
+    setComputeBuffer(bindCtx->pass,
+                     binding->buffer,
+                     binding->offset,
+                     binding->binding + binding->arrayIndex);
   } else if (binding->kind == GPUBindKindTexture && binding->textureView) {
-    gpuSetComputeTexture(bindCtx->pass,
-                         binding->textureView,
-                         binding->binding + binding->arrayIndex);
+    setComputeTexture(bindCtx->pass,
+                      binding->textureView,
+                      binding->binding + binding->arrayIndex);
   } else if (binding->kind == GPUBindKindSampler && binding->sampler) {
-    gpuSetComputeSampler(bindCtx->pass,
-                         binding->sampler,
-                         binding->binding + binding->arrayIndex);
+    setComputeSampler(bindCtx->pass,
+                      binding->sampler,
+                      binding->binding + binding->arrayIndex);
   } else if (binding->kind == GPUBindKindAccelerationStructure
              && binding->accelerationStructure) {
-    gpuSetComputeAccelerationStructure(bindCtx->pass,
-                                       binding->accelerationStructure,
-                                       binding->binding + binding->arrayIndex);
+    setComputeAccelerationStructure(bindCtx->pass,
+                                    binding->accelerationStructure,
+                                    binding->binding + binding->arrayIndex);
   }
 }
 
 GPU_HIDE
 void
-gpuSetComputeBuffer(GPUComputePassEncoder *pass,
-                    GPUBuffer             *buf,
-                    uint64_t               off,
-                    uint32_t               index) {
-  GPUApi *api;
+setComputeBuffer(GPUComputePassEncoder *pass,
+                 GPUBuffer             *buf,
+                 uint64_t               off,
+                 uint32_t               index) {
+  Api    *api;
 
   if (!pass || pass->_ended || !buf) {
     return;
   }
 
-  if (!(api = gpu_computePassApi(pass)) || !api->compute.buffer) {
+  if (!(api = computePassApi(pass)) || !api->compute.buffer) {
     return;
   }
 
@@ -229,16 +229,16 @@ gpuSetComputeBuffer(GPUComputePassEncoder *pass,
 
 GPU_HIDE
 void
-gpuSetComputeTexture(GPUComputePassEncoder *pass,
-                     GPUTextureView        *view,
-                     uint32_t               index) {
-  GPUApi *api;
+setComputeTexture(GPUComputePassEncoder *pass,
+                  GPUTextureView        *view,
+                  uint32_t               index) {
+  Api    *api;
 
   if (!pass || pass->_ended || !view) {
     return;
   }
 
-  if (!(api = gpu_computePassApi(pass)) || !api->compute.texture) {
+  if (!(api = computePassApi(pass)) || !api->compute.texture) {
     return;
   }
 
@@ -247,16 +247,16 @@ gpuSetComputeTexture(GPUComputePassEncoder *pass,
 
 GPU_HIDE
 void
-gpuSetComputeSampler(GPUComputePassEncoder *pass,
-                     GPUSampler            *sampler,
-                     uint32_t               index) {
-  GPUApi *api;
+setComputeSampler(GPUComputePassEncoder *pass,
+                  GPUSampler            *sampler,
+                  uint32_t               index) {
+  Api    *api;
 
   if (!pass || pass->_ended || !sampler) {
     return;
   }
 
-  if (!(api = gpu_computePassApi(pass)) || !api->compute.sampler) {
+  if (!(api = computePassApi(pass)) || !api->compute.sampler) {
     return;
   }
 
@@ -265,16 +265,16 @@ gpuSetComputeSampler(GPUComputePassEncoder *pass,
 
 GPU_HIDE
 void
-gpuSetComputeAccelerationStructure(GPUComputePassEncoder       *pass,
-                                   GPUAccelerationStructureEXT *structure,
-                                   uint32_t                     index) {
-  GPUApi *api;
+setComputeAccelerationStructure(GPUComputePassEncoder       *pass,
+                                GPUAccelerationStructureEXT *structure,
+                                uint32_t                     index) {
+  Api    *api;
 
   if (!pass || pass->_ended || !structure) {
     return;
   }
 
-  if (!(api = gpu_computePassApi(pass))
+  if (!(api = computePassApi(pass))
       || !api->compute.accelerationStructure) {
     return;
   }
@@ -283,16 +283,16 @@ gpuSetComputeAccelerationStructure(GPUComputePassEncoder       *pass,
 }
 
 static GPUResult
-gpu_createComputePipeline(GPUDevice                          *__restrict device,
+createComputePipeline(GPUDevice                          *__restrict device,
                          const GPUComputePipelineCreateInfo *__restrict info,
                          GPUComputePipeline                **__restrict outPipeline) {
-  GPUPipelineCacheKey                      cacheKey;
+  PipelineCacheKey                         cacheKey;
   const char                              *entries[1];
-  GPUComputePipelineState                 *state;
+  ComputePipelineState                    *state;
   GPUComputePipeline                      *pipeline;
-  GPUShaderFunction                       *function;
+  ShaderFunction                          *function;
   const GPUPipelineConstants              *constants;
-  GPUApi                                  *api;
+  Api                                     *api;
   const GPUIntersectionFunctionPipelineEXT *intersection;
   GPUResult                                result;
   uint32_t                                 requiredBindGroupMask;
@@ -322,24 +322,24 @@ gpu_createComputePipeline(GPUDevice                          *__restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  result = gpu_computePipelineExtensions(device, info, &intersection);
+  result = computePipelineExtensions(device, info, &intersection);
 
   if (result != GPU_OK) {
     return result;
   }
 
   if (info->cache && !intersection) {
-    result = gpuPipelineCacheFindCompute(info->cache,
-                                         info,
-                                         &cacheKey,
-                                         &pipeline);
+    result = pipelineCacheFindCompute(info->cache,
+                                      info,
+                                      &cacheKey,
+                                      &pipeline);
 
     if (result != GPU_OK) {
       return result;
     }
 
     if (pipeline) {
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      pipelineCacheReleaseKey(&cacheKey);
 
       *outPipeline = pipeline;
       return GPU_OK;
@@ -347,49 +347,49 @@ gpu_createComputePipeline(GPUDevice                          *__restrict device,
   }
 
   {
-    GPUShaderExecutionGraphEntryInfo graphEntry;
+    ShaderExecutionGraphEntryInfo    graphEntry;
     GPUShaderStageFlags              stage;
 
-    if (gpuGetShaderLibraryEntryStage(info->library, info->entryPoint, &stage)
+    if (getShaderLibraryEntryStage(info->library, info->entryPoint, &stage)
         && stage != GPU_SHADER_STAGE_COMPUTE_BIT) {
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      pipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
 
-    if (gpuGetShaderLibraryExecutionGraphEntry(info->library,
-                                               info->entryPoint,
-                                               &graphEntry)) {
-      gpuPipelineCacheReleaseKey(&cacheKey);
+    if (getShaderLibraryExecutionGraphEntry(info->library,
+                                            info->entryPoint,
+                                            &graphEntry)) {
+      pipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
 
-  constants  = gpuPipelineConstants(info->chain.pNext);
+  constants  = pipelineConstants(info->chain.pNext);
   entries[0] = info->entryPoint;
 
-  if (!gpuPipelineLayoutMatchesShaderEntries(info->layout,
-                                             info->library,
-                                             entries,
-                                             (uint32_t)GPU_ARRAY_LEN(entries),
-                                             GPU_SHADER_STAGE_COMPUTE_BIT,
-                                             &requiredBindGroupMask)) {
-    gpuPipelineCacheReleaseKey(&cacheKey);
+  if (!pipelineLayoutMatchesShaderEntries(info->layout,
+                                          info->library,
+                                          entries,
+                                          (uint32_t)GPU_ARRAY_LEN(entries),
+                                          GPU_SHADER_STAGE_COMPUTE_BIT,
+                                          &requiredBindGroupMask)) {
+    pipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuDeviceApi(device))) {
-    gpuPipelineCacheReleaseKey(&cacheKey);
+  if (!(api = deviceApi(device))) {
+    pipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   if (intersection && api->compute.createPipeline) {
-    gpuPipelineCacheReleaseKey(&cacheKey);
+    pipelineCacheReleaseKey(&cacheKey);
     return GPU_ERROR_UNSUPPORTED;
   }
 
   if (api->compute.createPipeline) {
     if (!(pipeline = calloc(1, sizeof(*pipeline)))) {
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      pipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_OUT_OF_MEMORY;
     }
 
@@ -403,7 +403,7 @@ gpu_createComputePipeline(GPUDevice                          *__restrict device,
 
     if (result != GPU_OK) {
       free(pipeline);
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      pipelineCacheReleaseKey(&cacheKey);
       return result;
     }
 
@@ -411,23 +411,23 @@ gpu_createComputePipeline(GPUDevice                          *__restrict device,
 
     if (!state) {
       GPUDestroyComputePipeline(pipeline);
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      pipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_BACKEND_FAILURE;
     }
   } else {
     if (!api->compute.newComputePipeline || !api->compute.setFunction) {
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      pipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
-    if (!(function = gpuShaderVariant(info->library, info->entryPoint, constants))) {
-      gpuPipelineCacheReleaseKey(&cacheKey);
+    if (!(function = shaderVariant(info->library, info->entryPoint, constants))) {
+      pipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
 
     if (!(pipeline = api->compute.newComputePipeline())) {
-      gpuDestroyShaderFunction(info->library, function);
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      destroyShaderFunction(info->library, function);
+      pipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -436,34 +436,34 @@ gpu_createComputePipeline(GPUDevice                          *__restrict device,
     pipeline->_refCount = 1u;
 
     api->compute.setFunction(pipeline, function);
-    gpuDestroyShaderFunction(info->library, function);
+    destroyShaderFunction(info->library, function);
 
     if (intersection) {
-      result = gpuAttachComputeIntersectionFunctions(device,
-                                                     info->library,
-                                                     intersection,
-                                                     pipeline);
+      result = attachComputeIntersectionFunctions(device,
+                                                  info->library,
+                                                  intersection,
+                                                  pipeline);
       if (result != GPU_OK) {
         GPUDestroyComputePipeline(pipeline);
-        gpuPipelineCacheReleaseKey(&cacheKey);
+        pipelineCacheReleaseKey(&cacheKey);
         return result;
       }
     }
 
     pipeline->_cache = info->cache;
-    state            = gpuCompileComputePipelineState(device, pipeline);
+    state            = compileComputePipelineState(device, pipeline);
     pipeline->_cache = NULL;
 
     if (!state) {
       GPUDestroyComputePipeline(pipeline);
-      gpuPipelineCacheReleaseKey(&cacheKey);
+      pipelineCacheReleaseKey(&cacheKey);
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
 
-  if (!gpuGetShaderLibraryComputeWorkgroupSize(info->library,
-                                               info->entryPoint,
-                                               state->workgroupSize)) {
+  if (!getShaderLibraryComputeWorkgroupSize(info->library,
+                                            info->entryPoint,
+                                            state->workgroupSize)) {
     state->workgroupSize[0] = 1u;
     state->workgroupSize[1] = 1u;
     state->workgroupSize[2] = 1u;
@@ -473,14 +473,14 @@ gpu_createComputePipeline(GPUDevice                          *__restrict device,
 
   pipeline->_requiredBindGroupMask = requiredBindGroupMask;
 
-  gpuGetPipelineLayoutPushConstants(info->layout,
-                                    &pipeline->_pushConstantSizeBytes,
-                                    &pipeline->_pushConstantStages);
+  getPipelineLayoutPushConstants(info->layout,
+                                 &pipeline->_pushConstantSizeBytes,
+                                 &pipeline->_pushConstantStages);
 
   if (info->cache && !intersection) {
-    pipeline = gpuPipelineCacheStoreCompute(info->cache, &cacheKey, pipeline);
+    pipeline = pipelineCacheStoreCompute(info->cache, &cacheKey, pipeline);
   } else {
-    gpuRecordPipelineCompile(device, info->cache);
+    recordPipelineCompile(device, info->cache);
   }
 
   *outPipeline = pipeline;
@@ -491,13 +491,13 @@ gpu_createComputePipeline(GPUDevice                          *__restrict device,
 GPU_EXPORT
 void
 GPUDestroyComputePipeline(GPUComputePipeline *pipeline) {
-  GPUApi *api;
+  Api    *api;
 
   if (!pipeline) {
     return;
   }
 
-  if (!gpuReleaseComputePipeline(pipeline)) {
+  if (!releaseComputePipeline(pipeline)) {
     return;
   }
 
@@ -526,7 +526,7 @@ GPUBeginComputePassWithInfo(GPUCommandBuffer               *cmdb,
   GPUComputePassCreateInfo backendInfo;
   GPUComputePassEncoder   *pass;
   GPUDevice               *device;
-  GPUApi                  *api;
+  Api                     *api;
   bool                     wroteBeginTimestamp;
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder || !info
@@ -539,13 +539,13 @@ GPUBeginComputePassWithInfo(GPUCommandBuffer               *cmdb,
 
   device = cmdb->_queue ? cmdb->_queue->_device : NULL;
 
-  if (!gpuValidPassTimestampWrites(info->timestampWrites, device)
-      || !(api = gpuDeviceApi(device)) || !api->compute.computeCommandEncoder) {
+  if (!validPassTimestampWrites(info->timestampWrites, device)
+      || !(api = deviceApi(device)) || !api->compute.computeCommandEncoder) {
     return NULL;
   }
 
   backendInfo         = *info;
-  backendInfo.label   = gpuDeviceDebugLabel(device, info->label);
+  backendInfo.label   = deviceDebugLabel(device, info->label);
   wroteBeginTimestamp = false;
 
   if (info->timestampWrites && api->cmdbuf.writeTimestamp) {
@@ -582,26 +582,26 @@ GPU_EXPORT
 void
 GPUBindComputePipeline(GPUComputePassEncoder *pass,
                        GPUComputePipeline    *pipeline) {
-  GPUComputePipelineState *state;
-  GPUApi                  *api;
+  ComputePipelineState    *state;
+  Api                     *api;
 
   if (!pass || pass->_ended || !pipeline || !pipeline->_state) {
     return;
   }
 
-  if (pipeline->_device != gpu_computePassDevice(pass)
-      || pipeline->_api != gpu_computePassApi(pass)) {
-    gpu_computeValidationError(pass,
-                               "GPUBindComputePipeline skipped: device mismatch");
+  if (pipeline->_device != computePassDevice(pass)
+      || pipeline->_api != computePassApi(pass)) {
+    computeValidationError(pass,
+                           "GPUBindComputePipeline skipped: device mismatch");
     return;
   }
 
-  if (!(api = gpu_computePassApi(pass))
+  if (!(api = computePassApi(pass))
       || !api->compute.setComputePipelineState) {
     return;
   }
 
-  gpuFrameStatsRecordBindRequest(pass->_stats);
+  frameStatsRecordBindRequest(pass->_stats);
 
   if (pass->_pipeline == pipeline) {
     return;
@@ -620,7 +620,7 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
   state = pipeline->_state;
 
   api->compute.setComputePipelineState(pass, state);
-  gpuFrameStatsRecordBindEmission(pass->_stats);
+  frameStatsRecordBindEmission(pass->_stats);
 
   pass->_hasPipeline           = true;
   pass->_executionGraph        = false;
@@ -642,8 +642,8 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
                     GPUBindGroup          *bindGroup,
                     uint32_t               dynamicOffsetCount,
                     const uint32_t        *pDynamicOffsets) {
-  GPUBindComputeContext ctx;
-  GPUApi               *api;
+  BindComputeContext    ctx;
+  Api                  *api;
 
   if (!pass || pass->_ended || !bindGroup
       || groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS) {
@@ -651,34 +651,34 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
   }
 
 #if GPU_BUILD_WITH_VALIDATION
-  if (gpuBindGroupGetDevice(bindGroup) != gpu_computePassDevice(pass)
-      || !gpuPipelineLayoutAcceptsBindGroup(pass->_pipelineLayout,
-                                            groupIndex,
-                                            bindGroup)) {
+  if (bindGroupGetDevice(bindGroup) != computePassDevice(pass)
+      || !pipelineLayoutAcceptsBindGroup(pass->_pipelineLayout,
+                                         groupIndex,
+                                         bindGroup)) {
     return;
   }
 #endif
 
-  gpuFrameStatsRecordBindRequest(pass->_stats);
+  frameStatsRecordBindRequest(pass->_stats);
 
-  if (gpuBindGroupShadowMatches(pass->_boundGroups[groupIndex],
-                                pass->_boundDynamicOffsetCounts[groupIndex],
-                                pass->_boundDynamicOffsets[groupIndex],
-                                bindGroup,
-                                dynamicOffsetCount,
-                                pDynamicOffsets)) {
+  if (bindGroupShadowMatches(pass->_boundGroups[groupIndex],
+                             pass->_boundDynamicOffsetCounts[groupIndex],
+                             pass->_boundDynamicOffsets[groupIndex],
+                             bindGroup,
+                             dynamicOffsetCount,
+                             pDynamicOffsets)) {
     return;
   }
 
-  api = gpu_computePassApi(pass);
+  api = computePassApi(pass);
 
   if (api && api->descriptor.bindComputeGroup) {
 #if GPU_BUILD_WITH_VALIDATION
-    if (!gpuValidateBindGroupDynamicOffsets(pass->_pipelineLayout,
-                                            groupIndex,
-                                            bindGroup,
-                                            dynamicOffsetCount,
-                                            pDynamicOffsets)) {
+    if (!validateBindGroupDynamicOffsets(pass->_pipelineLayout,
+                                         groupIndex,
+                                         bindGroup,
+                                         dynamicOffsetCount,
+                                         pDynamicOffsets)) {
       return;
     }
 #endif
@@ -690,15 +690,15 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
                                          dynamicOffsetCount,
                                          pDynamicOffsets)) {
       if (pass->_boundGroups[groupIndex] != bindGroup) {
-        pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(bindGroup);
+        pass->_boundGroupLayouts[groupIndex] = bindGroupGetLayout(bindGroup);
       }
 
       pass->_boundGroups[groupIndex] = bindGroup;
-      gpuStoreBindGroupShadow(&pass->_boundDynamicOffsetCounts[groupIndex],
-                              pass->_boundDynamicOffsets[groupIndex],
-                              dynamicOffsetCount,
-                              pDynamicOffsets);
-      gpuFrameStatsRecordBindEmission(pass->_stats);
+      storeBindGroupShadow(&pass->_boundDynamicOffsetCounts[groupIndex],
+                           pass->_boundDynamicOffsets[groupIndex],
+                           dynamicOffsetCount,
+                           pDynamicOffsets);
+      frameStatsRecordBindEmission(pass->_stats);
     }
 
     return;
@@ -706,23 +706,23 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
 
   ctx.pass = pass;
 
-  if (gpuForEachBindGroupBindingWithDynamicOffsets(pass->_pipelineLayout,
-                                                   groupIndex,
-                                                   bindGroup,
-                                                   dynamicOffsetCount,
-                                                   pDynamicOffsets,
-                                                   gpuBindComputeBinding,
-                                                   &ctx)) {
+  if (forEachBindGroupBindingWithDynamicOffsets(pass->_pipelineLayout,
+                                                groupIndex,
+                                                bindGroup,
+                                                dynamicOffsetCount,
+                                                pDynamicOffsets,
+                                                bindComputeBinding,
+                                                &ctx)) {
     if (pass->_boundGroups[groupIndex] != bindGroup) {
-      pass->_boundGroupLayouts[groupIndex] = gpuBindGroupGetLayout(bindGroup);
+      pass->_boundGroupLayouts[groupIndex] = bindGroupGetLayout(bindGroup);
     }
 
     pass->_boundGroups[groupIndex] = bindGroup;
-    gpuStoreBindGroupShadow(&pass->_boundDynamicOffsetCounts[groupIndex],
-                            pass->_boundDynamicOffsets[groupIndex],
-                            dynamicOffsetCount,
-                            pDynamicOffsets);
-    gpuFrameStatsRecordBindEmission(pass->_stats);
+    storeBindGroupShadow(&pass->_boundDynamicOffsetCounts[groupIndex],
+                         pass->_boundDynamicOffsets[groupIndex],
+                         dynamicOffsetCount,
+                         pDynamicOffsets);
+    frameStatsRecordBindEmission(pass->_stats);
   }
 }
 
@@ -732,7 +732,7 @@ GPUSetComputePushConstants(GPUComputePassEncoder *pass,
                            uint32_t               offset,
                            uint32_t               sizeBytes,
                            const void            *data) {
-  GPUApi *api;
+  Api    *api;
 
   if (!pass || pass->_ended || !pass->_hasPipeline
       || pass->_pushConstantSizeBytes == 0u
@@ -740,10 +740,10 @@ GPUSetComputePushConstants(GPUComputePassEncoder *pass,
     return;
   }
 
-  if (!gpu_validPushConstantRange(pass->_pushConstantSizeBytes,
-                                  offset,
-                                  sizeBytes,
-                                  data)) {
+  if (!validPushConstantRange(pass->_pushConstantSizeBytes,
+                              offset,
+                              sizeBytes,
+                              data)) {
     return;
   }
 
@@ -751,14 +751,14 @@ GPUSetComputePushConstants(GPUComputePassEncoder *pass,
     return;
   }
 
-  gpuFrameStatsRecordStateRequest(pass->_stats);
+  frameStatsRecordStateRequest(pass->_stats);
 
   if (pass->_pushConstantsEmitted
       && memcmp(pass->_pushConstants + offset, data, sizeBytes) == 0) {
     return;
   }
 
-  if (!(api = gpu_computePassApi(pass)) || !api->compute.pushConstants) {
+  if (!(api = computePassApi(pass)) || !api->compute.pushConstants) {
     return;
   }
 
@@ -767,7 +767,7 @@ GPUSetComputePushConstants(GPUComputePassEncoder *pass,
                              pass->_pushConstants,
                              pass->_pushConstantSizeBytes);
   pass->_pushConstantsEmitted = true;
-  gpuFrameStatsRecordStateEmission(pass->_stats);
+  frameStatsRecordStateEmission(pass->_stats);
 }
 
 GPU_EXPORT
@@ -776,28 +776,28 @@ GPUDispatch(GPUComputePassEncoder *pass,
             uint32_t               x,
             uint32_t               y,
             uint32_t               z) {
-  GPUApi *api;
+  Api    *api;
 
   if (!pass || pass->_ended) {
     return;
   }
 
   if (!pass->_hasPipeline || pass->_executionGraph) {
-    gpu_computeValidationError(pass, "GPUDispatch skipped: no compute pipeline bound");
+    computeValidationError(pass, "GPUDispatch skipped: no compute pipeline bound");
     return;
   }
 
-  if (!gpu_computeBindingsComplete(pass)) {
-    gpu_computeValidationError(pass, "GPUDispatch skipped: missing compute bind group");
+  if (!computeBindingsComplete(pass)) {
+    computeValidationError(pass, "GPUDispatch skipped: missing compute bind group");
     return;
   }
 
   if (x == 0 || y == 0 || z == 0) {
-    gpu_computeValidationError(pass, "GPUDispatch skipped: zero dispatch size");
+    computeValidationError(pass, "GPUDispatch skipped: zero dispatch size");
     return;
   }
 
-  if (!(api = gpu_computePassApi(pass)) || !api->compute.dispatch) {
+  if (!(api = computePassApi(pass)) || !api->compute.dispatch) {
     return;
   }
 
@@ -809,30 +809,30 @@ void
 GPUDispatchIndirect(GPUComputePassEncoder *pass,
                     GPUBuffer             *argsBuffer,
                     uint64_t               argsOffset) {
-  GPUApi *api;
+  Api    *api;
 
   if (!pass || pass->_ended) {
     return;
   }
 
   if (!pass->_hasPipeline || pass->_executionGraph) {
-    gpu_computeValidationError(pass, "GPUDispatchIndirect skipped: no compute pipeline bound");
+    computeValidationError(pass, "GPUDispatchIndirect skipped: no compute pipeline bound");
     return;
   }
 
-  if (!gpu_computeBindingsComplete(pass)) {
-    gpu_computeValidationError(pass, "GPUDispatchIndirect skipped: missing compute bind group");
+  if (!computeBindingsComplete(pass)) {
+    computeValidationError(pass, "GPUDispatchIndirect skipped: missing compute bind group");
     return;
   }
 
-  if (!gpuBufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT)
+  if (!bufferHasUsage(argsBuffer, GPU_BUFFER_USAGE_INDIRECT)
       || (argsOffset & 3u) != 0u
-      || !gpuBufferRangeValid(argsBuffer, argsOffset, 12u)) {
-    gpu_computeValidationError(pass, "GPUDispatchIndirect skipped: invalid indirect buffer");
+      || !bufferRangeValid(argsBuffer, argsOffset, 12u)) {
+    computeValidationError(pass, "GPUDispatchIndirect skipped: invalid indirect buffer");
     return;
   }
 
-  if (!(api = gpu_computePassApi(pass)) || !api->compute.dispatchIndirect) {
+  if (!(api = computePassApi(pass)) || !api->compute.dispatchIndirect) {
     return;
   }
 
@@ -846,7 +846,7 @@ GPUMultiDispatchIndirect(GPUComputePassEncoder *pass,
                          uint64_t               argsOffset,
                          uint32_t               dispatchCount,
                          uint32_t               strideBytes) {
-  GPUApi  *api;
+  Api     *api;
   uint32_t i;
 
   if (!pass || pass->_ended) {
@@ -854,28 +854,28 @@ GPUMultiDispatchIndirect(GPUComputePassEncoder *pass,
   }
 
   if (!pass->_hasPipeline || pass->_executionGraph) {
-    gpu_computeValidationError(pass,
-                               "GPUMultiDispatchIndirect skipped: no compute pipeline bound");
+    computeValidationError(pass,
+                           "GPUMultiDispatchIndirect skipped: no compute pipeline bound");
     return;
   }
 
-  if (!gpu_computeBindingsComplete(pass)) {
-    gpu_computeValidationError(pass,
-                               "GPUMultiDispatchIndirect skipped: missing compute bind group");
+  if (!computeBindingsComplete(pass)) {
+    computeValidationError(pass,
+                           "GPUMultiDispatchIndirect skipped: missing compute bind group");
     return;
   }
 
-  if (!gpu_validIndirectBatch(argsBuffer,
-                              argsOffset,
-                              dispatchCount,
-                              strideBytes,
-                              12u)) {
-    gpu_computeValidationError(pass,
-                               "GPUMultiDispatchIndirect skipped: invalid indirect batch");
+  if (!validIndirectBatch(argsBuffer,
+                          argsOffset,
+                          dispatchCount,
+                          strideBytes,
+                          12u)) {
+    computeValidationError(pass,
+                           "GPUMultiDispatchIndirect skipped: invalid indirect batch");
     return;
   }
 
-  if (!(api = gpu_computePassApi(pass))) {
+  if (!(api = computePassApi(pass))) {
     return;
   }
 
@@ -902,7 +902,7 @@ GPUMultiDispatchIndirect(GPUComputePassEncoder *pass,
 GPU_EXPORT
 void
 GPUEndComputePass(GPUComputePassEncoder *pass) {
-  GPUApi *api;
+  Api    *api;
 
   if (!pass || pass->_ended) {
     return;
@@ -914,7 +914,7 @@ GPUEndComputePass(GPUComputePassEncoder *pass) {
     pass->_cmdb->_activeEncoder = false;
   }
 
-  if (!(api = gpu_computePassApi(pass)) || !api->compute.endEncoding) {
+  if (!(api = computePassApi(pass)) || !api->compute.endEncoding) {
     return;
   }
 
@@ -934,7 +934,7 @@ GPUCreateComputePipeline(GPUDevice                          *device,
                          const GPUComputePipelineCreateInfo *info,
                          GPUComputePipeline                **outPipeline) {
   GPUComputePipelineCreateInfo snapshot;
-  GPUPreparedConstants         prepared;
+  PreparedConstants            prepared;
   GPUResult                    result;
 
   if (!outPipeline) {
@@ -947,7 +947,7 @@ GPUCreateComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  result = gpuPrepareConstants(info->library, info->chain.pNext, true, &prepared);
+  result = prepareConstants(info->library, info->chain.pNext, true, &prepared);
 
   if (result != GPU_OK) {
     return result;
@@ -955,7 +955,7 @@ GPUCreateComputePipeline(GPUDevice                          *device,
 
   snapshot             = *info;
   snapshot.chain.pNext = prepared.chain;
-  result               = gpu_createComputePipeline(device, &snapshot, outPipeline);
+  result               = createComputePipeline(device, &snapshot, outPipeline);
   free(prepared.values);
 
   return result;

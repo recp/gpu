@@ -19,9 +19,9 @@
 
 static void
 webgpu_recycleCommand(GPUCommandBuffer *cmdb) {
-  GPUCommandWebGPU *command;
+  CommandWebGPU    *command;
 
-  command = gpu_webgpuCommand(cmdb);
+  command = webgpuCommand(cmdb);
 
   if (!command) {
     return;
@@ -35,7 +35,7 @@ webgpu_commandDone(WGPUQueueWorkDoneStatus status,
                    WGPUStringView          message,
                    void                   *userData,
                    void                   *unused) {
-  GPUCommandWebGPU *command;
+  CommandWebGPU    *command;
   WGPUCommandBuffer submitted;
 
   GPU__UNUSED(status);
@@ -50,16 +50,16 @@ webgpu_commandDone(WGPUQueueWorkDoneStatus status,
     wgpuCommandBufferRelease(submitted);
   }
 
-  gpuFinishCommandBuffer(&command->command, webgpu_recycleCommand);
+  finishCommandBuffer(&command->command, webgpu_recycleCommand);
 }
 
 static GPUQueue*
 webgpu_getCommandQueue(GPUDevice       *device,
                        GPUQueueFlagBits bits,
                        uint32_t         index) {
-  GPUDeviceWebGPU *native;
+  DeviceWebGPU    *native;
 
-  native = gpu_webgpuDevice(device);
+  native = webgpuDevice(device);
 
   if (!native || index != 0u || bits == 0u
       || (bits & ~native->queueHandle.bits) != 0u) {
@@ -87,11 +87,11 @@ webgpu_newCommandBuffer(GPUQueue                    *queue,
                         void                        *sender,
                         GPUCommandBufferCompletionFn onComplete) {
   WGPUCommandEncoderDescriptor descriptor = WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
-  GPUDeviceWebGPU             *device;
-  GPUCommandWebGPU            *command;
+  DeviceWebGPU                *device;
+  CommandWebGPU               *command;
   uint32_t                     i;
 
-  device = gpu_webgpuDevice(queue ? queue->_device : NULL);
+  device = webgpuDevice(queue ? queue->_device : NULL);
 
   if (!device) {
     return NULL;
@@ -125,7 +125,7 @@ webgpu_newCommandBuffer(GPUQueue                    *queue,
   command->command._onComplete       = onComplete;
   command->present                   = NULL;
   command->pushConstantCursor        = 0u;
-  descriptor.label                   = gpu_webgpuString(label);
+  descriptor.label                   = webgpuString(label);
 
   if (!(command->encoder = wgpuDeviceCreateCommandEncoder(device->device,
                                                           &descriptor))) {
@@ -146,9 +146,9 @@ webgpu_commandBufferOnComplete(GPUCommandBuffer            *cmdb,
 
 static GPUResult
 webgpu_discard(GPUCommandBuffer *cmdb) {
-  GPUCommandWebGPU *command;
+  CommandWebGPU    *command;
 
-  command = gpu_webgpuCommand(cmdb);
+  command = webgpuCommand(cmdb);
 
   if (!command) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -160,7 +160,7 @@ webgpu_discard(GPUCommandBuffer *cmdb) {
   }
 
   command->present = NULL;
-  gpuDiscardCommandBufferState(cmdb, webgpu_recycleCommand);
+  discardCommandBufferState(cmdb, webgpu_recycleCommand);
 
   return GPU_OK;
 }
@@ -168,7 +168,7 @@ webgpu_discard(GPUCommandBuffer *cmdb) {
 static void
 webgpu_abortCommandBuffers(uint32_t                 count,
                            GPUCommandBuffer *const *buffers) {
-  GPUCommandWebGPU *command;
+  CommandWebGPU    *command;
   uint32_t          i;
 
   if (!buffers) {
@@ -176,7 +176,7 @@ webgpu_abortCommandBuffers(uint32_t                 count,
   }
 
   for (i = 0u; i < count; i++) {
-    command = gpu_webgpuCommand(buffers[i]);
+    command = webgpuCommand(buffers[i]);
 
     if (command) {
       if (command->encoder) {
@@ -187,7 +187,7 @@ webgpu_abortCommandBuffers(uint32_t                 count,
       command->present = NULL;
     }
 
-    gpuFinishCommandBuffer(buffers[i], webgpu_recycleCommand);
+    finishCommandBuffer(buffers[i], webgpu_recycleCommand);
   }
 }
 
@@ -197,9 +197,9 @@ webgpu_submitCommandBuffers(GPUQueue                *__restrict queue,
                             GPUCommandBuffer *const *__restrict buffers) {
   WGPUCommandBufferDescriptor   finishInfo   = WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT;
   WGPUQueueWorkDoneCallbackInfo callbackInfo = WGPU_QUEUE_WORK_DONE_CALLBACK_INFO_INIT;
-  GPUCommandWebGPU             *commands[GPU_WEBGPU_COMMAND_SLOT_COUNT];
+  CommandWebGPU                *commands[GPU_WEBGPU_COMMAND_SLOT_COUNT];
   WGPUCommandBuffer             submitted[GPU_WEBGPU_COMMAND_SLOT_COUNT];
-  GPUDeviceWebGPU              *device;
+  DeviceWebGPU                 *device;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
   WGPUSubmissionIndex           submission;
 #endif
@@ -210,7 +210,7 @@ webgpu_submitCommandBuffers(GPUQueue                *__restrict queue,
   uint32_t                      presentIndex;
   uint32_t                      callbackIndex;
 
-  device = gpu_webgpuDevice(queue ? queue->_device : NULL);
+  device = webgpuDevice(queue ? queue->_device : NULL);
 
   if (!device || !buffers || count == 0u
       || count > GPU_WEBGPU_COMMAND_SLOT_COUNT) {
@@ -221,10 +221,10 @@ webgpu_submitCommandBuffers(GPUQueue                *__restrict queue,
   memset(submitted, 0, sizeof(submitted));
 
   for (validateIndex = 0u; validateIndex < count; validateIndex++) {
-    commands[validateIndex] = gpu_webgpuCommand(buffers[validateIndex]);
+    commands[validateIndex] = webgpuCommand(buffers[validateIndex]);
 
     if (!commands[validateIndex] || !commands[validateIndex]->encoder
-        || gpuCommandBufferDevice(buffers[validateIndex]) != queue->_device) {
+        || commandBufferDevice(buffers[validateIndex]) != queue->_device) {
       webgpu_abortCommandBuffers(count, buffers);
       return GPU_ERROR_INVALID_ARGUMENT;
     }
@@ -284,7 +284,7 @@ webgpu_submitCommandBuffers(GPUQueue                *__restrict queue,
     wgpuQueueOnSubmittedWorkDone(device->queue, callbackInfo);
   }
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  gpu_webgpuQueueCompletion(device, submission);
+  webgpuQueueCompletion(device, submission);
 #endif
 
   return GPU_OK;
@@ -305,10 +305,10 @@ webgpu_commit(GPUCommandBuffer *cmdb) {
 
 static bool
 webgpu_presentDrawable(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  GPUCommandWebGPU   *command;
-  GPUSwapchainWebGPU *swapchain;
+  CommandWebGPU      *command;
+  SwapchainWebGPU    *swapchain;
 
-  command   = gpu_webgpuCommand(cmdb);
+  command   = webgpuCommand(cmdb);
   swapchain = frame ? frame->_priv : NULL;
 
   if (!command || !swapchain || !swapchain->acquired || command->present) {
@@ -321,7 +321,7 @@ webgpu_presentDrawable(GPUCommandBuffer *cmdb, GPUFrame *frame) {
 }
 
 void
-webgpu_initCommandQueue(GPUApiCommandQueue *api) {
+webgpu_initCommandQueue(ApiCommandQueue    *api) {
   api->getCommandQueue         = webgpu_getCommandQueue;
   api->getTimestampPeriod      = webgpu_getTimestampPeriod;
   api->newCommandBuffer        = webgpu_newCommandBuffer;
@@ -332,6 +332,6 @@ webgpu_initCommandQueue(GPUApiCommandQueue *api) {
 }
 
 void
-webgpu_initCommandBuffer(GPUApiCommandBuffer *api) {
+webgpu_initCommandBuffer(ApiCommandBuffer    *api) {
   api->presentDrawable = webgpu_presentDrawable;
 }

@@ -54,7 +54,7 @@ capture_binary(GPUDevice *device, const void *data, uint64_t size) {
 
 static int
 check_masks(const GPUShaderLibraryCreateInfo *info, uint32_t domain) {
-  GPUApi    api    = {0};
+  Api       api    = {0};
   GPUDevice device = {0};
   uint32_t  round;
   uint32_t  mask;
@@ -109,7 +109,7 @@ capture_source(GPUDevice *device, const char *source, uint64_t size, uint32_t fl
 
 static int
 check_metal_masks(const GPUShaderLibraryCreateInfo *info, uint32_t domain) {
-  GPUApi    api    = {0};
+  Api       api    = {0};
   GPUDevice device = {0};
   uint32_t  round;
   uint32_t  mask;

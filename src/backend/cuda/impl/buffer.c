@@ -20,8 +20,8 @@ static GPUResult
 cuda_createBuffer(GPUDevice                 *__restrict device,
                   const GPUBufferCreateInfo *__restrict info,
                   GPUBuffer                **__restrict outBuffer) {
-  GPUDeviceCuda      *deviceNative;
-  GPUBufferCuda      *native;
+  DeviceCuda         *deviceNative;
+  BufferCuda         *native;
   GPUBuffer          *buffer;
   GPUBufferUsageFlags allowedUsage;
   CUresult            result;
@@ -83,8 +83,8 @@ cuda_createBuffer(GPUDevice                 *__restrict device,
 
 static void
 cuda_destroyBuffer(GPUBuffer *__restrict buffer) {
-  GPUBufferCuda *native;
-  GPUDeviceCuda *device;
+  BufferCuda    *native;
+  DeviceCuda    *device;
 
   native = buffer ? buffer->_priv : NULL;
   device = buffer ? cuda_device(buffer->device) : NULL;
@@ -110,8 +110,8 @@ cuda_writeBuffer(GPUQueue   *__restrict queue,
                  uint64_t               dstOffset,
                  const void *__restrict data,
                  uint64_t               sizeBytes) {
-  GPUBufferCuda *native;
-  GPUQueueCuda  *queueNative;
+  BufferCuda    *native;
+  QueueCuda     *queueNative;
   CUresult       result;
 
   native      = buffer ? buffer->_priv : NULL;
@@ -154,8 +154,8 @@ cuda_readBuffer(GPUQueue  *__restrict queue,
                 uint64_t              srcOffset,
                 void      *__restrict outData,
                 uint64_t              sizeBytes) {
-  GPUBufferCuda *native;
-  GPUQueueCuda  *queueNative;
+  BufferCuda    *native;
+  QueueCuda     *queueNative;
   CUresult       result;
 
   native      = buffer ? buffer->_priv : NULL;
@@ -193,7 +193,7 @@ cuda_readBuffer(GPUQueue  *__restrict queue,
 }
 
 void
-cuda_initBuffer(GPUApiBuffer *api) {
+cuda_initBuffer(ApiBuffer    *api) {
   api->create  = cuda_createBuffer;
   api->destroy = cuda_destroyBuffer;
   api->write   = cuda_writeBuffer;

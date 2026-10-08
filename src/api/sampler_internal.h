@@ -28,13 +28,13 @@ struct GPUSampler {
 };
 
 static inline const GPUSamplerLODClamp*
-gpuSamplerLODClamp(const GPUSamplerCreateInfo *info) {
+samplerLODClamp(const GPUSamplerCreateInfo *info) {
   return info ? (const GPUSamplerLODClamp *)info->chain.pNext : NULL;
 }
 
-static inline GPUApi*
-gpuSamplerApi(const GPUSampler *sampler) {
-  return sampler ? gpuDeviceApi(sampler->device) : NULL;
+static inline Api*
+samplerApi(const GPUSampler *sampler) {
+  return sampler ? deviceApi(sampler->device) : NULL;
 }
 
 #endif /* gpu_sampler_internal_h */

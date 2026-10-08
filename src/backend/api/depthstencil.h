@@ -22,9 +22,9 @@ extern "C" {
 
 #include <gpu/common.h>
 
-typedef struct GPUApiDepthStencil {
+typedef struct ApiDepthStencil {
   void *reserved;
-} GPUApiDepthStencil;
+} ApiDepthStencil;
 
 #ifdef __cplusplus
 }

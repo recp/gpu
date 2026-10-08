@@ -27,7 +27,7 @@
 
 GPU_HIDE
 void*
-gpuCreateMetalLayer(void *nativeHandle, GPUSurfaceType type, float scale) {
+createMetalLayer(void *nativeHandle, GPUSurfaceType type, float scale) {
   CGRect        bounds;
   CAMetalLayer *layer;
   CALayer      *rootLayer;
@@ -81,10 +81,10 @@ gpuCreateMetalLayer(void *nativeHandle, GPUSurfaceType type, float scale) {
 
 GPU_HIDE
 void
-gpuResizeMetalLayer(void    *metalLayer,
-                    uint32_t width,
-                    uint32_t height,
-                    float    scale) {
+resizeMetalLayer(void    *metalLayer,
+                 uint32_t width,
+                 uint32_t height,
+                 float    scale) {
   CAMetalLayer *layer;
 
   layer = (CAMetalLayer *)metalLayer;
@@ -101,7 +101,7 @@ gpuResizeMetalLayer(void    *metalLayer,
 
 GPU_HIDE
 void
-gpuDestroyMetalLayer(void *metalLayer) {
+destroyMetalLayer(void *metalLayer) {
   CAMetalLayer *layer;
 
   layer = (CAMetalLayer *)metalLayer;

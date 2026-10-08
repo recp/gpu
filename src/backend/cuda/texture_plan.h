@@ -20,31 +20,31 @@
 #include "../../api/texture_internal.h"
 #include "format.h"
 
-typedef struct GPUCudaTexturePlan {
+typedef struct CudaTexturePlan {
   CUDA_ARRAY3D_DESCRIPTOR desc;
   uint32_t                mipLevelCount;
   bool                    mipmapped;
-} GPUCudaTexturePlan;
+} CudaTexturePlan;
 
-typedef struct GPUCudaTextureViewPlan {
+typedef struct CudaTextureViewPlan {
   CUDA_RESOURCE_VIEW_DESC desc;
   uint32_t                mipLevel;
   bool                    hasResourceView;
   bool                    singleLevel;
   bool                    surfaceCompatible;
-} GPUCudaTextureViewPlan;
+} CudaTextureViewPlan;
 
 GPU_HIDE
 bool
 cuda_texturePlan(const GPUTextureCreateInfo *info,
-                 const GPUCudaFormatInfo    *format,
-                 GPUCudaTexturePlan         *outPlan);
+                 const CudaFormatInfo       *format,
+                 CudaTexturePlan            *outPlan);
 
 GPU_HIDE
 bool
 cuda_textureViewPlan(const GPUTexture               *texture,
                      const GPUTextureViewCreateInfo *info,
-                     GPUCudaTextureViewPlan         *outPlan);
+                     CudaTextureViewPlan            *outPlan);
 
 GPU_HIDE
 bool

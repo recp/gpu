@@ -72,12 +72,12 @@ webgpu_createBuffer(GPUDevice                 *__restrict device,
                     const GPUBufferCreateInfo *__restrict info,
                     GPUBuffer                **__restrict outBuffer) {
   WGPUBufferDescriptor descriptor = WGPU_BUFFER_DESCRIPTOR_INIT;
-  GPUDeviceWebGPU     *native;
+  DeviceWebGPU        *native;
   GPUBuffer           *buffer;
   WGPUBufferUsage      usage;
   uint64_t             nativeSize;
 
-  native = gpu_webgpuDevice(device);
+  native = webgpuDevice(device);
 
   if (!native || !native->device || !info || !outBuffer) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -110,7 +110,7 @@ webgpu_createBuffer(GPUDevice                 *__restrict device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  descriptor.label = gpu_webgpuString(info->label);
+  descriptor.label = webgpuString(info->label);
   descriptor.usage = usage;
   descriptor.size  = nativeSize;
 
@@ -144,12 +144,12 @@ webgpu_writeBuffer(GPUQueue   *__restrict queue,
                    uint64_t               dstOffset,
                    const void *__restrict data,
                    uint64_t               sizeBytes) {
-  GPUDeviceWebGPU *native;
+  DeviceWebGPU    *native;
   uint64_t         alignedSize;
   uint32_t         tail;
   uint32_t         tailSize;
 
-  native = gpu_webgpuDevice(gpuCommandQueueDevice(queue));
+  native = webgpuDevice(commandQueueDevice(queue));
 
   if (!native || !native->queue || !buffer || !buffer->_priv || !data
       || sizeBytes > SIZE_MAX) {
@@ -204,12 +204,12 @@ webgpu_readBuffer(GPUQueue  *__restrict queue,
 #endif
   WebGPUBufferMapRequest       mapRequest = {0};
   GPUDevice                   *device;
-  GPUDeviceWebGPU             *native;
+  DeviceWebGPU                *native;
   WGPUCommandEncoder           encoder;
   WGPUCommandBuffer            command;
   WGPUBuffer                   staging;
 #if !GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  GPUInstanceWebGPU           *instance;
+  InstanceWebGPU              *instance;
 #endif
   const uint8_t               *mapped;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
@@ -224,15 +224,15 @@ webgpu_readBuffer(GPUQueue  *__restrict queue,
   GPUResult                    result;
   int                          mapStatus;
 
-  device = gpuCommandQueueDevice(queue);
-  native = gpu_webgpuDevice(device);
+  device = commandQueueDevice(queue);
+  native = webgpuDevice(device);
 
   if (!native || !native->device || !native->queue
       || !buffer || !buffer->_priv || !outData || sizeBytes > SIZE_MAX) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 #if GPU_WEBGPU_PROVIDER_DAWN
-  instance = gpu_webgpuInstance(device->inst);
+  instance = webgpuInstance(device->inst);
 
   if (!instance || !instance->instance || !instance->timedWaitAny) {
     return GPU_ERROR_UNSUPPORTED;
@@ -247,7 +247,7 @@ webgpu_readBuffer(GPUQueue  *__restrict queue,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  bufferInfo.label = gpu_webgpuString("gpu-readback");
+  bufferInfo.label = webgpuString("gpu-readback");
   bufferInfo.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
   bufferInfo.size  = copySize;
 
@@ -350,7 +350,7 @@ webgpu_bufferContents(GPUBuffer *__restrict buffer) {
 }
 
 void
-webgpu_initBuffer(GPUApiBuffer *api) {
+webgpu_initBuffer(ApiBuffer    *api) {
   api->create   = webgpu_createBuffer;
   api->destroy  = webgpu_destroyBuffer;
   api->write    = webgpu_writeBuffer;

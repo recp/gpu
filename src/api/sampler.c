@@ -21,7 +21,7 @@
 #include <math.h>
 
 static int
-gpu_samplerDescIsValid(const GPUSamplerDesc *desc) {
+samplerDescIsValid(const GPUSamplerDesc *desc) {
   if (!desc) {
     return 0;
   }
@@ -53,7 +53,7 @@ GPUCreateSampler(GPUDevice                  *__restrict device,
                  bool                                   staticIfSupported,
                  GPUSampler                **__restrict outSampler) {
   const GPUSamplerLODClamp *lod;
-  GPUApi                  *api;
+  Api                     *api;
   GPUResult                result;
 
   if (!outSampler) {
@@ -75,11 +75,11 @@ GPUCreateSampler(GPUDevice                  *__restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!gpu_samplerDescIsValid(&info->desc)) {
+  if (!samplerDescIsValid(&info->desc)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  lod = gpuSamplerLODClamp(info);
+  lod = samplerLODClamp(info);
 
   if (lod && (lod->chain.sType != GPU_STRUCTURE_TYPE_SAMPLER_LOD_CLAMP
               || lod->chain.structSize < sizeof(*lod)
@@ -89,7 +89,7 @@ GPUCreateSampler(GPUDevice                  *__restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuDeviceApi(device)))
+  if (!(api = deviceApi(device)))
     return GPU_ERROR_BACKEND_FAILURE;
 
   if (!api->sampler.createSampler) {
@@ -119,13 +119,13 @@ GPUCreateSampler(GPUDevice                  *__restrict device,
 GPU_EXPORT
 void
 GPUDestroySampler(GPUSampler *__restrict sampler) {
-  GPUApi *api;
+  Api    *api;
 
   if (!sampler) {
     return;
   }
 
-  if (!(api = gpuSamplerApi(sampler))) {
+  if (!(api = samplerApi(sampler))) {
     return;
   }
 

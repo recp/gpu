@@ -20,7 +20,7 @@
 #include <math.h>
 
 static GPUConstantType
-gpu_constantType(uint32_t kind) {
+constantType(uint32_t kind) {
   switch (kind) {
     case USL_RUNTIME_TYPE_BOOL: return GPU_CONSTANT_BOOL;
     case USL_RUNTIME_TYPE_I32:  return GPU_CONSTANT_I32;
@@ -34,7 +34,7 @@ gpu_constantType(uint32_t kind) {
 }
 
 static int
-gpu_constantCompare(const void *left, const void *right) {
+constantCompare(const void *left, const void *right) {
   const GPUConstant *a;
   const GPUConstant *b;
 
@@ -46,7 +46,7 @@ gpu_constantCompare(const void *left, const void *right) {
 
 GPU_HIDE
 const GPUPipelineConstants*
-gpuPipelineConstants(const GPUChainedStruct *chain) {
+pipelineConstants(const GPUChainedStruct *chain) {
   uint32_t count;
 
   for (count = 0u; chain && count < 3u; count++, chain = chain->pNext) {
@@ -60,7 +60,7 @@ gpuPipelineConstants(const GPUChainedStruct *chain) {
 
 GPU_HIDE
 const GPUMeshPipelineEXT*
-gpuPipelineMesh(const GPUChainedStruct *chain) {
+pipelineMesh(const GPUChainedStruct *chain) {
   uint32_t count;
 
   for (count = 0u; chain && count < 3u; count++, chain = chain->pNext) {
@@ -74,10 +74,10 @@ gpuPipelineMesh(const GPUChainedStruct *chain) {
 
 GPU_HIDE
 GPUResult
-gpuPrepareConstants(const GPUShaderLibrary *library,
-                    const GPUChainedStruct *chain,
-                    bool                    compute,
-                    GPUPreparedConstants   *out) {
+prepareConstants(const GPUShaderLibrary *library,
+                 const GPUChainedStruct *chain,
+                 bool                    compute,
+                 PreparedConstants      *out) {
   const GPUPipelineConstants *constants;
   const GPUConstant          *value;
   GPUBackend                  backend;
@@ -188,7 +188,7 @@ gpuPrepareConstants(const GPUShaderLibrary *library,
       }
     }
 
-    if (j == library->_constantCount || gpu_constantType(library->_constants[j].type.kind) != value->type) {
+    if (j == library->_constantCount || constantType(library->_constants[j].type.kind) != value->type) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
 
@@ -215,7 +215,7 @@ gpuPrepareConstants(const GPUShaderLibrary *library,
     }
   }
 
-  qsort(out->values, constants->constantCount, sizeof(*out->values), gpu_constantCompare);
+  qsort(out->values, constants->constantCount, sizeof(*out->values), constantCompare);
 
   for (i = 1u; i < constants->constantCount; i++) {
     if (out->values[i - 1u].id == out->values[i].id) {
@@ -234,12 +234,12 @@ gpuPrepareConstants(const GPUShaderLibrary *library,
 }
 
 GPU_HIDE
-GPUShaderFunction*
-gpuShaderVariant(GPUShaderLibrary           *library,
-                 const char                 *name,
-                 const GPUPipelineConstants *constants) {
+ShaderFunction*
+shaderVariant(GPUShaderLibrary           *library,
+              const char                 *name,
+              const GPUPipelineConstants *constants) {
   if (!constants || constants->constantCount == 0u) {
-    return gpuShaderFunction(library, name);
+    return shaderFunction(library, name);
   }
 
   if (!library || !name || !library->_api

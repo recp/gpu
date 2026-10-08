@@ -68,15 +68,15 @@ view_info(GPUTextureViewType viewType,
 
 static int
 validate_texture_plans(void) {
-  const GPUCudaFormatInfo format = {
+  const CudaFormatInfo    format = {
     CU_AD_FORMAT_FLOAT,
     GPU_CUDA_FORMAT_SAMPLED_BIT | GPU_CUDA_FORMAT_STORAGE_BIT,
     16u,
     4u
   };
-  GPUCudaFormatInfo       limitedFormat;
+  CudaFormatInfo          limitedFormat;
   GPUTextureCreateInfo    info;
-  GPUCudaTexturePlan      plan;
+  CudaTexturePlan         plan;
 
   info = texture_info(GPU_TEXTURE_DIMENSION_1D,
                       64u,
@@ -162,7 +162,7 @@ validate_texture_plans(void) {
                       GPU_TEXTURE_USAGE_SAMPLED);
   memset(&plan, 0xa5, sizeof(plan));
   CHECK(!cuda_texturePlan(&info, &format, &plan));
-  CHECK(memcmp(&plan, &(GPUCudaTexturePlan){0}, sizeof(plan)) == 0);
+  CHECK(memcmp(&plan, &(CudaTexturePlan){0}, sizeof(plan)) == 0);
 
   info = texture_info(GPU_TEXTURE_DIMENSION_2D,
                       64u,
@@ -183,7 +183,7 @@ validate_texture_plans(void) {
   info.usage          = GPU_TEXTURE_USAGE_STORAGE;
   CHECK(!cuda_texturePlan(&info, &limitedFormat, &plan));
 
-  limitedFormat = (GPUCudaFormatInfo){
+  limitedFormat = (CudaFormatInfo){
     CU_AD_FORMAT_UNSIGNED_INT32,
     GPU_CUDA_FORMAT_STORAGE_BIT,
     4u,
@@ -198,7 +198,7 @@ validate_texture_plans(void) {
   info.usage = GPU_TEXTURE_USAGE_SAMPLED;
   CHECK(!cuda_texturePlan(&info, &limitedFormat, &plan));
 
-  limitedFormat = (GPUCudaFormatInfo){
+  limitedFormat = (CudaFormatInfo){
     CU_AD_FORMAT_UNSIGNED_INT16,
     GPU_CUDA_FORMAT_SAMPLED_BIT | GPU_CUDA_FORMAT_FILTERABLE_BIT,
     2u,
@@ -216,7 +216,7 @@ static int
 validate_view_plans(void) {
   GPUTexture               texture = {0};
   GPUTextureViewCreateInfo info;
-  GPUCudaTextureViewPlan   plan;
+  CudaTextureViewPlan      plan;
 
   texture.format        = GPU_FORMAT_RGBA32_FLOAT;
   texture.dimension     = GPU_TEXTURE_DIMENSION_2D;

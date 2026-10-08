@@ -31,8 +31,8 @@ struct GPUSwapchain {
 };
 
 static inline void
-gpuSwapchainSetStatus(GPUSwapchain      *swapchain,
-                      GPUSwapchainStatus status) {
+swapchainSetStatus(GPUSwapchain      *swapchain,
+                   GPUSwapchainStatus status) {
   if (!swapchain) {
     return;
   }
@@ -46,7 +46,7 @@ gpuSwapchainSetStatus(GPUSwapchain      *swapchain,
 }
 
 static inline void
-gpuSwapchainResetStatus(GPUSwapchain *swapchain) {
+swapchainResetStatus(GPUSwapchain *swapchain) {
   if (swapchain) {
     swapchain->status = GPU_SWAPCHAIN_STATUS_READY;
   }

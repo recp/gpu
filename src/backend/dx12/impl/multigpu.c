@@ -24,10 +24,10 @@ enum {
 
 static GPUResult
 dx12_interopDevices(GPUDeviceInteropEXT *interop,
-                    GPUDeviceDX12      **outFirst,
-                    GPUDeviceDX12      **outSecond) {
-  GPUDeviceDX12 *first;
-  GPUDeviceDX12 *second;
+                    DeviceDX12         **outFirst,
+                    DeviceDX12         **outSecond) {
+  DeviceDX12    *first;
+  DeviceDX12    *second;
   GPUResult      result;
   bool           sameDevice;
 
@@ -36,7 +36,7 @@ dx12_interopDevices(GPUDeviceInteropEXT *interop,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (gpuDeviceApi(interop->firstDevice) != gpuDeviceApi(interop->secondDevice)) {
+  if (deviceApi(interop->firstDevice) != deviceApi(interop->secondDevice)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -75,8 +75,8 @@ dx12_nativeResult(HRESULT result) {
 }
 
 static GPUResult
-dx12_openSharedHandle(GPUDeviceDX12     *first,
-                      GPUDeviceDX12     *second,
+dx12_openSharedHandle(DeviceDX12        *first,
+                      DeviceDX12        *second,
                       ID3D12DeviceChild *object,
                       REFIID             interfaceId,
                       void             **outObject) {
@@ -138,8 +138,8 @@ dx12_sharedRequirements(GPUDeviceInteropEXT       *interop,
                         GPUMemoryRequirements     *outRequirements) {
   D3D12_RESOURCE_ALLOCATION_INFO firstInfo;
   D3D12_RESOURCE_ALLOCATION_INFO secondInfo;
-  GPUDeviceDX12                 *first;
-  GPUDeviceDX12                 *second;
+  DeviceDX12                    *first;
+  DeviceDX12                    *second;
   uint64_t                       compatibility;
   GPUResult                      result;
 
@@ -186,8 +186,8 @@ static GPUResult
 dx12_createDeviceInterop(GPUDevice           *firstDevice,
                          GPUDevice           *secondDevice,
                          GPUDeviceInteropEXT *interop) {
-  GPUDeviceDX12 *first;
-  GPUDeviceDX12 *second;
+  DeviceDX12    *first;
+  DeviceDX12    *second;
 
   if (!firstDevice || !secondDevice || !interop
       || interop->firstDevice != firstDevice
@@ -234,11 +234,11 @@ static GPUResult
 dx12_createExternalBuffer(GPUDevice                 *device,
                           const GPUBufferCreateInfo *info,
                           GPUBuffer                **outBuffer,
-                          GPUExternalMemoryExport   *outExport) {
+                          ExternalMemoryExport      *outExport) {
   D3D12_HEAP_PROPERTIES          heap = {0};
   D3D12_RESOURCE_DESC            desc = {0};
   D3D12_RESOURCE_ALLOCATION_INFO allocationInfo;
-  GPUDeviceDX12                 *native;
+  DeviceDX12                    *native;
   ID3D12Resource                *resource;
   HANDLE                         handle;
   GPUResult                      result;
@@ -332,12 +332,12 @@ static GPUResult
 dx12_createExternalTexture(GPUDevice                  *device,
                            const GPUTextureCreateInfo *info,
                            GPUTexture                **outTexture,
-                           GPUExternalMemoryExport    *outExport) {
+                           ExternalMemoryExport       *outExport) {
   D3D12_HEAP_PROPERTIES          heap       = {0};
   D3D12_RESOURCE_DESC            desc       = {0};
   D3D12_CLEAR_VALUE              clearValue = {0};
   D3D12_RESOURCE_ALLOCATION_INFO allocationInfo;
-  GPUDeviceDX12                 *native;
+  DeviceDX12                    *native;
   ID3D12Resource                *resource;
   HANDLE                         handle;
   D3D12_RESOURCE_STATES          initialState;
@@ -448,8 +448,8 @@ dx12_createSharedBuffer(GPUDeviceInteropEXT       *interop,
   GPUBufferCreateInfo   sharedInfo;
   D3D12_HEAP_PROPERTIES heap = {0};
   D3D12_RESOURCE_DESC   desc = {0};
-  GPUDeviceDX12        *first;
-  GPUDeviceDX12        *second;
+  DeviceDX12           *first;
+  DeviceDX12           *second;
   ID3D12Resource       *firstResource;
   ID3D12Resource       *secondResource;
   GPUResult             result;
@@ -543,8 +543,8 @@ dx12_sharedTextureDesc(GPUDeviceInteropEXT        *interop,
                        uint32_t                   *outSubresourceCount) {
   D3D12_RESOURCE_DESC   secondDesc  = {0};
   D3D12_CLEAR_VALUE     secondClear = {0};
-  GPUDeviceDX12        *first;
-  GPUDeviceDX12        *second;
+  DeviceDX12           *first;
+  DeviceDX12           *second;
   D3D12_RESOURCE_STATES initialState;
   D3D12_RESOURCE_STATES secondInitialState;
   uint32_t              secondMipCount;
@@ -653,8 +653,8 @@ dx12_createSharedTexture(GPUDeviceInteropEXT        *interop,
   D3D12_HEAP_PROPERTIES heap       = {0};
   D3D12_RESOURCE_DESC   desc       = {0};
   D3D12_CLEAR_VALUE     clearValue = {0};
-  GPUDeviceDX12        *first;
-  GPUDeviceDX12        *second;
+  DeviceDX12           *first;
+  DeviceDX12           *second;
   ID3D12Resource       *firstResource;
   ID3D12Resource       *secondResource;
   uint32_t              mipLevelCount;
@@ -777,8 +777,8 @@ dx12_createSharedSemaphore(GPUDeviceInteropEXT          *interop,
                            const GPUSemaphoreCreateInfo *info,
                            GPUSemaphore                 *firstSemaphore,
                            GPUSemaphore                 *secondSemaphore) {
-  GPUDeviceDX12 *first;
-  GPUDeviceDX12 *second;
+  DeviceDX12    *first;
+  DeviceDX12    *second;
   ID3D12Fence   *firstFence;
   ID3D12Fence   *secondFence;
   uint64_t       initialValue;
@@ -818,11 +818,11 @@ dx12_createSharedSemaphore(GPUDeviceInteropEXT          *interop,
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   if (info) {
     dx12_setSharedFenceName(firstFence,
-                            gpuDeviceDebugLabel(interop->firstDevice,
-                                                info->label));
+                            deviceDebugLabel(interop->firstDevice,
+                                             info->label));
     dx12_setSharedFenceName(secondFence,
-                            gpuDeviceDebugLabel(interop->secondDevice,
-                                                info->label));
+                            deviceDebugLabel(interop->secondDevice,
+                                             info->label));
   }
 #endif
   firstSemaphore->_priv  = firstFence;
@@ -835,8 +835,8 @@ static GPUResult
 dx12_createExternalSemaphore(GPUDevice                    *device,
                              const GPUSemaphoreCreateInfo *info,
                              GPUSemaphore                 *semaphore,
-                             GPUExternalSemaphoreExport   *outExport) {
-  GPUDeviceDX12 *native;
+                             ExternalSemaphoreExport      *outExport) {
+  DeviceDX12    *native;
   ID3D12Fence   *fence;
   HANDLE         handle;
   HRESULT        result;
@@ -875,7 +875,7 @@ dx12_createExternalSemaphore(GPUDevice                    *device,
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   if (info) {
     dx12_setSharedFenceName(fence,
-                            gpuDeviceDebugLabel(device, info->label));
+                            deviceDebugLabel(device, info->label));
   }
 #endif
   semaphore->_priv        = fence;
@@ -892,7 +892,7 @@ dx12_encodeExternalBarriers(GPUCommandBuffer               *cmdb,
   GPUBufferBarrier                  bufferBarriers[DX12_SHARED_BARRIER_CHUNK_SIZE];
   GPUTextureBarrier                 textureBarriers[DX12_SHARED_BARRIER_CHUNK_SIZE];
   GPUBarrierBatch                   batch;
-  GPUApi                           *api;
+  Api                              *api;
   const GPUSharedBufferBarrierEXT  *sharedBuffer;
   GPUBufferBarrier                 *bufferBarrier;
   const GPUSharedTextureBarrierEXT *sharedTexture;
@@ -904,7 +904,7 @@ dx12_encodeExternalBarriers(GPUCommandBuffer               *cmdb,
   uint32_t                          bufferIndex;
   uint32_t                          textureIndex;
 
-  api = cmdb && cmdb->_queue ? gpuCommandQueueApi(cmdb->_queue) : NULL;
+  api = cmdb && cmdb->_queue ? commandQueueApi(cmdb->_queue) : NULL;
 
   if (!api || api->backend != GPU_BACKEND_DX12 || !barriers) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -972,8 +972,8 @@ dx12_encodeSharedBarriers(GPUDeviceInteropEXT            *interop,
                           GPUCommandBuffer               *cmdb,
                           const GPUSharedBarrierBatchEXT *barriers,
                           bool                            acquire) {
-  GPUDeviceDX12 *first;
-  GPUDeviceDX12 *second;
+  DeviceDX12    *first;
+  DeviceDX12    *second;
   GPUResult      result;
 
   result = dx12_interopDevices(interop, &first, &second);
@@ -1011,7 +1011,7 @@ dx12_encodeSharedAcquire(GPUDeviceInteropEXT            *interop,
 
 GPU_HIDE
 void
-dx12_initMultiGPU(GPUApiMultiGPU *api) {
+dx12_initMultiGPU(ApiMultiGPU    *api) {
   api->createInterop                  = dx12_createDeviceInterop;
   api->destroyInterop                 = dx12_destroyDeviceInterop;
   api->getBufferRequirements          = dx12_getSharedBufferRequirements;

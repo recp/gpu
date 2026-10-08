@@ -20,8 +20,8 @@
 
 GPU_HIDE
 GPUResult
-gpuValidateBufferCreateInfo(const GPUDevice           *device,
-                            const GPUBufferCreateInfo *info) {
+validateBufferCreateInfo(const GPUDevice           *device,
+                         const GPUBufferCreateInfo *info) {
   const GPUBufferUsageFlags known = GPU_BUFFER_USAGE_VERTEX |
                                    GPU_BUFFER_USAGE_INDEX |
                                    GPU_BUFFER_USAGE_UNIFORM |
@@ -71,7 +71,7 @@ GPUResult
 GPUCreateBuffer(GPUDevice                 *__restrict device,
                 const GPUBufferCreateInfo *__restrict info,
                 GPUBuffer                **__restrict outBuffer) {
-  GPUApi   *api;
+  Api      *api;
   GPUResult result;
 
   if (!outBuffer) {
@@ -80,13 +80,13 @@ GPUCreateBuffer(GPUDevice                 *__restrict device,
 
   *outBuffer = NULL;
 
-  result = gpuValidateBufferCreateInfo(device, info);
+  result = validateBufferCreateInfo(device, info);
 
   if (result != GPU_OK) {
     return result;
   }
 
-  if (!(api = gpuDeviceApi(device))) {
+  if (!(api = deviceApi(device))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -114,7 +114,7 @@ GPUCreateBuffer(GPUDevice                 *__restrict device,
 GPU_EXPORT
 void
 GPUDestroyBuffer(GPUBuffer *__restrict buff) {
-  GPUApi *api;
+  Api    *api;
 
   if (!buff) {
     return;
@@ -126,7 +126,7 @@ GPUDestroyBuffer(GPUBuffer *__restrict buff) {
 
   buff->_sharedPeer = NULL;
 
-  if (!(api = gpuBufferApi(buff))) {
+  if (!(api = bufferApi(buff))) {
     return;
   }
 
@@ -138,7 +138,7 @@ GPUDestroyBuffer(GPUBuffer *__restrict buff) {
 GPU_EXPORT
 uint64_t
 GPUGetBufferDeviceAddressEXT(const GPUBuffer *__restrict buff) {
-  if (!gpuBufferHasUsage(buff, GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT)
+  if (!bufferHasUsage(buff, GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT)
       || !GPUIsFeatureEnabled(buff->device,
                               GPU_FEATURE_BUFFER_DEVICE_ADDRESS)) {
     return 0u;
@@ -154,16 +154,16 @@ GPUQueueWriteBuffer(GPUQueue   *__restrict queue,
                     uint64_t               dstOffset,
                     const void *__restrict data,
                     uint64_t               sizeBytes) {
-  GPUApi *api;
+  Api    *api;
 
   if (!queue || !buff || !data || sizeBytes == 0
-      || gpuCommandQueueDevice(queue) != buff->device
-      || !gpuBufferHasUsage(buff, GPU_BUFFER_USAGE_COPY_DST)
-      || !gpuBufferRangeValid(buff, dstOffset, sizeBytes)) {
+      || commandQueueDevice(queue) != buff->device
+      || !bufferHasUsage(buff, GPU_BUFFER_USAGE_COPY_DST)
+      || !bufferRangeValid(buff, dstOffset, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuCommandQueueApi(queue))) {
+  if (!(api = commandQueueApi(queue))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -181,16 +181,16 @@ GPUQueueReadBuffer(GPUQueue  *__restrict queue,
                    uint64_t              srcOffset,
                    void      *__restrict outData,
                    uint64_t              sizeBytes) {
-  GPUApi *api;
+  Api    *api;
 
   if (!queue || !buff || !outData || sizeBytes == 0
-      || gpuCommandQueueDevice(queue) != buff->device
-      || !gpuBufferHasUsage(buff, GPU_BUFFER_USAGE_COPY_SRC)
-      || !gpuBufferRangeValid(buff, srcOffset, sizeBytes)) {
+      || commandQueueDevice(queue) != buff->device
+      || !bufferHasUsage(buff, GPU_BUFFER_USAGE_COPY_SRC)
+      || !bufferRangeValid(buff, srcOffset, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuCommandQueueApi(queue))) {
+  if (!(api = commandQueueApi(queue))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 

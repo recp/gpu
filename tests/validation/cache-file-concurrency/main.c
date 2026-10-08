@@ -168,39 +168,39 @@ cache_sleep(uint32_t milliseconds) {
 
 static int
 cache_child(const char *path, uint32_t writer) {
-  GPUCacheFileGuard guard;
+  CacheFileGuard    guard;
   CacheRecord       current;
   CacheRecord       next;
   char             *temporaryPath;
   bool              replaced;
 
-  if (!path || writer == 0u || !gpuCacheFileBegin(path, &guard)) {
+  if (!path || writer == 0u || !cacheFileBegin(path, &guard)) {
     return EXIT_FAILURE;
   }
 
   if (!cache_readRecord(path, &current)) {
-    gpuCacheFileEnd(&guard);
+    cacheFileEnd(&guard);
     return EXIT_FAILURE;
   }
 
   cache_fillRecord(&next, current.sequence + 1u, writer);
   cache_sleep(CacheLockHoldMs);
 
-  if (!(temporaryPath = gpuCacheFileTemporaryPath(path, &next))) {
-    gpuCacheFileEnd(&guard);
+  if (!(temporaryPath = cacheFileTemporaryPath(path, &next))) {
+    cacheFileEnd(&guard);
     return EXIT_FAILURE;
   }
 
   remove(temporaryPath);
   replaced = cache_writeRecord(temporaryPath, &next)
-             && gpuCacheFileReplace(temporaryPath, path);
+             && cacheFileReplace(temporaryPath, path);
 
   if (!replaced) {
     remove(temporaryPath);
   }
 
   free(temporaryPath);
-  gpuCacheFileEnd(&guard);
+  cacheFileEnd(&guard);
   return replaced ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 

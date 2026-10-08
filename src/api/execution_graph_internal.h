@@ -21,7 +21,7 @@
 
 struct GPUExecutionGraphEXT {
   void                                  *_priv;
-  GPUApi                                *_api;
+  Api                                   *_api;
   GPUDevice                             *device;
   GPUShaderLibrary                      *library;
   GPUPipelineLayout                     *layout;
@@ -34,7 +34,7 @@ struct GPUExecutionGraphEXT {
 
 struct GPUExecutionGraphInstanceEXT {
   void                 *_priv;
-  GPUApi               *_api;
+  Api                  *_api;
   GPUDevice            *device;
   GPUExecutionGraphEXT *graph;
   uint64_t              memorySizeBytes;
@@ -42,6 +42,6 @@ struct GPUExecutionGraphInstanceEXT {
 
 GPU_HIDE
 void
-gpuRetainExecutionGraph(GPUExecutionGraphEXT *graph);
+retainExecutionGraph(GPUExecutionGraphEXT *graph);
 
 #endif /* gpu_execution_graph_internal_h */

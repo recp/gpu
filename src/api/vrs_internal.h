@@ -27,9 +27,9 @@ struct GPURasterizationRateMapEXT {
 };
 
 static inline bool
-gpuRenderPassVRSExtensions(const GPURenderPassCreateInfo               *info,
-                           const GPUShadingRateAttachmentEXT          **outAttachment,
-                           const GPURasterizationRateMapRenderPassEXT **outRateMap) {
+renderPassVRSExtensions(const GPURenderPassCreateInfo               *info,
+                        const GPUShadingRateAttachmentEXT          **outAttachment,
+                        const GPURasterizationRateMapRenderPassEXT **outRateMap) {
   const GPUChainedStruct *chain;
 
   if (!info || !outAttachment || !outRateMap) {

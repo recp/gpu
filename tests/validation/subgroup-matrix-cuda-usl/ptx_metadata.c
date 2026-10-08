@@ -57,7 +57,7 @@ get_matrix_properties(const GPUAdapter               *__restrict adapter,
 static bool
 supports_subgroups(const GPUAdapter     *__restrict adapter,
                    GPUShaderStageFlags              stage,
-                   GPUBackendSubgroupOperationFlags operations) {
+                   BackendSubgroupOperationFlags    operations) {
   (void)adapter;
   (void)operations;
   return (stage & GPU_SHADER_STAGE_COMPUTE_BIT) != 0u;
@@ -65,7 +65,7 @@ supports_subgroups(const GPUAdapter     *__restrict adapter,
 
 static int
 validate_contract(const GPUShaderLibrary *library) {
-  const GPUShaderPTXInfo *info;
+  const ShaderPTXInfo    *info;
   const char             *ptx;
 
   if (!library || library->_reflection.resourceCount != 3u
@@ -134,7 +134,7 @@ validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
   GPUDevice         device;
   GPUAdapter        adapter;
   GPUInstance       instance;
-  GPUApi            api;
+  Api               api;
   GPUResult         result;
   uint64_t          featureMask;
   int               valid;

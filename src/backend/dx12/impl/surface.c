@@ -36,7 +36,7 @@ static GPUResult
 dx12_getSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
                             GPUSurface             *__restrict surface,
                             GPUSurfaceCapabilities *__restrict outCaps) {
-  GPUInstanceDX12 *instance;
+  InstanceDX12    *instance;
 
   if (!adapter || !adapter->inst || !surface || !outCaps
       || (surface->type != GPU_SURFACE_WINDOWS_HWND
@@ -60,9 +60,9 @@ dx12_getSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
 }
 
 GPUSurface*
-dx12_createSurface(GPUApi                     *__restrict api,
+dx12_createSurface(Api                        *__restrict api,
                    GPUInstance                *__restrict inst,
-                   const GPUSurfaceNativeInfo *__restrict info) {
+                   const SurfaceNativeInfo    *__restrict info) {
   GPUSurface *surface;
 
   GPU__UNUSED(api);
@@ -93,7 +93,7 @@ dx12_destroySurface(GPUSurface *__restrict surface) {
 
 GPU_HIDE
 void
-dx12_initSurface(GPUApiSurface *apiDevice) {
+dx12_initSurface(ApiSurface    *apiDevice) {
   apiDevice->createSurface   = dx12_createSurface;
   apiDevice->getCapabilities = dx12_getSurfaceCapabilities;
   apiDevice->destroySurface  = dx12_destroySurface;

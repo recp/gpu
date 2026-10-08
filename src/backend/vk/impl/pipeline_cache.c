@@ -89,7 +89,7 @@ typedef struct VKPipelineCache {
   char                  *path;
 #ifdef VK_KHR_pipeline_binary
   char                  *binaryPath;
-  GPUDeviceVk           *deviceVk;
+  DeviceVk              *deviceVk;
   VkPipelineBinaryKeyKHR globalKey;
 #endif
   VkDevice               device;
@@ -196,7 +196,7 @@ vk_createCache(GPUDevice                        *device,
                GPUPipelineCache                 *cache) {
   VkPipelineCacheCreateInfo createInfo = {0};
   VKPipelineCache          *native;
-  GPUDeviceVk              *deviceVk;
+  DeviceVk                 *deviceVk;
   void                     *initialData;
   size_t                    initialSize;
   VkResult                  result;
@@ -325,7 +325,7 @@ vk__mergeStoredCache(VKPipelineCache *native) {
 
 static void
 vk__storeCache(VKPipelineCache *native) {
-  GPUCacheFileGuard guard;
+  CacheFileGuard    guard;
   void             *data;
   char             *temporaryPath;
   FILE             *file;
@@ -337,7 +337,7 @@ vk__storeCache(VKPipelineCache *native) {
     return;
   }
 
-  if (!gpuCacheFileBegin(native->path, &guard)) {
+  if (!cacheFileBegin(native->path, &guard)) {
     return;
   }
 
@@ -349,12 +349,12 @@ vk__storeCache(VKPipelineCache *native) {
                                     NULL);
 
   if (result != VK_SUCCESS || dataSize == 0u) {
-    gpuCacheFileEnd(&guard);
+    cacheFileEnd(&guard);
     return;
   }
 
   if (!(data = malloc(dataSize))) {
-    gpuCacheFileEnd(&guard);
+    cacheFileEnd(&guard);
     return;
   }
 
@@ -365,12 +365,12 @@ vk__storeCache(VKPipelineCache *native) {
 
   if (result != VK_SUCCESS) {
     free(data);
-    gpuCacheFileEnd(&guard);
+    cacheFileEnd(&guard);
     return;
   }
 
-  if (!(temporaryPath = gpuCacheFileTemporaryPath(native->path, native))) {
-    gpuCacheFileEnd(&guard);
+  if (!(temporaryPath = cacheFileTemporaryPath(native->path, native))) {
+    cacheFileEnd(&guard);
     free(data);
     return;
   }
@@ -383,7 +383,7 @@ vk__storeCache(VKPipelineCache *native) {
   }
 
   if (written) {
-    if (!gpuCacheFileReplace(temporaryPath, native->path)) {
+    if (!cacheFileReplace(temporaryPath, native->path)) {
       remove(temporaryPath);
     }
   } else {
@@ -392,7 +392,7 @@ vk__storeCache(VKPipelineCache *native) {
 
   free(temporaryPath);
   free(data);
-  gpuCacheFileEnd(&guard);
+  cacheFileEnd(&guard);
 }
 
 static void
@@ -455,7 +455,7 @@ vk__pipelineNext(VKPipelineKind kind, const void *info) {
 }
 
 static VkResult
-vk__createNativePipeline(GPUDeviceVk    *device,
+vk__createNativePipeline(DeviceVk       *device,
                          VKPipelineKind  kind,
                          VkPipelineCache cache,
                          const void     *info,
@@ -536,7 +536,7 @@ vk__createNativePipeline(GPUDeviceVk    *device,
 }
 
 static void
-vk__destroyBinarySet(GPUDeviceVk *device, VKPipelineBinarySet *set) {
+vk__destroyBinarySet(DeviceVk    *device, VKPipelineBinarySet *set) {
   uint32_t i;
 
   if (!set) {
@@ -748,7 +748,7 @@ vk__writeStoredBinaries(const VKPipelineCache        *native,
     return false;
   }
 
-  if (!(temporaryPath = gpuCacheFileTemporaryPath(path, native))) {
+  if (!(temporaryPath = cacheFileTemporaryPath(path, native))) {
     free(path);
     return false;
   }
@@ -773,7 +773,7 @@ vk__writeStoredBinaries(const VKPipelineCache        *native,
   }
 
   if (written) {
-    written = gpuCacheFileReplace(temporaryPath, path);
+    written = cacheFileReplace(temporaryPath, path);
   }
 
   if (!written) {
@@ -787,7 +787,7 @@ vk__writeStoredBinaries(const VKPipelineCache        *native,
 }
 
 static bool
-vk__getPipelineKey(GPUDeviceVk            *device,
+vk__getPipelineKey(DeviceVk               *device,
                    const void             *info,
                    VkPipelineBinaryKeyKHR *key) {
   VkPipelineCreateInfoKHR createInfo = {0};
@@ -802,7 +802,7 @@ vk__getPipelineKey(GPUDeviceVk            *device,
 }
 
 static bool
-vk__createStoredBinaryHandles(GPUDeviceVk         *device,
+vk__createStoredBinaryHandles(DeviceVk            *device,
                               VKPipelineBinarySet *set) {
   VkPipelineBinaryKeysAndDataKHR keysAndData = {0};
   VkPipelineBinaryCreateInfoKHR  createInfo  = {0};
@@ -827,7 +827,7 @@ vk__createStoredBinaryHandles(GPUDeviceVk         *device,
 }
 
 static bool
-vk__createInternalBinaryHandles(GPUDeviceVk         *device,
+vk__createInternalBinaryHandles(DeviceVk            *device,
                                 const void          *info,
                                 VKPipelineBinarySet *set) {
   VkPipelineCreateInfoKHR        pipelineInfo = {0};
@@ -873,7 +873,7 @@ vk__createInternalBinaryHandles(GPUDeviceVk         *device,
 }
 
 static void
-vk__releaseCapturedPipeline(GPUDeviceVk *device, VkPipeline pipeline) {
+vk__releaseCapturedPipeline(DeviceVk    *device, VkPipeline pipeline) {
   VkReleaseCapturedPipelineDataInfoKHR info = {0};
 
   info.sType    = VK_STRUCTURE_TYPE_RELEASE_CAPTURED_PIPELINE_DATA_INFO_KHR;
@@ -882,7 +882,7 @@ vk__releaseCapturedPipeline(GPUDeviceVk *device, VkPipeline pipeline) {
 }
 
 static bool
-vk__capturePipelineBinaries(GPUDeviceVk         *device,
+vk__capturePipelineBinaries(DeviceVk            *device,
                             VkPipeline           pipeline,
                             VKPipelineBinarySet *set) {
   VkPipelineBinaryCreateInfoKHR  createInfo  = {0};
@@ -983,7 +983,7 @@ vk__capturePipelineBinaries(GPUDeviceVk         *device,
 }
 
 static VkResult
-vk__createPipelineFromBinaries(GPUDeviceVk               *device,
+vk__createPipelineFromBinaries(DeviceVk                  *device,
                                VKPipelineKind             kind,
                                const void                *info,
                                const VKPipelineBinarySet *set,
@@ -1006,7 +1006,7 @@ vk__createPipelineFromBinaries(GPUDeviceVk               *device,
 }
 
 static VkResult
-vk__createCapturePipeline(GPUDeviceVk   *device,
+vk__createCapturePipeline(DeviceVk      *device,
                           VKPipelineKind kind,
                           const void    *info,
                           VkPipeline    *pipeline) {
@@ -1041,14 +1041,14 @@ vk__removeStoredBinaries(const VKPipelineCache        *native,
 }
 
 static VkResult
-vk__createPipelineCached(GPUDeviceVk      *device,
+vk__createPipelineCached(DeviceVk         *device,
                          GPUPipelineCache *cache,
                          VKPipelineKind    kind,
                          const void       *info,
                          VkPipeline       *pipeline) {
   VKPipelineBinarySet    binaries    = {0};
   VkPipelineBinaryKeyKHR pipelineKey = {0};
-  GPUCacheFileGuard      binaryGuard = {0};
+  CacheFileGuard         binaryGuard = {0};
   VKPipelineCache       *native;
   VkPipelineCache        classicCache;
   char                  *binaryPath;
@@ -1092,7 +1092,7 @@ vk__createPipelineCached(GPUDeviceVk      *device,
   binaryPath = havePipelineKey ? vk__binaryFilePath(native, &pipelineKey) : NULL;
 
   if (havePipelineKey
-      && (!binaryPath || !gpuCacheFileBegin(binaryPath, &binaryGuard))) {
+      && (!binaryPath || !cacheFileBegin(binaryPath, &binaryGuard))) {
     havePipelineKey = false;
   }
 
@@ -1109,7 +1109,7 @@ vk__createPipelineCached(GPUDeviceVk      *device,
 
       if (result == VK_SUCCESS) {
         vk__destroyBinarySet(device, &binaries);
-        gpuCacheFileEnd(&binaryGuard);
+        cacheFileEnd(&binaryGuard);
         vk_unlockCache(cache);
         return VK_SUCCESS;
       }
@@ -1153,7 +1153,7 @@ vk__createPipelineCached(GPUDeviceVk      *device,
         vk__destroyBinarySet(device, &binaries);
       }
 
-      gpuCacheFileEnd(&binaryGuard);
+      cacheFileEnd(&binaryGuard);
       vk_unlockCache(cache);
       return VK_SUCCESS;
     }
@@ -1164,7 +1164,7 @@ vk__createPipelineCached(GPUDeviceVk      *device,
     }
   }
 
-  gpuCacheFileEnd(&binaryGuard);
+  cacheFileEnd(&binaryGuard);
   result = vk__createNativePipeline(device,
                                     kind,
                                     classicCache,
@@ -1219,7 +1219,7 @@ vk_unlockCache(GPUPipelineCache *cache) {
 
 GPU_HIDE
 VkResult
-vk_createGraphicsPipelineCached(GPUDeviceVk                        *device,
+vk_createGraphicsPipelineCached(DeviceVk                           *device,
                                 GPUPipelineCache                   *cache,
                                 const VkGraphicsPipelineCreateInfo *info,
                                 VkPipeline                         *pipeline) {
@@ -1248,7 +1248,7 @@ vk_createGraphicsPipelineCached(GPUDeviceVk                        *device,
 
 GPU_HIDE
 VkResult
-vk_createComputePipelineCached(GPUDeviceVk                       *device,
+vk_createComputePipelineCached(DeviceVk                          *device,
                                GPUPipelineCache                  *cache,
                                const VkComputePipelineCreateInfo *info,
                                VkPipeline                        *pipeline) {
@@ -1279,7 +1279,7 @@ vk_createComputePipelineCached(GPUDeviceVk                       *device,
 
 GPU_HIDE
 VkResult
-vk_createRayPipelineCached(GPUDeviceVk                             *device,
+vk_createRayPipelineCached(DeviceVk                                *device,
                            GPUPipelineCache                        *cache,
                            const VkRayTracingPipelineCreateInfoKHR *info,
                            VkPipeline                              *pipeline) {
@@ -1311,7 +1311,7 @@ vk_createRayPipelineCached(GPUDeviceVk                             *device,
 
 GPU_HIDE
 void
-vk_initPipelineCache(GPUApiPipelineCache *api) {
+vk_initPipelineCache(ApiPipelineCache    *api) {
   api->create  = vk_createCache;
   api->destroy = vk_destroyCache;
 }

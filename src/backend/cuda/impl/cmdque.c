@@ -22,12 +22,12 @@ enum {
 };
 
 static CUresult
-cuda__launchCommand(GPUQueueCuda *queue, GPUCommandCuda *command) {
+cuda__launchCommand(QueueCuda    *queue, CommandCuda    *command) {
   void                        *parameters[GPU_SHADER_PTX_MAX_PARAM_COUNT];
-  GPUComputePipelineCuda      *pipeline;
-  GPUDispatchCuda             *dispatch;
+  ComputePipelineCuda         *pipeline;
+  DispatchCuda                *dispatch;
   uint8_t                     *paramData;
-  const GPUShaderPTXParamInfo *param;
+  const ShaderPTXParamInfo    *param;
   CUresult                     result;
   uint32_t                     i;
   uint32_t                     j;
@@ -89,7 +89,7 @@ cuda__launchCommand(GPUQueueCuda *queue, GPUCommandCuda *command) {
 }
 
 static void
-cuda__queuePending(GPUQueueCuda *queue, GPUCommandCuda *command) {
+cuda__queuePending(QueueCuda    *queue, CommandCuda    *command) {
   command->next    = NULL;
   command->pending = true;
 
@@ -109,18 +109,18 @@ cuda__finishCommands(uint32_t count, GPUCommandBuffer *const *commands) {
 
   for (i = 0u; i < count; i++) {
     if (commands[i]) {
-      gpuFinishCommandBuffer(commands[i], cuda_recycleCommand);
+      finishCommandBuffer(commands[i], cuda_recycleCommand);
     }
   }
 }
 
 static bool
-cuda__validSemaphores(GPUQueueCuda                  *queue,
+cuda__validSemaphores(QueueCuda                     *queue,
                       const GPUQueueSemaphoreWait   *waits,
                       uint32_t                       waitCount,
                       const GPUQueueSemaphoreSignal *signals,
                       uint32_t                       signalCount) {
-  GPUSemaphoreCuda *native;
+  SemaphoreCuda    *native;
   uint32_t          i;
 
   for (i = 0u; i < waitCount; i++) {
@@ -143,12 +143,12 @@ cuda__validSemaphores(GPUQueueCuda                  *queue,
 }
 
 static CUresult
-cuda__waitSemaphores(GPUQueueCuda                *queue,
+cuda__waitSemaphores(QueueCuda                   *queue,
                      const GPUQueueSemaphoreWait *waits,
                      uint32_t                     count) {
   CUDAExternalSemaphoreWaitParams params[CUDA_SEMAPHORE_BATCH_COUNT];
   CUexternalSemaphore             native[CUDA_SEMAPHORE_BATCH_COUNT];
-  GPUSemaphoreCuda               *semaphore;
+  SemaphoreCuda                  *semaphore;
   CUresult                        result;
   uint32_t                        offset;
   uint32_t                        i;
@@ -186,12 +186,12 @@ cuda__waitSemaphores(GPUQueueCuda                *queue,
 }
 
 static CUresult
-cuda__signalSemaphores(GPUQueueCuda                  *queue,
+cuda__signalSemaphores(QueueCuda                     *queue,
                        const GPUQueueSemaphoreSignal *signals,
                        uint32_t                       count) {
   CUDAExternalSemaphoreSignalParams params[CUDA_SEMAPHORE_BATCH_COUNT];
   CUexternalSemaphore               native[CUDA_SEMAPHORE_BATCH_COUNT];
-  GPUSemaphoreCuda                 *semaphore;
+  SemaphoreCuda                    *semaphore;
   CUresult                          result;
   uint32_t                          offset;
   uint32_t                          i;
@@ -232,7 +232,7 @@ static GPUQueue*
 cuda_getQueue(GPUDevice *__restrict device,
               GPUQueueFlagBits      bits,
               uint32_t              index) {
-  GPUDeviceCuda *native;
+  DeviceCuda    *native;
 
   native = cuda_device(device);
 
@@ -248,8 +248,8 @@ cuda_newCommandBuffer(GPUQueue         *__restrict queue,
                       const char       *__restrict label,
                       void             *__restrict sender,
                       GPUCommandBufferCompletionFn onComplete) {
-  GPUCommandCuda *command;
-  GPUQueueCuda   *native;
+  CommandCuda    *command;
+  QueueCuda      *native;
 
   GPU__UNUSED(label);
   native = cuda_queue(queue);
@@ -279,8 +279,8 @@ cuda_newCommandBuffer(GPUQueue         *__restrict queue,
       return NULL;
     }
 
-    gpuDeviceRecordHotPathAlloc(queue->_device,
-                                sizeof(*command) + CUDA_INITIAL_DISPATCH_CAPACITY * sizeof(*command->dispatches));
+    deviceRecordHotPathAlloc(queue->_device,
+                             sizeof(*command) + CUDA_INITIAL_DISPATCH_CAPACITY * sizeof(*command->dispatches));
   }
 
   memset(&command->command, 0, sizeof(command->command));
@@ -318,15 +318,15 @@ cuda_discardCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  gpuDiscardCommandBufferState(cmdb, cuda_recycleCommand);
+  discardCommandBufferState(cmdb, cuda_recycleCommand);
 
   return GPU_OK;
 }
 
 static GPUResult
 cuda_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
-  GPUCommandCuda *command;
-  GPUQueueCuda   *queue;
+  CommandCuda    *command;
+  QueueCuda      *queue;
   CUresult        result;
   GPUResult       recordResult;
 
@@ -339,7 +339,7 @@ cuda_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
 
   if (command->recordResult != GPU_OK) {
     recordResult = command->recordResult;
-    gpuFinishCommandBuffer(cmdb, cuda_recycleCommand);
+    finishCommandBuffer(cmdb, cuda_recycleCommand);
     return recordResult;
   }
 
@@ -347,7 +347,7 @@ cuda_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
 
   if (cuda_push(queue->driver, queue->context) != GPU_OK) {
     cuda_queueUnlock(queue);
-    gpuFinishCommandBuffer(cmdb, cuda_recycleCommand);
+    finishCommandBuffer(cmdb, cuda_recycleCommand);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -362,7 +362,7 @@ cuda_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
     cuda_pop(queue->driver);
     cuda_queueUnlock(queue);
     cuda_report(queue->queue._device, result, "command submission");
-    gpuFinishCommandBuffer(cmdb, cuda_recycleCommand);
+    finishCommandBuffer(cmdb, cuda_recycleCommand);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -387,8 +387,8 @@ cuda_createSemaphore(GPUDevice                    *device,
 
 static void
 cuda_destroySemaphore(GPUSemaphore *semaphore) {
-  GPUSemaphoreCuda *native;
-  GPUDeviceCuda    *device;
+  SemaphoreCuda    *native;
+  DeviceCuda       *device;
 
   native = semaphore ? semaphore->_priv : NULL;
   device = semaphore ? cuda_device(semaphore->_device) : NULL;
@@ -412,8 +412,8 @@ cuda_destroySemaphore(GPUSemaphore *semaphore) {
 static GPUResult
 cuda_submitEx(GPUQueue                   *queueHandle,
               const GPUQueueSubmitExInfo *info) {
-  GPUCommandCuda *commands[CUDA_SUBMIT_STACK_COUNT];
-  GPUQueueCuda   *queue;
+  CommandCuda    *commands[CUDA_SUBMIT_STACK_COUNT];
+  QueueCuda      *queue;
   CUresult        result;
   GPUResult       recordResult;
   uint32_t        i;
@@ -510,7 +510,7 @@ cuda_submitEx(GPUQueue                   *queueHandle,
 }
 
 void
-cuda_initQueue(GPUApiCommandQueue *api) {
+cuda_initQueue(ApiCommandQueue    *api) {
   api->getCommandQueue         = cuda_getQueue;
   api->newCommandBuffer        = cuda_newCommandBuffer;
   api->commandBufferOnComplete = cuda_commandBufferOnComplete;

@@ -26,8 +26,8 @@ dx12__logSwapchainError(const char *operation, HRESULT result) {
 }
 
 static void
-dx12__releaseBackBuffers(GPUSwapchainDX12 *swapchain) {
-  GPUFrameDX12 *frame;
+dx12__releaseBackBuffers(SwapchainDX12    *swapchain) {
+  FrameDX12    *frame;
   UINT          i;
 
   if (!swapchain || !swapchain->frames) {
@@ -47,13 +47,13 @@ dx12__releaseBackBuffers(GPUSwapchainDX12 *swapchain) {
 
 static bool
 dx12__createBackBuffers(GPUDevice        *device,
-                        GPUSwapchainDX12 *swapchain,
+                        SwapchainDX12    *swapchain,
                         GPUFormat         format,
                         uint32_t          width,
                         uint32_t          height) {
   D3D12_CPU_DESCRIPTOR_HANDLE rtv;
-  GPUDeviceDX12              *deviceDX12;
-  GPUFrameDX12               *frame;
+  DeviceDX12                 *deviceDX12;
+  FrameDX12                  *frame;
   HRESULT                     result;
   UINT                        i;
 
@@ -131,7 +131,7 @@ dx12__createBackBuffers(GPUDevice        *device,
 }
 
 static void
-dx12__destroySwapchainState(GPUSwapchainDX12 *swapchain) {
+dx12__destroySwapchainState(SwapchainDX12    *swapchain) {
   if (!swapchain) {
     return;
   }
@@ -156,16 +156,16 @@ dx12__destroySwapchainState(GPUSwapchainDX12 *swapchain) {
 
 GPU_HIDE
 GPUSwapchain*
-dx12_createSwapchain(GPUApi                       *__restrict api,
+dx12_createSwapchain(Api                          *__restrict api,
                      GPUDevice                    *__restrict device,
                      GPUQueue                     *__restrict queue,
                      const GPUSwapchainCreateInfo *__restrict info) {
   D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {0};
   DXGI_SWAP_CHAIN_DESC1      desc = {0};
-  GPUInstanceDX12           *instanceDX12;
-  GPUDeviceDX12             *deviceDX12;
-  GPUQueueDX12              *queueDX12;
-  GPUSwapchainDX12          *native;
+  InstanceDX12              *instanceDX12;
+  DeviceDX12                *deviceDX12;
+  QueueDX12                 *queueDX12;
+  SwapchainDX12             *native;
   GPUSwapchain              *swapchain;
   IDXGISwapChain1           *swapchain1;
   DXGI_FORMAT                format;
@@ -330,7 +330,7 @@ dx12_createSwapchain(GPUApi                       *__restrict api,
 GPU_HIDE
 GPUResult
 dx12_resizeSwapchain(GPUSwapchain *swapchain, GPUExtent2D size) {
-  GPUSwapchainDX12 *native;
+  SwapchainDX12    *native;
   GPUDevice        *device;
   GPUFormat         format;
   HRESULT           result;
@@ -384,7 +384,7 @@ dx12_destroySwapchain(GPUSwapchain *swapchain) {
 
 GPU_HIDE
 void
-dx12_initSwapchain(GPUApiSwapchain *api) {
+dx12_initSwapchain(ApiSwapchain    *api) {
   api->createSwapchain  = dx12_createSwapchain;
   api->resizeSwapchain  = dx12_resizeSwapchain;
   api->destroySwapchain = dx12_destroySwapchain;

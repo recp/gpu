@@ -92,7 +92,7 @@ webgpu_isDepthStencilFormat(GPUFormat format) {
 }
 
 static bool
-webgpu_textureWithinLimits(const GPUDeviceWebGPU      *native,
+webgpu_textureWithinLimits(const DeviceWebGPU         *native,
                            const GPUTextureCreateInfo *info,
                            WGPUTextureDimension        dimension) {
   const WGPULimits *limits;
@@ -120,13 +120,13 @@ webgpu_createTexture(GPUDevice                  *__restrict device,
                      const GPUTextureCreateInfo *__restrict info,
                      GPUTexture                **__restrict outTexture) {
   WGPUTextureDescriptor descriptor = WGPU_TEXTURE_DESCRIPTOR_INIT;
-  GPUFormatLayout       layout;
-  GPUDeviceWebGPU      *native;
+  FormatLayout          layout;
+  DeviceWebGPU         *native;
   GPUTexture           *texture;
   uint32_t              mipLevelCount;
   uint32_t              sampleCount;
 
-  native = gpu_webgpuDevice(device);
+  native = webgpuDevice(device);
 
   if (!native || !native->device || !info || !outTexture) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -142,7 +142,7 @@ webgpu_createTexture(GPUDevice                  *__restrict device,
                          && info->depthOrLayers > 1u
                            ? WGPUTextureDimension_2D
                            : webgpu_textureDimension(info->dimension);
-  descriptor.format    = gpu_webgpuFormat(info->format);
+  descriptor.format    = webgpuFormat(info->format);
   descriptor.usage     = webgpu_textureUsage(info->usage);
 
   if (descriptor.dimension == WGPUTextureDimension_Undefined
@@ -172,7 +172,7 @@ webgpu_createTexture(GPUDevice                  *__restrict device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  descriptor.label                   = gpu_webgpuString(info->label);
+  descriptor.label                   = webgpuString(info->label);
   descriptor.size.width              = info->width;
   descriptor.size.height             = info->dimension == GPU_TEXTURE_DIMENSION_1D
                                        && info->depthOrLayers > 1u
@@ -226,7 +226,7 @@ webgpu_createTextureView(GPUTexture                     *__restrict texture,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  descriptor.format    = gpu_webgpuFormat(info->format);
+  descriptor.format    = webgpuFormat(info->format);
   descriptor.dimension = webgpu_textureViewDimension(info->viewType);
 
   if (descriptor.format == WGPUTextureFormat_Undefined
@@ -238,7 +238,7 @@ webgpu_createTextureView(GPUTexture                     *__restrict texture,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  descriptor.label           = gpu_webgpuString(info->label);
+  descriptor.label           = webgpuString(info->label);
   descriptor.baseMipLevel    = info->baseMipLevel;
   descriptor.mipLevelCount   = info->mipLevelCount;
   descriptor.baseArrayLayer  = info->baseArrayLayer;
@@ -278,9 +278,9 @@ webgpu_writeTexture(GPUQueue                    *__restrict queue,
   WGPUTexelCopyBufferLayout layout      = WGPU_TEXEL_COPY_BUFFER_LAYOUT_INIT;
   WGPUTexelCopyTextureInfo  destination = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
   WGPUExtent3D              extent      = WGPU_EXTENT_3D_INIT;
-  GPUDeviceWebGPU          *native;
+  DeviceWebGPU             *native;
 
-  native = gpu_webgpuDevice(gpuCommandQueueDevice(queue));
+  native = webgpuDevice(commandQueueDevice(queue));
 
   if (!native || !native->queue || !texture || !texture->_priv
       || !region || !data || sizeBytes > SIZE_MAX) {
@@ -322,7 +322,7 @@ webgpu_writeTexture(GPUQueue                    *__restrict queue,
 }
 
 void
-webgpu_initTexture(GPUApiTexture *api) {
+webgpu_initTexture(ApiTexture    *api) {
   api->create      = webgpu_createTexture;
   api->destroy     = webgpu_destroyTexture;
   api->createView  = webgpu_createTextureView;

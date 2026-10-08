@@ -32,7 +32,7 @@
 
 #define CUDA_SRGB_FLAGS (GPU_CUDA_FORMAT_SAMPLED_BIT | GPU_CUDA_FORMAT_FILTERABLE_BIT | GPU_CUDA_FORMAT_SRGB_BIT)
 
-static const GPUCudaFormatInfo cuda_formats[GPU_FORMAT_COUNT] = {
+static const CudaFormatInfo    cuda_formats[GPU_FORMAT_COUNT] = {
   [GPU_FORMAT_R8_UNORM] = CUDA_FORMAT(CU_AD_FORMAT_UNSIGNED_INT8, CUDA_FLOAT_FLAGS, 1u, 1u),
   [GPU_FORMAT_R8_SNORM] = CUDA_FORMAT(CU_AD_FORMAT_SIGNED_INT8, CUDA_FLOAT_FLAGS, 1u, 1u),
   [GPU_FORMAT_R8_UINT]  = CUDA_FORMAT(CU_AD_FORMAT_UNSIGNED_INT8, CUDA_INTEGER_FLAGS, 1u, 1u),
@@ -92,8 +92,8 @@ _Static_assert(GPU_ARRAY_LEN(cuda_formats) == GPU_FORMAT_COUNT,
 
 GPU_HIDE
 bool
-cuda_formatInfo(GPUFormat format, GPUCudaFormatInfo *outInfo) {
-  GPUCudaFormatInfo info;
+cuda_formatInfo(GPUFormat format, CudaFormatInfo    *outInfo) {
+  CudaFormatInfo    info;
 
   if (!outInfo) {
     return false;
@@ -119,7 +119,7 @@ cuda_formatInfo(GPUFormat format, GPUCudaFormatInfo *outInfo) {
 
 GPU_HIDE
 bool
-cuda_formatResourceView(const GPUCudaFormatInfo *format,
+cuda_formatResourceView(const CudaFormatInfo    *format,
                         CUresourceViewFormat    *outFormat) {
   CUresourceViewFormat base;
   uint32_t             channelOffset;
@@ -193,7 +193,7 @@ cuda_formatResourceView(const GPUCudaFormatInfo *format,
 
 GPU_HIDE
 bool
-cuda_formatTextureDesc(const GPUCudaFormatInfo *format,
+cuda_formatTextureDesc(const CudaFormatInfo    *format,
                        const CUDA_TEXTURE_DESC *source,
                        CUDA_TEXTURE_DESC       *outDesc) {
   CUDA_TEXTURE_DESC desc;

@@ -44,7 +44,7 @@ mt_resolveStoreAction(GPUStoreOp op) {
 
 static MTLClearColor
 mt_clearColor(const GPUClearColorValue *color, GPUFormat format) {
-  switch (gpuFormatNumericType(format)) {
+  switch (formatNumericType(format)) {
     case GPU_FORMAT_NUMERIC_UINT:
       return MTLClearColorMake((double)color->uint32[0],
                                (double)color->uint32[1],
@@ -185,18 +185,18 @@ mt_bufferTextureRangeValid(id<MTLBuffer>                     buffer,
                            const GPUTexture                 *texture,
                            const GPUBufferTextureCopyRegion *region,
                            uint64_t                         *outBytesPerImage) {
-  GPUFormatDataLayout layout;
+  FormatDataLayout    layout;
 
   if (!buffer || !texture || !region || !outBytesPerImage
-      || !gpuFormatAspectDataLayout(texture->format,
-                                    region->texture.texture.aspect,
-                                    region->texture.width,
-                                    region->texture.height,
-                                    region->texture.depth,
-                                    region->texture.layerCount,
-                                    region->bytesPerRow,
-                                    region->rowsPerImage,
-                                    &layout)) {
+      || !formatAspectDataLayout(texture->format,
+                                 region->texture.texture.aspect,
+                                 region->texture.width,
+                                 region->texture.height,
+                                 region->texture.depth,
+                                 region->texture.layerCount,
+                                 region->bytesPerRow,
+                                 region->rowsPerImage,
+                                 &layout)) {
     return false;
   }
 
@@ -226,7 +226,7 @@ mt_copyDepthStencilPlane(GPUTransferPassEncoder              *pass,
                          GPUTexture                          *src,
                          GPUTexture                          *dst,
                          const GPUTextureToTextureCopyRegion *region) {
-  GPUFormatLayout layout;
+  FormatLayout    layout;
   MTLSize         size;
   id<MTLTexture>  srcTexture;
   id<MTLTexture>  dstTexture;
@@ -249,7 +249,7 @@ mt_copyDepthStencilPlane(GPUTransferPassEncoder              *pass,
   option     = mt_copyOption(src->format, region->src.aspect);
 
   if (!srcTexture || !dstTexture || option == MTLBlitOptionNone
-      || !gpuFormatAspectLayout(src->format, region->src.aspect, &layout)
+      || !formatAspectLayout(src->format, region->src.aspect, &layout)
       || layout.blockWidth != 1u || layout.blockHeight != 1u
       || region->width > UINT64_MAX / layout.bytesPerBlock) {
     return;
@@ -363,14 +363,14 @@ static void
 mt_generateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
   GPUTransferPassEncoder *pass;
   MTCopyEncoder          *native;
-  GPUAdapterMT           *adapter;
+  AdapterMT              *adapter;
   id<MTLTexture>          nativeTexture;
 
   adapter = texture && texture->device && texture->device->adapter ? texture->device->adapter->_priv : NULL;
 
   if (texture && texture->depthOrLayers > 1u && adapter
       && !adapter->appleFamily1) {
-    gpuGenerateMipmapsFallback(cmdb, texture, mt_blitTexture);
+    generateMipmapsFallback(cmdb, texture, mt_blitTexture);
     return;
   }
 
@@ -404,7 +404,7 @@ mt_generateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
 }
 
 GPU_HIDE
-GPURenderPassDesc*
+RenderPassDesc*
 mt_beginRenderPass(GPUCommandBuffer              *cmdb,
                    const GPURenderPassCreateInfo *info) {
   const GPUShadingRateAttachmentEXT          *shadingRate;
@@ -412,9 +412,9 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   const GPURenderPassColorAttachment         *color;
   const GPURenderPassDepthStencilAttachment  *depthStencil;
   MTCommandBuffer                            *commandState;
-  GPUAdapterMT                               *adapter;
+  AdapterMT                                  *adapter;
   GPUDevice                                  *device;
-  GPURenderPassDesc                          *renderPass;
+  RenderPassDesc                             *renderPass;
   MTRenderPass                               *nativePass;
   MTLRenderPassDescriptor                    *rpd;
   MTQuerySet                                 *occlusion;
@@ -446,14 +446,14 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
       || (info->colorAttachmentCount > 0 && !info->pColorAttachments))
     return NULL;
 
-  if (!gpuRenderPassVRSExtensions(info, &shadingRate, &rateMap)
+  if (!renderPassVRSExtensions(info, &shadingRate, &rateMap)
       || shadingRate) {
     return NULL;
   }
 
   if (rateMap
       && (!rateMap->map
-          || rateMap->map->device != gpuCommandBufferDevice(cmdb)
+          || rateMap->map->device != commandBufferDevice(cmdb)
           || !rateMap->map->_priv)) {
     return NULL;
   }
@@ -539,7 +539,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
 
     /* integer attachments support msaa, but not automatic color resolve. */
     if (color->resolveView
-        && gpuFormatNumericType(color->view->format) != GPU_FORMAT_NUMERIC_FLOAT) {
+        && formatNumericType(color->view->format) != GPU_FORMAT_NUMERIC_FLOAT) {
       return NULL;
     }
 
@@ -547,7 +547,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
         && (color->view->format == GPU_FORMAT_R32_FLOAT
             || color->view->format == GPU_FORMAT_RG32_FLOAT
             || color->view->format == GPU_FORMAT_RGBA32_FLOAT)) {
-      device  = gpuCommandBufferDevice(cmdb);
+      device  = commandBufferDevice(cmdb);
       adapter = device && device->adapter ? device->adapter->_priv : NULL;
 
       if (!adapter || !adapter->msaa32Supported) {
@@ -733,7 +733,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
 
 GPU_HIDE
 void
-mt_destroyRenderPass(GPURenderPassDesc *pass) {
+mt_destroyRenderPass(RenderPassDesc    *pass) {
   (void)pass;
 }
 
@@ -1273,7 +1273,7 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
 
 GPU_HIDE
 void
-mt_initRenderPass(GPUApiRenderPass *api) {
+mt_initRenderPass(ApiRenderPass    *api) {
   api->beginRenderPass      = mt_beginRenderPass;
   api->destroyRenderPass    = mt_destroyRenderPass;
   api->beginTransferPass    = mt_beginTransferPass;

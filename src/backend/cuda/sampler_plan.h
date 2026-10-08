@@ -32,7 +32,7 @@ cuda_samplerTextureDesc(const GPUSamplerDesc *source,
 
 GPU_HIDE
 bool
-cuda_staticSamplerTextureDesc(const GPUStaticSamplerDesc *source,
+cuda_staticSamplerTextureDesc(const StaticSamplerDesc    *source,
                               CUDA_TEXTURE_DESC          *outDesc);
 
 GPU_HIDE

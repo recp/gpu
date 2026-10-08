@@ -348,9 +348,9 @@ cleanup:
 
 int
 gpu_test_metal_vertex_slots(GPUDevice *device, const char *bytecodePath) {
-  GPUApi *api;
+  Api    *api;
 
-  api = gpuDeviceApi(device);
+  api = deviceApi(device);
 
   if (!api || api->backend != GPU_BACKEND_METAL) {
     return 1;

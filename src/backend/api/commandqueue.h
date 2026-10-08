@@ -23,7 +23,7 @@ extern "C" {
 #include <gpu/common.h>
 #include <gpu/gpu.h>
 
-typedef struct GPUApiCommandQueue {
+typedef struct ApiCommandQueue {
   GPUQueue * (*newCommandQueue)(GPUDevice *__restrict device);
 
   GPUQueue * (*getCommandQueue)(struct GPUDevice *__restrict device, GPUQueueFlagBits bits, uint32_t index);
@@ -43,7 +43,7 @@ typedef struct GPUApiCommandQueue {
 
   GPUResult (*discard)(GPUCommandBuffer *__restrict cmdb);
 
-  /* every prepared buffer must reach gpuFinishCommandBuffer exactly once. */
+  /* every prepared buffer must reach finishCommandBuffer exactly once. */
   GPUResult (*commit)(GPUCommandBuffer *__restrict cmdb);
 
   GPUResult (*submit)(GPUQueue *__restrict queue, uint32_t count, GPUCommandBuffer *const *__restrict buffers);
@@ -53,7 +53,7 @@ typedef struct GPUApiCommandQueue {
   void (*destroySemaphore)(GPUSemaphore *semaphore);
 
   GPUResult (*submitEx)(GPUQueue *queue, const GPUQueueSubmitExInfo *info);
-} GPUApiCommandQueue;
+} ApiCommandQueue;
 
 #ifdef __cplusplus
 }

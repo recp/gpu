@@ -74,7 +74,7 @@ check_resolve(GPUAdapter *adapter);
 static bool
 check_policy(GPUAdapter *adapter) {
   GPUFormatCapabilities caps;
-  GPUAdapterMT         *native;
+  AdapterMT            *native;
   const FormatCase     *test;
   GPUSampleCountFlags   expectedSamples;
   uint32_t              flags, mask, i;
@@ -141,7 +141,7 @@ check_policy(GPUAdapter *adapter) {
 static bool
 check_native(GPUAdapter *adapter) {
   GPUFormatCapabilities caps;
-  GPUAdapterMT         *native;
+  AdapterMT            *native;
   const FormatCase     *test;
   MTLTextureDescriptor *desc;
   id<MTLTexture>        texture;
@@ -215,7 +215,7 @@ check_native(GPUAdapter *adapter) {
 
 static int
 run(void) {
-  GPUAdapterMT          saved;
+  AdapterMT             saved;
   GPUInstanceCreateInfo info = {0};
   GPUInstance          *instance = NULL;
   GPUAdapter           *adapter  = NULL;
@@ -235,11 +235,11 @@ run(void) {
     return 77;
   }
 
-  saved = *(GPUAdapterMT *)adapter->_priv;
+  saved = *(AdapterMT *)adapter->_priv;
   ok    = check_native(adapter);
   ok    = check_policy(adapter) && ok;
 
-  *(GPUAdapterMT *)adapter->_priv = saved;
+  *(AdapterMT *)adapter->_priv = saved;
   ok = check_resolve(adapter) && ok;
 
   GPUDestroyInstance(instance);

@@ -58,7 +58,7 @@ gpu_signalFence(GPUFence *fence) {
 }
 
 static void
-gpu_resetFenceInternal(GPUFence *fence) {
+resetFenceInternal(GPUFence *fence) {
   if (!fence) {
     return;
   }
@@ -76,7 +76,7 @@ gpu_resetFenceInternal(GPUFence *fence) {
 
 #if !defined(_WIN32) && !defined(WIN32)
 static void
-gpu_timeoutFromNow(uint64_t timeoutNs, struct timespec *outTime) {
+timeoutFromNow(uint64_t timeoutNs, struct timespec *outTime) {
   uint64_t sec;
   uint64_t nsec;
 
@@ -100,19 +100,19 @@ gpu_newCommandBuffer(GPUQueue         *__restrict cmdq,
                      const char       *__restrict label,
                      void             *__restrict sender,
                      GPUCommandBufferCompletionFn oncomplete) {
-  GPUApi           *api;
+  Api              *api;
   GPUCommandBuffer *cmdb;
 
   if (!cmdq)
     return NULL;
 
-  if (!(api = gpuCommandQueueApi(cmdq)))
+  if (!(api = commandQueueApi(cmdq)))
     return NULL;
 
   if (!api->cmdque.newCommandBuffer)
     return NULL;
 
-  label = gpuDeviceDebugLabel(cmdq->_device, label);
+  label = deviceDebugLabel(cmdq->_device, label);
   cmdb  = api->cmdque.newCommandBuffer(cmdq, label, sender, oncomplete);
 
   if (cmdb) {
@@ -123,12 +123,12 @@ gpu_newCommandBuffer(GPUQueue         *__restrict cmdq,
 }
 
 static GPUResult
-gpu_prepareQueueSubmit(GPUQueue                *cmdq,
-                       uint32_t                 commandBufferCount,
-                       GPUCommandBuffer *const *commandBuffers,
-                       GPUFence                *fence,
-                       GPUApi                 **outApi) {
-  GPUApi           *api;
+prepareQueueSubmit(GPUQueue                *cmdq,
+                   uint32_t                 commandBufferCount,
+                   GPUCommandBuffer *const *commandBuffers,
+                   GPUFence                *fence,
+                   Api                    **outApi) {
+  Api              *api;
   GPUDevice        *device;
   GPUFence         *transientFence;
   GPUCommandBuffer *lastCmdb;
@@ -143,9 +143,9 @@ gpu_prepareQueueSubmit(GPUQueue                *cmdq,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  device = gpuCommandQueueDevice(cmdq);
+  device = commandQueueDevice(cmdq);
 
-  if (!(api = gpuCommandQueueApi(cmdq)))
+  if (!(api = commandQueueApi(cmdq)))
     return GPU_ERROR_BACKEND_FAILURE;
 
   if (!api->cmdque.commit)
@@ -188,7 +188,7 @@ gpu_prepareQueueSubmit(GPUQueue                *cmdq,
       transientFrameIndex = device->transientFrameIndex;
     }
 
-    result = gpuDeviceFlushTransientUploads(cmdq, transientFrameIndex);
+    result = deviceFlushTransientUploads(cmdq, transientFrameIndex);
 
     if (result != GPU_OK) {
       return result;
@@ -214,7 +214,7 @@ gpu_prepareQueueSubmit(GPUQueue                *cmdq,
       return GPU_ERROR_UNSUPPORTED;
     }
 
-    gpu_resetFenceInternal(fence);
+    resetFenceInternal(fence);
     lastCmdb->_submitFence = fence;
   }
 
@@ -234,8 +234,8 @@ gpu_prepareQueueSubmit(GPUQueue                *cmdq,
 
 GPU_HIDE
 void
-gpuFinishCommandBuffer(GPUCommandBuffer         *cmdb,
-                       GPUCommandBufferRecycleFn recycle) {
+finishCommandBuffer(GPUCommandBuffer         *cmdb,
+                    GPUCommandBufferRecycleFn recycle) {
   GPUFence                    *fence;
   GPUFence                    *transientFence;
   void                        *sender;
@@ -270,8 +270,8 @@ gpuFinishCommandBuffer(GPUCommandBuffer         *cmdb,
 
 GPU_HIDE
 void
-gpuDiscardCommandBufferState(GPUCommandBuffer         *cmdb,
-                             GPUCommandBufferRecycleFn recycle) {
+discardCommandBufferState(GPUCommandBuffer         *cmdb,
+                          GPUCommandBufferRecycleFn recycle) {
   if (!cmdb) {
     return;
   }
@@ -297,13 +297,13 @@ GPUQueue*
 GPUGetQueue(GPUDevice *__restrict device,
             GPUQueueFlagBits      bits,
             uint32_t              index) {
-  GPUApi *api;
+  Api    *api;
 
   if (!device || bits == 0) {
     return NULL;
   }
 
-  if (!(api = gpuDeviceApi(device)))
+  if (!(api = deviceApi(device)))
     return NULL;
 
   if (!api->cmdque.getCommandQueue)
@@ -335,14 +335,14 @@ GPUAcquireCommandBuffer(GPUQueue          *__restrict cmdq,
 GPU_EXPORT
 GPUResult
 GPUDiscardCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
-  GPUApi *api;
+  Api    *api;
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder
       || cmdb->_pipelineStatsQuery) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuCommandBufferApi(cmdb)) || !api->cmdque.discard) {
+  if (!(api = commandBufferApi(cmdb)) || !api->cmdque.discard) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -356,12 +356,12 @@ void
 GPUSetCommandBufferCompletionHandler(GPUCommandBuffer *__restrict cmdb,
                                      void             *__restrict sender,
                                      GPUCommandBufferCompletionFn oncomplete) {
-  GPUApi *api;
+  Api    *api;
 
   if (!cmdb || cmdb->_submitted)
     return;
 
-  if (!(api = gpuCommandBufferApi(cmdb)))
+  if (!(api = commandBufferApi(cmdb)))
     return;
 
   if (!api->cmdque.commandBufferOnComplete)
@@ -393,7 +393,7 @@ GPU_EXPORT
 GPUResult
 GPUQueueSubmit(GPUQueue                 *__restrict cmdq,
                const GPUQueueSubmitInfo *__restrict info) {
-  GPUApi    *api;
+  Api       *api;
   GPUResult  result;
   GPUResult  commitResult;
   uint32_t   i;
@@ -413,11 +413,11 @@ GPUQueueSubmit(GPUQueue                 *__restrict cmdq,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  result = gpu_prepareQueueSubmit(cmdq,
-                                  info->commandBufferCount,
-                                  info->ppCommandBuffers,
-                                  info->fence,
-                                  &api);
+  result = prepareQueueSubmit(cmdq,
+                              info->commandBufferCount,
+                              info->ppCommandBuffers,
+                              info->fence,
+                              &api);
 
   if (result != GPU_OK) {
     return result;
@@ -448,7 +448,7 @@ GPUQueueSubmitEx(GPUQueue                   *__restrict cmdq,
                  const GPUQueueSubmitExInfo *__restrict info) {
   GPUQueueSubmitInfo   baseInfo;
   GPUSemaphore        *semaphore;
-  GPUApi              *api;
+  Api                 *api;
   GPUPipelineStageMask validStages;
   GPUResult            result;
   uint32_t             i;
@@ -510,15 +510,15 @@ GPUQueueSubmitEx(GPUQueue                   *__restrict cmdq,
     }
   }
 
-  if (!(api = gpuCommandQueueApi(cmdq)) || !api->cmdque.submitEx) {
+  if (!(api = commandQueueApi(cmdq)) || !api->cmdque.submitEx) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  result = gpu_prepareQueueSubmit(cmdq,
-                                  info->commandBufferCount,
-                                  info->ppCommandBuffers,
-                                  info->fence,
-                                  &api);
+  result = prepareQueueSubmit(cmdq,
+                              info->commandBufferCount,
+                              info->ppCommandBuffers,
+                              info->fence,
+                              &api);
 
   return result == GPU_OK ? api->cmdque.submitEx(cmdq, info) : result;
 }
@@ -639,7 +639,7 @@ GPUWaitFence(GPUFence *__restrict fence, uint64_t timeoutNs) {
       }
     }
   } else {
-    gpu_timeoutFromNow(timeoutNs, &deadline);
+    timeoutFromNow(timeoutNs, &deadline);
 
     while (!fence->signaled) {
       rc = pthread_cond_timedwait(&fence->cond, &fence->mutex, &deadline);
@@ -685,7 +685,7 @@ GPUIsFenceSignaled(GPUFence *__restrict fence) {
 GPU_EXPORT
 void
 GPUResetFence(GPUFence *__restrict fence) {
-  gpu_resetFenceInternal(fence);
+  resetFenceInternal(fence);
 }
 
 GPU_EXPORT
@@ -693,7 +693,7 @@ GPUResult
 GPUCreateSemaphore(GPUDevice                    *__restrict device,
                    const GPUSemaphoreCreateInfo *__restrict info,
                    GPUSemaphore                **__restrict outSemaphore) {
-  GPUApi       *api;
+  Api          *api;
   GPUSemaphore *semaphore;
   GPUResult     result;
 
@@ -717,7 +717,7 @@ GPUCreateSemaphore(GPUDevice                    *__restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->cmdque.createSemaphore
+  if (!(api = deviceApi(device)) || !api->cmdque.createSemaphore
       || !api->cmdque.destroySemaphore) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -742,13 +742,13 @@ GPUCreateSemaphore(GPUDevice                    *__restrict device,
 GPU_EXPORT
 void
 GPUDestroySemaphore(GPUSemaphore *__restrict semaphore) {
-  GPUApi *api;
+  Api    *api;
 
   if (!semaphore) {
     return;
   }
 
-  api = gpuDeviceApi(semaphore->_device);
+  api = deviceApi(semaphore->_device);
 
   if (api && api->cmdque.destroySemaphore) {
     api->cmdque.destroySemaphore(semaphore);

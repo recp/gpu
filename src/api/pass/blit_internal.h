@@ -19,43 +19,43 @@
 
 #include "../../common.h"
 
-typedef struct GPUBlitShaderData {
+typedef struct BlitShaderData {
   const void *data;
   uint64_t    size;
   bool        binary;
-} GPUBlitShaderData;
+} BlitShaderData;
 
-typedef struct GPUBlitShaderSet {
-  GPUBlitShaderData filteringFloat;
-  GPUBlitShaderData filteringFloatArray;
-  GPUBlitShaderData unfilterableFloat;
-  GPUBlitShaderData unsignedInteger;
-  GPUBlitShaderData signedInteger;
-} GPUBlitShaderSet;
+typedef struct BlitShaderSet {
+  BlitShaderData    filteringFloat;
+  BlitShaderData    filteringFloatArray;
+  BlitShaderData    unfilterableFloat;
+  BlitShaderData    unsignedInteger;
+  BlitShaderData    signedInteger;
+} BlitShaderSet;
 
 GPU_HIDE
 GPUResult
-gpuInitBlitDevice(GPUDevice *device);
+initBlitDevice(GPUDevice *device);
 
 GPU_HIDE
 void
-gpuDestroyBlitDevice(GPUDevice *device);
+destroyBlitDevice(GPUDevice *device);
 
 GPU_HIDE
 void
-gpuDestroyTextureBlitViews(GPUTexture *texture);
+destroyTextureBlitViews(GPUTexture *texture);
 
 GPU_HIDE
 void
-gpuBlitTextureRenderFallback(GPUCommandBuffer         *cmdb,
-                             const GPUTextureBlitInfo *info,
-                             const GPUBlitShaderSet   *shaders);
+blitTextureRenderFallback(GPUCommandBuffer         *cmdb,
+                          const GPUTextureBlitInfo *info,
+                          const BlitShaderSet      *shaders);
 
 GPU_HIDE
 void
-gpuGenerateMipmapsFallback(GPUCommandBuffer *cmdb,
-                           GPUTexture       *texture,
-                           void            (*blitTexture)(GPUCommandBuffer         *cmdb,
-                                                          const GPUTextureBlitInfo *info));
+generateMipmapsFallback(GPUCommandBuffer *cmdb,
+                        GPUTexture       *texture,
+                        void            (*blitTexture)(GPUCommandBuffer         *cmdb,
+                                                       const GPUTextureBlitInfo *info));
 
 #endif /* gpu_blit_internal_h */

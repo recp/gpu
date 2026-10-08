@@ -58,7 +58,7 @@ create_profile_library(const void        *artifact,
                        GPUDevice         *device,
                        GPUAdapter        *adapter,
                        GPUInstance       *instance,
-                       GPUApi            *api,
+                       Api               *api,
                        GPUShaderLibrary **outLibrary) {
   GPUResult result;
 
@@ -92,7 +92,7 @@ validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
   GPUDevice         devices[ProfileCount];
   GPUAdapter        adapters[ProfileCount];
   GPUInstance       instances[ProfileCount];
-  GPUApi            apis[ProfileCount];
+  Api               apis[ProfileCount];
   const char       *sources[ProfileCount] = {0};
   int               valid;
   uint32_t          createIndex;

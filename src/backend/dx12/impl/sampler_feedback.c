@@ -41,7 +41,7 @@ dx12_setSamplerFeedbackName(ID3D12Resource *resource, const char *label) {
 static void
 dx12_getSamplerFeedbackProperties(const GPUAdapter                *adapter,
                                   GPUSamplerFeedbackPropertiesEXT *outProperties) {
-  const GPUAdapterDX12 *native;
+  const AdapterDX12    *native;
 
   native = adapter ? adapter->_priv : NULL;
 
@@ -65,7 +65,7 @@ dx12_getSamplerFeedbackProperties(const GPUAdapter                *adapter,
 }
 
 static void
-dx12_destroySamplerFeedbackState(GPUSamplerFeedbackMapDX12 *native) {
+dx12_destroySamplerFeedbackState(SamplerFeedbackMapDX12    *native) {
   if (!native) {
     return;
   }
@@ -92,9 +92,9 @@ dx12_createSamplerFeedback(GPUDevice                                *device,
   D3D12_RESOURCE_DESC         targetDesc;
   D3D12_RESOURCE_DESC1        desc = {0};
   D3D12_CPU_DESCRIPTOR_HANDLE handle;
-  GPUDeviceDX12              *deviceDX12;
-  GPUTextureDX12             *target;
-  GPUSamplerFeedbackMapDX12  *native;
+  DeviceDX12                 *deviceDX12;
+  TextureDX12                *target;
+  SamplerFeedbackMapDX12     *native;
   GPUResult                   result;
   HRESULT                     nativeResult;
 
@@ -183,7 +183,7 @@ dx12_createSamplerFeedback(GPUDevice                                *device,
 
 static void
 dx12_destroySamplerFeedback(GPUSamplerFeedbackMapEXT *map) {
-  GPUSamplerFeedbackMapDX12 *native;
+  SamplerFeedbackMapDX12    *native;
 
   native = map ? map->_priv : NULL;
 
@@ -202,8 +202,8 @@ dx12_clearSamplerFeedback(GPUCommandBuffer         *cmdb,
   D3D12_GPU_DESCRIPTOR_HANDLE gpu;
   D3D12_RESOURCE_BARRIER      barrier = {0};
   UINT                        values[4] = {0};
-  GPUCommandBufferDX12       *command;
-  GPUSamplerFeedbackMapDX12  *native;
+  CommandBufferDX12          *command;
+  SamplerFeedbackMapDX12     *native;
   UINT                        heapCount;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -256,9 +256,9 @@ dx12_transcodeSamplerFeedback(GPUCommandBuffer         *cmdb,
                               GPUSamplerFeedbackMapEXT *map,
                               GPUTexture               *decodedTexture,
                               bool                      encode) {
-  GPUCommandBufferDX12      *command;
-  GPUSamplerFeedbackMapDX12 *native;
-  GPUTextureDX12            *decoded;
+  CommandBufferDX12         *command;
+  SamplerFeedbackMapDX12    *native;
+  TextureDX12               *decoded;
   ID3D12Resource            *source;
   ID3D12Resource            *destination;
   D3D12_RESOURCE_STATES      decodedState;
@@ -290,7 +290,7 @@ dx12_transcodeSamplerFeedback(GPUCommandBuffer         *cmdb,
                               0u,
                               decodedTexture->mipLevelCount,
                               0u,
-                              gpuTextureArrayLayerCount(decodedTexture),
+                              textureArrayLayerCount(decodedTexture),
                               decodedState)
       || !dx12_transitionSamplerFeedback(command->commandList,
                                          native,
@@ -360,7 +360,7 @@ dx12_encodeSamplerFeedback(GPUCommandBuffer         *cmdb,
 
 GPU_HIDE
 void
-dx12_initSamplerFeedback(GPUApiSamplerFeedback *api) {
+dx12_initSamplerFeedback(ApiSamplerFeedback    *api) {
 #if GPU_DX12_HAS_SAMPLER_FEEDBACK
   api->getProperties = dx12_getSamplerFeedbackProperties;
   api->create        = dx12_createSamplerFeedback;

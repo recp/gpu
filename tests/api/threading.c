@@ -267,7 +267,7 @@ gpu_runThreadingTest(GPUThreadContext *ctx) {
       break;
     }
 
-    gpuDeviceCacheCounterAdd(&ctx->device->cacheStats.pipelineCompiles, 1u);
+    deviceCacheCounterAdd(&ctx->device->cacheStats.pipelineCompiles, 1u);
   }
 
   GPUDestroyShaderLibrary(library);

@@ -19,8 +19,8 @@
 #include "vertex_internal.h"
 
 GPU_HIDE
-GPUVertexDescriptor*
-gpuCreateVertexDesc(GPUApi *api) {
+VertexDescriptor*
+createVertexDesc(Api    *api) {
   if (!api || !api->vertex.newVertexDesc)
     return NULL;
 
@@ -29,7 +29,7 @@ gpuCreateVertexDesc(GPUApi *api) {
 
 GPU_HIDE
 void
-gpuDestroyVertexDesc(GPUApi *api, GPUVertexDescriptor *vert) {
+gpuDestroyVertexDesc(Api    *api, VertexDescriptor    *vert) {
   if (!vert)
     return;
 
@@ -43,12 +43,12 @@ gpuDestroyVertexDesc(GPUApi *api, GPUVertexDescriptor *vert) {
 
 GPU_HIDE
 void
-gpuVertexDescAttrib(GPUApi              *__restrict api,
-                    GPUVertexDescriptor *__restrict vert,
-                    uint32_t                        attribIndex,
-                    GPUVertexFormat                 format,
-                    uint32_t                        offset,
-                    uint32_t                        bufferIndex) {
+vertexDescAttrib(Api                 *__restrict api,
+                 VertexDescriptor    *__restrict vert,
+                 uint32_t                        attribIndex,
+                 GPUVertexFormat                 format,
+                 uint32_t                        offset,
+                 uint32_t                        bufferIndex) {
   if (!api || !vert || !api->vertex.attrib)
     return;
 
@@ -57,11 +57,11 @@ gpuVertexDescAttrib(GPUApi              *__restrict api,
 
 GPU_HIDE
 void
-gpuVertexDescLayout(GPUApi              *__restrict api,
-                    GPUVertexDescriptor *__restrict vert,
-                    uint32_t                        layoutIndex,
-                    uint32_t                        stride,
-                    GPUVertexStepMode               stepMode) {
+vertexDescLayout(Api                 *__restrict api,
+                 VertexDescriptor    *__restrict vert,
+                 uint32_t                        layoutIndex,
+                 uint32_t                        stride,
+                 GPUVertexStepMode               stepMode) {
   if (!api || !vert || !api->vertex.layout)
     return;
 
@@ -70,9 +70,9 @@ gpuVertexDescLayout(GPUApi              *__restrict api,
 
 GPU_HIDE
 void
-gpuPipelineSetVertexDesc(GPURenderPipeline   *__restrict pipeline,
-                         GPUVertexDescriptor *__restrict vert) {
-  GPUApi *api;
+pipelineSetVertexDesc(GPURenderPipeline   *__restrict pipeline,
+                      VertexDescriptor    *__restrict vert) {
+  Api    *api;
 
   if (!pipeline || !vert || !(api = pipeline->_api)
       || !api->vertex.vertexDesc)

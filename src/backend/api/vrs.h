@@ -22,7 +22,7 @@ extern "C" {
 
 #include <gpu/vrs.h>
 
-typedef struct GPUApiVRS {
+typedef struct ApiVRS {
   void (*getCapabilities)(const GPUAdapter *adapter, GPUVRSCapabilitiesEXT *outCaps);
 
   GPUResult
@@ -51,7 +51,7 @@ typedef struct GPUApiVRS {
                              GPURasterizationRateMapParameterInfoEXT *outInfo);
 
   GPUResult (*copyRateMapParameters)(const GPURasterizationRateMapEXT *map, GPUBuffer *buffer, uint64_t offset);
-} GPUApiVRS;
+} ApiVRS;
 
 #ifdef __cplusplus
 }

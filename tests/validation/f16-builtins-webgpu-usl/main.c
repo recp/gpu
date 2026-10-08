@@ -144,21 +144,21 @@ webgpu_f16_begin_readback(WebGPUF16Validation *state) {
   WGPUCommandEncoderDescriptor encoderInfo  = WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
   WGPUCommandBufferDescriptor  commandInfo  = WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT;
   WGPUBufferMapCallbackInfo    callbackInfo = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
-  GPUDeviceWebGPU             *native;
+  DeviceWebGPU                *native;
   WGPUCommandEncoder           encoder;
   WGPUCommandBuffer            command;
 
   /* GPUQueueReadBuffer is deliberately synchronous and unavailable in a
    * browser. keep this validation-only readback asynchronous and outside the
    * public runtime contract. */
-  native = gpu_webgpuDevice(state ? state->device : NULL);
+  native = webgpuDevice(state ? state->device : NULL);
 
   if (!state || !native || !native->device || !native->queue
       || !state->buffers[1] || !state->buffers[1]->_priv) {
     return webgpu_f16_setup_error("native readback setup");
   }
 
-  bufferInfo.label = gpu_webgpuString("f16-builtins-readback");
+  bufferInfo.label = webgpuString("f16-builtins-readback");
   bufferInfo.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
   bufferInfo.size  = sizeof(state->output);
   state->staging   = wgpuDeviceCreateBuffer(native->device, &bufferInfo);

@@ -644,13 +644,13 @@ bench_renderFreeMetrics(BenchSceneMetrics *metrics) {
 
 void
 bench_renderCleanup(BenchRender *bench) {
-  GPUApi *api;
+  Api    *api;
 
   if (!bench) {
     return;
   }
 
-  api = gpuDeviceApi(bench->device);
+  api = deviceApi(bench->device);
 
   if (api && api->device.waitIdle) {
     (void)api->device.waitIdle(bench->device);

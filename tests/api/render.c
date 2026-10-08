@@ -210,7 +210,7 @@ check_pipeline_disk_cache(GPUDevice                   *device,
   GPUPipelineCacheCreateInfo cacheInfo = {0};
   GPUPipelineCache          *cache;
   GPURenderPipeline         *pipeline;
-  GPUApi                    *api;
+  Api                       *api;
   GPUResult                  result;
   char                       path[160];
   char                       metadataPath[168];
@@ -225,7 +225,7 @@ check_pipeline_disk_cache(GPUDevice                   *device,
 #endif
   int                        ok;
 
-  if (!(api = gpuDeviceApi(device))) {
+  if (!(api = deviceApi(device))) {
     return 0;
   }
 
@@ -494,7 +494,7 @@ cleanup:
 
 static void
 count_draw_primitives(GPURenderPassEncoder *rce,
-                      GPUPrimitiveType      type,
+                      PrimitiveType         type,
                       size_t                start,
                       size_t                count,
                       uint32_t              instanceCount,
@@ -526,7 +526,7 @@ count_draw_indexed(GPURenderPassEncoder *rce,
 
 static void
 count_draw_indirect(GPURenderPassEncoder *rce,
-                    GPUPrimitiveType      type,
+                    PrimitiveType         type,
                     GPUBuffer            *argsBuffer,
                     uint64_t              argsOffset) {
   (void)rce;
@@ -548,7 +548,7 @@ count_draw_indexed_indirect(GPURenderPassEncoder *rce,
 
 static bool
 count_multi_draw_indirect(GPURenderPassEncoder *rce,
-                          GPUPrimitiveType      type,
+                          PrimitiveType         type,
                           GPUBuffer            *argsBuffer,
                           uint64_t              argsOffset,
                           uint32_t              drawCount,
@@ -1594,7 +1594,7 @@ check_render_readback_case(GPUDevice             *device,
       return 0;
     }
 
-    if (!formatCaps.blendable && gpuDeviceApi(device)->backend != GPU_BACKEND_METAL) {
+    if (!formatCaps.blendable && deviceApi(device)->backend != GPU_BACKEND_METAL) {
       return 1;
     }
   }
@@ -2496,12 +2496,12 @@ check_render_pass_validation(void) {
 
 static int
 check_render_draw_validation_calls(GPUDevice *device) {
-  GPUApi                      *api;
-  void (*oldDraw)(GPURenderPassEncoder *, GPUPrimitiveType, size_t, size_t, uint32_t, uint32_t);
+  Api                         *api;
+  void (*oldDraw)(GPURenderPassEncoder *, PrimitiveType, size_t, size_t, uint32_t, uint32_t);
   void (*oldDrawIndexed)(GPURenderPassEncoder *, uint32_t, uint32_t, uint32_t, int32_t, uint32_t);
-  void (*oldDrawIndirect)(GPURenderPassEncoder *, GPUPrimitiveType, GPUBuffer *, uint64_t);
+  void (*oldDrawIndirect)(GPURenderPassEncoder *, PrimitiveType, GPUBuffer *, uint64_t);
   void (*oldDrawIndexedIndirect)(GPURenderPassEncoder *, GPUBuffer *, uint64_t);
-  bool (*oldMultiDrawIndirect)(GPURenderPassEncoder *, GPUPrimitiveType, GPUBuffer *, uint64_t, uint32_t, uint32_t);
+  bool (*oldMultiDrawIndirect)(GPURenderPassEncoder *, PrimitiveType, GPUBuffer *, uint64_t, uint32_t, uint32_t);
   bool (*oldMultiDrawIndexedIndirect)(GPURenderPassEncoder *, GPUBuffer *, uint64_t, uint32_t, uint32_t);
   GPUBindGroupLayout          *layout         = NULL;
   GPUBindGroupLayout          *layouts[1];
@@ -2521,7 +2521,7 @@ check_render_draw_validation_calls(GPUDevice *device) {
   bool                         savedStatsEnabled;
   int                          ok = 0;
 
-  if (!(api = gpuDeviceApi(device))) {
+  if (!(api = deviceApi(device))) {
     fprintf(stderr, "render draw validation has no device api\n");
     return 0;
   }
@@ -2780,12 +2780,12 @@ check_vertex_buffer_shadowing_calls(GPUDevice *activeDevice) {
   GPUBuffer            buffer  = {0};
   GPUBufferBinding     binding = {0};
   GPURenderPassEncoder pass    = {0};
-  GPUApi              *api;
+  Api                 *api;
   void (*oldVertexBuffer)(GPURenderPassEncoder *, GPUBuffer *, uint64_t, uint32_t);
   int                  ok;
   uint32_t             i;
 
-  if (!(api = gpuDeviceApi(activeDevice))) {
+  if (!(api = deviceApi(activeDevice))) {
     fprintf(stderr, "vertex buffer shadowing has no device api\n");
     return 0;
   }
@@ -2853,13 +2853,13 @@ check_render_push_constant_shadowing_calls(GPUDevice *activeDevice) {
   GPUQueue             queue  = {0};
   GPUCommandBuffer     cmdb   = {0};
   GPURenderPassEncoder pass   = {0};
-  GPUApi              *api;
+  Api                 *api;
   void (*oldPushConstants)(GPURenderPassEncoder *, GPUShaderStageFlags, const void *, uint32_t);
   uint32_t             value;
   int                  ok;
   uint32_t             i;
 
-  if (!(api = gpuDeviceApi(activeDevice))) {
+  if (!(api = deviceApi(activeDevice))) {
     fprintf(stderr, "render push constant shadowing has no device api\n");
     return 0;
   }
@@ -2917,8 +2917,8 @@ cleanup:
 
 static int
 check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
-  GPUApi                  *api;
-  GPUApi                   scopedApi;
+  Api                     *api;
+  Api                      scopedApi;
   GPUDevice                device    = {0};
   GPUQueue                 queue     = {0};
   GPUCommandBuffer         cmdb      = {0};
@@ -2928,7 +2928,7 @@ check_dynamic_state_validation_calls(GPUDevice *activeDevice) {
   GPUViewport              invalidViewport;
   int                      ok = 0;
 
-  if (!(api = gpuDeviceApi(activeDevice))) {
+  if (!(api = deviceApi(activeDevice))) {
     fprintf(stderr, "dynamic state validation has no device api\n");
     return 0;
   }

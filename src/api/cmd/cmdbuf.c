@@ -20,15 +20,15 @@
 
 GPU_HIDE
 bool
-gpuSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  GPUApi *api;
+schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
+  Api    *api;
 
   if (!cmdb || cmdb->_submitted || !frame || !frame->drawable
-      || gpuCommandBufferDevice(cmdb) != frame->device) {
+      || commandBufferDevice(cmdb) != frame->device) {
     return false;
   }
 
-  if (!(api = gpuCommandBufferApi(cmdb)))
+  if (!(api = commandBufferApi(cmdb)))
     return false;
 
   if (!api->cmdbuf.presentDrawable)
@@ -51,7 +51,7 @@ gpuSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
 GPU_EXPORT
 void
 GPUSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  (void)gpuSchedulePresent(cmdb, frame);
+  (void)schedulePresent(cmdb, frame);
 }
 
 GPU_EXPORT

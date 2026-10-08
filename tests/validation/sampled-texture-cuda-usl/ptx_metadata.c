@@ -43,12 +43,12 @@ destroy_library(GPUShaderLibrary *library) {
 }
 
 static int
-validate_entry(const GPUShaderPTXInfo *info,
+validate_entry(const ShaderPTXInfo    *info,
                uint32_t                entryIndex,
                int                     staticSampler) {
-  const GPUShaderPTXEntryInfo *entry;
-  const GPUShaderPTXParamInfo *sampled;
-  const GPUShaderPTXParamInfo *output;
+  const ShaderPTXEntryInfo    *entry;
+  const ShaderPTXParamInfo    *sampled;
+  const ShaderPTXParamInfo    *output;
 
   if (!info || entryIndex >= info->entryCount) {
     return 0;
@@ -90,10 +90,10 @@ validate_entry(const GPUShaderPTXInfo *info,
 }
 
 static int
-validate_fetch_entry(const GPUShaderPTXInfo *info, uint32_t entryIndex) {
-  const GPUShaderPTXEntryInfo *entry;
-  const GPUShaderPTXParamInfo *output;
-  const GPUShaderPTXParamInfo *texture;
+validate_fetch_entry(const ShaderPTXInfo    *info, uint32_t entryIndex) {
+  const ShaderPTXEntryInfo    *entry;
+  const ShaderPTXParamInfo    *output;
+  const ShaderPTXParamInfo    *texture;
 
   if (!info || entryIndex >= info->entryCount) {
     return 0;
@@ -124,10 +124,10 @@ validate_fetch_entry(const GPUShaderPTXInfo *info, uint32_t entryIndex) {
 }
 
 static int
-validate_query_entry(const GPUShaderPTXInfo *info, uint32_t entryIndex) {
-  const GPUShaderPTXEntryInfo *entry;
-  const GPUShaderPTXParamInfo *metadata;
-  const GPUShaderPTXParamInfo *output;
+validate_query_entry(const ShaderPTXInfo    *info, uint32_t entryIndex) {
+  const ShaderPTXEntryInfo    *entry;
+  const ShaderPTXParamInfo    *metadata;
+  const ShaderPTXParamInfo    *output;
 
   if (!info || entryIndex >= info->entryCount) {
     return 0;
@@ -157,9 +157,9 @@ validate_query_entry(const GPUShaderPTXInfo *info, uint32_t entryIndex) {
 
 static void
 print_metadata(const GPUShaderLibrary *library) {
-  const GPUShaderPTXInfo      *info;
-  const GPUShaderPTXEntryInfo *entry;
-  const GPUShaderPTXParamInfo *param;
+  const ShaderPTXInfo         *info;
+  const ShaderPTXEntryInfo    *entry;
+  const ShaderPTXParamInfo    *param;
   uint32_t                     entryIndex;
   uint32_t                     paramIndex;
 
@@ -209,7 +209,7 @@ print_metadata(const GPUShaderLibrary *library) {
 int
 validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
   GPUDevice         device;
-  GPUApi            api;
+  Api               api;
   GPUShaderLibrary *library;
   GPUResult         result;
   int               valid;

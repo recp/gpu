@@ -27,14 +27,14 @@ vk_unlockCache(GPUPipelineCache *cache);
 
 GPU_HIDE
 VkResult
-vk_createGraphicsPipelineCached(GPUDeviceVk                        *device,
+vk_createGraphicsPipelineCached(DeviceVk                           *device,
                                 GPUPipelineCache                   *cache,
                                 const VkGraphicsPipelineCreateInfo *info,
                                 VkPipeline                         *pipeline);
 
 GPU_HIDE
 VkResult
-vk_createComputePipelineCached(GPUDeviceVk                       *device,
+vk_createComputePipelineCached(DeviceVk                          *device,
                                GPUPipelineCache                  *cache,
                                const VkComputePipelineCreateInfo *info,
                                VkPipeline                        *pipeline);
@@ -42,7 +42,7 @@ vk_createComputePipelineCached(GPUDeviceVk                       *device,
 #ifdef VK_KHR_ray_tracing_pipeline
 GPU_HIDE
 VkResult
-vk_createRayPipelineCached(GPUDeviceVk                             *device,
+vk_createRayPipelineCached(DeviceVk                                *device,
                            GPUPipelineCache                        *cache,
                            const VkRayTracingPipelineCreateInfoKHR *info,
                            VkPipeline                              *pipeline);

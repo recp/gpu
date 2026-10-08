@@ -22,7 +22,7 @@ extern "C" {
 
 #include <gpu/execution-graph.h>
 
-typedef struct GPUApiExecutionGraph {
+typedef struct ApiExecutionGraph {
   GPUResult
   (*create)(GPUDevice                            *device,
             const GPUExecutionGraphCreateInfoEXT *info,
@@ -58,7 +58,7 @@ typedef struct GPUApiExecutionGraph {
                     GPUExecutionGraphInstanceEXT          *instance,
                     uint32_t                               inputCount,
                     const GPUExecutionGraphBufferInputEXT *inputs);
-} GPUApiExecutionGraph;
+} ApiExecutionGraph;
 
 #ifdef __cplusplus
 }

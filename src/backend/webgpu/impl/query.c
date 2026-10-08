@@ -32,9 +32,9 @@ webgpu_createQuerySet(GPUDevice                   *device,
                       const GPUQuerySetCreateInfo *info,
                       GPUQuerySet                 *set) {
   WGPUQuerySetDescriptor descriptor = WGPU_QUERY_SET_DESCRIPTOR_INIT;
-  GPUDeviceWebGPU       *native;
+  DeviceWebGPU          *native;
 
-  native = gpu_webgpuDevice(device);
+  native = webgpuDevice(device);
 
   if (!native || !native->device || !info || !set) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -47,7 +47,7 @@ webgpu_createQuerySet(GPUDevice                   *device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  descriptor.label = gpu_webgpuString(info->label);
+  descriptor.label = webgpuString(info->label);
   descriptor.count = info->count;
   set->_priv       = wgpuDeviceCreateQuerySet(native->device, &descriptor);
 
@@ -70,7 +70,7 @@ static void
 webgpu_beginOcclusionQuery(GPURenderPassEncoder *pass,
                            GPUQuerySet          *set,
                            uint32_t              queryIndex) {
-  GPUCommandWebGPU *command;
+  CommandWebGPU    *command;
 
   command = pass ? pass->_priv : NULL;
 
@@ -84,7 +84,7 @@ static void
 webgpu_endOcclusionQuery(GPURenderPassEncoder *pass,
                          GPUQuerySet          *set,
                          uint32_t              queryIndex) {
-  GPUCommandWebGPU *command;
+  CommandWebGPU    *command;
 
   GPU__UNUSED(set);
   GPU__UNUSED(queryIndex);
@@ -96,9 +96,9 @@ webgpu_endOcclusionQuery(GPURenderPassEncoder *pass,
 }
 
 static WGPUBuffer
-webgpu_queryScratch(GPUCommandWebGPU *command, uint64_t sizeBytes) {
+webgpu_queryScratch(CommandWebGPU    *command, uint64_t sizeBytes) {
   WGPUBufferDescriptor descriptor = WGPU_BUFFER_DESCRIPTOR_INIT;
-  GPUDeviceWebGPU     *device;
+  DeviceWebGPU        *device;
 
   if (sizeBytes > GPU_WEBGPU_QUERY_RESOLVE_CAPACITY) {
     return NULL;
@@ -108,13 +108,13 @@ webgpu_queryScratch(GPUCommandWebGPU *command, uint64_t sizeBytes) {
     return command->queryResolveScratch;
   }
 
-  device = gpu_webgpuDevice(gpuCommandBufferDevice(&command->command));
+  device = webgpuDevice(commandBufferDevice(&command->command));
 
   if (!device || !device->device) {
     return NULL;
   }
 
-  descriptor.label             = gpu_webgpuString("gpu-webgpu-query-resolve");
+  descriptor.label             = webgpuString("gpu-webgpu-query-resolve");
   descriptor.usage             = WGPUBufferUsage_QueryResolve | WGPUBufferUsage_CopySrc;
   descriptor.size              = GPU_WEBGPU_QUERY_RESOLVE_CAPACITY;
   command->queryResolveScratch = wgpuDeviceCreateBuffer(device->device,
@@ -130,11 +130,11 @@ webgpu_resolveQuerySet(GPUCommandBuffer *cmdb,
                        uint32_t          queryCount,
                        GPUBuffer        *dstBuffer,
                        uint64_t          dstOffset) {
-  GPUCommandWebGPU *command;
+  CommandWebGPU    *command;
   WGPUBuffer        destination;
   uint64_t          resultBytes;
 
-  command = gpu_webgpuCommand(cmdb);
+  command = webgpuCommand(cmdb);
 
   if (!command || !command->encoder || !set || !set->_priv
       || !dstBuffer || !dstBuffer->_priv) {
@@ -168,7 +168,7 @@ webgpu_resolveQuerySet(GPUCommandBuffer *cmdb,
 }
 
 void
-webgpu_initQuery(GPUApiCommandBuffer *api) {
+webgpu_initQuery(ApiCommandBuffer    *api) {
   api->createQuerySet      = webgpu_createQuerySet;
   api->destroyQuerySet     = webgpu_destroyQuerySet;
   api->writeTimestamp      = NULL;

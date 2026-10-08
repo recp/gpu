@@ -33,6 +33,6 @@ struct GPUFrame {
 
 GPU_HIDE
 bool
-gpuSchedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame);
+schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame);
 
 #endif /* gpu_frame_internal_h */

@@ -19,7 +19,7 @@
 
 static void
 mt_drawPrimitivesClassic(GPURenderPassEncoder *rce,
-                         GPUPrimitiveType      type,
+                         PrimitiveType         type,
                          size_t                start,
                          size_t                count,
                          uint32_t              instanceCount,
@@ -36,7 +36,7 @@ mt_drawIndexedPrimsClassic(GPURenderPassEncoder *rce,
 #if MT_HAS_METAL4
 static void
 mt_drawPrimitives4(GPURenderPassEncoder *rce,
-                   GPUPrimitiveType      type,
+                   PrimitiveType         type,
                    size_t                start,
                    size_t                count,
                    uint32_t              instanceCount,
@@ -88,7 +88,7 @@ mt_scissorAxis(int32_t     origin,
 
 static void
 mt_drawPrimitivesClassic(GPURenderPassEncoder *rce,
-                         GPUPrimitiveType      type,
+                         PrimitiveType         type,
                          size_t                start,
                          size_t                count,
                          uint32_t              instanceCount,
@@ -112,7 +112,7 @@ mt_drawPrimitivesClassic(GPURenderPassEncoder *rce,
 
 static void
 mt_drawPrimitives4(GPURenderPassEncoder *rce,
-                   GPUPrimitiveType      type,
+                   PrimitiveType         type,
                    size_t                start,
                    size_t                count,
                    uint32_t              instanceCount,
@@ -208,7 +208,7 @@ mt_drawIndexedPrims4(GPURenderPassEncoder *rce,
 
 GPU_HIDE
 GPURenderPassEncoder*
-mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
+mt_renderCommandEncoder(GPUCommandBuffer *cmdb, RenderPassDesc    *pass) {
   MTCommandBuffer      *commandState;
   GPURenderPassEncoder *enc;
   MTRenderEncoder      *nativeState;
@@ -238,12 +238,12 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
     if (!nativePass->modern
         || !mt_prepareArgumentState(cmdb,
                                     &commandState->vertexArguments,
-                                    gpuDeviceDebugLabel(gpuCommandBufferDevice(cmdb),
-                                                        "gpu-metal4-vertex-arguments"))
+                                    deviceDebugLabel(commandBufferDevice(cmdb),
+                                                     "gpu-metal4-vertex-arguments"))
         || !mt_prepareArgumentState(cmdb,
                                     &commandState->fragmentArguments,
-                                    gpuDeviceDebugLabel(gpuCommandBufferDevice(cmdb),
-                                                        "gpu-metal4-fragment-arguments"))) {
+                                    deviceDebugLabel(commandBufferDevice(cmdb),
+                                                     "gpu-metal4-fragment-arguments"))) {
       return NULL;
     }
 
@@ -276,7 +276,7 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   nativeState->width  = nativePass->width;
   nativeState->height = nativePass->height;
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-  if (gpuDeviceDebugMarkersEnabled(gpuCommandBufferDevice(cmdb))
+  if (deviceDebugMarkersEnabled(commandBufferDevice(cmdb))
       && pass->label && pass->label[0] != '\0') {
     label = [NSString stringWithUTF8String:pass->label];
 
@@ -308,7 +308,7 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 GPU_HIDE
 void
 mt_setRenderPipelineState(GPURenderPassEncoder   *rce,
-                          GPURenderPipelineState *pipelineState,
+                          RenderPipelineState    *pipelineState,
                           GPUCullMode             cullMode,
                           GPUFrontFace            frontFace) {
   MTRenderEncoder       *native;
@@ -340,8 +340,8 @@ mt_setRenderPipelineState(GPURenderPassEncoder   *rce,
 
         if (!mt_prepareArgumentState(rce->_cmdb,
                                      &meshCommand->meshArguments,
-                                     gpuDeviceDebugLabel(gpuCommandBufferDevice(rce->_cmdb),
-                                                         "gpu-metal4-mesh-arguments"))) {
+                                     deviceDebugLabel(commandBufferDevice(rce->_cmdb),
+                                                      "gpu-metal4-mesh-arguments"))) {
           return;
         }
 
@@ -355,8 +355,8 @@ mt_setRenderPipelineState(GPURenderPassEncoder   *rce,
 
         if (!mt_prepareArgumentState(rce->_cmdb,
                                      &taskCommand->taskArguments,
-                                     gpuDeviceDebugLabel(gpuCommandBufferDevice(rce->_cmdb),
-                                                         "gpu-metal4-task-arguments"))) {
+                                     deviceDebugLabel(commandBufferDevice(rce->_cmdb),
+                                                      "gpu-metal4-task-arguments"))) {
           return;
         }
 
@@ -801,7 +801,7 @@ void
 mt_rceSetVertexAccelerationStructure(GPURenderPassEncoder        *rce,
                                      GPUAccelerationStructureEXT *structure,
                                      uint32_t                     index) {
-  GPUAccelerationStructureMT *ray;
+  AccelerationStructureMT    *ray;
   MTRenderEncoder            *native;
 
   native = mt_renderEncoder(rce);
@@ -1076,7 +1076,7 @@ void
 mt_rceSetFragmentAccelerationStructure(GPURenderPassEncoder        *rce,
                                        GPUAccelerationStructureEXT *structure,
                                        uint32_t                     index) {
-  GPUAccelerationStructureMT *ray;
+  AccelerationStructureMT    *ray;
   MTRenderEncoder            *native;
 
   native = mt_renderEncoder(rce);
@@ -1104,7 +1104,7 @@ mt_rceSetFragmentAccelerationStructure(GPURenderPassEncoder        *rce,
 GPU_HIDE
 void
 mt_drawPrimitives(GPURenderPassEncoder *rce,
-                  GPUPrimitiveType      type,
+                  PrimitiveType         type,
                   size_t                start,
                   size_t                count,
                   uint32_t              instanceCount,
@@ -1214,7 +1214,7 @@ mt_drawMesh(GPURenderPassEncoder *rce,
 GPU_HIDE
 void
 mt_drawPrimitivesIndirect(GPURenderPassEncoder *rce,
-                          GPUPrimitiveType      type,
+                          PrimitiveType         type,
                           GPUBuffer            *argsBuffer,
                           uint64_t              argsOffset) {
   MTRenderEncoder *native;
@@ -1315,7 +1315,7 @@ mt_endEncoding(GPURenderPassEncoder *rce) {
 
 GPU_HIDE
 void
-mt_initRCE(GPUApiRCE *api) {
+mt_initRCE(ApiRCE    *api) {
   api->renderCommandEncoder   = mt_renderCommandEncoder;
   api->setRenderPipelineState = mt_setRenderPipelineState;
   api->viewport               = mt_viewport;

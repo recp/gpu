@@ -83,18 +83,18 @@ mt_bufferDescriptorArray(MTBindGroup *native, uint32_t layoutEntryIndex) {
 }
 
 static bool
-mt_isBufferDescriptorArray(const GPUBindGroupBindingView *binding) {
+mt_isBufferDescriptorArray(const BindGroupBindingView    *binding) {
   return binding && binding->kind == GPUBindKindBuffer
          && binding->arrayCount > 1u;
 }
 
 static uint64_t
-mt_bufferAddress(const GPUBindGroupBindingView *binding) {
+mt_bufferAddress(const BindGroupBindingView    *binding) {
   return binding && binding->buffer ? binding->buffer->_gpuAddress + binding->offset : 0u;
 }
 
 static void
-mt_scanBindGroup(void *ctx, const GPUBindGroupBindingView *binding) {
+mt_scanBindGroup(void *ctx, const BindGroupBindingView    *binding) {
   MTBindGroupScan *scan;
 
   if (!ctx || !binding) {
@@ -113,10 +113,10 @@ mt_scanBindGroup(void *ctx, const GPUBindGroupBindingView *binding) {
 }
 
 static void
-mt_buildBindGroup(void *ctx, const GPUBindGroupBindingView *binding) {
+mt_buildBindGroup(void *ctx, const BindGroupBindingView    *binding) {
   MTBufferDescriptorArray *record;
   MTBindGroupBuild        *build;
-  GPUDeviceMT             *deviceMT;
+  DeviceMT                *deviceMT;
   id<MTLBuffer>            argumentBuffer;
   uint32_t                *recordMap;
   uint64_t                *addresses;
@@ -219,7 +219,7 @@ mt_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
 
   memset(&scan, 0, sizeof(scan));
 
-  if (!gpuForEachBindGroupBinding(group, mt_scanBindGroup, &scan)) {
+  if (!forEachBindGroupBinding(group, mt_scanBindGroup, &scan)) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -256,7 +256,7 @@ mt_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   build.native = native;
   build.valid  = true;
 
-  if (!gpuForEachBindGroupBinding(group, mt_buildBindGroup, &build)
+  if (!forEachBindGroupBinding(group, mt_buildBindGroup, &build)
       || !build.valid) {
     for (cleanupIndex = 0u; cleanupIndex < native->arrayCount; cleanupIndex++) {
       [(id<MTLBuffer>)native->arrays[cleanupIndex].argumentBuffer._priv release];
@@ -273,7 +273,7 @@ mt_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
 
 static void
 mt_updateBindGroupBinding(void                          *ctx,
-                          const GPUBindGroupBindingView *binding) {
+                          const BindGroupBindingView    *binding) {
   MTBufferDescriptorArray *record;
   MTBindGroupBuild        *build;
   uint64_t                *addresses;
@@ -318,15 +318,15 @@ mt_updateBindGroup(GPUBindGroup            *group,
     return true;
   }
 
-  build.device = gpuBindGroupGetDevice(group);
+  build.device = bindGroupGetDevice(group);
   build.native = group->_native;
   build.valid  = true;
 
-  return gpuForEachBindGroupEntry(group,
-                                  entryCount,
-                                  entries,
-                                  mt_updateBindGroupBinding,
-                                  &build)
+  return forEachBindGroupEntry(group,
+                               entryCount,
+                               entries,
+                               mt_updateBindGroupBinding,
+                               &build)
          && build.valid;
 }
 
@@ -383,7 +383,7 @@ mt_renderStages(GPUShaderStageFlags visibility) {
 
 static void
 mt_useRenderBuffer(MTBindContext                 *ctx,
-                   const GPUBindGroupBindingView *binding) {
+                   const BindGroupBindingView    *binding) {
   MTRenderEncoder *native;
   id<MTLBuffer>    buffer;
 
@@ -413,7 +413,7 @@ mt_useRenderBuffer(MTBindContext                 *ctx,
 
 static void
 mt_useComputeBuffer(MTBindContext                 *ctx,
-                    const GPUBindGroupBindingView *binding) {
+                    const BindGroupBindingView    *binding) {
   MTComputeEncoder *native;
   id<MTLBuffer>     buffer;
 
@@ -445,26 +445,26 @@ mt_bindRenderBuffer(GPURenderPassEncoder *pass,
                     uint32_t              index,
                     GPUShaderStageFlags   visibility) {
   if ((visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0u) {
-    gpuSetRenderVertexBuffer(pass, buffer, offset, index);
+    setRenderVertexBuffer(pass, buffer, offset, index);
   }
 
   if ((visibility & GPU_SHADER_STAGE_FRAGMENT_BIT) != 0u) {
-    gpuSetRenderFragmentBuffer(pass, buffer, offset, index);
+    setRenderFragmentBuffer(pass, buffer, offset, index);
   }
 
   if ((visibility & GPU_SHADER_STAGE_TASK_BIT) != 0u) {
-    gpuSetRenderTaskBuffer(pass, buffer, offset, index);
+    setRenderTaskBuffer(pass, buffer, offset, index);
   }
 
   if ((visibility & GPU_SHADER_STAGE_MESH_BIT) != 0u) {
-    gpuSetRenderMeshBuffer(pass, buffer, offset, index);
+    setRenderMeshBuffer(pass, buffer, offset, index);
   }
 }
 
 static void
 mt_bindRenderArgumentBuffer(MTBindContext                 *ctx,
                             MTBufferDescriptorArray       *record,
-                            const GPUBindGroupBindingView *binding) {
+                            const BindGroupBindingView    *binding) {
   GPUBuffer    *argumentBuffer;
   uint64_t     *addresses;
   id<MTLBuffer> upload;
@@ -536,16 +536,16 @@ mt_bindRenderArgumentBuffer(MTBindContext                 *ctx,
 static void
 mt_bindComputeArgumentBuffer(MTBindContext                 *ctx,
                              MTBufferDescriptorArray       *record,
-                             const GPUBindGroupBindingView *binding) {
+                             const BindGroupBindingView    *binding) {
   uint64_t     *addresses;
   id<MTLBuffer> upload;
 
   if (!binding->hasDynamicOffset) {
     if (binding->arrayIndex == 0u) {
-      gpuSetComputeBuffer(ctx->compute,
-                          &record->argumentBuffer,
-                          0u,
-                          binding->binding);
+      setComputeBuffer(ctx->compute,
+                       &record->argumentBuffer,
+                       0u,
+                       binding->binding);
     }
 
     mt_useComputeBuffer(ctx, binding);
@@ -573,10 +573,10 @@ mt_bindComputeArgumentBuffer(MTBindContext                 *ctx,
       ctx->dynamicBuffer._gpuAddress = upload.gpuAddress;
     }
 
-    gpuSetComputeBuffer(ctx->compute,
-                        &ctx->dynamicBuffer,
-                        ctx->dynamicOffset,
-                        binding->binding);
+    setComputeBuffer(ctx->compute,
+                     &ctx->dynamicBuffer,
+                     ctx->dynamicOffset,
+                     binding->binding);
   }
 
   if (ctx->dynamicRecord != record
@@ -600,10 +600,10 @@ mt_bindComputeArgumentBuffer(MTBindContext                 *ctx,
 }
 
 static void
-mt_bindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
+mt_bindRenderBinding(void *ctx, const BindGroupBindingView    *binding) {
   MTBufferDescriptorArray *record;
   MTBindContext           *bind;
-  GPUApiRCE               *api;
+  ApiRCE                  *api;
   uint32_t                 index;
 
   if (!ctx || !binding) {
@@ -699,10 +699,10 @@ static MTBindDynamicStatus
 mt_bindRenderSingleDynamicBuffer(GPURenderPassEncoder *pass,
                                  GPUPipelineLayout    *pipelineLayout,
                                  uint32_t              groupIndex,
-                                 GPUBindGroupPriv     *priv,
+                                 BindGroupPriv        *priv,
                                  const uint32_t       *dynamicOffsets) {
-  GPUBindGroupBindingPriv *binding;
-  GPUPipelineLayoutPriv   *pipeline;
+  BindGroupBindingPriv    *binding;
+  PipelineLayoutPriv      *pipeline;
   uint64_t                 offset;
   uint32_t                 index;
 
@@ -720,7 +720,7 @@ mt_bindRenderSingleDynamicBuffer(GPURenderPassEncoder *pass,
   offset = binding->offset + dynamicOffsets[0];
 
   if (offset < binding->offset
-      || !gpuBufferRangeValid(binding->buffer, offset, binding->size)) {
+      || !bufferRangeValid(binding->buffer, offset, binding->size)) {
     return MT_BIND_DYNAMIC_FAILED;
   }
 
@@ -747,15 +747,15 @@ mt_bindRenderDynamicBuffers(GPURenderPassEncoder *pass,
                             GPUBindGroup         *group,
                             uint32_t              dynamicOffsetCount,
                             const uint32_t       *dynamicOffsets) {
-  GPUBindGroupLayoutPriv        *layout;
-  GPUBindGroupPriv              *priv;
-  GPUPipelineLayoutPriv         *pipeline;
-  GPUApiRCE                     *api;
+  BindGroupLayoutPriv           *layout;
+  BindGroupPriv                 *priv;
+  PipelineLayoutPriv            *pipeline;
+  ApiRCE                        *api;
   MTBindGroup                   *native;
   const GPUBindGroupLayoutEntry *singleEntry;
-  const GPUBindGroupBindingPriv *singleBinding;
+  const BindGroupBindingPriv    *singleBinding;
   const GPUBindGroupLayoutEntry *entry;
-  const GPUBindGroupBindingPriv *binding;
+  const BindGroupBindingPriv    *binding;
   uint64_t                       singleOffset;
   uint64_t                       offset;
   uint32_t                       singleIndex;
@@ -806,7 +806,7 @@ mt_bindRenderDynamicBuffers(GPURenderPassEncoder *pass,
              dynamicOffsets[singleBinding->dynamicOffsetIndex];
 
     if (singleOffset < singleBinding->offset
-        || !gpuBufferRangeValid(singleBinding->buffer, singleOffset, singleBinding->size)) {
+        || !bufferRangeValid(singleBinding->buffer, singleOffset, singleBinding->size)) {
       return MT_BIND_DYNAMIC_FAILED;
     }
 
@@ -838,7 +838,7 @@ mt_bindRenderDynamicBuffers(GPURenderPassEncoder *pass,
              dynamicOffsets[binding->dynamicOffsetIndex];
 
     if (offset < binding->offset
-        || !gpuBufferRangeValid(binding->buffer, offset, binding->size)) {
+        || !bufferRangeValid(binding->buffer, offset, binding->size)) {
       return MT_BIND_DYNAMIC_FAILED;
     }
 
@@ -872,10 +872,10 @@ mt_bindRenderDynamicBuffers(GPURenderPassEncoder *pass,
 
 static GPU_INLINE bool
 mt_bindStaticBuffer(GPURenderPassEncoder  *pass,
-                    GPUPipelineLayoutPriv *pipeline,
+                    PipelineLayoutPriv    *pipeline,
                     uint32_t               groupIndex,
-                    GPUBindGroupPriv      *priv) {
-  GPUBindGroupBindingPriv *binding;
+                    BindGroupPriv         *priv) {
+  BindGroupBindingPriv    *binding;
   MTRenderEncoder         *native;
 #if MT_HAS_METAL4
   MTArgumentState         *arguments;
@@ -927,14 +927,14 @@ mt_bindRenderGroupStatic(GPURenderPassEncoder *pass,
                          GPUPipelineLayout    *pipelineLayout,
                          uint32_t              groupIndex,
                          GPUBindGroup         *group) {
-  GPUBindGroupLayoutPriv        *layout;
-  GPUBindGroupPriv              *priv;
-  GPUPipelineLayoutPriv         *pipeline;
-  GPUApiRCE                     *api;
+  BindGroupLayoutPriv           *layout;
+  BindGroupPriv                 *priv;
+  PipelineLayoutPriv            *pipeline;
+  ApiRCE                        *api;
   const GPUBindGroupLayoutEntry *singleEntry;
-  const GPUBindGroupBindingPriv *singleBinding;
+  const BindGroupBindingPriv    *singleBinding;
   const GPUBindGroupLayoutEntry *entry;
-  const GPUBindGroupBindingPriv *binding;
+  const BindGroupBindingPriv    *binding;
   uint32_t                       singleIndex;
   uint32_t                       i;
   uint32_t                       index;
@@ -1060,10 +1060,10 @@ mt_bindRenderGroupStatic(GPURenderPassEncoder *pass,
 }
 
 static void
-mt_bindComputeBinding(void *ctx, const GPUBindGroupBindingView *binding) {
+mt_bindComputeBinding(void *ctx, const BindGroupBindingView    *binding) {
   MTBufferDescriptorArray *record;
   MTBindContext           *bind;
-  GPUApiCompute           *api;
+  ApiCompute              *api;
   uint32_t                 index;
 
   if (!ctx || !binding
@@ -1111,7 +1111,7 @@ mt_bindRenderGroup(GPURenderPassEncoder *pass,
                    uint32_t              dynamicOffsetCount,
                    const uint32_t       *dynamicOffsets) {
   MTBindContext       ctx;
-  GPUBindGroupPriv   *priv;
+  BindGroupPriv      *priv;
   MTBindDynamicStatus result;
 
   priv = group ? group->_priv : NULL;
@@ -1138,13 +1138,13 @@ mt_bindRenderGroup(GPURenderPassEncoder *pass,
   ctx.native = group ? group->_native : NULL;
   ctx.valid  = true;
 
-  return gpuForEachBindGroupBindingWithDynamicOffsets(pipelineLayout,
-                                                      groupIndex,
-                                                      group,
-                                                      dynamicOffsetCount,
-                                                      dynamicOffsets,
-                                                      mt_bindRenderBinding,
-                                                      &ctx)
+  return forEachBindGroupBindingWithDynamicOffsets(pipelineLayout,
+                                                   groupIndex,
+                                                   group,
+                                                   dynamicOffsetCount,
+                                                   dynamicOffsets,
+                                                   mt_bindRenderBinding,
+                                                   &ctx)
          && ctx.valid;
 }
 
@@ -1162,19 +1162,19 @@ mt_bindComputeGroup(GPUComputePassEncoder *pass,
   ctx.native  = group ? group->_native : NULL;
   ctx.valid   = true;
 
-  return gpuForEachBindGroupBindingWithDynamicOffsets(pipelineLayout,
-                                                      groupIndex,
-                                                      group,
-                                                      dynamicOffsetCount,
-                                                      dynamicOffsets,
-                                                      mt_bindComputeBinding,
-                                                      &ctx)
+  return forEachBindGroupBindingWithDynamicOffsets(pipelineLayout,
+                                                   groupIndex,
+                                                   group,
+                                                   dynamicOffsetCount,
+                                                   dynamicOffsets,
+                                                   mt_bindComputeBinding,
+                                                   &ctx)
          && ctx.valid;
 }
 
 GPU_HIDE
 void
-mt_initDescriptor(GPUApiDescriptor *api) {
+mt_initDescriptor(ApiDescriptor    *api) {
   api->createBindGroup  = mt_createBindGroup;
   api->updateBindGroup  = mt_updateBindGroup;
   api->destroyBindGroup = mt_destroyBindGroup;

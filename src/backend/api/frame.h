@@ -23,13 +23,13 @@ extern "C" {
 #include <gpu/common.h>
 #include <gpu/gpu.h>
 
-struct GPUApi;
+struct Api;
 
-typedef struct GPUApiFrame {
-  GPUFrame* (*beginFrame)(struct GPUApi *__restrict api, GPUSwapchain *__restrict swapchain);
+typedef struct ApiFrame {
+  GPUFrame* (*beginFrame)(struct Api    *__restrict api, GPUSwapchain *__restrict swapchain);
 
-  void (*endFrame)(struct GPUApi *__restrict api, GPUFrame *__restrict frame);
-} GPUApiFrame;
+  void (*endFrame)(struct Api    *__restrict api, GPUFrame *__restrict frame);
+} ApiFrame;
 
 #ifdef __cplusplus
 }

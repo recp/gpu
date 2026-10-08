@@ -21,90 +21,90 @@
 
 GPU_HIDE
 void
-gpuSetRenderVertexBuffer(GPURenderPassEncoder *pass,
-                         GPUBuffer            *buf,
-                         uint64_t              off,
+setRenderVertexBuffer(GPURenderPassEncoder *pass,
+                      GPUBuffer            *buf,
+                      uint64_t              off,
+                      uint32_t              index);
+
+GPU_HIDE
+void
+setRenderVertexTexture(GPURenderPassEncoder *pass,
+                       GPUTextureView       *view,
+                       uint32_t              index);
+
+GPU_HIDE
+void
+setRenderVertexSampler(GPURenderPassEncoder *pass,
+                       GPUSampler           *sampler,
+                       uint32_t              index);
+
+GPU_HIDE
+void
+setRenderVertexAccelerationStructure(GPURenderPassEncoder        *pass,
+                                     GPUAccelerationStructureEXT *structure,
+                                     uint32_t                     index);
+
+GPU_HIDE
+void
+setRenderTaskBuffer(GPURenderPassEncoder *pass,
+                    GPUBuffer            *buf,
+                    uint64_t              off,
+                    uint32_t              index);
+
+GPU_HIDE
+void
+setRenderTaskTexture(GPURenderPassEncoder *pass,
+                     GPUTextureView       *view,
+                     uint32_t              index);
+
+GPU_HIDE
+void
+setRenderTaskSampler(GPURenderPassEncoder *pass,
+                     GPUSampler           *sampler,
+                     uint32_t              index);
+
+GPU_HIDE
+void
+setRenderMeshBuffer(GPURenderPassEncoder *pass,
+                    GPUBuffer            *buf,
+                    uint64_t              off,
+                    uint32_t              index);
+
+GPU_HIDE
+void
+setRenderMeshTexture(GPURenderPassEncoder *pass,
+                     GPUTextureView       *view,
+                     uint32_t              index);
+
+GPU_HIDE
+void
+setRenderMeshSampler(GPURenderPassEncoder *pass,
+                     GPUSampler           *sampler,
+                     uint32_t              index);
+
+GPU_HIDE
+void
+setRenderFragmentBuffer(GPURenderPassEncoder *pass,
+                        GPUBuffer            *buf,
+                        uint64_t              off,
+                        uint32_t              index);
+
+GPU_HIDE
+void
+setRenderFragmentTexture(GPURenderPassEncoder *pass,
+                         GPUTextureView       *view,
                          uint32_t              index);
 
 GPU_HIDE
 void
-gpuSetRenderVertexTexture(GPURenderPassEncoder *pass,
-                          GPUTextureView       *view,
-                          uint32_t              index);
+setRenderFragmentSampler(GPURenderPassEncoder *pass,
+                         GPUSampler           *sampler,
+                         uint32_t              index);
 
 GPU_HIDE
 void
-gpuSetRenderVertexSampler(GPURenderPassEncoder *pass,
-                          GPUSampler           *sampler,
-                          uint32_t              index);
-
-GPU_HIDE
-void
-gpuSetRenderVertexAccelerationStructure(GPURenderPassEncoder        *pass,
-                                        GPUAccelerationStructureEXT *structure,
-                                        uint32_t                     index);
-
-GPU_HIDE
-void
-gpuSetRenderTaskBuffer(GPURenderPassEncoder *pass,
-                       GPUBuffer            *buf,
-                       uint64_t              off,
-                       uint32_t              index);
-
-GPU_HIDE
-void
-gpuSetRenderTaskTexture(GPURenderPassEncoder *pass,
-                        GPUTextureView       *view,
-                        uint32_t              index);
-
-GPU_HIDE
-void
-gpuSetRenderTaskSampler(GPURenderPassEncoder *pass,
-                        GPUSampler           *sampler,
-                        uint32_t              index);
-
-GPU_HIDE
-void
-gpuSetRenderMeshBuffer(GPURenderPassEncoder *pass,
-                       GPUBuffer            *buf,
-                       uint64_t              off,
-                       uint32_t              index);
-
-GPU_HIDE
-void
-gpuSetRenderMeshTexture(GPURenderPassEncoder *pass,
-                        GPUTextureView       *view,
-                        uint32_t              index);
-
-GPU_HIDE
-void
-gpuSetRenderMeshSampler(GPURenderPassEncoder *pass,
-                        GPUSampler           *sampler,
-                        uint32_t              index);
-
-GPU_HIDE
-void
-gpuSetRenderFragmentBuffer(GPURenderPassEncoder *pass,
-                           GPUBuffer            *buf,
-                           uint64_t              off,
-                           uint32_t              index);
-
-GPU_HIDE
-void
-gpuSetRenderFragmentTexture(GPURenderPassEncoder *pass,
-                            GPUTextureView       *view,
-                            uint32_t              index);
-
-GPU_HIDE
-void
-gpuSetRenderFragmentSampler(GPURenderPassEncoder *pass,
-                            GPUSampler           *sampler,
-                            uint32_t              index);
-
-GPU_HIDE
-void
-gpuSetRenderFragmentAccelerationStructure(GPURenderPassEncoder        *pass,
-                                          GPUAccelerationStructureEXT *structure,
-                                          uint32_t                     index);
+setRenderFragmentAccelerationStructure(GPURenderPassEncoder        *pass,
+                                       GPUAccelerationStructureEXT *structure,
+                                       uint32_t                     index);
 
 #endif /* gpu_rce_internal_h */

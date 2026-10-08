@@ -155,11 +155,11 @@ static int
 reflection_group0_layout_is_canonical(GPUDevice          *device,
                                       GPUBindGroupLayout *layout) {
   const GPUBindGroupLayoutEntry *entries;
-  GPUApi                        *api;
+  Api                           *api;
   uint32_t                       count;
   int                            webgpu;
 
-  api     = gpuDeviceApi(device);
+  api     = deviceApi(device);
   webgpu  = api && api->backend == GPU_BACKEND_WEBGPU;
   entries = GPUGetBindGroupLayoutEntries(layout, &count);
 
@@ -210,7 +210,7 @@ check_compute_pipeline_workgroup_size(GPUDevice         *device,
                                       GPUShaderLibrary  *library,
                                       GPUPipelineLayout *layout) {
   GPUComputePipelineCreateInfo info = {0};
-  GPUComputePipelineState     *state;
+  ComputePipelineState        *state;
   GPUComputePipeline          *pipeline;
   int                          ok;
 
@@ -654,10 +654,10 @@ check_shader_layout_after_library_destroy(GPUDevice       *device,
   GPUBindGroupEntry      group0Entries[2];
   GPUBindGroupEntry      group1Entries[2];
   GPUBindGroupCreateInfo groupInfo = {0};
-  GPUApiDescriptor       savedDescriptor;
+  ApiDescriptor          savedDescriptor;
   GPUBindGroup          *group0Group;
   GPUBindGroup          *group1Group;
-  GPUApi                *api;
+  Api                   *api;
   int                    ok;
 
   if (!shaderLayout
@@ -723,7 +723,7 @@ check_shader_layout_after_library_destroy(GPUDevice       *device,
   groupInfo.entryCount       = (uint32_t)GPU_ARRAY_LEN(group0Entries);
   groupInfo.pEntries         = group0Entries;
 
-  if (!(api = gpuDeviceApi(device))) {
+  if (!(api = deviceApi(device))) {
     return 0;
   }
 
@@ -773,11 +773,11 @@ check_reflection_objects_after_library_destroy(GPUDevice           *device,
   GPUBindGroupEntry           group1Entries[2];
   GPUBindGroupCreateInfo      groupInfo    = {0};
   GPUPipelineLayoutCreateInfo pipelineInfo = {0};
-  GPUApiDescriptor            savedDescriptor;
+  ApiDescriptor               savedDescriptor;
   GPUPipelineLayout          *pipelineLayout = NULL;
   GPUBindGroup               *group0Group    = NULL;
   GPUBindGroup               *group1Group    = NULL;
-  GPUApi                     *api;
+  Api                        *api;
   int                         descriptorHookDisabled = 0;
   int                         ok                     = 0;
 
@@ -858,7 +858,7 @@ check_reflection_objects_after_library_destroy(GPUDevice           *device,
   groupInfo.entryCount       = (uint32_t)GPU_ARRAY_LEN(group0Entries);
   groupInfo.pEntries         = group0Entries;
 
-  if (!(api = gpuDeviceApi(device))) {
+  if (!(api = deviceApi(device))) {
     goto cleanup;
   }
 

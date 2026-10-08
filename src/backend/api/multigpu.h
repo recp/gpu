@@ -19,40 +19,40 @@
 
 #include <gpu/gpu.h>
 
-typedef enum GPUExternalMemoryType {
+typedef enum ExternalMemoryType {
   GPU_EXTERNAL_MEMORY_NONE,
   GPU_EXTERNAL_MEMORY_OPAQUE_FD,
   GPU_EXTERNAL_MEMORY_OPAQUE_WIN32,
   GPU_EXTERNAL_MEMORY_D3D12_RESOURCE
-} GPUExternalMemoryType;
+} ExternalMemoryType;
 
-typedef enum GPUExternalSemaphoreType {
+typedef enum ExternalSemaphoreType {
   GPU_EXTERNAL_SEMAPHORE_NONE,
   GPU_EXTERNAL_SEMAPHORE_OPAQUE_FD,
   GPU_EXTERNAL_SEMAPHORE_OPAQUE_WIN32,
   GPU_EXTERNAL_SEMAPHORE_D3D12_FENCE,
   GPU_EXTERNAL_SEMAPHORE_TIMELINE_FD,
   GPU_EXTERNAL_SEMAPHORE_TIMELINE_WIN32
-} GPUExternalSemaphoreType;
+} ExternalSemaphoreType;
 
-typedef union GPUExternalHandle {
+typedef union ExternalHandle {
   void *win32;
   int   fd;
-} GPUExternalHandle;
+} ExternalHandle;
 
-typedef struct GPUExternalMemoryExport {
-  GPUExternalHandle     handle;
+typedef struct ExternalMemoryExport {
+  ExternalHandle        handle;
   uint64_t              sizeBytes;
-  GPUExternalMemoryType type;
+  ExternalMemoryType    type;
   bool                  dedicated;
-} GPUExternalMemoryExport;
+} ExternalMemoryExport;
 
-typedef struct GPUExternalSemaphoreExport {
-  GPUExternalHandle        handle;
-  GPUExternalSemaphoreType type;
-} GPUExternalSemaphoreExport;
+typedef struct ExternalSemaphoreExport {
+  ExternalHandle           handle;
+  ExternalSemaphoreType    type;
+} ExternalSemaphoreExport;
 
-typedef struct GPUApiMultiGPU {
+typedef struct ApiMultiGPU {
   GPUResult (*createInterop)(GPUDevice *firstDevice, GPUDevice *secondDevice, GPUDeviceInteropEXT *interop);
 
   void (*destroyInterop)(GPUDeviceInteropEXT *interop);
@@ -108,7 +108,7 @@ typedef struct GPUApiMultiGPU {
   (*createExternalBuffer)(GPUDevice                 *device,
                           const GPUBufferCreateInfo *info,
                           GPUBuffer                **outBuffer,
-                          GPUExternalMemoryExport   *outExport);
+                          ExternalMemoryExport      *outExport);
 
   GPUResult
   (*getExternalTextureRequirements)(GPUDevice                  *device,
@@ -119,17 +119,17 @@ typedef struct GPUApiMultiGPU {
   (*createExternalTexture)(GPUDevice                  *device,
                            const GPUTextureCreateInfo *info,
                            GPUTexture                **outTexture,
-                           GPUExternalMemoryExport    *outExport);
+                           ExternalMemoryExport       *outExport);
 
   GPUResult
   (*createExternalSemaphore)(GPUDevice                    *device,
                              const GPUSemaphoreCreateInfo *info,
                              GPUSemaphore                 *semaphore,
-                             GPUExternalSemaphoreExport   *outExport);
+                             ExternalSemaphoreExport      *outExport);
 
   GPUResult (*encodeExternalRelease)(GPUCommandBuffer *cmdb, const GPUSharedBarrierBatchEXT *barriers);
 
   GPUResult (*encodeExternalAcquire)(GPUCommandBuffer *cmdb, const GPUSharedBarrierBatchEXT *barriers);
-} GPUApiMultiGPU;
+} ApiMultiGPU;
 
 #endif /* gpu_gpudef_multigpu_h */

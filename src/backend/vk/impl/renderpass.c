@@ -25,8 +25,8 @@ enum {
   GPU_VK_TRANSFER_CHUNK_SIZE = 64u * 1024u
 };
 
-typedef struct GPUClassicRenderPassVk {
-  struct GPUClassicRenderPassVk *next;
+typedef struct ClassicRenderPassVk {
+  struct ClassicRenderPassVk    *next;
   VkRenderPass                   renderPass;
   VkFormat                       colorFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   VkFormat                       depthStencilFormat;
@@ -40,10 +40,10 @@ typedef struct GPUClassicRenderPassVk {
   uint32_t                       colorCount;
   uint32_t                       resolveMask;
   uint32_t                       presentMask;
-} GPUClassicRenderPassVk;
+} ClassicRenderPassVk;
 
-typedef struct GPUClassicFramebufferVk {
-  struct GPUClassicFramebufferVk *next;
+typedef struct ClassicFramebufferVk {
+  struct ClassicFramebufferVk    *next;
   VkFramebuffer                   framebuffer;
   VkRenderPass                    renderPass;
   VkImageView                     colorViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
@@ -52,9 +52,9 @@ typedef struct GPUClassicFramebufferVk {
   VkExtent2D                      extent;
   uint32_t                        colorCount;
   uint32_t                        layerCount;
-} GPUClassicFramebufferVk;
+} ClassicFramebufferVk;
 
-typedef struct GPUClassicRenderTargetInfoVk {
+typedef struct ClassicRenderTargetInfoVk {
   const VkFormat    *colorFormats;
   const VkImageView *colorViews;
   const VkImageView *resolveViews;
@@ -72,7 +72,7 @@ typedef struct GPUClassicRenderTargetInfoVk {
   uint32_t           sampleCount;
   uint32_t           resolveMask;
   uint32_t           presentMask;
-} GPUClassicRenderTargetInfoVk;
+} ClassicRenderTargetInfoVk;
 
 #ifdef VK_KHR_copy_memory_indirect
 _Static_assert(sizeof(GPUIndirectMemoryCopyCommandEXT) == sizeof(VkCopyMemoryIndirectCommandKHR),
@@ -135,7 +135,7 @@ vk__storeOp(GPUStoreOp op) {
 }
 
 static void
-vk__lockClassicRenderTargets(GPUDeviceVk *device) {
+vk__lockClassicRenderTargets(DeviceVk    *device) {
 #if defined(_WIN32) || defined(WIN32)
   EnterCriticalSection(&device->classicRenderLock);
 #else
@@ -144,7 +144,7 @@ vk__lockClassicRenderTargets(GPUDeviceVk *device) {
 }
 
 static void
-vk__unlockClassicRenderTargets(GPUDeviceVk *device) {
+vk__unlockClassicRenderTargets(DeviceVk    *device) {
 #if defined(_WIN32) || defined(WIN32)
   LeaveCriticalSection(&device->classicRenderLock);
 #else
@@ -152,15 +152,15 @@ vk__unlockClassicRenderTargets(GPUDeviceVk *device) {
 #endif
 }
 
-static GPUClassicRenderPassVk*
-vk__findClassicRenderPass(GPUDeviceVk                        *device,
-                          const GPUClassicRenderTargetInfoVk *info,
+static ClassicRenderPassVk*
+vk__findClassicRenderPass(DeviceVk                           *device,
+                          const ClassicRenderTargetInfoVk    *info,
                           VkSampleCountFlagBits               sampleCount,
                           VkAttachmentLoadOp                  depthLoadOp,
                           VkAttachmentStoreOp                 depthStoreOp,
                           VkAttachmentLoadOp                  stencilLoadOp,
                           VkAttachmentStoreOp                 stencilStoreOp) {
-  GPUClassicRenderPassVk *entry;
+  ClassicRenderPassVk    *entry;
   uint32_t                i;
   bool                    matches;
 
@@ -188,9 +188,9 @@ vk__findClassicRenderPass(GPUDeviceVk                        *device,
   return NULL;
 }
 
-static GPUClassicRenderPassVk*
-vk__createClassicRenderPass(GPUDeviceVk                        *device,
-                            const GPUClassicRenderTargetInfoVk *target,
+static ClassicRenderPassVk*
+vk__createClassicRenderPass(DeviceVk                           *device,
+                            const ClassicRenderTargetInfoVk    *target,
                             VkSampleCountFlagBits               sampleCount,
                             VkAttachmentLoadOp                  depthLoadOp,
                             VkAttachmentStoreOp                 depthStoreOp,
@@ -203,7 +203,7 @@ vk__createClassicRenderPass(GPUDeviceVk                        *device,
   VkSubpassDescription     subpass                                            = {0};
   VkSubpassDependency      dependency                                         = {0};
   VkRenderPassCreateInfo   info                                               = {0};
-  GPUClassicRenderPassVk  *entry;
+  ClassicRenderPassVk     *entry;
   VkAttachmentDescription *colorAttachment;
   VkAttachmentDescription *resolveAttachment;
   uint32_t                 attachmentCount;
@@ -332,14 +332,14 @@ vk__createClassicRenderPass(GPUDeviceVk                        *device,
 }
 
 static GPUResult
-vk__getClassicRenderTarget(GPUDeviceVk                        *device,
-                           const GPUClassicRenderTargetInfoVk *target,
+vk__getClassicRenderTarget(DeviceVk                           *device,
+                           const ClassicRenderTargetInfoVk    *target,
                            VkRenderPass                       *outRenderPass,
                            VkFramebuffer                      *outFramebuffer) {
   VkImageView              attachments[GPU_VK_MAX_RENDER_ATTACHMENTS];
   VkFramebufferCreateInfo  info = {0};
-  GPUClassicRenderPassVk  *pass;
-  GPUClassicFramebufferVk *framebuffer;
+  ClassicRenderPassVk     *pass;
+  ClassicFramebufferVk    *framebuffer;
   VkSampleCountFlagBits    nativeSampleCount;
   VkAttachmentLoadOp       nativeDepthLoad;
   VkAttachmentStoreOp      nativeDepthStore;
@@ -519,7 +519,7 @@ static VkClearColorValue
 vk__clearColor(const GPUClearColorValue *color, GPUFormat format) {
   VkClearColorValue result;
 
-  switch (gpuFormatNumericType(format)) {
+  switch (formatNumericType(format)) {
     case GPU_FORMAT_NUMERIC_UINT:
       memcpy(result.uint32, color->uint32, sizeof(result.uint32));
       break;
@@ -578,24 +578,24 @@ vk__layoutAccess(VkImageLayout layout, VkPipelineStageFlags *outStage, VkAccessF
   }
 }
 
-static GPURenderPassDesc*
+static RenderPassDesc*
 vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
                           const GPURenderPassCreateInfo *info,
-                          GPUCommandBufferVk            *command,
-                          GPUDeviceVk                   *device) {
-  GPURenderPassDesc                          *pass;
-  GPURenderPassVk                            *native;
+                          CommandBufferVk               *command,
+                          DeviceVk                      *device) {
+  RenderPassDesc                             *pass;
+  RenderPassVk                               *native;
   const GPUShadingRateAttachmentEXT          *shadingRate;
   const GPURasterizationRateMapRenderPassEXT *rateMap;
   const GPURenderPassColorAttachment         *colorAttachment;
-  GPUTextureViewVk                           *colorView;
-  GPUTextureViewVk                           *resolveView;
-  GPUSwapchainVk                             *swapchain;
+  TextureViewVk                              *colorView;
+  TextureViewVk                              *resolveView;
+  SwapchainVk                                *swapchain;
   VkRenderingAttachmentInfoKHR               *nativeAttachment;
   const GPURenderPassDepthStencilAttachment  *depthAttachment;
-  GPUTextureViewVk                           *depthView;
+  TextureViewVk                              *depthView;
 #ifdef VK_KHR_fragment_shading_rate
-  GPUTextureViewVk                           *shadingView;
+  TextureViewVk                              *shadingView;
 #endif
   uint32_t                                    layerCount;
   uint32_t                                    i;
@@ -618,7 +618,7 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
   memset(pass, 0, sizeof(*pass));
   memset(native, 0, sizeof(*native));
 
-  if (!gpuRenderPassVRSExtensions(info, &shadingRate, &rateMap) || rateMap) {
+  if (!renderPassVRSExtensions(info, &shadingRate, &rateMap) || rateMap) {
     return NULL;
   }
 
@@ -790,14 +790,14 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
   return pass;
 }
 
-static GPUCommandBufferVk*
+static CommandBufferVk*
 vk__copyCommand(GPUTransferPassEncoder *pass) {
   return pass ? pass->_priv : NULL;
 }
 
 static GPUTransferPassEncoder*
 vk_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
-  GPUCommandBufferVk     *command;
+  CommandBufferVk        *command;
   GPUTransferPassEncoder *pass;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -809,7 +809,7 @@ vk_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
   pass = &command->copyEncoder;
   memset(pass, 0, sizeof(*pass));
   pass->_priv                   = command;
-  command->copyDebugLabelActive = vk_beginDebugLabel(gpuCommandBufferDevice(cmdb),
+  command->copyDebugLabelActive = vk_beginDebugLabel(commandBufferDevice(cmdb),
                                                      command->command,
                                                      label);
 
@@ -819,9 +819,9 @@ vk_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
 static void
 vk_copyBufferToBuffer(GPUTransferPassEncoder *pass, GPUBuffer *src, GPUBuffer *dst, const GPUBufferCopyRegion *region) {
   VkBufferCopy        copy = {0};
-  GPUCommandBufferVk *command;
-  GPUBufferVk        *srcVk;
-  GPUBufferVk        *dstVk;
+  CommandBufferVk    *command;
+  BufferVk           *srcVk;
+  BufferVk           *dstVk;
 
   command = vk__copyCommand(pass);
   srcVk   = src ? src->_priv : NULL;
@@ -841,7 +841,7 @@ static bool
 vk__copyAspect(GPUFormat format, GPUTextureAspect aspect, VkImageAspectFlags *outAspect) {
   GPUTextureAspect resolved;
 
-  if (!outAspect || !gpuFormatResolveCopyAspect(format, aspect, &resolved)) {
+  if (!outAspect || !formatResolveCopyAspect(format, aspect, &resolved)) {
     return false;
   }
 
@@ -862,7 +862,7 @@ vk__copyAspect(GPUFormat format, GPUTextureAspect aspect, VkImageAspectFlags *ou
 
 static bool
 vk__bufferImageCopy(GPUTexture *texture, const GPUBufferTextureCopyRegion *region, VkBufferImageCopy *outCopy) {
-  GPUFormatLayout    formatLayout;
+  FormatLayout       formatLayout;
   VkImageAspectFlags aspect;
   uint32_t           rowBlocks;
   uint32_t           rowLength;
@@ -871,9 +871,9 @@ vk__bufferImageCopy(GPUTexture *texture, const GPUBufferTextureCopyRegion *regio
       || !vk__copyAspect(texture->format,
                          region->texture.texture.aspect,
                          &aspect)
-      || !gpuFormatAspectLayout(texture->format,
-                                region->texture.texture.aspect,
-                                &formatLayout)
+      || !formatAspectLayout(texture->format,
+                             region->texture.texture.aspect,
+                             &formatLayout)
       || region->bytesPerRow % formatLayout.bytesPerBlock != 0u) {
     return false;
   }
@@ -918,9 +918,9 @@ vk_copyBufferToTexture(GPUTransferPassEncoder           *pass,
                        GPUTexture                       *dst,
                        const GPUBufferTextureCopyRegion *region) {
   VkBufferImageCopy   copy;
-  GPUCommandBufferVk *command;
-  GPUBufferVk        *buffer;
-  GPUTextureVk       *texture;
+  CommandBufferVk    *command;
+  BufferVk           *buffer;
+  TextureVk          *texture;
 
   command = vk__copyCommand(pass);
   buffer  = src ? src->_priv : NULL;
@@ -954,9 +954,9 @@ vk_copyTextureToBuffer(GPUTransferPassEncoder           *pass,
                        GPUBuffer                        *dst,
                        const GPUBufferTextureCopyRegion *region) {
   VkBufferImageCopy   copy;
-  GPUCommandBufferVk *command;
-  GPUTextureVk       *texture;
-  GPUBufferVk        *buffer;
+  CommandBufferVk    *command;
+  TextureVk          *texture;
+  BufferVk           *buffer;
 
   command = vk__copyCommand(pass);
   texture = src ? src->_priv : NULL;
@@ -993,10 +993,10 @@ vk__reserveScratch(GPUTransferPassEncoder *pass,
                    VkBuffer               *outBuffer,
                    VkDeviceSize           *outOffset) {
   GPUBufferCreateInfo info = {0};
-  GPUCommandBufferVk *command;
-  GPUTransferChunkVk *chunk;
-  GPUTransferChunkVk *candidate;
-  GPUBufferVk        *bufferVk;
+  CommandBufferVk    *command;
+  TransferChunkVk    *chunk;
+  TransferChunkVk    *candidate;
+  BufferVk           *bufferVk;
   uint64_t            alignedOffset;
   uint64_t            capacity;
   uint64_t            offset;
@@ -1062,8 +1062,8 @@ vk__reserveScratch(GPUTransferPassEncoder *pass,
     chunk->capacity         = capacity;
     chunk->next             = command->transferChunks;
     command->transferChunks = chunk;
-    gpuDeviceRecordHotPathAlloc(pass->_cmdb->_queue->_device,
-                                sizeof(*chunk) + capacity);
+    deviceRecordHotPathAlloc(pass->_cmdb->_queue->_device,
+                             sizeof(*chunk) + capacity);
   }
 
   bufferVk = chunk->buffer->_priv;
@@ -1085,12 +1085,12 @@ vk__copyDepthStencilPlane(GPUTransferPassEncoder              *pass,
                           GPUTexture                          *dst,
                           const GPUTextureToTextureCopyRegion *region,
                           VkImageAspectFlags                   aspect) {
-  GPUFormatLayout       layout;
+  FormatLayout          layout;
   VkBufferImageCopy     copy    = {0};
   VkBufferMemoryBarrier barrier = {0};
-  GPUCommandBufferVk   *command;
-  GPUTextureVk         *srcVk;
-  GPUTextureVk         *dstVk;
+  CommandBufferVk      *command;
+  TextureVk            *srcVk;
+  TextureVk            *dstVk;
   VkBuffer              scratch;
   VkDeviceSize          scratchOffset;
   uint64_t              rowBytes;
@@ -1106,9 +1106,9 @@ vk__copyDepthStencilPlane(GPUTransferPassEncoder              *pass,
   texture3D = src && src->dimension == GPU_TEXTURE_DIMENSION_3D;
 
   if (!command || !srcVk || !dstVk || !region
-      || !gpuFormatAspectLayout(src->format,
-                                region->src.aspect,
-                                &layout)
+      || !formatAspectLayout(src->format,
+                             region->src.aspect,
+                             &layout)
       || layout.blockWidth != 1u
       || layout.blockHeight != 1u
       || region->width > UINT64_MAX / layout.bytesPerBlock) {
@@ -1222,9 +1222,9 @@ vk_copyTextureToTexture(GPUTransferPassEncoder              *pass,
                         GPUTexture                          *dst,
                         const GPUTextureToTextureCopyRegion *region) {
   VkImageCopy         copy = {0};
-  GPUCommandBufferVk *command;
-  GPUTextureVk       *srcVk;
-  GPUTextureVk       *dstVk;
+  CommandBufferVk    *command;
+  TextureVk          *srcVk;
+  TextureVk          *dstVk;
   VkImageAspectFlags  srcAspect;
   VkImageAspectFlags  dstAspect;
   bool                texture3D;
@@ -1299,9 +1299,9 @@ vk_copyTextureToTexture(GPUTransferPassEncoder              *pass,
 static void
 vk_blitTexture(GPUCommandBuffer *cmdb, const GPUTextureBlitInfo *info) {
   VkImageBlit         blit = {0};
-  GPUCommandBufferVk *command;
-  GPUTextureVk       *src;
-  GPUTextureVk       *dst;
+  CommandBufferVk    *command;
+  TextureVk          *src;
+  TextureVk          *dst;
 
   command = cmdb ? cmdb->_priv : NULL;
   src     = info && info->src ? info->src->_priv : NULL;
@@ -1370,16 +1370,16 @@ vk_blitTexture(GPUCommandBuffer *cmdb, const GPUTextureBlitInfo *info) {
 
 static bool
 vk__indirectCopyState(GPUTransferPassEncoder *pass,
-                      GPUCommandBufferVk    **outCommand,
-                      GPUDeviceVk           **outDevice,
+                      CommandBufferVk       **outCommand,
+                      DeviceVk              **outDevice,
                       VkQueueFlags           *outQueueFlags) {
-  GPUCommandBufferVk *command;
-  GPUAdapterVk       *adapter;
+  CommandBufferVk    *command;
+  AdapterVk          *adapter;
   GPUDevice          *device;
-  GPUDeviceVk        *deviceVk;
+  DeviceVk           *deviceVk;
 
   command  = vk__copyCommand(pass);
-  device   = pass && pass->_cmdb ? gpuCommandBufferDevice(pass->_cmdb) : NULL;
+  device   = pass && pass->_cmdb ? commandBufferDevice(pass->_cmdb) : NULL;
   deviceVk = device ? device->_priv : NULL;
   adapter  = device && device->adapter ? device->adapter->_priv : NULL;
 
@@ -1400,8 +1400,8 @@ vk__indirectCopyState(GPUTransferPassEncoder *pass,
 static void
 vk_copyMemoryIndirect(GPUTransferPassEncoder *pass, const GPUIndirectMemoryCopyInfoEXT *info) {
   VkCopyMemoryIndirectInfoKHR native = {0};
-  GPUCommandBufferVk         *command;
-  GPUDeviceVk                *device;
+  CommandBufferVk            *command;
+  DeviceVk                   *device;
 
   if (!info
       || !vk__indirectCopyState(pass,
@@ -1426,9 +1426,9 @@ vk_copyMemoryIndirect(GPUTransferPassEncoder *pass, const GPUIndirectMemoryCopyI
 static void
 vk_copyMemoryToTextureIndirect(GPUTransferPassEncoder *pass, const GPUIndirectMemoryToTextureCopyInfoEXT *info) {
   VkCopyMemoryToImageIndirectInfoKHR      native = {0};
-  GPUCommandBufferVk                     *command;
-  GPUDeviceVk                            *device;
-  GPUTextureVk                           *texture;
+  CommandBufferVk                        *command;
+  DeviceVk                               *device;
+  TextureVk                              *texture;
   const GPUIndirectTextureSubresourceEXT *subresource;
   VkQueueFlags                            queueFlags;
   uint32_t                                i;
@@ -1482,21 +1482,21 @@ vk_copyMemoryToTextureIndirect(GPUTransferPassEncoder *pass, const GPUIndirectMe
 
 static void
 vk_endTransferPass(GPUTransferPassEncoder *pass) {
-  GPUCommandBufferVk *command;
+  CommandBufferVk    *command;
 
   command = vk__copyCommand(pass);
 
   if (command && command->copyDebugLabelActive) {
-    vk_endDebugLabel(gpuCommandBufferDevice(pass->_cmdb), command->command);
+    vk_endDebugLabel(commandBufferDevice(pass->_cmdb), command->command);
     command->copyDebugLabelActive = false;
   }
 }
 
 GPU_HIDE
 void
-vk_invalidateClassicFramebuffers(GPUDeviceVk *device, VkImageView view) {
-  GPUClassicFramebufferVk **link;
-  GPUClassicFramebufferVk  *entry;
+vk_invalidateClassicFramebuffers(DeviceVk    *device, VkImageView view) {
+  ClassicFramebufferVk    **link;
+  ClassicFramebufferVk     *entry;
 
   if (!device || !device->classicRenderLockInitialized || !view) {
     return;
@@ -1529,9 +1529,9 @@ vk_invalidateClassicFramebuffers(GPUDeviceVk *device, VkImageView view) {
 
 GPU_HIDE
 void
-vk_destroyClassicRenderTargets(GPUDeviceVk *device) {
-  GPUClassicFramebufferVk *framebuffer;
-  GPUClassicRenderPassVk  *pass;
+vk_destroyClassicRenderTargets(DeviceVk    *device) {
+  ClassicFramebufferVk    *framebuffer;
+  ClassicRenderPassVk     *pass;
 
   if (!device) {
     return;
@@ -1551,9 +1551,9 @@ vk_destroyClassicRenderTargets(GPUDeviceVk *device) {
 
 GPU_HIDE
 void
-vk_transitionView(VkCommandBuffer command, GPUTextureViewVk *view, VkImageLayout nextLayout) {
+vk_transitionView(VkCommandBuffer command, TextureViewVk    *view, VkImageLayout nextLayout) {
   VkImageMemoryBarrier barrier = {0};
-  GPUDeviceVk         *device;
+  DeviceVk            *device;
   VkPipelineStageFlags srcStage;
   VkPipelineStageFlags dstStage;
   VkAccessFlags        srcAccess;
@@ -1612,7 +1612,7 @@ vk_transitionView(VkCommandBuffer command, GPUTextureViewVk *view, VkImageLayout
 
 GPU_HIDE
 VkPipelineStageFlags
-vk_barrierStages(const GPUDeviceVk *device, GPUPipelineStageMask stages) {
+vk_barrierStages(const DeviceVk    *device, GPUPipelineStageMask stages) {
   VkPipelineStageFlags result;
 
   result = 0u;
@@ -1708,13 +1708,13 @@ vk_bufferBarrierAccess(const GPUBuffer *buffer, GPUAccessMask access, GPUPipelin
   result = vk_barrierAccess(access);
 
   if ((access & GPU_ACCESS_SHADER_READ) != 0u && (stages & GPU_STAGE_VERTEX) != 0u) {
-    if (gpuBufferHasUsage(buffer,
-                          GPU_BUFFER_USAGE_VERTEX)) {
+    if (bufferHasUsage(buffer,
+                       GPU_BUFFER_USAGE_VERTEX)) {
       result |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
     }
 
-    if (gpuBufferHasUsage(buffer,
-                          GPU_BUFFER_USAGE_INDEX)) {
+    if (bufferHasUsage(buffer,
+                       GPU_BUFFER_USAGE_INDEX)) {
       result |= VK_ACCESS_INDEX_READ_BIT;
     }
   }
@@ -1771,9 +1771,9 @@ vk_textureBarrierLayout(const GPUTexture *texture, GPUAccessMask access, bool so
 GPU_HIDE
 void
 vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
-  GPUCommandBufferVk  *command;
+  CommandBufferVk     *command;
   GPUDevice           *gpuDevice;
-  GPUDeviceVk         *device;
+  DeviceVk            *device;
   VkPipelineStageFlags srcStages;
   VkPipelineStageFlags dstStages;
   uint32_t             bufferOffset;
@@ -1794,8 +1794,8 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
     const GPUBufferBarrier *barrier = &barriers->pBufferBarriers[i];
     bool                    addressedIndirect;
 
-    addressedIndirect = gpuBufferHasUsage(barrier->buffer,
-                                          GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT)
+    addressedIndirect = bufferHasUsage(barrier->buffer,
+                                       GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT)
                         && (device->indirectMemoryCopy || device->indirectMemoryToTextureCopy);
 
     if ((barrier->srcAccess & GPU_ACCESS_INDIRECT_READ) != 0u) {
@@ -1838,7 +1838,7 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
       after = barriers->pAliasingBarriers[i].afterTexture;
 
       if (after && after->_priv) {
-        GPUTextureVk *texture = after->_priv;
+        TextureVk    *texture = after->_priv;
 
         vk_setTextureLayout(texture,
                             0u,
@@ -1877,7 +1877,7 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
 
     for (uint32_t i = 0u; i < bufferChunkCount; i++) {
       const GPUBufferBarrier *barrier;
-      GPUBufferVk            *buffer;
+      BufferVk               *buffer;
       VkBufferMemoryBarrier  *native;
 
       barrier = &barriers->pBufferBarriers[bufferOffset + i];
@@ -1907,23 +1907,23 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
 
     for (uint32_t i = 0u; i < textureChunkCount; i++) {
       const GPUTextureBarrier *barrier;
-      GPUTextureVk            *texture;
+      TextureVk               *texture;
       VkImageMemoryBarrier    *native;
       VkImageLayout            newLayout;
 
       barrier = &barriers->pTextureBarriers[textureOffset + i];
 
       if (!barrier->texture->_ownsNative) {
-        gpuDeviceRecordValidationError(gpuDevice,
-                                       "Vulkan barriers do not support swapchain textures");
+        deviceRecordValidationError(gpuDevice,
+                                    "Vulkan barriers do not support swapchain textures");
         continue;
       }
 
       texture = barrier->texture->_priv;
 
       if (!texture || !texture->image || texture->device != device->device) {
-        gpuDeviceRecordValidationError(gpuDevice,
-                                       "Vulkan texture barrier has no compatible native image");
+        deviceRecordValidationError(gpuDevice,
+                                    "Vulkan texture barrier has no compatible native image");
         continue;
       }
 
@@ -1956,8 +1956,8 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
                                          dstStages,
                                          vk_barrierAccess(barrier->srcAccess),
                                          vk_barrierAccess(barrier->dstAccess))) {
-          gpuDeviceRecordValidationError(gpuDevice,
-                                         "Vulkan texture barrier range transition failed");
+          deviceRecordValidationError(gpuDevice,
+                                      "Vulkan texture barrier range transition failed");
         }
 
         continue;
@@ -2003,29 +2003,29 @@ vk_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
 }
 
 GPU_HIDE
-GPURenderPassDesc*
+RenderPassDesc*
 vk_beginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) {
   VkFormat                                    colorFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS]  = {0};
   VkImageView                                 colorViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS]    = {0};
   VkImageView                                 resolveViews[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS]  = {0};
   GPULoadOp                                   colorLoadOps[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS]  = {0};
   GPUStoreOp                                  colorStoreOps[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS] = {0};
-  GPUClassicRenderTargetInfoVk                target                                                  = {0};
+  ClassicRenderTargetInfoVk                   target                                                  = {0};
   const GPURenderPassDepthStencilAttachment  *depthStencil;
-  GPUCommandBufferVk                         *command;
-  GPUTextureViewVk                           *depthStencilView;
-  GPUSwapchainVk                             *swapchain;
-  GPURenderPassDesc                          *pass;
-  GPURenderPassVk                            *native;
-  GPUDeviceVk                                *device;
+  CommandBufferVk                            *command;
+  TextureViewVk                              *depthStencilView;
+  SwapchainVk                                *swapchain;
+  RenderPassDesc                             *pass;
+  RenderPassVk                               *native;
+  DeviceVk                                   *device;
   const GPUShadingRateAttachmentEXT          *shadingRate;
   const GPURasterizationRateMapRenderPassEXT *rateMap;
   const GPURenderPassColorAttachment         *colorAttachment;
-  GPUTextureViewVk                           *colorView;
-  GPUTextureViewVk                           *resolveView;
-  GPUSwapchainVk                             *attachmentSwapchain;
+  TextureViewVk                              *colorView;
+  TextureViewVk                              *resolveView;
+  SwapchainVk                                *attachmentSwapchain;
   const GPURenderPassColorAttachment         *singleColor;
-  GPUTextureViewVk                           *singleView;
+  TextureViewVk                              *singleView;
   uint32_t                                    attachmentCount;
   uint32_t                                    sampleCount;
   uint32_t                                    layerCount;
@@ -2043,7 +2043,7 @@ vk_beginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
                                      device);
   }
 
-  if (!gpuRenderPassVRSExtensions(info, &shadingRate, &rateMap) || shadingRate || rateMap) {
+  if (!renderPassVRSExtensions(info, &shadingRate, &rateMap) || shadingRate || rateMap) {
     return NULL;
   }
 
@@ -2264,13 +2264,13 @@ vk_beginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
 
 GPU_HIDE
 void
-vk_destroyRenderPass(GPURenderPassDesc *pass) {
+vk_destroyRenderPass(RenderPassDesc    *pass) {
   GPU__UNUSED(pass);
 }
 
 GPU_HIDE
 void
-vk_initRenderPass(GPUApiRenderPass *api) {
+vk_initRenderPass(ApiRenderPass    *api) {
   api->beginRenderPass      = vk_beginRenderPass;
   api->destroyRenderPass    = vk_destroyRenderPass;
   api->beginTransferPass    = vk_beginTransferPass;

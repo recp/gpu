@@ -41,7 +41,7 @@ count_barriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
 
 static int
 check_barrier_forwarding(GPUDevice *device) {
-  GPUApi              *api;
+  Api                 *api;
   GPUBuffer           *buffer  = NULL;
   GPUTexture          *texture = NULL;
 
@@ -56,7 +56,7 @@ check_barrier_forwarding(GPUDevice *device) {
   GPUBarrierBatch      batch          = {0};
   int                  ok             = 0;
 
-  api = gpuDeviceApi(device);
+  api = deviceApi(device);
 
   if (!api) {
     fprintf(stderr, "barrier test active api missing\n");
@@ -239,14 +239,14 @@ check_mipmap_barrier(GPUDevice *device) {
   GPUCommandBuffer  cmdb    = {0};
   GPUTextureBarrier barrier = {0};
   GPUBarrierBatch   batch   = {0};
-  GPUApi           *api;
+  Api              *api;
 
   void (*saved)(GPUCommandBuffer *, const GPUBarrierBatch *);
 
   uint32_t          invalid;
   int               ok;
 
-  api = gpuDeviceApi(device);
+  api = deviceApi(device);
 
   if (!api)
     return 0;

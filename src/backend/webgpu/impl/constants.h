@@ -27,7 +27,7 @@ webgpu_pipelineConstants(const GPUChainedStruct *chain,
   const GPUConstant          *constant;
   uint32_t                    i;
 
-  constants = gpuPipelineConstants(chain);
+  constants = pipelineConstants(chain);
 
   if (!constants) {
     return 0u;
@@ -38,7 +38,7 @@ webgpu_pipelineConstants(const GPUChainedStruct *chain,
   for (i = 0u; i < constants->constantCount; i++) {
     constant = &constants->pConstants[i];
     snprintf(ids[i], sizeof(ids[i]), "%u", constant->id);
-    entries[i].key = gpu_webgpuString(ids[i]);
+    entries[i].key = webgpuString(ids[i]);
 
     switch (constant->type) {
       case GPU_CONSTANT_BOOL: entries[i].value = constant->value.boolean ? 1.0 : 0.0; break;

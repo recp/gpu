@@ -20,7 +20,7 @@
 static void
 mt_getVRSCapabilities(const GPUAdapter      *adapter,
                       GPUVRSCapabilitiesEXT *outCaps) {
-  const GPUAdapterMT *adapterMT;
+  const AdapterMT    *adapterMT;
   id<MTLDevice>       device;
   uint32_t            count;
 
@@ -55,7 +55,7 @@ mt_createRateMap(GPUDevice                                  *device,
                  GPURasterizationRateMapEXT                **outMap) {
   MTLRasterizationRateMapDescriptor   *descriptor;
   GPURasterizationRateMapEXT          *map;
-  GPUDeviceMT                         *deviceMT;
+  DeviceMT                            *deviceMT;
   id<MTLRasterizationRateMap>          native;
   const GPURasterizationRateLayerEXT  *source;
   MTLRasterizationRateLayerDescriptor *layer;
@@ -246,7 +246,7 @@ mt_getRateMapPhysicalSize(const GPURasterizationRateMapEXT *map,
 
 GPU_HIDE
 void
-mt_initVRS(GPUApiVRS *api) {
+mt_initVRS(ApiVRS    *api) {
   api->getCapabilities            = mt_getVRSCapabilities;
   api->createRateMap              = mt_createRateMap;
   api->destroyRateMap             = mt_destroyRateMap;

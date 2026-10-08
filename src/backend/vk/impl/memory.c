@@ -24,9 +24,9 @@ vk_createHeap(GPUDevice               *device,
               GPUHeap                **outHeap) {
   VkMemoryAllocateInfo      allocationInfo  = {0};
   VkMemoryAllocateFlagsInfo allocationFlags = {0};
-  GPUDeviceVk              *deviceVk;
+  DeviceVk                 *deviceVk;
   GPUHeap                  *heap;
-  GPUHeapVk                *native;
+  HeapVk                   *native;
   VkMemoryPropertyFlags     memoryFlags;
   uint32_t                  memoryTypeIndex;
 
@@ -48,7 +48,7 @@ vk_createHeap(GPUDevice               *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native                  = (GPUHeapVk *)(heap + 1);
+  native                  = (HeapVk *)(heap + 1);
   native->device          = deviceVk->device;
   native->sizeBytes       = info->sizeBytes;
   native->memoryFlags     = memoryFlags;
@@ -95,7 +95,7 @@ vk_createHeap(GPUDevice               *device,
 
 static void
 vk_destroyHeap(GPUHeap *heap) {
-  GPUHeapVk *native;
+  HeapVk    *native;
 
   if (!heap) {
     return;
@@ -128,8 +128,8 @@ vk_submitSparse(GPUQueue                       *queueHandle,
                 const GPUQueueSparseSubmitInfo *info) {
   VkTimelineSemaphoreSubmitInfo      timelineInfo = {0};
   VkBindSparseInfo                   bindInfo     = {0};
-  GPUQueueVk                        *queue;
-  GPUDeviceVk                       *device;
+  QueueVk                           *queue;
+  DeviceVk                          *device;
   VkSparseMemoryBind                *bufferBinds;
   VkSparseBufferMemoryBindInfo      *bufferInfos;
   VkSparseImageMemoryBind           *imageBinds;
@@ -161,8 +161,8 @@ vk_submitSparse(GPUQueue                       *queueHandle,
 
   if (!queueHandle->_device->adapter
       || queue->familyIndex >=
-        ((GPUAdapterVk *)queueHandle->_device->adapter->_priv)->nQueFamilies
-      || ((((GPUAdapterVk *)queueHandle->_device->adapter->_priv)
+        ((AdapterVk *)queueHandle->_device->adapter->_priv)->nQueFamilies
+      || ((((AdapterVk *)queueHandle->_device->adapter->_priv)
           ->queueFamilyProps[queue->familyIndex].queueFlags &
          VK_QUEUE_SPARSE_BINDING_BIT) == 0u)) {
     return GPU_ERROR_UNSUPPORTED;
@@ -207,8 +207,8 @@ vk_submitSparse(GPUQueue                       *queueHandle,
 
   for (uint32_t i = 0u; i < info->bufferMappingCount; i++) {
     const GPUSparseBufferMapping *mapping;
-    GPUBufferVk                  *buffer;
-    GPUHeapVk                    *heap;
+    BufferVk                     *buffer;
+    HeapVk                       *heap;
     VkSparseMemoryBind           *bind;
     VkSparseBufferMemoryBindInfo *bufferInfo;
 
@@ -242,8 +242,8 @@ vk_submitSparse(GPUQueue                       *queueHandle,
 
   for (uint32_t i = 0u; i < info->textureMappingCount; i++) {
     const GPUSparseTextureMapping *mapping;
-    GPUTextureVk                  *texture;
-    GPUHeapVk                     *heap;
+    TextureVk                     *texture;
+    HeapVk                        *heap;
     VkDeviceSize                   memoryOffset;
 
     mapping = &info->pTextureMappings[i];
@@ -342,7 +342,7 @@ vk_submitSparse(GPUQueue                       *queueHandle,
   }
 
   for (uint32_t i = 0u; i < info->waitCount; i++) {
-    GPUSemaphoreVk *semaphore;
+    SemaphoreVk    *semaphore;
 
     semaphore = info->pWaits[i].semaphore->_priv;
 
@@ -357,7 +357,7 @@ vk_submitSparse(GPUQueue                       *queueHandle,
   }
 
   for (uint32_t i = 0u; i < info->signalCount; i++) {
-    GPUSemaphoreVk *semaphore;
+    SemaphoreVk    *semaphore;
 
     semaphore = info->pSignals[i].semaphore->_priv;
 
@@ -404,7 +404,7 @@ GPU_HIDE
 uint32_t
 vk_filterMemoryTypes(GPUDevice *device, uint32_t typeBits) {
   VkPhysicalDeviceMemoryProperties properties;
-  GPUAdapterVk                    *adapter;
+  AdapterVk                       *adapter;
   uint32_t                         result;
   uint32_t                         i;
 
@@ -431,7 +431,7 @@ vk_filterMemoryTypes(GPUDevice *device, uint32_t typeBits) {
 
 GPU_HIDE
 void
-vk_initMemory(GPUApiMemory *api) {
+vk_initMemory(ApiMemory    *api) {
   api->getBufferRequirements        = vk_getBufferMemoryRequirements;
   api->getTextureRequirements       = vk_getTextureMemoryRequirements;
   api->getSparseBufferRequirements  = vk_getSparseBufferRequirements;

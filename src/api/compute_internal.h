@@ -19,13 +19,13 @@
 
 #include "../common.h"
 
-struct GPUComputePipelineState {
+struct ComputePipelineState {
   void    *_priv;
   uint32_t workgroupSize[3];
 };
 
 struct GPUComputePipeline {
-  GPUApi              *_api;
+  Api                 *_api;
   void                *_priv;
   void                *_state;
   GPUDevice           *_device;
@@ -39,27 +39,27 @@ struct GPUComputePipeline {
 
 GPU_HIDE
 void
-gpuSetComputeBuffer(GPUComputePassEncoder *pass,
-                    GPUBuffer             *buf,
-                    uint64_t               off,
-                    uint32_t               index);
+setComputeBuffer(GPUComputePassEncoder *pass,
+                 GPUBuffer             *buf,
+                 uint64_t               off,
+                 uint32_t               index);
 
 GPU_HIDE
 void
-gpuSetComputeTexture(GPUComputePassEncoder *pass,
-                     GPUTextureView        *view,
-                     uint32_t               index);
+setComputeTexture(GPUComputePassEncoder *pass,
+                  GPUTextureView        *view,
+                  uint32_t               index);
 
 GPU_HIDE
 void
-gpuSetComputeSampler(GPUComputePassEncoder *pass,
-                     GPUSampler            *sampler,
-                     uint32_t               index);
+setComputeSampler(GPUComputePassEncoder *pass,
+                  GPUSampler            *sampler,
+                  uint32_t               index);
 
 GPU_HIDE
 void
-gpuSetComputeAccelerationStructure(GPUComputePassEncoder       *pass,
-                                   GPUAccelerationStructureEXT *structure,
-                                   uint32_t                     index);
+setComputeAccelerationStructure(GPUComputePassEncoder       *pass,
+                                GPUAccelerationStructureEXT *structure,
+                                uint32_t                     index);
 
 #endif /* gpu_compute_internal_h */

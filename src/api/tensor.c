@@ -19,9 +19,9 @@
 #include "tensor_internal.h"
 
 static GPUResult
-gpu_tensorChain(const GPUChainedStruct *chain,
-                GPUStructureType        type,
-                size_t                  size) {
+tensorChain(const GPUChainedStruct *chain,
+            GPUStructureType        type,
+            size_t                  size) {
   if ((chain->sType != GPU_STRUCTURE_TYPE_NONE && chain->sType != type)
       || (chain->structSize != 0u && chain->structSize < size)) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -31,9 +31,9 @@ gpu_tensorChain(const GPUChainedStruct *chain,
 }
 
 static GPUResult
-gpu_tensorDesc(const GPUDevice        *device,
-               const GPUTensorDescEXT *desc,
-               uint64_t               *outSpanBytes) {
+tensorDesc(const GPUDevice        *device,
+           const GPUTensorDescEXT *desc,
+           uint64_t               *outSpanBytes) {
   const GPUTensorUsageFlagsEXT known = GPU_TENSOR_USAGE_COMPUTE_EXT
                                       | GPU_TENSOR_USAGE_RENDER_EXT
                                       | GPU_TENSOR_USAGE_ML_EXT;
@@ -47,7 +47,7 @@ gpu_tensorDesc(const GPUDevice        *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  result = gpu_tensorChain(&desc->chain, GPU_STRUCTURE_TYPE_TENSOR_DESC_EXT, sizeof(*desc));
+  result = tensorChain(&desc->chain, GPU_STRUCTURE_TYPE_TENSOR_DESC_EXT, sizeof(*desc));
 
   if (result != GPU_OK) {
     return result;
@@ -106,7 +106,7 @@ GPUResult
 GPUGetTensorBufferRequirementsEXT(GPUDevice                      *device,
                                   const GPUTensorDescEXT         *desc,
                                   GPUTensorBufferRequirementsEXT *outRequirements) {
-  GPUApi   *api;
+  Api      *api;
   uint64_t  spanBytes;
   GPUResult result;
 
@@ -115,14 +115,14 @@ GPUGetTensorBufferRequirementsEXT(GPUDevice                      *device,
   }
 
   memset(outRequirements, 0, sizeof(*outRequirements));
-  result = gpu_tensorDesc(device, desc, &spanBytes);
+  result = tensorDesc(device, desc, &spanBytes);
 
   if (result != GPU_OK) {
     return result;
   }
 
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_TENSOR_RESOURCES_EXT)
-      || !(api = gpuDeviceApi(device)) || !api->tensor.getBufferRequirements) {
+      || !(api = deviceApi(device)) || !api->tensor.getBufferRequirements) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -141,7 +141,7 @@ GPUCreateTensorViewEXT(GPUDevice                        *device,
                        const GPUTensorViewCreateInfoEXT *info,
                        GPUTensorEXT                    **outTensor) {
   GPUTensorEXT *tensor;
-  GPUApi       *api;
+  Api          *api;
   uint64_t      spanBytes;
   size_t        labelSize;
   GPUResult     result;
@@ -156,26 +156,26 @@ GPUCreateTensorViewEXT(GPUDevice                        *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  result = gpu_tensorChain(&info->chain, GPU_STRUCTURE_TYPE_TENSOR_VIEW_CREATE_INFO_EXT, sizeof(*info));
+  result = tensorChain(&info->chain, GPU_STRUCTURE_TYPE_TENSOR_VIEW_CREATE_INFO_EXT, sizeof(*info));
 
   if (result != GPU_OK) {
     return result;
   }
 
-  result = gpu_tensorDesc(device, info->pDesc, &spanBytes);
+  result = tensorDesc(device, info->pDesc, &spanBytes);
 
   if (result != GPU_OK) {
     return result;
   }
 
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_TENSOR_RESOURCES_EXT)
-      || !(api = gpuDeviceApi(device)) || !api->tensor.createView || !api->tensor.destroy) {
+      || !(api = deviceApi(device)) || !api->tensor.createView || !api->tensor.destroy) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   if (!info->buffer || info->buffer->device != device
-      || !gpuBufferHasUsage(info->buffer, GPU_BUFFER_USAGE_STORAGE)
-      || !gpuBufferRangeValid(info->buffer, info->offsetBytes, spanBytes)
+      || !bufferHasUsage(info->buffer, GPU_BUFFER_USAGE_STORAGE)
+      || !bufferRangeValid(info->buffer, info->offsetBytes, spanBytes)
       || info->offsetBytes % (info->pDesc->dataType == GPU_TENSOR_DATA_TYPE_F16_EXT ? 2u : 4u) != 0u
       || ((info->pDesc->usage & GPU_TENSOR_USAGE_ML_EXT) != 0u && info->offsetBytes != 0u)) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -242,13 +242,13 @@ GPUGetTensorBufferEXT(const GPUTensorEXT *tensor, uint64_t *outOffsetBytes) {
 GPU_EXPORT
 void
 GPUDestroyTensorEXT(GPUTensorEXT *tensor) {
-  GPUApi *api;
+  Api    *api;
 
   if (!tensor) {
     return;
   }
 
-  if ((api = gpuDeviceApi(tensor->device)) && api->tensor.destroy) {
+  if ((api = deviceApi(tensor->device)) && api->tensor.destroy) {
     api->tensor.destroy(tensor);
   }
 

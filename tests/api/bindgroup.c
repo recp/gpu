@@ -181,8 +181,8 @@ test_bindComputeGroup(GPUComputePassEncoder *pass,
 
 static int
 check_backend_descriptor_hooks(GPUDevice *device) {
-  GPUApiDescriptor             hooks = {0};
-  GPUApiDescriptor             saved;
+  ApiDescriptor                hooks = {0};
+  ApiDescriptor                saved;
   GPUBindGroupLayoutCreateInfo layoutInfo   = {0};
   GPUPipelineLayoutCreateInfo  pipelineInfo = {0};
   GPUBindGroupCreateInfo       groupInfo    = {0};
@@ -192,10 +192,10 @@ check_backend_descriptor_hooks(GPUDevice *device) {
   GPUBindGroupLayout          *layout         = NULL;
   GPUPipelineLayout           *pipelineLayout = NULL;
   GPUBindGroup                *group          = NULL;
-  GPUApi                      *api;
+  Api                         *api;
   int                          ok;
 
-  api = gpuDeviceApi(device);
+  api = deviceApi(device);
 
   if (!api) {
     return 0;
@@ -312,7 +312,7 @@ check_pipeline_layout_bind_validation(GPUDevice                          *device
                                       const GPUBindGroupLayoutCreateInfo *layoutInfo,
                                       GPUBindGroupLayout                 *layout,
                                       GPUPipelineLayout                  *pipelineLayout) {
-  GPUApiDescriptor             saved;
+  ApiDescriptor                saved;
   GPUBindGroupCreateInfo       groupInfo            = {0};
   GPUBindGroupLayoutCreateInfo secondLayoutInfo     = {0};
   GPUPipelineLayoutCreateInfo  otherPipelineInfo    = {0};
@@ -322,7 +322,7 @@ check_pipeline_layout_bind_validation(GPUDevice                          *device
   GPUBindGroupLayout          *twoGroupLayouts[2];
   GPURenderPassEncoder         renderPass  = {0};
   GPUComputePassEncoder        computePass = {0};
-  GPUApi                      *api;
+  Api                         *api;
   GPUBindGroupLayout          *otherLayout            = NULL;
   GPUPipelineLayout           *otherPipelineLayout    = NULL;
   GPUPipelineLayout           *twoGroupPipelineLayout = NULL;
@@ -330,7 +330,7 @@ check_pipeline_layout_bind_validation(GPUDevice                          *device
   GPUBindGroup                *secondGroup            = NULL;
   uint32_t                     dynamicOffset          = 0u;
 
-  api = gpuDeviceApi(device);
+  api = deviceApi(device);
 
   if (!api) {
     return 0;
@@ -1274,9 +1274,9 @@ count_binding_error(GPUDevice                *device,
 
 static int
 check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
-  GPUApiDescriptor             saved;
-  GPUApi                      *api;
-  GPUApi                       fallback     = {0};
+  ApiDescriptor                saved;
+  Api                         *api;
+  Api                          fallback     = {0};
   GPUFrameStats                warmStats    = {0};
   GPUBindGroupLayoutEntry      entry        = {0};
   GPUBindGroupLayoutCreateInfo layoutInfo   = {0};
@@ -1307,7 +1307,7 @@ check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
 
   GPUDeviceErrorCallback savedCallback;
 
-  api = gpuDeviceApi(device);
+  api = deviceApi(device);
 
   if (!api) {
     return 0;
@@ -1648,7 +1648,7 @@ check_binding_arrays(GPUDevice *device) {
   GPUBindGroupEntry            groupEntries[4] = {0};
   GPUBindGroupCreateInfo       groupInfo       = {0};
   GPURenderPassEncoder         renderPass      = {0};
-  GPUApiDescriptor             savedDescriptor;
+  ApiDescriptor                savedDescriptor;
   uint32_t                     validOffsets[2]   = {0u, 256u};
   uint32_t                     invalidOffsets[2] = {0u, 1024u};
   GPUBindGroupLayout          *layout            = NULL;
@@ -1656,14 +1656,14 @@ check_binding_arrays(GPUDevice *device) {
   GPUBuffer                   *buffer            = NULL;
   GPUBindGroup                *group             = NULL;
   GPUBindGroup                *invalidGroup      = NULL;
-  GPUApi                      *api;
+  Api                         *api;
   int                          ok = 0;
   uint32_t                     samplerIndex;
   uint32_t                     entryIndex;
   uint32_t                     releaseIndex;
   bool                         descriptorSaved = false;
 
-  api = gpuDeviceApi(device);
+  api = deviceApi(device);
 
   if (!api) {
     return 0;
@@ -1839,13 +1839,13 @@ check_metal_pipeline_binding_limits(GPUDevice *device) {
   GPUPipelineLayoutCreateInfo  pipelineInfo = {0};
   GPUBindGroupLayout          *layouts[3]   = {0};
   GPUPipelineLayout           *pipelineLayout;
-  GPUApi                      *api;
+  Api                         *api;
   int                          ok;
   uint32_t                     bufferIndex;
   uint32_t                     samplerIndex;
   uint32_t                     fragmentIndex;
 
-  api = gpuDeviceApi(device);
+  api = deviceApi(device);
 
   if (!api || api->backend != GPU_BACKEND_METAL) {
     return 1;
@@ -2025,7 +2025,7 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
   GPUBindGroupLayout          *pipelineGroups[1]   = {NULL};
   GPUPipelineLayoutCreateInfo  pipelineInfo        = {0};
   GPURenderPassEncoder         renderPass          = {0};
-  GPUApiDescriptor             savedDescriptor;
+  ApiDescriptor                savedDescriptor;
   GPUDevice                   *disabled       = NULL;
   GPUDevice                   *device         = NULL;
   GPUBindGroupLayout          *layout         = NULL;
@@ -2036,7 +2036,7 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
   GPUBindGroup                *regularGroup   = NULL;
   GPUTexture                  *texture        = NULL;
   GPUTextureView              *view           = NULL;
-  GPUApi                      *api;
+  Api                         *api;
   int                          ok = 0;
   uint32_t                     i;
 
@@ -2262,7 +2262,7 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
     goto cleanup;
   }
 
-  api = gpuDeviceApi(device);
+  api = deviceApi(device);
 
   if (!api) {
     fprintf(stderr, "bindless sparse buffer backend lookup failed\n");

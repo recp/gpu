@@ -37,7 +37,7 @@ mt_setSafeMathFallback(MTLCompileOptions *options) {
 }
 
 static void
-mt_destroyFunction(GPUShaderFunction *function) {
+mt_destroyFunction(ShaderFunction    *function) {
   MTShaderFunction *native;
 
   if (!function) {
@@ -68,7 +68,7 @@ mt_newLibraryWithSource(GPUDevice  *device,
                         const char *source,
                         uint64_t    sourceSize,
                         uint32_t    compileFlags) {
-  GPUDeviceMT           *deviceMT;
+  DeviceMT              *deviceMT;
   GPUShaderLibrary      *library;
   id<MTLLibrary>         mtLibrary;
   NSError               *error;
@@ -154,11 +154,11 @@ mt_newLibraryWithSource(GPUDevice  *device,
   return library;
 }
 
-static GPUShaderFunction*
+static ShaderFunction*
 mt_newVariant(GPUShaderLibrary           *lib,
               const char                 *name,
               const GPUPipelineConstants *constants) {
-  GPUShaderFunction           *func;
+  ShaderFunction              *func;
   MTShaderFunction            *native;
   const USLRuntimeSpecConstant *source;
   const GPUConstant           *value;
@@ -295,7 +295,7 @@ mt_newVariant(GPUShaderLibrary           *lib,
 }
 
 GPU_HIDE
-GPUShaderFunction*
+ShaderFunction*
 mt_newFunction(GPUShaderLibrary *lib, const char *name) {
   return mt_newVariant(lib, name, NULL);
 }
@@ -328,12 +328,12 @@ mt_samplerAddressMode(GPUAddressMode mode) {
 
 GPU_HIDE
 GPUResult
-mt_createSampler(GPUApi          *__restrict api,
+mt_createSampler(Api             *__restrict api,
                  GPUDevice       *__restrict device,
                  const GPUSamplerCreateInfo *info,
                  bool                        staticIfSupported,
                  GPUSampler                **outSampler) {
-  GPUDeviceMT              *deviceMT;
+  DeviceMT                 *deviceMT;
   MTLSamplerDescriptor     *desc;
   const GPUSamplerLODClamp *lod;
   GPUSampler               *sampler;
@@ -361,7 +361,7 @@ mt_createSampler(GPUApi          *__restrict api,
                          ? mt_samplerCompareFunction(info->desc.compare)
                          : MTLCompareFunctionNever;
 
-  lod = gpuSamplerLODClamp(info);
+  lod = samplerLODClamp(info);
 
   if (lod) {
     desc.lodMinClamp = lod->minLOD;
@@ -421,7 +421,7 @@ mt_destroyLibrary(GPUShaderLibrary *lib) {
 
 GPU_HIDE
 void
-mt_initLibrary(GPUApiLibrary *api) {
+mt_initLibrary(ApiLibrary    *api) {
   api->newLibraryWithSource = mt_newLibraryWithSource;
   api->newFunction          = mt_newFunction;
   api->newVariant           = mt_newVariant;
@@ -431,7 +431,7 @@ mt_initLibrary(GPUApiLibrary *api) {
 
 GPU_HIDE
 void
-mt_initSampler(GPUApiSampler *api) {
+mt_initSampler(ApiSampler    *api) {
   api->createSampler  = mt_createSampler;
   api->destroySampler = mt_destroySampler;
 }

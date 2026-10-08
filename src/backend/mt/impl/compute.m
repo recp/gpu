@@ -30,7 +30,7 @@ mt_nativeBuffer(GPUBuffer *buffer) {
 
 static GPUResult
 mt_setComputeIntersectionFunctions(GPUComputePipeline       *pipeline,
-                                   GPUShaderFunction *const *functions,
+                                   ShaderFunction    *const *functions,
                                    uint32_t                  functionCount) {
   MTComputePipelineDesc         *desc;
   NSMutableArray                *nativeFunctions;
@@ -108,7 +108,7 @@ mt_newComputePipeline(void) {
 
 GPU_HIDE
 void
-mt_setComputeFunction(GPUComputePipeline *pipeline, GPUShaderFunction *func) {
+mt_setComputeFunction(GPUComputePipeline *pipeline, ShaderFunction    *func) {
   MTComputePipelineDesc            *desc;
   MTShaderFunction                 *function;
 #if MT_HAS_METAL4
@@ -145,13 +145,13 @@ mt_setComputeFunction(GPUComputePipeline *pipeline, GPUShaderFunction *func) {
 }
 
 GPU_HIDE
-GPUComputePipelineState*
+ComputePipelineState*
 mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
   MTLComputePipelineDescriptor  *pipelineDesc;
   id<MTLComputePipelineState>    mtState;
-  GPUComputePipelineState       *state;
+  ComputePipelineState          *state;
   MTComputePipelineDesc         *desc;
-  GPUDeviceMT                   *deviceMT;
+  DeviceMT                      *deviceMT;
   NSError                       *error;
 #if MT_HAS_METAL4
   MTL4ComputePipelineDescriptor *pipelineDesc4;
@@ -254,7 +254,7 @@ GPU_HIDE
 void
 mt_destroyComputePipeline(GPUComputePipeline *pipeline) {
   MTComputePipelineDesc   *desc;
-  GPUComputePipelineState *state;
+  ComputePipelineState    *state;
 
   if (!pipeline) {
     return;
@@ -310,8 +310,8 @@ mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
   if (commandState->mode == MTCommandMode4) {
     if (!mt_prepareArgumentState(cmdb,
                                  &commandState->computeArguments,
-                                 gpuDeviceDebugLabel(gpuCommandBufferDevice(cmdb),
-                                                     "gpu-metal4-compute-arguments"))) {
+                                 deviceDebugLabel(commandBufferDevice(cmdb),
+                                                  "gpu-metal4-compute-arguments"))) {
       return NULL;
     }
 
@@ -361,7 +361,7 @@ mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
 GPU_HIDE
 void
 mt_setComputePipelineState(GPUComputePassEncoder   *enc,
-                           GPUComputePipelineState *state) {
+                           ComputePipelineState    *state) {
   MTComputeEncoder *native;
 
   if (!enc || !state || !state->_priv) {
@@ -465,7 +465,7 @@ void
 mt_computeAccelerationStructure(GPUComputePassEncoder       *enc,
                                 GPUAccelerationStructureEXT *structure,
                                 uint32_t                     index) {
-  GPUAccelerationStructureMT *ray;
+  AccelerationStructureMT    *ray;
   MTComputeEncoder           *native;
 
   native = mt_computeEncoder(enc);
@@ -625,7 +625,7 @@ mt_endComputeEncoding(GPUComputePassEncoder *enc) {
 
 GPU_HIDE
 void
-mt_initCompute(GPUApiCompute *api) {
+mt_initCompute(ApiCompute    *api) {
   api->newComputePipeline       = mt_newComputePipeline;
   api->setFunction              = mt_setComputeFunction;
   api->setIntersectionFunctions = mt_setComputeIntersectionFunctions;

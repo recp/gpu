@@ -49,7 +49,7 @@ check_dynamic_order(GPUDevice *device) {
   const uint32_t                bufferIndices[] = {2u, 0u, 1u};
   GPUBindGroupLayout           *layout          = NULL;
   GPUBindGroup                 *group           = NULL;
-  const GPUBindGroupDX12       *native;
+  const BindGroupDX12          *native;
   const DX12DynamicBufferRange *ranges;
   int                           ok = 0;
   uint32_t                      bufferIndex;

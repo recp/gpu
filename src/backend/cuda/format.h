@@ -21,7 +21,7 @@
 #include "../../../include/gpu/format.h"
 #include "driver.h"
 
-typedef uint32_t GPUCudaFormatFlags;
+typedef uint32_t CudaFormatFlags;
 
 enum {
   GPU_CUDA_FORMAT_SAMPLED_BIT         = 1u << 0,
@@ -31,28 +31,28 @@ enum {
   GPU_CUDA_FORMAT_SRGB_BIT            = 1u << 4
 };
 
-typedef struct GPUCudaFormatInfo {
+typedef struct CudaFormatInfo {
   CUarray_format     arrayFormat;
-  GPUCudaFormatFlags flags;
+  CudaFormatFlags    flags;
   uint32_t           bytesPerTexel;
   uint32_t           channelCount;
-} GPUCudaFormatInfo;
+} CudaFormatInfo;
 
-_Static_assert(sizeof(GPUCudaFormatInfo) == 16u,
+_Static_assert(sizeof(CudaFormatInfo) == 16u,
                "CUDA format info ABI drift");
 
 GPU_HIDE
 bool
-cuda_formatInfo(GPUFormat format, GPUCudaFormatInfo *outInfo);
+cuda_formatInfo(GPUFormat format, CudaFormatInfo    *outInfo);
 
 GPU_HIDE
 bool
-cuda_formatResourceView(const GPUCudaFormatInfo *format,
+cuda_formatResourceView(const CudaFormatInfo    *format,
                         CUresourceViewFormat    *outFormat);
 
 GPU_HIDE
 bool
-cuda_formatTextureDesc(const GPUCudaFormatInfo *format,
+cuda_formatTextureDesc(const CudaFormatInfo    *format,
                        const CUDA_TEXTURE_DESC *source,
                        CUDA_TEXTURE_DESC       *outDesc);
 

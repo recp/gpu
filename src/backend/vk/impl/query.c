@@ -47,10 +47,10 @@ VK__ASSERT_PIPESTAT(GPU_PIPESTAT_COMPUTE_SHADER_INVOCATIONS,
 
 #undef VK__ASSERT_PIPESTAT
 
-typedef struct GPUQuerySetVk {
+typedef struct QuerySetVk {
   VkDevice    device;
   VkQueryPool pool;
-} GPUQuerySetVk;
+} QuerySetVk;
 
 static VkQueryPipelineStatisticFlags
 vk_pipelineStatisticFlags(void) {
@@ -63,8 +63,8 @@ vk_createQuerySet(GPUDevice                   *device,
                   const GPUQuerySetCreateInfo *info,
                   GPUQuerySet                 *set) {
   VkQueryPoolCreateInfo queryInfo = {0};
-  GPUDeviceVk          *deviceVk;
-  GPUQuerySetVk        *native;
+  DeviceVk             *deviceVk;
+  QuerySetVk           *native;
 
   deviceVk = device ? device->_priv : NULL;
 
@@ -108,8 +108,8 @@ vk_createQuerySet(GPUDevice                   *device,
 GPU_HIDE
 void
 vk_resetQuerySet(GPUCommandBuffer *cmdb, GPUQuerySet *set) {
-  GPUCommandBufferVk *command;
-  GPUQuerySetVk      *native;
+  CommandBufferVk    *command;
+  QuerySetVk         *native;
 
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
@@ -126,8 +126,8 @@ void
 vk_beginOcclusionQuery(GPURenderPassEncoder *pass,
                        GPUQuerySet          *set,
                        uint32_t              queryIndex) {
-  GPURenderEncoderVk *encoder;
-  GPUQuerySetVk      *native;
+  RenderEncoderVk    *encoder;
+  QuerySetVk         *native;
 
   encoder = pass ? pass->_priv : NULL;
   native  = set ? set->_priv : NULL;
@@ -144,8 +144,8 @@ void
 vk_endOcclusionQuery(GPURenderPassEncoder *pass,
                      GPUQuerySet          *set,
                      uint32_t              queryIndex) {
-  GPURenderEncoderVk *encoder;
-  GPUQuerySetVk      *native;
+  RenderEncoderVk    *encoder;
+  QuerySetVk         *native;
 
   encoder = pass ? pass->_priv : NULL;
   native  = set ? set->_priv : NULL;
@@ -162,8 +162,8 @@ void
 vk_beginPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
                                 GPUQuerySet      *set,
                                 uint32_t          queryIndex) {
-  GPUCommandBufferVk *command;
-  GPUQuerySetVk      *native;
+  CommandBufferVk    *command;
+  QuerySetVk         *native;
 
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
@@ -181,8 +181,8 @@ void
 vk_endPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
                               GPUQuerySet      *set,
                               uint32_t          queryIndex) {
-  GPUCommandBufferVk *command;
-  GPUQuerySetVk      *native;
+  CommandBufferVk    *command;
+  QuerySetVk         *native;
 
   command = cmdb ? cmdb->_priv : NULL;
   native  = set ? set->_priv : NULL;
@@ -197,7 +197,7 @@ vk_endPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
 GPU_HIDE
 void
 vk_destroyQuerySet(GPUQuerySet *set) {
-  GPUQuerySetVk *native;
+  QuerySetVk    *native;
 
   native = set ? set->_priv : NULL;
 
@@ -219,8 +219,8 @@ vk_writeTimestamp(GPUCommandBuffer *cmdb,
                   GPUQuerySet      *set,
                   uint32_t          queryIndex,
                   bool              beginningOfPass) {
-  GPUCommandBufferVk     *command;
-  GPUQuerySetVk          *native;
+  CommandBufferVk        *command;
+  QuerySetVk             *native;
   VkPipelineStageFlagBits stage;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -248,9 +248,9 @@ vk_resolveQuerySet(GPUCommandBuffer *cmdb,
                    uint32_t          queryCount,
                    GPUBuffer        *dstBuffer,
                    uint64_t          dstOffset) {
-  GPUCommandBufferVk *command;
-  GPUQuerySetVk      *native;
-  GPUBufferVk        *buffer;
+  CommandBufferVk    *command;
+  QuerySetVk         *native;
+  BufferVk           *buffer;
   VkDeviceSize        resultStride;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -289,7 +289,7 @@ vk_resolveQuerySet(GPUCommandBuffer *cmdb,
 
 GPU_HIDE
 void
-vk_initQuery(GPUApiCommandBuffer *api) {
+vk_initQuery(ApiCommandBuffer    *api) {
   api->createQuerySet               = vk_createQuerySet;
   api->destroyQuerySet              = vk_destroyQuerySet;
   api->writeTimestamp               = vk_writeTimestamp;

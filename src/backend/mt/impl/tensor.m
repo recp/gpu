@@ -81,7 +81,7 @@ mt_tensorRequirements(GPUDevice                      *device,
                       uint64_t                        spanBytes,
                       GPUTensorBufferRequirementsEXT *outRequirements) {
   MTLSizeAndAlign sizeAndAlign;
-  GPUDeviceMT    *deviceMT;
+  DeviceMT       *deviceMT;
   uint32_t        i;
 
   deviceMT = device->_priv;
@@ -179,7 +179,7 @@ mt_createTensorView(GPUTensorEXT *tensor, uint64_t spanBytes) {
       }
 
       if (tensor->offsetBytes % requirements.offsetAlignmentBytes != 0u
-          || !gpuBufferRangeValid(tensor->buffer, tensor->offsetBytes, requirements.sizeBytes)) {
+          || !bufferRangeValid(tensor->buffer, tensor->offsetBytes, requirements.sizeBytes)) {
         [nativeDesc release];
         return GPU_ERROR_INVALID_ARGUMENT;
       }
@@ -194,7 +194,7 @@ mt_createTensorView(GPUTensorEXT *tensor, uint64_t spanBytes) {
       }
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-      if (gpuDeviceDebugMarkersEnabled(tensor->device) && tensor->label[0] != '\0') {
+      if (deviceDebugMarkersEnabled(tensor->device) && tensor->label[0] != '\0') {
         nativeTensor.label = [NSString stringWithUTF8String:tensor->label];
       }
 #endif
@@ -224,7 +224,7 @@ mt_destroyTensor(GPUTensorEXT *tensor) {
 
 GPU_HIDE
 void
-mt_initTensor(GPUApiTensor *api) {
+mt_initTensor(ApiTensor    *api) {
   api->getBufferRequirements = mt_getTensorBufferRequirements;
   api->createView            = mt_createTensorView;
   api->destroy               = mt_destroyTensor;

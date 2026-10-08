@@ -19,12 +19,12 @@
 #include "instance_internal.h"
 
 static void
-gpu_destroyInstanceAdapters(GPUInstance *instance) {
+destroyInstanceAdapters(GPUInstance *instance) {
   GPUAdapter *adapter;
   GPUAdapter *next;
-  GPUApi     *api;
+  Api        *api;
 
-  api                     = gpuInstanceApi(instance);
+  api                     = instanceApi(instance);
   adapter                 = instance->_adapters;
   instance->_adapters     = NULL;
   instance->_adapterCount = 0u;
@@ -48,7 +48,7 @@ GPUResult
 GPUCreateInstance(const GPUInstanceCreateInfo *__restrict info,
                   GPUInstance                **__restrict outInstance) {
   GPUInstanceCreateInfo defaultInfo;
-  GPUApi               *api;
+  Api                  *api;
 
   if (!outInstance) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -74,7 +74,7 @@ GPUCreateInstance(const GPUInstanceCreateInfo *__restrict info,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuApiForBackend(info->preferredBackend)) || !api->instance.createInstance) {
+  if (!(api = apiForBackend(info->preferredBackend)) || !api->instance.createInstance) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -90,14 +90,14 @@ GPUCreateInstance(const GPUInstanceCreateInfo *__restrict info,
 GPU_EXPORT
 void
 GPUDestroyInstance(GPUInstance *instance) {
-  GPUApi *api;
+  Api    *api;
 
   if (!instance) {
     return;
   }
 
-  api = gpuInstanceApi(instance);
-  gpu_destroyInstanceAdapters(instance);
+  api = instanceApi(instance);
+  destroyInstanceAdapters(instance);
 
   if (api && api->instance.destroyInstance) {
     api->instance.destroyInstance(api, instance);

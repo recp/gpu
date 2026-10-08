@@ -19,25 +19,25 @@
 
 #include "../common.h"
 
-typedef struct GPUCacheFileGuard {
+typedef struct CacheFileGuard {
   intptr_t native;
   bool     locked;
-} GPUCacheFileGuard;
+} CacheFileGuard;
 
 GPU_HIDE
 bool
-gpuCacheFileBegin(const char *path, GPUCacheFileGuard *guard);
+cacheFileBegin(const char *path, CacheFileGuard    *guard);
 
 GPU_HIDE
 void
-gpuCacheFileEnd(GPUCacheFileGuard *guard);
+cacheFileEnd(CacheFileGuard    *guard);
 
 GPU_HIDE
 char*
-gpuCacheFileTemporaryPath(const char *path, const void *identity);
+cacheFileTemporaryPath(const char *path, const void *identity);
 
 GPU_HIDE
 bool
-gpuCacheFileReplace(const char *source, const char *destination);
+cacheFileReplace(const char *source, const char *destination);
 
 #endif /* gpu_backend_cache_file_h */

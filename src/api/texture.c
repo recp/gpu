@@ -23,14 +23,14 @@
 #include <math.h>
 
 static bool
-gpuIsTextureDimensionValid(GPUTextureDimension dimension) {
+isTextureDimensionValid(GPUTextureDimension dimension) {
   return dimension == GPU_TEXTURE_DIMENSION_1D
          || dimension == GPU_TEXTURE_DIMENSION_2D
          || dimension == GPU_TEXTURE_DIMENSION_3D;
 }
 
 static bool
-gpuIsTextureViewTypeValid(GPUTextureViewType viewType) {
+isTextureViewTypeValid(GPUTextureViewType viewType) {
   return viewType == GPU_TEXTURE_VIEW_1D
          || viewType == GPU_TEXTURE_VIEW_1D_ARRAY
          || viewType == GPU_TEXTURE_VIEW_2D
@@ -41,8 +41,8 @@ gpuIsTextureViewTypeValid(GPUTextureViewType viewType) {
 }
 
 static bool
-gpuTextureViewCompatible(const GPUTexture               *texture,
-                         const GPUTextureViewCreateInfo *info) {
+textureViewCompatible(const GPUTexture               *texture,
+                      const GPUTextureViewCreateInfo *info) {
   switch (texture->dimension) {
     case GPU_TEXTURE_DIMENSION_1D:
       if (texture->depthOrLayers == 1u) {
@@ -83,7 +83,7 @@ gpuTextureViewCompatible(const GPUTexture               *texture,
 }
 
 static bool
-gpuTextureViewRangeValid(const GPUTextureViewCreateInfo *info) {
+textureViewRangeValid(const GPUTextureViewCreateInfo *info) {
   if (info->viewType == GPU_TEXTURE_VIEW_CUBE) {
     return info->baseArrayLayer == 0u && info->arrayLayerCount == 6u;
   }
@@ -101,13 +101,13 @@ gpuTextureViewRangeValid(const GPUTextureViewCreateInfo *info) {
 }
 
 static bool
-gpuIsSampleCountValid(uint32_t sampleCount) {
+isSampleCountValid(uint32_t sampleCount) {
   return sampleCount == 0u || sampleCount == 1u || sampleCount == 2u
          || sampleCount == 4u || sampleCount == 8u;
 }
 
 static uint32_t
-gpuMaxMipLevelCount(const GPUTextureCreateInfo *info) {
+maxMipLevelCount(const GPUTextureCreateInfo *info) {
   uint32_t extent;
   uint32_t count;
 
@@ -134,10 +134,10 @@ gpuMaxMipLevelCount(const GPUTextureCreateInfo *info) {
 }
 
 static GPUResult
-gpuValidateTextureFormatUsage(const GPUDevice     *device,
-                              GPUFormat            format,
-                              GPUTextureUsageFlags usage,
-                              uint32_t             sampleCount) {
+validateTextureFormatUsage(const GPUDevice     *device,
+                           GPUFormat            format,
+                           GPUTextureUsageFlags usage,
+                           uint32_t             sampleCount) {
   GPUFormatCapabilities caps;
   GPUResult             result;
 
@@ -174,16 +174,16 @@ gpuMipExtent(uint32_t extent, uint32_t mipLevel) {
 }
 
 static bool
-gpuTextureRegionInRange(const GPUTexture *texture,
-                        uint32_t          mipLevel,
-                        uint32_t          x,
-                        uint32_t          y,
-                        uint32_t          z,
-                        uint32_t          width,
-                        uint32_t          height,
-                        uint32_t          depth,
-                        uint32_t          baseArrayLayer,
-                        uint32_t          layerCount) {
+textureRegionInRange(const GPUTexture *texture,
+                     uint32_t          mipLevel,
+                     uint32_t          x,
+                     uint32_t          y,
+                     uint32_t          z,
+                     uint32_t          width,
+                     uint32_t          height,
+                     uint32_t          depth,
+                     uint32_t          baseArrayLayer,
+                     uint32_t          layerCount) {
   uint32_t mipWidth;
   uint32_t mipHeight;
   uint32_t mipDepth;
@@ -221,18 +221,18 @@ gpuTextureRegionInRange(const GPUTexture *texture,
 }
 
 static bool
-gpuTextureWriteLayoutValid(const GPUTexture            *texture,
-                           const GPUTextureWriteRegion *region,
-                           uint64_t                     sizeBytes) {
-  GPUFormatDataLayout layout;
+textureWriteLayoutValid(const GPUTexture            *texture,
+                        const GPUTextureWriteRegion *region,
+                        uint64_t                     sizeBytes) {
+  FormatDataLayout    layout;
   GPUTextureAspect    aspect;
   uint32_t            mipHeight;
   uint32_t            mipWidth;
 
   if (!texture || !region || sizeBytes == 0u
-      || !gpuFormatResolveCopyAspect(texture->format,
-                                     region->aspect,
-                                     &aspect)) {
+      || !formatResolveCopyAspect(texture->format,
+                                  region->aspect,
+                                  &aspect)) {
     return false;
   }
 
@@ -245,32 +245,32 @@ gpuTextureWriteLayoutValid(const GPUTexture            *texture,
     return false;
   }
 
-  if (!gpuFormatCopyAligned(texture->format,
-                            0u,
-                            0u,
-                            region->width,
-                            region->height,
-                            mipWidth,
-                            mipHeight)) {
+  if (!formatCopyAligned(texture->format,
+                         0u,
+                         0u,
+                         region->width,
+                         region->height,
+                         mipWidth,
+                         mipHeight)) {
     return false;
   }
 
-  return gpuFormatAspectDataLayout(texture->format,
-                                   region->aspect,
-                                   region->width,
-                                   region->height,
-                                   region->depth,
-                                   region->layerCount,
-                                   region->bytesPerRow,
-                                   region->rowsPerImage,
-                                   &layout)
+  return formatAspectDataLayout(texture->format,
+                                region->aspect,
+                                region->width,
+                                region->height,
+                                region->depth,
+                                region->layerCount,
+                                region->bytesPerRow,
+                                region->rowsPerImage,
+                                &layout)
          && sizeBytes >= layout.requiredBytes;
 }
 
 GPU_HIDE
 GPUResult
-gpuValidateTextureCreateInfo(const GPUDevice            *device,
-                             const GPUTextureCreateInfo *info) {
+validateTextureCreateInfo(const GPUDevice            *device,
+                          const GPUTextureCreateInfo *info) {
   const GPUTextureUsageFlags known = GPU_TEXTURE_USAGE_SAMPLED
                                      | GPU_TEXTURE_USAGE_STORAGE
                                      | GPU_TEXTURE_USAGE_COLOR_TARGET
@@ -298,7 +298,7 @@ gpuValidateTextureCreateInfo(const GPUDevice            *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!gpuIsTextureDimensionValid(info->dimension) || info->usage == 0u) {
+  if (!isTextureDimensionValid(info->dimension) || info->usage == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -310,11 +310,11 @@ gpuValidateTextureCreateInfo(const GPUDevice            *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if ((info->mipLevelCount ? info->mipLevelCount : 1u) > gpuMaxMipLevelCount(info)) {
+  if ((info->mipLevelCount ? info->mipLevelCount : 1u) > maxMipLevelCount(info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!gpuIsSampleCountValid(info->sampleCount)
+  if (!isSampleCountValid(info->sampleCount)
       || (info->sampleCount > 1u
           && (info->dimension != GPU_TEXTURE_DIMENSION_2D
               || info->depthOrLayers != 1u || info->mipLevelCount != 1u
@@ -325,10 +325,10 @@ gpuValidateTextureCreateInfo(const GPUDevice            *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  return gpuValidateTextureFormatUsage(device,
-                                       info->format,
-                                       info->usage,
-                                       info->sampleCount ? info->sampleCount : 1u);
+  return validateTextureFormatUsage(device,
+                                    info->format,
+                                    info->usage,
+                                    info->sampleCount ? info->sampleCount : 1u);
 }
 
 GPU_EXPORT
@@ -336,7 +336,7 @@ GPUResult
 GPUCreateTexture(GPUDevice                  *__restrict device,
                  const GPUTextureCreateInfo *__restrict info,
                  GPUTexture                **__restrict outTexture) {
-  GPUApi   *api;
+  Api      *api;
   GPUResult result;
 
   if (!outTexture) {
@@ -345,13 +345,13 @@ GPUCreateTexture(GPUDevice                  *__restrict device,
 
   *outTexture = NULL;
 
-  result = gpuValidateTextureCreateInfo(device, info);
+  result = validateTextureCreateInfo(device, info);
 
   if (result != GPU_OK) {
     return result;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->texture.create) {
+  if (!(api = deviceApi(device)) || !api->texture.create) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -373,7 +373,7 @@ GPUCreateTexture(GPUDevice                  *__restrict device,
 GPU_EXPORT
 void
 GPUDestroyTexture(GPUTexture *__restrict texture) {
-  GPUApi *api;
+  Api    *api;
 
   if (!texture) {
     return;
@@ -385,11 +385,11 @@ GPUDestroyTexture(GPUTexture *__restrict texture) {
 
   texture->_sharedPeer = NULL;
 
-  if (!(api = gpuDeviceApi(texture->device)) || !api->texture.destroy) {
+  if (!(api = deviceApi(texture->device)) || !api->texture.destroy) {
     return;
   }
 
-  gpuDestroyTextureBlitViews(texture);
+  destroyTextureBlitViews(texture);
   api->texture.destroy(texture);
 }
 
@@ -425,7 +425,7 @@ GPUCreateTextureView(GPUTexture                     *__restrict texture,
                      const GPUTextureViewCreateInfo *__restrict info,
                      GPUTextureView                **__restrict outView) {
   const GPUTextureViewMinLODEXT *lod;
-  GPUApi                       *api;
+  Api                          *api;
   GPUTextureView               *view;
   GPUResult                     result;
 
@@ -452,10 +452,10 @@ GPUCreateTextureView(GPUTexture                     *__restrict texture,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!gpuIsTextureViewTypeValid(info->viewType)
+  if (!isTextureViewTypeValid(info->viewType)
       || info->format != texture->format
-      || !gpuTextureViewCompatible(texture, info)
-      || !gpuTextureViewRangeValid(info)
+      || !textureViewCompatible(texture, info)
+      || !textureViewRangeValid(info)
       || info->baseMipLevel >= texture->mipLevelCount
       || info->mipLevelCount > texture->mipLevelCount - info->baseMipLevel
       || info->baseArrayLayer >= texture->depthOrLayers
@@ -479,7 +479,7 @@ GPUCreateTextureView(GPUTexture                     *__restrict texture,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!(api = gpuDeviceApi(texture->device)) || !api->texture.createView) {
+  if (!(api = deviceApi(texture->device)) || !api->texture.createView) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -509,14 +509,14 @@ GPUCreateTextureView(GPUTexture                     *__restrict texture,
 GPU_EXPORT
 void
 GPUDestroyTextureView(GPUTextureView *__restrict view) {
-  GPUApi *api;
+  Api    *api;
 
   if (!view) {
     return;
   }
 
   if (!view->_texture
-      || !(api = gpuDeviceApi(view->_texture->device))
+      || !(api = deviceApi(view->_texture->device))
       || !api->texture.destroyView) {
     return;
   }
@@ -531,7 +531,7 @@ GPUQueueWriteTexture(GPUQueue                    *__restrict queue,
                      const GPUTextureWriteRegion *__restrict region,
                      const void                  *__restrict data,
                      uint64_t                                sizeBytes) {
-  GPUApi *api;
+  Api    *api;
 
   if (!queue || !texture || texture->sampleCount > 1u
       || queue->_device != texture->device
@@ -546,24 +546,24 @@ GPUQueueWriteTexture(GPUQueue                    *__restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!gpuTextureRegionInRange(texture,
-                               region->mipLevel,
-                               0u,
-                               0u,
-                               0u,
-                               region->width,
-                               region->height,
-                               region->depth,
-                               region->baseArrayLayer,
-                               region->layerCount)) {
+  if (!textureRegionInRange(texture,
+                            region->mipLevel,
+                            0u,
+                            0u,
+                            0u,
+                            region->width,
+                            region->height,
+                            region->depth,
+                            region->baseArrayLayer,
+                            region->layerCount)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!gpuTextureWriteLayoutValid(texture, region, sizeBytes)) {
+  if (!textureWriteLayoutValid(texture, region, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuDeviceApi(texture->device)) || !api->texture.write) {
+  if (!(api = deviceApi(texture->device)) || !api->texture.write) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 

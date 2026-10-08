@@ -69,9 +69,9 @@ cuda__textureViewSupported(GPUTextureViewType viewType) {
 
 bool
 cuda_texturePlan(const GPUTextureCreateInfo *info,
-                 const GPUCudaFormatInfo    *format,
-                 GPUCudaTexturePlan         *outPlan) {
-  GPUCudaTexturePlan         plan;
+                 const CudaFormatInfo       *format,
+                 CudaTexturePlan            *outPlan) {
+  CudaTexturePlan            plan;
   const GPUTextureUsageFlags allowedUsage = GPU_TEXTURE_USAGE_SAMPLED
                                          | GPU_TEXTURE_USAGE_STORAGE
                                          | GPU_TEXTURE_USAGE_COPY_SRC
@@ -163,8 +163,8 @@ cuda_textureStorageViewSupported(GPUTextureViewType viewType) {
 bool
 cuda_textureViewPlan(const GPUTexture               *texture,
                      const GPUTextureViewCreateInfo *info,
-                     GPUCudaTextureViewPlan         *outPlan) {
-  GPUCudaTextureViewPlan plan;
+                     CudaTextureViewPlan            *outPlan) {
+  CudaTextureViewPlan    plan;
   uint32_t               layerCount;
   bool                   cubemap, layered;
 
@@ -173,11 +173,11 @@ cuda_textureViewPlan(const GPUTexture               *texture,
   }
 
   if (!texture || !info || !outPlan || info->format != texture->format
-      || !gpuTextureSubresourceRangeValid(texture,
-                                          info->baseMipLevel,
-                                          info->mipLevelCount,
-                                          info->baseArrayLayer,
-                                          info->arrayLayerCount)
+      || !textureSubresourceRangeValid(texture,
+                                       info->baseMipLevel,
+                                       info->mipLevelCount,
+                                       info->baseArrayLayer,
+                                       info->arrayLayerCount)
       || !cuda__textureViewSupported(info->viewType)) {
     return false;
   }
@@ -189,7 +189,7 @@ cuda_textureViewPlan(const GPUTexture               *texture,
   layered = texture->dimension != GPU_TEXTURE_DIMENSION_3D
             && texture->depthOrLayers > 1u
             && (!cubemap || texture->depthOrLayers > 6u);
-  layerCount = gpuTextureArrayLayerCount(texture);
+  layerCount = textureArrayLayerCount(texture);
 
   switch (texture->dimension) {
     case GPU_TEXTURE_DIMENSION_1D:

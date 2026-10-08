@@ -23,22 +23,22 @@ extern "C" {
 #include <gpu/common.h>
 #include <gpu/gpu.h>
 
-struct GPUApi;
+struct Api;
 
-typedef struct GPUSurfaceNativeInfo {
+typedef struct SurfaceNativeInfo {
   GPUAdapter     *adapter;
   void           *display;
   void           *nativeHandle;
   uintptr_t       nativeWindow;
   GPUSurfaceType  type;
   float           scale;
-} GPUSurfaceNativeInfo;
+} SurfaceNativeInfo;
 
-typedef struct GPUApiSurface {
+typedef struct ApiSurface {
   GPUSurface *
-  (*createSurface)(struct GPUApi              *__restrict api,
+  (*createSurface)(struct Api                 *__restrict api,
                    struct GPUInstance         *__restrict inst,
-                   const GPUSurfaceNativeInfo *__restrict info);
+                   const SurfaceNativeInfo    *__restrict info);
 
   GPUResult
   (*getCapabilities)(const GPUAdapter       *__restrict adapter,
@@ -46,7 +46,7 @@ typedef struct GPUApiSurface {
                      GPUSurfaceCapabilities *__restrict outCaps);
 
   void (*destroySurface)(GPUSurface *__restrict surface);
-} GPUApiSurface;
+} ApiSurface;
 
 #ifdef __cplusplus
 }

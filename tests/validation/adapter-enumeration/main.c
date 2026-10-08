@@ -38,7 +38,7 @@ enumerate_adapters(GPUInstance *__restrict instance, uint32_t maxCount) {
 
 int
 main(void) {
-  GPUApi      api      = {0};
+  Api         api      = {0};
   GPUInstance instance = {0};
   GPUAdapter *result;
   GPUResult   status;

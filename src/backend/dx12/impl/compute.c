@@ -20,7 +20,7 @@
 #include "../../../api/compute_internal.h"
 #include "pipeline_cache.h"
 
-static GPUComputeEncoderDX12*
+static ComputeEncoderDX12*
 dx12__computeEncoder(GPUComputePassEncoder *encoder) {
   return encoder ? encoder->_priv : NULL;
 }
@@ -31,8 +31,8 @@ dx12__dispatchIndirect(GPUComputePassEncoder *encoder,
                        uint64_t               argsOffset,
                        uint32_t               dispatchCount,
                        uint32_t               strideBytes) {
-  GPUComputeEncoderDX12 *native;
-  GPUBufferDX12         *buffer;
+  ComputeEncoderDX12    *native;
+  BufferDX12            *buffer;
 
   native = dx12__computeEncoder(encoder);
   buffer = argsBuffer ? argsBuffer->_priv : NULL;
@@ -65,12 +65,12 @@ dx12_createComputePipeline(GPUDevice                          *device,
   D3D12_COMPUTE_PIPELINE_STATE_DESC  desc = {0};
   DX12ShaderCode                    shaderCode = {0};
   DX12PipelineKey                   rootKey;
-  GPUDeviceDX12                    *deviceDX12;
+  DeviceDX12                       *deviceDX12;
   GPUShaderLibrary                 *library;
-  GPUShaderLibraryDX12             *libraryDX12;
-  GPUPipelineLayoutDX12            *layout;
-  GPUComputePipelineState          *state;
-  GPUComputePipelineDX12           *native;
+  ShaderLibraryDX12                *libraryDX12;
+  PipelineLayoutDX12               *layout;
+  ComputePipelineState             *state;
+  ComputePipelineDX12              *native;
   ID3D12RootSignature              *rootSignature;
   uint64_t                          entryMask;
   HRESULT                           result;
@@ -90,9 +90,9 @@ dx12_createComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native        = (GPUComputePipelineDX12 *)(state + 1);
+  native        = (ComputePipelineDX12 *)(state + 1);
   rootSignature = NULL;
-  entryMask     = gpuShaderEntryBit(info->library, info->entryPoint);
+  entryMask     = shaderEntryBit(info->library, info->entryPoint);
 
   if (dx12_createShaderRootSignature(device,
                                      info->layout,
@@ -108,7 +108,7 @@ dx12_createComputePipeline(GPUDevice                          *device,
                           library,
                           info->entryPoint,
                           GPU_SHADER_STAGE_COMPUTE_BIT,
-                          gpuPipelineConstants(info->chain.pNext),
+                          pipelineConstants(info->chain.pNext),
                           &shaderCode)) {
     rootSignature->lpVtbl->Release(rootSignature);
     free(state);
@@ -147,8 +147,8 @@ dx12_createComputePipeline(GPUDevice                          *device,
 GPU_HIDE
 void
 dx12_destroyComputePipeline(GPUComputePipeline *pipeline) {
-  GPUComputePipelineState *state;
-  GPUComputePipelineDX12  *native;
+  ComputePipelineState    *state;
+  ComputePipelineDX12     *native;
 
   if (!pipeline) {
     return;
@@ -175,10 +175,10 @@ GPU_HIDE
 GPUComputePassEncoder*
 dx12_computeCommandEncoder(GPUCommandBuffer               *cmdb,
                            const GPUComputePassCreateInfo *info) {
-  GPUDeviceDX12         *device;
-  GPUCommandBufferDX12  *command;
+  DeviceDX12            *device;
+  CommandBufferDX12     *command;
   GPUComputePassEncoder *encoder;
-  GPUComputeEncoderDX12 *native;
+  ComputeEncoderDX12    *native;
 
   device  = cmdb && cmdb->_queue && cmdb->_queue->_device ? cmdb->_queue->_device->_priv : NULL;
   command = cmdb ? cmdb->_priv : NULL;
@@ -198,7 +198,7 @@ dx12_computeCommandEncoder(GPUCommandBuffer               *cmdb,
 #if GPU_DX12_HAS_EXECUTION_GRAPHS
   native->commandList10    = command->commandList10;
 #endif
-  native->debugEventActive = dx12_beginDebugEvent(gpuCommandBufferDevice(cmdb),
+  native->debugEventActive = dx12_beginDebugEvent(commandBufferDevice(cmdb),
                                                   native->commandList,
                                                   info->label);
 
@@ -213,9 +213,9 @@ dx12_computeCommandEncoder(GPUCommandBuffer               *cmdb,
 GPU_HIDE
 void
 dx12_setComputePipelineState(GPUComputePassEncoder   *encoder,
-                             GPUComputePipelineState *pipelineState) {
-  GPUComputeEncoderDX12  *native;
-  GPUComputePipelineDX12 *pipeline;
+                             ComputePipelineState    *pipelineState) {
+  ComputeEncoderDX12     *native;
+  ComputePipelineDX12    *pipeline;
   bool                    rootChanged;
 
   native   = dx12__computeEncoder(encoder);
@@ -252,8 +252,8 @@ void
 dx12_computePushConstants(GPUComputePassEncoder *encoder,
                           const void            *data,
                           uint32_t               sizeBytes) {
-  GPUComputeEncoderDX12 *native;
-  GPUPipelineLayoutDX12 *layout;
+  ComputeEncoderDX12    *native;
+  PipelineLayoutDX12    *layout;
 
   native = dx12__computeEncoder(encoder);
   layout = encoder && encoder->_pipelineLayout ? encoder->_pipelineLayout->_native : NULL;
@@ -277,7 +277,7 @@ dx12_dispatch(GPUComputePassEncoder *encoder,
               uint32_t               x,
               uint32_t               y,
               uint32_t               z) {
-  GPUComputeEncoderDX12 *native;
+  ComputeEncoderDX12    *native;
 
   if (!(native = dx12__computeEncoder(encoder)) || !native->commandList) {
     return;
@@ -315,14 +315,14 @@ dx12_multiDispatchIndirect(GPUComputePassEncoder *encoder,
 GPU_HIDE
 void
 dx12_endComputeEncoding(GPUComputePassEncoder *encoder) {
-  GPUComputeEncoderDX12 *native;
+  ComputeEncoderDX12    *native;
 
   if (!(native = dx12__computeEncoder(encoder))) {
     return;
   }
 
   if (native->debugEventActive) {
-    dx12_endDebugEvent(gpuCommandBufferDevice(encoder->_cmdb),
+    dx12_endDebugEvent(commandBufferDevice(encoder->_cmdb),
                        native->commandList);
   }
 
@@ -341,7 +341,7 @@ dx12_endComputeEncoding(GPUComputePassEncoder *encoder) {
 
 GPU_HIDE
 void
-dx12_initCompute(GPUApiCompute *api) {
+dx12_initCompute(ApiCompute    *api) {
   api->createPipeline          = dx12_createComputePipeline;
   api->destroyComputePipeline  = dx12_destroyComputePipeline;
   api->computeCommandEncoder   = dx12_computeCommandEncoder;

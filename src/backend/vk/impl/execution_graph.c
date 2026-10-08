@@ -23,23 +23,23 @@
 
 #ifdef VK_AMDX_shader_enqueue
 
-typedef struct GPUExecutionGraphEntryVk {
+typedef struct ExecutionGraphEntryVk {
   const char               *entryPoint;
   GPUExecutionGraphEntryEXT entry;
   uint64_t                  nameHash;
   uint32_t                  nameLength;
-} GPUExecutionGraphEntryVk;
+} ExecutionGraphEntryVk;
 
-typedef struct GPUExecutionGraphVk {
-  GPUDeviceVk              *gpuDevice;
-  GPUShaderLayoutVk         shaderLayout;
+typedef struct ExecutionGraphVk {
+  DeviceVk                 *gpuDevice;
+  ShaderLayoutVk            shaderLayout;
   VkPipeline                pipeline;
-  GPUExecutionGraphEntryVk *entries;
+  ExecutionGraphEntryVk    *entries;
   uint32_t                  entryCount;
-} GPUExecutionGraphVk;
+} ExecutionGraphVk;
 
-typedef struct GPUExecutionGraphInstanceVk {
-  GPUCommandBufferVk      *recordingCommandBuffer;
+typedef struct ExecutionGraphInstanceVk {
+  CommandBufferVk         *recordingCommandBuffer;
   VkDispatchGraphInfoAMDX *hostInfos;
   VkDevice                 device;
   VkBuffer                 scratchBuffer;
@@ -48,10 +48,10 @@ typedef struct GPUExecutionGraphInstanceVk {
   uint64_t                 scratchOffset;
   uint32_t                 inputCapacity;
   bool                     initialized;
-} GPUExecutionGraphInstanceVk;
+} ExecutionGraphInstanceVk;
 
-struct GPUExecutionGraphInputChunkVk {
-  struct GPUExecutionGraphInputChunkVk *next;
+struct ExecutionGraphInputChunkVk {
+  struct ExecutionGraphInputChunkVk    *next;
   uint8_t                              *mapped;
   VkDevice                              device;
   VkBuffer                              buffer;
@@ -93,7 +93,7 @@ vk_graphResult(VkResult result) {
 }
 
 static void
-vk_destroyExecutionGraphState(GPUExecutionGraphVk *native) {
+vk_destroyExecutionGraphState(ExecutionGraphVk    *native) {
   if (!native) {
     return;
   }
@@ -110,13 +110,13 @@ static GPUResult
 vk_createExecutionGraph(GPUDevice                            *device,
                         const GPUExecutionGraphCreateInfoEXT *info,
                         GPUExecutionGraphEXT                 *graph) {
-  GPUShaderExecutionGraphEntryInfo        reflected[USL_RUNTIME_MAX_ENTRY_POINTS];
+  ShaderExecutionGraphEntryInfo           reflected[USL_RUNTIME_MAX_ENTRY_POINTS];
   VkPipelineShaderStageNodeCreateInfoAMDX nodeInfos[USL_RUNTIME_MAX_ENTRY_POINTS];
   VkPipelineShaderStageCreateInfo         stages[USL_RUNTIME_MAX_ENTRY_POINTS];
   VkExecutionGraphPipelineCreateInfoAMDX  pipelineInfo = {0};
   VkExecutionGraphPipelineScratchSizeAMDX scratch      = {0};
-  GPUShaderLibraryVk                     *library;
-  GPUExecutionGraphVk                    *native;
+  ShaderLibraryVk                        *library;
+  ExecutionGraphVk                       *native;
   VkPipelineCache                         cache;
   uint8_t                                *storage;
   size_t                                  allocationSize;
@@ -132,7 +132,7 @@ vk_createExecutionGraph(GPUDevice                            *device,
 
   library    = info && info->library ? info->library->_priv : NULL;
   entryCount = info
-                 ? gpuGetShaderLibraryExecutionGraphEntryCount(info->library)
+                 ? getShaderLibraryExecutionGraphEntryCount(info->library)
                  : 0u;
 
   if (!device || !device->_priv || !info || !graph || !library
@@ -147,16 +147,16 @@ vk_createExecutionGraph(GPUDevice                            *device,
   programEntryCount = 0u;
 
   for (entryIndex = 0u; entryIndex < entryCount; entryIndex++) {
-    if (!gpuGetShaderLibraryExecutionGraphEntryAt(info->library,
-                                                  entryIndex,
-                                                  &reflected[entryIndex])
+    if (!getShaderLibraryExecutionGraphEntryAt(info->library,
+                                               entryIndex,
+                                               &reflected[entryIndex])
         || !reflected[entryIndex].entryPoint || !reflected[entryIndex].entryPoint[0]
         || !reflected[entryIndex].nodeName || !reflected[entryIndex].nodeName[0]
         || reflected[entryIndex].recordSizeBytes != 0u) {
       return GPU_ERROR_UNSUPPORTED;
     }
 
-    entryMask |= gpuShaderEntryBit(info->library, reflected[entryIndex].entryPoint);
+    entryMask |= shaderEntryBit(info->library, reflected[entryIndex].entryPoint);
     nameSize = strlen(reflected[entryIndex].entryPoint) + 1u;
 
     if (namesSize > SIZE_MAX - nameSize) {
@@ -181,7 +181,7 @@ vk_createExecutionGraph(GPUDevice                            *device,
   }
 
   native->gpuDevice  = device->_priv;
-  native->entries    = (GPUExecutionGraphEntryVk *)(native + 1);
+  native->entries    = (ExecutionGraphEntryVk *)(native + 1);
   native->entryCount = entryCount;
   storage            = (uint8_t *)(native->entries + entryCount);
 
@@ -311,7 +311,7 @@ vk_createGraphBuffer(GPUDevice            *device,
   VkMemoryAllocateInfo      allocationInfo  = {0};
   VkBufferDeviceAddressInfo addressInfo     = {0};
   VkMemoryRequirements      requirements;
-  GPUDeviceVk              *deviceVk;
+  DeviceVk                 *deviceVk;
   VkMemoryPropertyFlags     memoryFlags;
   uint32_t                  memoryTypeIndex;
   VkResult                  result;
@@ -425,7 +425,7 @@ vk_createGraphBuffer(GPUDevice            *device,
 }
 
 static bool
-vk_graphInputOffset(GPUExecutionGraphInputChunkVk *chunk,
+vk_graphInputOffset(ExecutionGraphInputChunkVk    *chunk,
                     uint64_t                       alignment,
                     uint64_t                       sizeBytes,
                     uint64_t                      *outOffset) {
@@ -462,10 +462,10 @@ vk_reserveGraphInput(GPUComputePassEncoder *pass,
                      uint64_t               alignment,
                      void                 **outMapped,
                      VkDeviceAddress       *outAddress) {
-  GPUCommandBufferVk            *command;
+  CommandBufferVk               *command;
   GPUDevice                     *device;
-  GPUDeviceVk                   *deviceVk;
-  GPUExecutionGraphInputChunkVk *chunk;
+  DeviceVk                      *deviceVk;
+  ExecutionGraphInputChunkVk    *chunk;
   void                          *mapped;
   VkDeviceAddress                address;
   uint64_t                       capacity;
@@ -535,7 +535,7 @@ vk_reserveGraphInput(GPUComputePassEncoder *pass,
   chunk->offset             = offset + sizeBytes;
   chunk->next               = command->graphInputChunks;
   command->graphInputChunks = chunk;
-  gpuDeviceRecordHotPathAlloc(device, sizeof(*chunk) + capacity);
+  deviceRecordHotPathAlloc(device, sizeof(*chunk) + capacity);
 
   *outMapped  = chunk->mapped + offset;
   *outAddress = chunk->address + offset;
@@ -544,7 +544,7 @@ vk_reserveGraphInput(GPUComputePassEncoder *pass,
 }
 
 static void
-vk_destroyExecutionGraphInstanceState(GPUExecutionGraphInstanceVk *native) {
+vk_destroyExecutionGraphInstanceState(ExecutionGraphInstanceVk    *native) {
   if (!native) {
     return;
   }
@@ -564,9 +564,9 @@ static GPUResult
 vk_createExecutionGraphInstance(GPUDevice                                    *device,
                                 const GPUExecutionGraphInstanceCreateInfoEXT *info,
                                 GPUExecutionGraphInstanceEXT                 *instance) {
-  GPUExecutionGraphVk         *graph;
-  GPUExecutionGraphInstanceVk *native;
-  GPUDeviceVk                 *deviceVk;
+  ExecutionGraphVk            *graph;
+  ExecutionGraphInstanceVk    *native;
+  DeviceVk                    *deviceVk;
   VkDeviceAddress              address;
   uint64_t                     scratchSize;
   GPUResult                    result;
@@ -628,8 +628,8 @@ static GPUResult
 vk_getExecutionGraphEntry(const GPUExecutionGraphEXT *graph,
                           const char                 *entryName,
                           GPUExecutionGraphEntryEXT  *outEntry) {
-  GPUExecutionGraphVk            *native;
-  const GPUExecutionGraphEntryVk *entry;
+  ExecutionGraphVk               *native;
+  const ExecutionGraphEntryVk    *entry;
   uint64_t                        hash;
   size_t                          length;
   uint32_t                        i;
@@ -664,8 +664,8 @@ vk_getExecutionGraphEntry(const GPUExecutionGraphEXT *graph,
 static void
 vk_bindExecutionGraph(GPUComputePassEncoder *pass,
                       GPUExecutionGraphEXT  *graph) {
-  GPUComputeEncoderVk *encoder;
-  GPUExecutionGraphVk *native;
+  ComputeEncoderVk    *encoder;
+  ExecutionGraphVk    *native;
 
   encoder = pass ? pass->_priv : NULL;
   native  = graph ? graph->_priv : NULL;
@@ -694,7 +694,7 @@ vk_bindExecutionGraph(GPUComputePassEncoder *pass,
 }
 
 static bool
-vk_executionGraphEntryMatches(const GPUExecutionGraphVk       *graph,
+vk_executionGraphEntryMatches(const ExecutionGraphVk          *graph,
                               const GPUExecutionGraphEntryEXT *entry) {
   const GPUExecutionGraphEntryEXT *expected;
   uint32_t                         i;
@@ -718,8 +718,8 @@ vk_executionGraphEntryMatches(const GPUExecutionGraphVk       *graph,
 static bool
 vk_trackGraphInitialization(GPUComputePassEncoder        *pass,
                             GPUExecutionGraphInstanceEXT *instance,
-                            GPUExecutionGraphInstanceVk  *native) {
-  GPUCommandBufferVk *command;
+                            ExecutionGraphInstanceVk     *native) {
+  CommandBufferVk    *command;
 
   if (!pass || !instance || !native || native->initialized) {
     return false;
@@ -750,9 +750,9 @@ static bool
 vk_prepareExecutionGraphInstance(GPUComputePassEncoder        *pass,
                                  GPUExecutionGraphInstanceEXT *instance) {
   VkMemoryBarrier              barrier;
-  GPUComputeEncoderVk         *encoder;
-  GPUExecutionGraphVk         *graph;
-  GPUExecutionGraphInstanceVk *native;
+  ComputeEncoderVk            *encoder;
+  ExecutionGraphVk            *graph;
+  ExecutionGraphInstanceVk    *native;
 
   encoder = pass ? pass->_priv : NULL;
   graph   = instance && instance->graph ? instance->graph->_priv : NULL;
@@ -798,9 +798,9 @@ vk_dispatchExecutionGraph(GPUComputePassEncoder           *pass,
                           uint32_t                         inputCount,
                           const GPUExecutionGraphInputEXT *inputs) {
   VkDispatchGraphCountInfoAMDX countInfo = {0};
-  GPUComputeEncoderVk         *encoder;
-  GPUExecutionGraphVk         *graph;
-  GPUExecutionGraphInstanceVk *native;
+  ComputeEncoderVk            *encoder;
+  ExecutionGraphVk            *graph;
+  ExecutionGraphInstanceVk    *native;
   uint32_t                     i;
 
   encoder = pass ? pass->_priv : NULL;
@@ -841,9 +841,9 @@ vk_dispatchExecutionGraphBuffer(GPUComputePassEncoder                 *pass,
                                 uint32_t                               inputCount,
                                 const GPUExecutionGraphBufferInputEXT *inputs) {
   VkDispatchGraphCountInfoAMDX countInfo = {0};
-  GPUComputeEncoderVk         *encoder;
-  GPUExecutionGraphVk         *graph;
-  GPUExecutionGraphInstanceVk *native;
+  ComputeEncoderVk            *encoder;
+  ExecutionGraphVk            *graph;
+  ExecutionGraphInstanceVk    *native;
   VkDispatchGraphInfoAMDX     *gpuInfos;
   VkDeviceAddress              inputAddress;
   uint64_t                     alignment;
@@ -910,11 +910,11 @@ vk_dispatchExecutionGraphBuffer(GPUComputePassEncoder                 *pass,
 
 GPU_HIDE
 void
-vk_resetGraphInitializations(GPUCommandBufferVk *command) {
+vk_resetGraphInitializations(CommandBufferVk    *command) {
 #ifdef VK_AMDX_shader_enqueue
   GPUExecutionGraphInstanceEXT  *instance;
-  GPUExecutionGraphInstanceVk   *native;
-  GPUExecutionGraphInputChunkVk *chunk;
+  ExecutionGraphInstanceVk      *native;
+  ExecutionGraphInputChunkVk    *chunk;
   uint32_t                       i;
 #endif
 
@@ -946,10 +946,10 @@ vk_resetGraphInitializations(GPUCommandBufferVk *command) {
 
 GPU_HIDE
 void
-vk_destroyGraphInputScratch(GPUCommandBufferVk *command) {
+vk_destroyGraphInputScratch(CommandBufferVk    *command) {
 #ifdef VK_AMDX_shader_enqueue
-  GPUExecutionGraphInputChunkVk *chunk;
-  GPUExecutionGraphInputChunkVk *next;
+  ExecutionGraphInputChunkVk    *chunk;
+  ExecutionGraphInputChunkVk    *next;
 #endif
 
 #ifdef VK_AMDX_shader_enqueue
@@ -984,10 +984,10 @@ vk_destroyGraphInputScratch(GPUCommandBufferVk *command) {
 
 GPU_HIDE
 void
-vk_submitGraphInitializations(GPUCommandBufferVk *command) {
+vk_submitGraphInitializations(CommandBufferVk    *command) {
 #ifdef VK_AMDX_shader_enqueue
   GPUExecutionGraphInstanceEXT *instance;
-  GPUExecutionGraphInstanceVk  *native;
+  ExecutionGraphInstanceVk     *native;
   uint32_t                      i;
 #endif
 
@@ -1016,7 +1016,7 @@ vk_submitGraphInitializations(GPUCommandBufferVk *command) {
 
 GPU_HIDE
 void
-vk_initExecutionGraph(GPUApiExecutionGraph *api) {
+vk_initExecutionGraph(ApiExecutionGraph    *api) {
 #ifdef VK_AMDX_shader_enqueue
   api->create          = vk_createExecutionGraph;
   api->destroy         = vk_destroyExecutionGraph;

@@ -21,40 +21,40 @@
 #include "../../include/gpu/format.h"
 #include "../../include/gpu/texture.h"
 
-typedef struct GPUFormatLayout {
+typedef struct FormatLayout {
   uint32_t bytesPerBlock;
   uint32_t blockWidth;
   uint32_t blockHeight;
-} GPUFormatLayout;
+} FormatLayout;
 
-typedef struct GPUFormatDataLayout {
+typedef struct FormatDataLayout {
   uint64_t bytesPerImage;
   uint64_t requiredBytes;
   uint32_t bytesInLastRow;
   uint32_t blockRows;
-} GPUFormatDataLayout;
+} FormatDataLayout;
 
-typedef enum GPUFormatNumericType {
+typedef enum FormatNumericType {
   GPU_FORMAT_NUMERIC_FLOAT = 0,
   GPU_FORMAT_NUMERIC_UINT,
   GPU_FORMAT_NUMERIC_SINT
-} GPUFormatNumericType;
+} FormatNumericType;
 
 GPU_HIDE
 bool
-gpuFormatLayout(GPUFormat format, GPUFormatLayout *outLayout);
+gpuFormatLayout(GPUFormat format, FormatLayout    *outLayout);
 
 GPU_HIDE
 bool
-gpuFormatResolveCopyAspect(GPUFormat         format,
-                           GPUTextureAspect  aspect,
-                           GPUTextureAspect *outAspect);
+formatResolveCopyAspect(GPUFormat         format,
+                        GPUTextureAspect  aspect,
+                        GPUTextureAspect *outAspect);
 
 GPU_HIDE
 bool
-gpuFormatAspectLayout(GPUFormat        format,
-                      GPUTextureAspect aspect,
-                      GPUFormatLayout *outLayout);
+formatAspectLayout(GPUFormat        format,
+                   GPUTextureAspect aspect,
+                   FormatLayout    *outLayout);
 
 GPU_HIDE
 uint32_t
@@ -62,39 +62,39 @@ gpuBlockCount(uint32_t extent, uint32_t blockExtent);
 
 GPU_HIDE
 bool
-gpuFormatDataLayout(GPUFormat            format,
-                    uint32_t             width,
-                    uint32_t             height,
-                    uint32_t             depth,
-                    uint32_t             layerCount,
-                    uint32_t             bytesPerRow,
-                    uint32_t             rowsPerImage,
-                    GPUFormatDataLayout *outLayout);
+formatDataLayout(GPUFormat            format,
+                 uint32_t             width,
+                 uint32_t             height,
+                 uint32_t             depth,
+                 uint32_t             layerCount,
+                 uint32_t             bytesPerRow,
+                 uint32_t             rowsPerImage,
+                 FormatDataLayout    *outLayout);
 
 GPU_HIDE
 bool
-gpuFormatAspectDataLayout(GPUFormat            format,
-                          GPUTextureAspect     aspect,
-                          uint32_t             width,
-                          uint32_t             height,
-                          uint32_t             depth,
-                          uint32_t             layerCount,
-                          uint32_t             bytesPerRow,
-                          uint32_t             rowsPerImage,
-                          GPUFormatDataLayout *outLayout);
+formatAspectDataLayout(GPUFormat            format,
+                       GPUTextureAspect     aspect,
+                       uint32_t             width,
+                       uint32_t             height,
+                       uint32_t             depth,
+                       uint32_t             layerCount,
+                       uint32_t             bytesPerRow,
+                       uint32_t             rowsPerImage,
+                       FormatDataLayout    *outLayout);
 
 GPU_HIDE
 bool
-gpuFormatCopyAligned(GPUFormat format,
-                     uint32_t  x,
-                     uint32_t  y,
-                     uint32_t  width,
-                     uint32_t  height,
-                     uint32_t  mipWidth,
-                     uint32_t  mipHeight);
+formatCopyAligned(GPUFormat format,
+                  uint32_t  x,
+                  uint32_t  y,
+                  uint32_t  width,
+                  uint32_t  height,
+                  uint32_t  mipWidth,
+                  uint32_t  mipHeight);
 
-static GPU_INLINE GPUFormatNumericType
-gpuFormatNumericType(GPUFormat format) {
+static GPU_INLINE FormatNumericType
+formatNumericType(GPUFormat format) {
   switch (format) {
     case GPU_FORMAT_R8_UINT:
     case GPU_FORMAT_R16_UINT:

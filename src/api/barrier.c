@@ -22,7 +22,7 @@
 #include "texture_internal.h"
 
 static bool
-gpu_validStageMask(GPUPipelineStageMask stages) {
+validStageMask(GPUPipelineStageMask stages) {
   const uint32_t knownMask = GPU_STAGE_TOP |
                             GPU_STAGE_VERTEX |
                             GPU_STAGE_FRAGMENT |
@@ -34,7 +34,7 @@ gpu_validStageMask(GPUPipelineStageMask stages) {
 }
 
 static bool
-gpu_validAccessMask(GPUAccessMask access) {
+validAccessMask(GPUAccessMask access) {
   const uint32_t knownMask = GPU_ACCESS_SHADER_READ |
                             GPU_ACCESS_SHADER_WRITE |
                             GPU_ACCESS_COLOR_READ |
@@ -49,10 +49,10 @@ gpu_validAccessMask(GPUAccessMask access) {
 }
 
 static bool
-gpu_validTextureAccess(const GPUTexture *texture, GPUAccessMask access) {
+validTextureAccess(const GPUTexture *texture, GPUAccessMask access) {
   GPUTextureUsageFlags usage;
 
-  if (!texture || !gpu_validAccessMask(access)
+  if (!texture || !validAccessMask(access)
       || (access & GPU_ACCESS_INDIRECT_READ) != 0u) {
     return false;
   }
@@ -106,7 +106,7 @@ gpu_validTextureAccess(const GPUTexture *texture, GPUAccessMask access) {
 }
 
 static GPUPipelineStageMask
-gpu_textureAccessStages(GPUAccessMask access, bool source) {
+textureAccessStages(GPUAccessMask access, bool source) {
   GPUPipelineStageMask stages;
 
   if (access == GPU_ACCESS_NONE) {
@@ -135,8 +135,8 @@ gpu_textureAccessStages(GPUAccessMask access, bool source) {
 }
 
 static bool
-gpu_validAliasingBarrier(GPUDevice                *device,
-                         const GPUAliasingBarrier *barrier) {
+validAliasingBarrier(GPUDevice                *device,
+                     const GPUAliasingBarrier *barrier) {
   GPUHeap  *beforeHeap;
   GPUHeap  *afterHeap;
   uint64_t  beforeOffset;
@@ -196,7 +196,7 @@ gpu_validAliasingBarrier(GPUDevice                *device,
 }
 
 static bool
-gpu_validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
+validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
   const GPUTextureBarrier *textureBarrier;
   const GPUBufferBarrier  *bufferBarrier;
   uint32_t                 i;
@@ -205,8 +205,8 @@ gpu_validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
     return false;
   }
 
-  if (!gpu_validStageMask(barriers->srcStages)
-      || !gpu_validStageMask(barriers->dstStages)) {
+  if (!validStageMask(barriers->srcStages)
+      || !validStageMask(barriers->dstStages)) {
     return false;
   }
 
@@ -220,11 +220,11 @@ gpu_validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
     bufferBarrier = &barriers->pBufferBarriers[i];
 
     if (!bufferBarrier->buffer || bufferBarrier->buffer->device != device
-        || !gpuBufferRangeValid(bufferBarrier->buffer,
-                                bufferBarrier->offset,
-                                bufferBarrier->sizeBytes)
-        || !gpu_validAccessMask(bufferBarrier->srcAccess)
-        || !gpu_validAccessMask(bufferBarrier->dstAccess)) {
+        || !bufferRangeValid(bufferBarrier->buffer,
+                             bufferBarrier->offset,
+                             bufferBarrier->sizeBytes)
+        || !validAccessMask(bufferBarrier->srcAccess)
+        || !validAccessMask(bufferBarrier->dstAccess)) {
       return false;
     }
   }
@@ -233,19 +233,19 @@ gpu_validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
     textureBarrier = &barriers->pTextureBarriers[i];
 
     if (!textureBarrier->texture || textureBarrier->texture->device != device
-        || !gpuTextureSubresourceRangeValid(textureBarrier->texture,
-                                            textureBarrier->baseMip,
-                                            textureBarrier->mipCount,
-                                            textureBarrier->baseLayer,
-                                            textureBarrier->layerCount)
-        || !gpu_validTextureAccess(textureBarrier->texture, textureBarrier->srcAccess)
-        || !gpu_validTextureAccess(textureBarrier->texture, textureBarrier->dstAccess)) {
+        || !textureSubresourceRangeValid(textureBarrier->texture,
+                                         textureBarrier->baseMip,
+                                         textureBarrier->mipCount,
+                                         textureBarrier->baseLayer,
+                                         textureBarrier->layerCount)
+        || !validTextureAccess(textureBarrier->texture, textureBarrier->srcAccess)
+        || !validTextureAccess(textureBarrier->texture, textureBarrier->dstAccess)) {
       return false;
     }
   }
 
   for (i = 0; i < barriers->aliasingBarrierCount; i++) {
-    if (!gpu_validAliasingBarrier(device, &barriers->pAliasingBarriers[i])) {
+    if (!validAliasingBarrier(device, &barriers->pAliasingBarriers[i])) {
       return false;
     }
   }
@@ -258,7 +258,7 @@ gpu_validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
 static void
 gpu_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   GPUDevice *device;
-  GPUApi    *api;
+  Api       *api;
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return;
@@ -266,8 +266,8 @@ gpu_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
 
   device = cmdb->_queue ? cmdb->_queue->_device : NULL;
 
-  if (!gpu_validBarrierBatch(device, barriers)
-      || !(api = gpuDeviceApi(device))
+  if (!validBarrierBatch(device, barriers)
+      || !(api = deviceApi(device))
       || !api->renderPass.encodeBarriers) {
     return;
   }
@@ -298,11 +298,11 @@ GPUTransitionTexture(GPUCommandBuffer *cmdb,
   textureBarrier.srcAccess  = srcAccess;
   textureBarrier.dstAccess  = dstAccess;
   textureBarrier.mipCount   = texture->mipLevelCount;
-  textureBarrier.layerCount = gpuTextureArrayLayerCount(texture);
+  textureBarrier.layerCount = textureArrayLayerCount(texture);
 
   barrierBatch.pTextureBarriers    = &textureBarrier;
-  barrierBatch.srcStages           = gpu_textureAccessStages(srcAccess, true);
-  barrierBatch.dstStages           = gpu_textureAccessStages(dstAccess, false);
+  barrierBatch.srcStages           = textureAccessStages(srcAccess, true);
+  barrierBatch.dstStages           = textureAccessStages(dstAccess, false);
   barrierBatch.textureBarrierCount = 1u;
 
   gpu_encodeBarriers(cmdb, &barrierBatch);

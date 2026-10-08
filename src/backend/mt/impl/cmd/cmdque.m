@@ -25,19 +25,19 @@ enum {
 static
 GPU_HIDE
 void
-gpu_cmdoncomplete(GPUCommandBuffer *__restrict cmdb,
-                  MTCommandBuffer  *__restrict native,
-                  MTCommandQueue   *__restrict queue,
-                  id<MTLCommandBuffer>         mtlCmdb);
+cmdoncomplete(GPUCommandBuffer *__restrict cmdb,
+              MTCommandBuffer  *__restrict native,
+              MTCommandQueue   *__restrict queue,
+              id<MTLCommandBuffer>         mtlCmdb);
 
 #if MT_HAS_METAL4
 static
 GPU_HIDE
 void
-gpu_cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
-                   MTCommandBuffer  *__restrict native,
-                   MTCommandQueue   *__restrict queue,
-                   id                           feedback);
+cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
+               MTCommandBuffer  *__restrict native,
+               MTCommandQueue   *__restrict queue,
+               id                           feedback);
 #endif
 
 GPU_HIDE
@@ -111,7 +111,7 @@ static bool
 mt_ensureTransferStaging(GPUQueue       *queue,
                          MTTransferSlot *slot,
                          uint64_t        sizeBytes) {
-  GPUDeviceMT  *device;
+  DeviceMT     *device;
   id<MTLBuffer> staging;
   uint64_t      capacity;
 
@@ -135,7 +135,7 @@ mt_ensureTransferStaging(GPUQueue       *queue,
     return false;
   }
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-  if (gpuDeviceDebugMarkersEnabled(queue->_device)) {
+  if (deviceDebugMarkersEnabled(queue->_device)) {
     staging.label = @"gpu-queue-upload";
   }
 #endif
@@ -158,8 +158,8 @@ mt_recordGPUFrameTime(GPUCommandBuffer *cmdb,
     return;
   }
 
-  device = gpuCommandBufferDevice(cmdb);
-  gpuDeviceRecordGPUFrameTime(device, (end - start) * 1000.0);
+  device = commandBufferDevice(cmdb);
+  deviceRecordGPUFrameTime(device, (end - start) * 1000.0);
 }
 
 static MTCommandBuffer*
@@ -167,7 +167,7 @@ mt_createCommandBufferState(GPUQueue *cmdb, MTCommandQueue *queue) {
   GPUCommandBuffer          *cb;
   MTCommandBuffer           *native;
 #if MT_HAS_METAL4
-  GPUDeviceMT               *deviceMT;
+  DeviceMT                  *deviceMT;
   MTLResidencySetDescriptor *residencyDesc;
   NSError                   *error;
 #endif
@@ -177,7 +177,7 @@ mt_createCommandBufferState(GPUQueue *cmdb, MTCommandQueue *queue) {
   }
 
   atomic_init(&native->completionReady, false);
-  gpuDeviceRecordHotPathAlloc(cmdb->_device, sizeof(*native));
+  deviceRecordHotPathAlloc(cmdb->_device, sizeof(*native));
 
   cb            = &native->commandBuffer;
   native->owner = queue;
@@ -193,7 +193,7 @@ mt_createCommandBufferState(GPUQueue *cmdb, MTCommandQueue *queue) {
       native->allocator = [deviceMT->device newCommandAllocator];
       residencyDesc     = [MTLResidencySetDescriptor new];
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-      if (gpuDeviceDebugMarkersEnabled(cmdb->_device)) {
+      if (deviceDebugMarkersEnabled(cmdb->_device)) {
         residencyDesc.label = @"gpu-command-residency";
       }
 #endif
@@ -262,7 +262,7 @@ static GPUResult
 mt_createSemaphore(GPUDevice                    *device,
                    const GPUSemaphoreCreateInfo *info,
                    GPUSemaphore                 *semaphore) {
-  GPUDeviceMT       *deviceMT;
+  DeviceMT          *deviceMT;
   id<MTLSharedEvent> event;
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   const char        *label;
@@ -281,7 +281,7 @@ mt_createSemaphore(GPUDevice                    *device,
 
     event.signaledValue = info ? info->initialValue : 0u;
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-    label = info ? gpuDeviceDebugLabel(device, info->label) : NULL;
+    label = info ? deviceDebugLabel(device, info->label) : NULL;
 
     if (label && label[0] != '\0') {
       event.label = [NSString stringWithUTF8String:label];
@@ -329,8 +329,8 @@ mt_submitEx(GPUQueue                   *queueHandle,
   for (uint32_t i = 0u; i < info->waitCount; i++) {
     if (!info->pWaits[i].semaphore->_priv) {
       for (uint32_t j = 0u; j < info->commandBufferCount; j++) {
-        gpuFinishCommandBuffer(info->ppCommandBuffers[j],
-                               mt_recycleCommandBuffer);
+        finishCommandBuffer(info->ppCommandBuffers[j],
+                            mt_recycleCommandBuffer);
       }
 
       return GPU_ERROR_BACKEND_FAILURE;
@@ -341,8 +341,8 @@ mt_submitEx(GPUQueue                   *queueHandle,
   for (uint32_t i = 0u; i < info->signalCount; i++) {
     if (!info->pSignals[i].semaphore->_priv) {
       for (uint32_t j = 0u; j < info->commandBufferCount; j++) {
-        gpuFinishCommandBuffer(info->ppCommandBuffers[j],
-                               mt_recycleCommandBuffer);
+        finishCommandBuffer(info->ppCommandBuffers[j],
+                            mt_recycleCommandBuffer);
       }
 
       return GPU_ERROR_BACKEND_FAILURE;
@@ -351,8 +351,8 @@ mt_submitEx(GPUQueue                   *queueHandle,
 
   if (mt_flushTransfers(queueHandle, false) != GPU_OK) {
     for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
-      gpuFinishCommandBuffer(info->ppCommandBuffers[i],
-                             mt_recycleCommandBuffer);
+      finishCommandBuffer(info->ppCommandBuffers[i],
+                          mt_recycleCommandBuffer);
     }
 
     return GPU_ERROR_BACKEND_FAILURE;
@@ -390,8 +390,8 @@ mt_submitEx(GPUQueue                   *queueHandle,
 
 
     for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
-      gpuFinishCommandBuffer(info->ppCommandBuffers[i],
-                             mt_recycleCommandBuffer);
+      finishCommandBuffer(info->ppCommandBuffers[i],
+                          mt_recycleCommandBuffer);
     }
 
     return GPU_ERROR_UNSUPPORTED;
@@ -408,8 +408,8 @@ mt_submitEx(GPUQueue                   *queueHandle,
 
     if (!waitBuffer) {
       for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
-        gpuFinishCommandBuffer(info->ppCommandBuffers[i],
-                               mt_recycleCommandBuffer);
+        finishCommandBuffer(info->ppCommandBuffers[i],
+                            mt_recycleCommandBuffer);
       }
 
       return GPU_ERROR_BACKEND_FAILURE;
@@ -429,8 +429,8 @@ mt_submitEx(GPUQueue                   *queueHandle,
 
   if (!last->classic) {
     for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
-      gpuFinishCommandBuffer(info->ppCommandBuffers[i],
-                             mt_recycleCommandBuffer);
+      finishCommandBuffer(info->ppCommandBuffers[i],
+                          mt_recycleCommandBuffer);
     }
 
     return GPU_ERROR_BACKEND_FAILURE;
@@ -526,16 +526,16 @@ mt_reportCommandBufferError(GPUCommandBuffer *__restrict cmdb,
            "Metal command buffer failed%s%s",
            detail ? ": " : "",
            detail ? detail : "");
-  gpuDeviceReportError(device, type, lostReason, result, message);
+  deviceReportError(device, type, lostReason, result, message);
 }
 
 static
 GPU_HIDE
 void
-gpu_cmdoncomplete(GPUCommandBuffer *__restrict cmdb,
-                  MTCommandBuffer  *__restrict native,
-                  MTCommandQueue   *__restrict queue,
-                  id<MTLCommandBuffer>         mtlCmdb) {
+cmdoncomplete(GPUCommandBuffer *__restrict cmdb,
+              MTCommandBuffer  *__restrict native,
+              MTCommandQueue   *__restrict queue,
+              id<MTLCommandBuffer>         mtlCmdb) {
   if (!cmdb || !native || !queue
       || !atomic_load_explicit(&native->completionReady,
                                memory_order_acquire)) {
@@ -554,7 +554,7 @@ gpu_cmdoncomplete(GPUCommandBuffer *__restrict cmdb,
     }
   }
 
-  gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+  finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
   dispatch_group_leave(queue->inFlightGroup);
 }
 
@@ -562,10 +562,10 @@ gpu_cmdoncomplete(GPUCommandBuffer *__restrict cmdb,
 static
 GPU_HIDE
 void
-gpu_cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
-                   MTCommandBuffer  *__restrict native,
-                   MTCommandQueue   *__restrict queue,
-                   id                           feedback) {
+cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
+               MTCommandBuffer  *__restrict native,
+               MTCommandQueue   *__restrict queue,
+               id                           feedback) {
   GPUDevice             *device;
   id<MTL4CommitFeedback> modernFeedback;
 
@@ -589,7 +589,7 @@ gpu_cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
                           modernFeedback.GPUEndTime);
   }
 
-  gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+  finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
   dispatch_group_leave(queue->inFlightGroup);
 }
 #endif
@@ -780,7 +780,7 @@ mt_waitCommandQueueIdle(GPUQueue *queue) {
 GPU_HIDE
 GPUQueue*
 mt_newCommandQueue(GPUDevice *__restrict device) {
-  GPUDeviceMT    *deviceMT;
+  DeviceMT       *deviceMT;
   GPUQueue       *que;
   MTCommandQueue *native;
 
@@ -885,7 +885,7 @@ mt_getCommandQueue(GPUDevice *__restrict device,
                    GPUQueueFlagBits      bits,
                    uint32_t              index) {
   GPUQueue    *que;
-  GPUDeviceMT *deviceMT;
+  DeviceMT    *deviceMT;
   uint32_t     matchIndex;
   uint32_t     i;
 
@@ -912,7 +912,7 @@ GPUResult
 mt_getTimestampPeriod(GPUQueue *queue,
                       double   *outNanosecondsPerTick) {
 #if MT_HAS_METAL4
-  GPUDeviceMT    *deviceMT;
+  DeviceMT       *deviceMT;
   MTCommandQueue *native;
   uint64_t        frequency;
 
@@ -1045,7 +1045,7 @@ mt_discardCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
   native = mt_commandBuffer(cmdb);
 
   if (!native) {
-    gpuDiscardCommandBufferState(cmdb, NULL);
+    discardCommandBufferState(cmdb, NULL);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -1054,13 +1054,13 @@ mt_discardCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern endCommandBuffer];
     } else {
-      gpuDiscardCommandBufferState(cmdb, NULL);
+      discardCommandBufferState(cmdb, NULL);
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
 #endif
 
-  gpuDiscardCommandBufferState(cmdb, mt_recycleCommandBuffer);
+  discardCommandBufferState(cmdb, mt_recycleCommandBuffer);
 
   return GPU_OK;
 }
@@ -1087,12 +1087,12 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
   queue  = cmdb->_queue ? mt_commandQueue(cmdb->_queue) : NULL;
 
   if (!native || !queue) {
-    gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+    finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   if (mt_flushTransfers(cmdb->_queue, false) != GPU_OK) {
-    gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+    finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -1112,7 +1112,7 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
 
       options = [MTL4CommitOptions new];
       [options addFeedbackHandler:^(id<MTL4CommitFeedback> feedback) {
-        gpu_cmdoncomplete4(cmdb, native, queue, feedback);
+        cmdoncomplete4(cmdb, native, queue, feedback);
       }];
       dispatch_group_enter(queue->inFlightGroup);
       atomic_store_explicit(&native->completionReady,
@@ -1139,7 +1139,7 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
       return GPU_OK;
     }
 
-    gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+    finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 #endif
@@ -1147,12 +1147,12 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
   mcb = native->classic;
 
   if (!mcb) {
-    gpuFinishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+    finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   [mcb addCompletedHandler:^(id<MTLCommandBuffer> _Nonnull buffer) {
-    gpu_cmdoncomplete(cmdb, native, queue, buffer);
+    cmdoncomplete(cmdb, native, queue, buffer);
   }];
   dispatch_group_enter(queue->inFlightGroup);
   atomic_store_explicit(&native->completionReady,
@@ -1203,7 +1203,7 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
 
   if (mt_flushTransfers(queueHandle, false) != GPU_OK) {
     for (cleanupIndex = 0u; cleanupIndex < count; cleanupIndex++) {
-      gpuFinishCommandBuffer(buffers[cleanupIndex], mt_recycleCommandBuffer);
+      finishCommandBuffer(buffers[cleanupIndex], mt_recycleCommandBuffer);
     }
 
     return GPU_ERROR_BACKEND_FAILURE;
@@ -1220,7 +1220,7 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
       [native->residency commit];
       [native->modern endCommandBuffer];
       [options addFeedbackHandler:^(id<MTL4CommitFeedback> feedback) {
-        gpu_cmdoncomplete4(cmdb, native, queue, feedback);
+        cmdoncomplete4(cmdb, native, queue, feedback);
       }];
       dispatch_group_enter(queue->inFlightGroup);
       atomic_store_explicit(&native->completionReady,
@@ -1247,7 +1247,7 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
 
 GPU_HIDE
 void
-mt_initCmdQue(GPUApiCommandQueue *api) {
+mt_initCmdQue(ApiCommandQueue    *api) {
   api->newCommandQueue         = mt_newCommandQueue;
   api->getCommandQueue         = mt_getCommandQueue;
   api->getTimestampPeriod      = mt_getTimestampPeriod;

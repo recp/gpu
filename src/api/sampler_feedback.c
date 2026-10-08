@@ -22,13 +22,13 @@
 #include "texture_internal.h"
 
 static bool
-gpu_samplerFeedbackPowerOfTwo(uint32_t value) {
+samplerFeedbackPowerOfTwo(uint32_t value) {
   return value != 0u && (value & (value - 1u)) == 0u;
 }
 
 static bool
-gpu_samplerFeedbackCreateInfoValid(const GPUDevice                          *device,
-                                   const GPUSamplerFeedbackMapCreateInfoEXT *info) {
+samplerFeedbackCreateInfoValid(const GPUDevice                          *device,
+                               const GPUSamplerFeedbackMapCreateInfoEXT *info) {
   const GPUTexture *texture;
 
   if (!device || !info || !(texture = info->texture)
@@ -43,8 +43,8 @@ gpu_samplerFeedbackCreateInfoValid(const GPUDevice                          *dev
       || texture->dimension != GPU_TEXTURE_DIMENSION_2D
       || texture->sampleCount != 1u
       || !(texture->usage & GPU_TEXTURE_USAGE_SAMPLED)
-      || !gpu_samplerFeedbackPowerOfTwo(info->mipRegionWidth)
-      || !gpu_samplerFeedbackPowerOfTwo(info->mipRegionHeight)) {
+      || !samplerFeedbackPowerOfTwo(info->mipRegionWidth)
+      || !samplerFeedbackPowerOfTwo(info->mipRegionHeight)) {
     return false;
   }
 
@@ -55,8 +55,8 @@ gpu_samplerFeedbackCreateInfoValid(const GPUDevice                          *dev
 }
 
 static bool
-gpu_samplerFeedbackDecodeInfo(const GPUSamplerFeedbackMapCreateInfoEXT *info,
-                              GPUSamplerFeedbackDecodeInfoEXT          *outInfo) {
+samplerFeedbackDecodeInfo(const GPUSamplerFeedbackMapCreateInfoEXT *info,
+                          GPUSamplerFeedbackDecodeInfoEXT          *outInfo) {
   const GPUTexture *texture;
   uint32_t          mipPadding;
 
@@ -70,7 +70,7 @@ gpu_samplerFeedbackDecodeInfo(const GPUSamplerFeedbackMapCreateInfoEXT *info,
   outInfo->width           = (texture->width + info->mipRegionWidth - 1u) / info->mipRegionWidth;
   outInfo->height          = (texture->height + info->mipRegionHeight - 1u) / info->mipRegionHeight;
   outInfo->mipLevelCount   = info->mode == GPU_SAMPLER_FEEDBACK_MIN_MIP_EXT ? 1u : texture->mipLevelCount;
-  outInfo->arrayLayerCount = gpuTextureArrayLayerCount(texture);
+  outInfo->arrayLayerCount = textureArrayLayerCount(texture);
 
   if (outInfo->mipLevelCount > 1u) {
     mipPadding = 1u << (outInfo->mipLevelCount - 1u);
@@ -85,8 +85,8 @@ gpu_samplerFeedbackDecodeInfo(const GPUSamplerFeedbackMapCreateInfoEXT *info,
 }
 
 static bool
-gpu_samplerFeedbackCommandValid(const GPUCommandBuffer         *cmdb,
-                                const GPUSamplerFeedbackMapEXT *map) {
+samplerFeedbackCommandValid(const GPUCommandBuffer         *cmdb,
+                            const GPUSamplerFeedbackMapEXT *map) {
   const GPUQueue *queue;
 
   queue = cmdb ? cmdb->_queue : NULL;
@@ -97,9 +97,9 @@ gpu_samplerFeedbackCommandValid(const GPUCommandBuffer         *cmdb,
 }
 
 static bool
-gpu_samplerFeedbackTextureValid(const GPUSamplerFeedbackMapEXT *map,
-                                const GPUTexture               *texture,
-                                GPUTextureUsageFlags            usage) {
+samplerFeedbackTextureValid(const GPUSamplerFeedbackMapEXT *map,
+                            const GPUTexture               *texture,
+                            GPUTextureUsageFlags            usage) {
   const GPUSamplerFeedbackDecodeInfoEXT *info;
 
   if (!map || !texture || texture->device != map->device) {
@@ -112,7 +112,7 @@ gpu_samplerFeedbackTextureValid(const GPUSamplerFeedbackMapEXT *map,
          && texture->format == info->format
          && texture->width == info->width
          && texture->height == info->height
-         && gpuTextureArrayLayerCount(texture) == info->arrayLayerCount
+         && textureArrayLayerCount(texture) == info->arrayLayerCount
          && texture->mipLevelCount == info->mipLevelCount
          && texture->sampleCount == 1u && (texture->usage & usage) == usage;
 }
@@ -121,7 +121,7 @@ GPU_EXPORT
 GPUResult
 GPUGetSamplerFeedbackPropertiesEXT(const GPUAdapter                *adapter,
                                    GPUSamplerFeedbackPropertiesEXT *outProperties) {
-  GPUApi *api;
+  Api    *api;
 
   if (!adapter || !outProperties) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -129,7 +129,7 @@ GPUGetSamplerFeedbackPropertiesEXT(const GPUAdapter                *adapter,
 
   memset(outProperties, 0, sizeof(*outProperties));
 
-  if (!(api = gpuAdapterApi(adapter)) || !api->samplerFeedback.getProperties) {
+  if (!(api = adapterApi(adapter)) || !api->samplerFeedback.getProperties) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -146,7 +146,7 @@ GPUCreateSamplerFeedbackMapEXT(GPUDevice                                *device,
                                const GPUSamplerFeedbackMapCreateInfoEXT *info,
                                GPUSamplerFeedbackMapEXT                **outMap) {
   GPUSamplerFeedbackMapEXT *map;
-  GPUApi                   *api;
+  Api                      *api;
   GPUResult                 result;
 
   if (!outMap) {
@@ -155,7 +155,7 @@ GPUCreateSamplerFeedbackMapEXT(GPUDevice                                *device,
 
   *outMap = NULL;
 
-  if (!gpu_samplerFeedbackCreateInfoValid(device, info)) {
+  if (!samplerFeedbackCreateInfoValid(device, info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -163,7 +163,7 @@ GPUCreateSamplerFeedbackMapEXT(GPUDevice                                *device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->samplerFeedback.create) {
+  if (!(api = deviceApi(device)) || !api->samplerFeedback.create) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -177,7 +177,7 @@ GPUCreateSamplerFeedbackMapEXT(GPUDevice                                *device,
   map->mipRegionWidth  = info->mipRegionWidth;
   map->mipRegionHeight = info->mipRegionHeight;
 
-  if (!gpu_samplerFeedbackDecodeInfo(info, &map->decodeInfo)) {
+  if (!samplerFeedbackDecodeInfo(info, &map->decodeInfo)) {
     free(map);
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -206,13 +206,13 @@ GPUCreateSamplerFeedbackMapEXT(GPUDevice                                *device,
 GPU_EXPORT
 void
 GPUDestroySamplerFeedbackMapEXT(GPUSamplerFeedbackMapEXT *map) {
-  GPUApi *api;
+  Api    *api;
 
   if (!map) {
     return;
   }
 
-  if ((api = gpuDeviceApi(map->device)) && api->samplerFeedback.destroy) {
+  if ((api = deviceApi(map->device)) && api->samplerFeedback.destroy) {
     api->samplerFeedback.destroy(map);
   }
 
@@ -236,13 +236,13 @@ GPU_EXPORT
 GPUResult
 GPUClearSamplerFeedbackEXT(GPUCommandBuffer         *cmdb,
                            GPUSamplerFeedbackMapEXT *map) {
-  GPUApi *api;
+  Api    *api;
 
-  if (!gpu_samplerFeedbackCommandValid(cmdb, map)) {
+  if (!samplerFeedbackCommandValid(cmdb, map)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  api = gpuCommandBufferApi(cmdb);
+  api = commandBufferApi(cmdb);
 
   return api && api->samplerFeedback.clear
            ? api->samplerFeedback.clear(cmdb, map)
@@ -254,16 +254,16 @@ GPUResult
 GPUDecodeSamplerFeedbackEXT(GPUCommandBuffer         *cmdb,
                             GPUSamplerFeedbackMapEXT *map,
                             GPUTexture               *decodedTexture) {
-  GPUApi *api;
+  Api    *api;
 
-  if (!gpu_samplerFeedbackCommandValid(cmdb, map)
-      || !gpu_samplerFeedbackTextureValid(map,
-                                          decodedTexture,
-                                          GPU_TEXTURE_USAGE_COPY_DST)) {
+  if (!samplerFeedbackCommandValid(cmdb, map)
+      || !samplerFeedbackTextureValid(map,
+                                      decodedTexture,
+                                      GPU_TEXTURE_USAGE_COPY_DST)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  api = gpuCommandBufferApi(cmdb);
+  api = commandBufferApi(cmdb);
 
   return api && api->samplerFeedback.decode
            ? api->samplerFeedback.decode(cmdb, map, decodedTexture)
@@ -275,16 +275,16 @@ GPUResult
 GPUEncodeSamplerFeedbackEXT(GPUCommandBuffer         *cmdb,
                             GPUTexture               *decodedTexture,
                             GPUSamplerFeedbackMapEXT *map) {
-  GPUApi *api;
+  Api    *api;
 
-  if (!gpu_samplerFeedbackCommandValid(cmdb, map)
-      || !gpu_samplerFeedbackTextureValid(map,
-                                          decodedTexture,
-                                          GPU_TEXTURE_USAGE_COPY_SRC)) {
+  if (!samplerFeedbackCommandValid(cmdb, map)
+      || !samplerFeedbackTextureValid(map,
+                                      decodedTexture,
+                                      GPU_TEXTURE_USAGE_COPY_SRC)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  api = gpuCommandBufferApi(cmdb);
+  api = commandBufferApi(cmdb);
 
   return api && api->samplerFeedback.encode
            ? api->samplerFeedback.encode(cmdb, decodedTexture, map)

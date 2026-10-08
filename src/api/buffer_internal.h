@@ -36,23 +36,23 @@ struct GPUBuffer {
 
 GPU_HIDE
 GPUResult
-gpuValidateBufferCreateInfo(const GPUDevice           *device,
-                            const GPUBufferCreateInfo *info);
+validateBufferCreateInfo(const GPUDevice           *device,
+                         const GPUBufferCreateInfo *info);
 
-static inline GPUApi*
-gpuBufferApi(const GPUBuffer *buffer) {
-  return buffer ? gpuDeviceApi(buffer->device) : NULL;
+static inline Api*
+bufferApi(const GPUBuffer *buffer) {
+  return buffer ? deviceApi(buffer->device) : NULL;
 }
 
 static inline bool
-gpuBufferHasUsage(const GPUBuffer *buffer, GPUBufferUsageFlags usage) {
+bufferHasUsage(const GPUBuffer *buffer, GPUBufferUsageFlags usage) {
   return buffer && (buffer->usage & usage) == usage;
 }
 
 static inline bool
-gpuBufferRangeValid(const GPUBuffer *buffer,
-                    uint64_t         offset,
-                    uint64_t         sizeBytes) {
+bufferRangeValid(const GPUBuffer *buffer,
+                 uint64_t         offset,
+                 uint64_t         sizeBytes) {
   return buffer
          && sizeBytes > 0u
          && offset <= buffer->sizeBytes
@@ -60,7 +60,7 @@ gpuBufferRangeValid(const GPUBuffer *buffer,
 }
 
 static inline bool
-gpuBufferOffsetValid(const GPUBuffer *buffer, uint64_t offset) {
+bufferOffsetValid(const GPUBuffer *buffer, uint64_t offset) {
   return buffer && offset <= buffer->sizeBytes;
 }
 

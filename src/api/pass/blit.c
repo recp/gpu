@@ -40,34 +40,34 @@ typedef struct GPUBlitParams {
   float invSrcSize[4];
 } GPUBlitParams;
 
-typedef struct GPUBlitVariant {
+typedef struct BlitVariant {
   GPUShaderLibrary   *library;
   GPUBindGroupLayout *bindGroupLayout;
   GPUPipelineLayout  *pipelineLayout;
   GPURenderPipeline  *pipelines[GPU_FORMAT_COUNT];
-} GPUBlitVariant;
+} BlitVariant;
 
-typedef struct GPUBlitContext {
+typedef struct BlitContext {
   GPUSampler    *nearestSampler;
   GPUSampler    *linearSampler;
-  GPUBlitVariant variants[GPU_BLIT_VARIANT_COUNT];
+  BlitVariant    variants[GPU_BLIT_VARIANT_COUNT];
 #if defined(_WIN32) || defined(WIN32)
   CRITICAL_SECTION lock;
 #else
   pthread_mutex_t lock;
 #endif
-} GPUBlitContext;
+} BlitContext;
 
-typedef struct GPUBlitView {
-  struct GPUBlitView *next;
+typedef struct BlitView {
+  struct BlitView    *next;
   GPUTextureView     *view;
   GPUBindGroup       *groups[GPU_BLIT_VARIANT_COUNT][2];
   uint32_t            mipLevel;
   uint32_t            arrayLayer;
-} GPUBlitView;
+} BlitView;
 
 static void
-gpu_blitLock(GPUBlitContext *context) {
+blitLock(BlitContext    *context) {
 #if defined(_WIN32) || defined(WIN32)
   EnterCriticalSection(&context->lock);
 #else
@@ -76,7 +76,7 @@ gpu_blitLock(GPUBlitContext *context) {
 }
 
 static void
-gpu_blitUnlock(GPUBlitContext *context) {
+blitUnlock(BlitContext    *context) {
 #if defined(_WIN32) || defined(WIN32)
   LeaveCriticalSection(&context->lock);
 #else
@@ -85,14 +85,14 @@ gpu_blitUnlock(GPUBlitContext *context) {
 }
 
 static uint32_t
-gpu_blitMipExtent(uint32_t extent, uint32_t mipLevel) {
+blitMipExtent(uint32_t extent, uint32_t mipLevel) {
   extent >>= mipLevel;
   return extent > 0u ? extent : 1u;
 }
 
 static bool
-gpu_blitRegionValid(const GPUTextureSubresourceRegion *region,
-                    const GPUTexture                  *texture) {
+blitRegionValid(const GPUTextureSubresourceRegion *region,
+                const GPUTexture                  *texture) {
   uint32_t mipWidth;
   uint32_t mipHeight;
 
@@ -111,10 +111,10 @@ gpu_blitRegionValid(const GPUTextureSubresourceRegion *region,
     return false;
   }
 
-  mipWidth  = gpu_blitMipExtent(texture->width,
-                                region->texture.mipLevel);
-  mipHeight = gpu_blitMipExtent(texture->height,
-                                region->texture.mipLevel);
+  mipWidth  = blitMipExtent(texture->width,
+                            region->texture.mipLevel);
+  mipHeight = blitMipExtent(texture->height,
+                            region->texture.mipLevel);
 
   return region->texture.x < mipWidth
          && region->texture.y < mipHeight
@@ -123,7 +123,7 @@ gpu_blitRegionValid(const GPUTextureSubresourceRegion *region,
 }
 
 static bool
-gpu_blitSubresourcesOverlap(const GPUTextureBlitInfo *info) {
+blitSubresourcesOverlap(const GPUTextureBlitInfo *info) {
   uint32_t srcFirst;
   uint32_t srcLast;
   uint32_t dstFirst;
@@ -143,14 +143,14 @@ gpu_blitSubresourcesOverlap(const GPUTextureBlitInfo *info) {
 }
 
 static bool
-gpu_blitInfoValid(GPUCommandBuffer         *cmdb,
-                  const GPUTextureBlitInfo *info,
-                  GPUFormatCapabilities    *outSrcCaps) {
+blitInfoValid(GPUCommandBuffer         *cmdb,
+              const GPUTextureBlitInfo *info,
+              GPUFormatCapabilities    *outSrcCaps) {
   GPUDevice           *device;
-  GPUFormatNumericType srcType;
-  GPUFormatNumericType dstType;
+  FormatNumericType    srcType;
+  FormatNumericType    dstType;
 
-  device = gpuCommandBufferDevice(cmdb);
+  device = commandBufferDevice(cmdb);
 
   if (!cmdb || !device || cmdb->_submitted || cmdb->_activeEncoder
       || !cmdb->_queue
@@ -167,14 +167,14 @@ gpu_blitInfoValid(GPUCommandBuffer         *cmdb,
        (GPU_TEXTURE_USAGE_COLOR_TARGET | GPU_TEXTURE_USAGE_COPY_DST)) !=
         (GPU_TEXTURE_USAGE_COLOR_TARGET | GPU_TEXTURE_USAGE_COPY_DST)
       || info->srcRegion.layerCount != info->dstRegion.layerCount
-      || !gpu_blitRegionValid(&info->srcRegion, info->src)
-      || !gpu_blitRegionValid(&info->dstRegion, info->dst)
-      || gpu_blitSubresourcesOverlap(info)) {
+      || !blitRegionValid(&info->srcRegion, info->src)
+      || !blitRegionValid(&info->dstRegion, info->dst)
+      || blitSubresourcesOverlap(info)) {
     return false;
   }
 
-  srcType = gpuFormatNumericType(info->src->format);
-  dstType = gpuFormatNumericType(info->dst->format);
+  srcType = formatNumericType(info->src->format);
+  dstType = formatNumericType(info->dst->format);
 
   if (srcType != dstType
       || (info->filter == GPU_FILTER_LINEAR
@@ -190,8 +190,8 @@ gpu_blitInfoValid(GPUCommandBuffer         *cmdb,
   return true;
 }
 
-static const GPUBlitShaderData*
-gpu_blitShaderData(const GPUBlitShaderSet *shaders, uint32_t variant) {
+static const BlitShaderData*
+blitShaderData(const BlitShaderSet    *shaders, uint32_t variant) {
   if (!shaders) {
     return NULL;
   }
@@ -213,7 +213,7 @@ gpu_blitShaderData(const GPUBlitShaderSet *shaders, uint32_t variant) {
 }
 
 static bool
-gpu_blitEnsureSamplers(GPUDevice *device, GPUBlitContext *context) {
+blitEnsureSamplers(GPUDevice *device, BlitContext    *context) {
   GPUSamplerCreateInfo info = {0};
 
   if (context->nearestSampler && context->linearSampler) {
@@ -253,7 +253,7 @@ gpu_blitEnsureSamplers(GPUDevice *device, GPUBlitContext *context) {
 }
 
 static GPUTextureSampleType
-gpu_blitSampleType(uint32_t variant) {
+blitSampleType(uint32_t variant) {
   switch (variant) {
     case GPU_BLIT_VARIANT_FLOAT_UNFILTERABLE:
       return GPU_TEXTURE_SAMPLE_TYPE_UNFILTERABLE_FLOAT;
@@ -267,18 +267,18 @@ gpu_blitSampleType(uint32_t variant) {
 }
 
 static bool
-gpu_blitEnsureVariant(GPUDevice              *device,
-                      GPUBlitContext         *context,
-                      const GPUBlitShaderSet *shaders,
-                      uint32_t                variantIndex) {
+blitEnsureVariant(GPUDevice              *device,
+                  BlitContext            *context,
+                  const BlitShaderSet    *shaders,
+                  uint32_t                variantIndex) {
   GPUBindGroupLayoutCreateInfo bindGroupInfo = {0};
   GPUPipelineLayoutCreateInfo  pipelineInfo  = {0};
   GPUBindGroupLayoutEntry      entries[2]    = {0};
   GPUBindGroupLayout          *layouts[1];
-  GPUBlitVariant              *variant;
+  BlitVariant                 *variant;
   GPUShaderLibrary            *library;
-  GPUApi                      *api;
-  const GPUBlitShaderData     *shader;
+  Api                         *api;
+  const BlitShaderData        *shader;
 
   variant = &context->variants[variantIndex];
 
@@ -287,8 +287,8 @@ gpu_blitEnsureVariant(GPUDevice              *device,
     return true;
   }
 
-  api    = gpuDeviceApi(device);
-  shader = gpu_blitShaderData(shaders, variantIndex);
+  api    = deviceApi(device);
+  shader = blitShaderData(shaders, variantIndex);
 
   if (!api || !shader || !shader->data || shader->size == 0u
       || (shader->binary && !api->library.newLibraryWithBinary)
@@ -319,7 +319,7 @@ gpu_blitEnsureVariant(GPUDevice              *device,
   entries[0].sampledTexture.viewType     = variantIndex == GPU_BLIT_VARIANT_FLOAT_FILTERING_ARRAY
                                              ? GPU_TEXTURE_VIEW_2D_ARRAY
                                              : GPU_TEXTURE_VIEW_2D;
-  entries[0].sampledTexture.sampleType   = gpu_blitSampleType(variantIndex);
+  entries[0].sampledTexture.sampleType   = blitSampleType(variantIndex);
   entries[0].sampledTexture.multisampled = false;
   entries[1].binding                     = 1u;
   entries[1].arrayCount                  = 1u;
@@ -363,9 +363,9 @@ gpu_blitEnsureVariant(GPUDevice              *device,
 }
 
 static bool
-gpu_blitEnsurePipeline(GPUDevice      *device,
-                       GPUBlitVariant *variant,
-                       GPUFormat       format) {
+blitEnsurePipeline(GPUDevice      *device,
+                   BlitVariant    *variant,
+                   GPUFormat       format) {
   GPURenderPipelineCreateInfo info  = {0};
   GPUColorTargetState         color = {0};
 
@@ -392,12 +392,12 @@ gpu_blitEnsurePipeline(GPUDevice      *device,
                                  &variant->pipelines[format]) == GPU_OK;
 }
 
-static GPUBlitView*
-gpu_blitEnsureView(GPUTexture *texture,
-                   uint32_t    mipLevel,
-                   uint32_t    arrayLayer) {
+static BlitView*
+blitEnsureView(GPUTexture *texture,
+               uint32_t    mipLevel,
+               uint32_t    arrayLayer) {
   GPUTextureViewCreateInfo info = {0};
-  GPUBlitView             *entry;
+  BlitView                *entry;
 
   for (entry = texture->_blitViews; entry; entry = entry->next) {
     if (entry->mipLevel == mipLevel
@@ -434,12 +434,12 @@ gpu_blitEnsureView(GPUTexture *texture,
 }
 
 static GPUBindGroup*
-gpu_blitEnsureGroup(GPUDevice      *device,
-                    GPUBlitContext *context,
-                    GPUBlitVariant *variant,
-                    GPUBlitView    *view,
-                    uint32_t        variantIndex,
-                    GPUFilter       filter) {
+blitEnsureGroup(GPUDevice      *device,
+                BlitContext    *context,
+                BlitVariant    *variant,
+                BlitView       *view,
+                uint32_t        variantIndex,
+                GPUFilter       filter) {
   GPUBindGroupCreateInfo info       = {0};
   GPUBindGroupEntry      entries[2] = {0};
   uint32_t               filterIndex;
@@ -473,13 +473,13 @@ gpu_blitEnsureGroup(GPUDevice      *device,
 }
 
 static uint32_t
-gpu_blitVariantIndex(const GPUTextureBlitInfo    *info,
-                     const GPUFormatCapabilities *srcCaps) {
+blitVariantIndex(const GPUTextureBlitInfo    *info,
+                 const GPUFormatCapabilities *srcCaps) {
   if (info->src->depthOrLayers > 1u) {
     return GPU_BLIT_VARIANT_FLOAT_FILTERING_ARRAY;
   }
 
-  switch (gpuFormatNumericType(info->src->format)) {
+  switch (formatNumericType(info->src->format)) {
     case GPU_FORMAT_NUMERIC_UINT:
       return GPU_BLIT_VARIANT_UINT;
     case GPU_FORMAT_NUMERIC_SINT:
@@ -492,11 +492,11 @@ gpu_blitVariantIndex(const GPUTextureBlitInfo    *info,
 }
 
 static bool
-gpu_generateMipmapsValid(GPUCommandBuffer *cmdb, GPUTexture *texture) {
+generateMipmapsValid(GPUCommandBuffer *cmdb, GPUTexture *texture) {
   GPUFormatCapabilities caps;
   GPUDevice            *device;
 
-  device = gpuCommandBufferDevice(cmdb);
+  device = commandBufferDevice(cmdb);
 
   return cmdb && device && !cmdb->_submitted && !cmdb->_activeEncoder
          && cmdb->_queue
@@ -508,7 +508,7 @@ gpu_generateMipmapsValid(GPUCommandBuffer *cmdb, GPUTexture *texture) {
          && (texture->usage &
           (GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COLOR_TARGET)) ==
            (GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COLOR_TARGET)
-         && gpuFormatNumericType(texture->format) == GPU_FORMAT_NUMERIC_FLOAT
+         && formatNumericType(texture->format) == GPU_FORMAT_NUMERIC_FLOAT
          && GPUGetFormatCapabilities(device->adapter,
                                      texture->format,
                                      &caps) == GPU_OK
@@ -517,8 +517,8 @@ gpu_generateMipmapsValid(GPUCommandBuffer *cmdb, GPUTexture *texture) {
 
 GPU_HIDE
 GPUResult
-gpuInitBlitDevice(GPUDevice *device) {
-  GPUBlitContext *context;
+initBlitDevice(GPUDevice *device) {
+  BlitContext    *context;
 
   if (!device) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -542,9 +542,9 @@ gpuInitBlitDevice(GPUDevice *device) {
 
 GPU_HIDE
 void
-gpuDestroyBlitDevice(GPUDevice *device) {
-  GPUBlitContext *context;
-  GPUBlitVariant *variant;
+destroyBlitDevice(GPUDevice *device) {
+  BlitContext    *context;
+  BlitVariant    *variant;
   uint32_t        variantIndex;
   uint32_t        format;
 
@@ -579,10 +579,10 @@ gpuDestroyBlitDevice(GPUDevice *device) {
 
 GPU_HIDE
 void
-gpuDestroyTextureBlitViews(GPUTexture *texture) {
-  GPUBlitContext *context;
-  GPUBlitView    *entry;
-  GPUBlitView    *next;
+destroyTextureBlitViews(GPUTexture *texture) {
+  BlitContext    *context;
+  BlitView       *entry;
+  BlitView       *next;
   uint32_t        variant;
 
   context = texture && texture->device
@@ -593,7 +593,7 @@ gpuDestroyTextureBlitViews(GPUTexture *texture) {
     return;
   }
 
-  gpu_blitLock(context);
+  blitLock(context);
 
   for (entry = texture->_blitViews; entry; entry = next) {
     next = entry->next;
@@ -608,23 +608,23 @@ gpuDestroyTextureBlitViews(GPUTexture *texture) {
   }
 
   texture->_blitViews = NULL;
-  gpu_blitUnlock(context);
+  blitUnlock(context);
 }
 
 GPU_HIDE
 void
-gpuBlitTextureRenderFallback(GPUCommandBuffer         *cmdb,
-                             const GPUTextureBlitInfo *info,
-                             const GPUBlitShaderSet   *shaders) {
+blitTextureRenderFallback(GPUCommandBuffer         *cmdb,
+                          const GPUTextureBlitInfo *info,
+                          const BlitShaderSet      *shaders) {
   GPURenderPassColorAttachment color      = {0};
   GPURenderPassCreateInfo      renderInfo = {0};
   GPUFormatCapabilities        srcCaps;
-  GPUBlitContext              *context;
-  GPUBlitVariant              *variant;
+  BlitContext                 *context;
+  BlitVariant                 *variant;
   GPUDevice                   *device;
   GPURenderPassEncoder        *pass;
-  GPUBlitView                 *srcView;
-  GPUBlitView                 *dstView;
+  BlitView                    *srcView;
+  BlitView                    *dstView;
   GPUBindGroup                *group;
   uint32_t                     variantIndex;
   uint32_t                     layer;
@@ -633,7 +633,7 @@ gpuBlitTextureRenderFallback(GPUCommandBuffer         *cmdb,
   uint32_t                     dstMipWidth;
   uint32_t                     dstMipHeight;
 
-  device  = gpuCommandBufferDevice(cmdb);
+  device  = commandBufferDevice(cmdb);
   context = device ? device->_blitContext : NULL;
 
   if (!context
@@ -643,19 +643,19 @@ gpuBlitTextureRenderFallback(GPUCommandBuffer         *cmdb,
     return;
   }
 
-  variantIndex = gpu_blitVariantIndex(info, &srcCaps);
-  gpu_blitLock(context);
+  variantIndex = blitVariantIndex(info, &srcCaps);
+  blitLock(context);
 
-  if (!gpu_blitEnsureSamplers(device, context)
-      || !gpu_blitEnsureVariant(device, context, shaders, variantIndex)) {
-    gpu_blitUnlock(context);
+  if (!blitEnsureSamplers(device, context)
+      || !blitEnsureVariant(device, context, shaders, variantIndex)) {
+    blitUnlock(context);
     return;
   }
 
   variant = &context->variants[variantIndex];
 
-  if (!gpu_blitEnsurePipeline(device, variant, info->dst->format)) {
-    gpu_blitUnlock(context);
+  if (!blitEnsurePipeline(device, variant, info->dst->format)) {
+    blitUnlock(context);
     return;
   }
 
@@ -664,34 +664,34 @@ gpuBlitTextureRenderFallback(GPUCommandBuffer         *cmdb,
     GPUViewport    viewport;
     GPUScissorRect scissor;
 
-    srcView = gpu_blitEnsureView(info->src,
-                                 info->srcRegion.texture.mipLevel,
-                                 info->srcRegion.texture.baseArrayLayer + layer);
-    dstView = gpu_blitEnsureView(info->dst,
-                                 info->dstRegion.texture.mipLevel,
-                                 info->dstRegion.texture.baseArrayLayer + layer);
+    srcView = blitEnsureView(info->src,
+                             info->srcRegion.texture.mipLevel,
+                             info->srcRegion.texture.baseArrayLayer + layer);
+    dstView = blitEnsureView(info->dst,
+                             info->dstRegion.texture.mipLevel,
+                             info->dstRegion.texture.baseArrayLayer + layer);
     group   = srcView
-              ? gpu_blitEnsureGroup(device,
-                                    context,
-                                    variant,
-                                    srcView,
-                                    variantIndex,
-                                    info->filter)
+              ? blitEnsureGroup(device,
+                                context,
+                                variant,
+                                srcView,
+                                variantIndex,
+                                info->filter)
               : NULL;
 
     if (!srcView || !dstView || !group) {
-      gpu_blitUnlock(context);
+      blitUnlock(context);
       return;
     }
 
-    srcMipWidth  = gpu_blitMipExtent(info->src->width,
-                                     info->srcRegion.texture.mipLevel);
-    srcMipHeight = gpu_blitMipExtent(info->src->height,
-                                     info->srcRegion.texture.mipLevel);
-    dstMipWidth  = gpu_blitMipExtent(info->dst->width,
-                                     info->dstRegion.texture.mipLevel);
-    dstMipHeight = gpu_blitMipExtent(info->dst->height,
-                                     info->dstRegion.texture.mipLevel);
+    srcMipWidth  = blitMipExtent(info->src->width,
+                                 info->srcRegion.texture.mipLevel);
+    srcMipHeight = blitMipExtent(info->src->height,
+                                 info->srcRegion.texture.mipLevel);
+    dstMipWidth  = blitMipExtent(info->dst->width,
+                                 info->dstRegion.texture.mipLevel);
+    dstMipHeight = blitMipExtent(info->dst->height,
+                                 info->dstRegion.texture.mipLevel);
 
     color.view                      = dstView->view;
     color.loadOp                    = info->dstRegion.texture.x == 0u
@@ -728,7 +728,7 @@ gpuBlitTextureRenderFallback(GPUCommandBuffer         *cmdb,
     scissor.width     = info->dstRegion.width;
     scissor.height    = info->dstRegion.height;
 
-    gpu_blitUnlock(context);
+    blitUnlock(context);
 
     if (!(pass = GPUBeginRenderPass(cmdb, &renderInfo))) {
       return;
@@ -741,18 +741,18 @@ gpuBlitTextureRenderFallback(GPUCommandBuffer         *cmdb,
     GPUSetRenderPushConstants(pass, 0u, sizeof(params), &params);
     GPUDraw(pass, 3u, 1u, 0u, 0u);
     GPUEndRenderPass(pass);
-    gpu_blitLock(context);
+    blitLock(context);
   }
 
-  gpu_blitUnlock(context);
+  blitUnlock(context);
 }
 
 GPU_HIDE
 void
-gpuGenerateMipmapsFallback(GPUCommandBuffer *cmdb,
-                           GPUTexture       *texture,
-                           void            (*blitTexture)(GPUCommandBuffer         *cmdb,
-                                                          const GPUTextureBlitInfo *info)) {
+generateMipmapsFallback(GPUCommandBuffer *cmdb,
+                        GPUTexture       *texture,
+                        void            (*blitTexture)(GPUCommandBuffer         *cmdb,
+                                                       const GPUTextureBlitInfo *info)) {
   GPUTextureBlitInfo info           = {0};
   GPUTextureBarrier  textureBarrier = {0};
   GPUBarrierBatch    barrierBatch   = {0};
@@ -774,11 +774,11 @@ gpuGenerateMipmapsFallback(GPUCommandBuffer *cmdb,
 
   for (mipLevel = 1u; mipLevel < texture->mipLevelCount; mipLevel++) {
     info.srcRegion.texture.mipLevel = mipLevel - 1u;
-    info.srcRegion.width            = gpu_blitMipExtent(texture->width, mipLevel - 1u);
-    info.srcRegion.height           = gpu_blitMipExtent(texture->height, mipLevel - 1u);
+    info.srcRegion.width            = blitMipExtent(texture->width, mipLevel - 1u);
+    info.srcRegion.height           = blitMipExtent(texture->height, mipLevel - 1u);
     info.dstRegion.texture.mipLevel = mipLevel;
-    info.dstRegion.width            = gpu_blitMipExtent(texture->width, mipLevel);
-    info.dstRegion.height           = gpu_blitMipExtent(texture->height, mipLevel);
+    info.dstRegion.width            = blitMipExtent(texture->width, mipLevel);
+    info.dstRegion.height           = blitMipExtent(texture->height, mipLevel);
     blitTexture(cmdb, &info);
 
     if (mipLevel + 1u < texture->mipLevelCount) {
@@ -802,10 +802,10 @@ void
 GPUBlit(GPUCommandBuffer         *cmdb,
         const GPUTextureBlitInfo *info) {
   GPUFormatCapabilities   srcCaps;
-  GPUApi                 *api;
+  Api                    *api;
   GPUTransferPassEncoder *pass;
 
-  if (!gpu_blitInfoValid(cmdb, info, &srcCaps)) {
+  if (!blitInfoValid(cmdb, info, &srcCaps)) {
     return;
   }
 
@@ -830,7 +830,7 @@ GPUBlit(GPUCommandBuffer         *cmdb,
     return;
   }
 
-  if ((api = gpuCommandBufferApi(cmdb)) && api->renderPass.blitTexture) {
+  if ((api = commandBufferApi(cmdb)) && api->renderPass.blitTexture) {
     api->renderPass.blitTexture(cmdb, info);
   }
 }
@@ -838,21 +838,21 @@ GPUBlit(GPUCommandBuffer         *cmdb,
 GPU_EXPORT
 void
 GPUGenerateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
-  GPUApi *api;
+  Api    *api;
 
-  if (!gpu_generateMipmapsValid(cmdb, texture)) {
+  if (!generateMipmapsValid(cmdb, texture)) {
     return;
   }
 
-  if (!(api = gpuCommandBufferApi(cmdb))) {
+  if (!(api = commandBufferApi(cmdb))) {
     return;
   }
 
   if (api->renderPass.generateMipmaps) {
     api->renderPass.generateMipmaps(cmdb, texture);
   } else if (api->renderPass.blitTexture) {
-    gpuGenerateMipmapsFallback(cmdb,
-                               texture,
-                               api->renderPass.blitTexture);
+    generateMipmapsFallback(cmdb,
+                            texture,
+                            api->renderPass.blitTexture);
   }
 }

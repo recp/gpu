@@ -354,7 +354,7 @@ snapshot_stats(WebGPURenderBench   *state,
                WebGPURenderSamples *samples) {
   /* offscreen work has no frame end to publish current runtime counters. */
 
-  gpuDeviceEndFrame(state->device);
+  deviceEndFrame(state->device);
   record_stats(state, samples);
 }
 

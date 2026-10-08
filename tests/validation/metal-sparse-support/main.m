@@ -230,7 +230,7 @@ mt_supportsFeature(const GPUAdapter *adapter, GPUFeature feature);
 GPU_HIDE
 GPUDevice*
 mt_createDevice(GPUAdapter               *adapter,
-                const GPUQueueCreateInfo queues[],
+                const QueueCreateInfo    queues[],
                 uint32_t                 queueCount,
                 uint64_t                 enabledFeatures);
 
@@ -287,7 +287,7 @@ mt_createDevice(GPUAdapter               *adapter,
 /* stop after mode selection, before native compiler or queue work. */
 GPU_HIDE
 GPUResult
-mt_initPipelineCompiler(GPUDeviceMT *device) {
+mt_initPipelineCompiler(DeviceMT    *device) {
   observedMode = device->commandMode;
   modeInitializations++;
   return GPU_ERROR_BACKEND_FAILURE;
@@ -295,7 +295,7 @@ mt_initPipelineCompiler(GPUDeviceMT *device) {
 
 GPU_HIDE
 void
-mt_destroyPipelineCompiler(GPUDeviceMT *device) {
+mt_destroyPipelineCompiler(DeviceMT    *device) {
   GPU__UNUSED(device);
   unexpectedWork++;
 }
@@ -317,8 +317,8 @@ mt_destroyCommandQueue(GPUQueue *queue) {
 
 static int
 run_tests(void) {
-  GPUQueueCreateInfo   queues[1] = {{0}};
-  GPUAdapterMT         native    = {0};
+  QueueCreateInfo      queues[1] = {{0}};
+  AdapterMT            native    = {0};
   GPUAdapter           adapter   = {0};
   SparseDevice        *device;
   const SparseCase    *test;

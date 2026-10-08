@@ -23,18 +23,18 @@ extern "C" {
 #include <gpu/common.h>
 #include <gpu/gpu.h>
 
-struct GPUApi;
+struct Api;
 
-typedef struct GPUApiSampler {
+typedef struct ApiSampler {
   GPUResult
-  (*createSampler)(struct GPUApi   *__restrict api,
+  (*createSampler)(struct Api      *__restrict api,
                    GPUDevice       *__restrict device,
                    const GPUSamplerCreateInfo *info,
                    bool                        staticIfSupported,
                    GPUSampler                **outSampler);
 
   void (*destroySampler)(GPUSampler *__restrict sampler);
-} GPUApiSampler;
+} ApiSampler;
 
 #ifdef __cplusplus
 }

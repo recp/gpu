@@ -19,7 +19,7 @@
 
 #include <gpu/tensor.h>
 
-typedef struct GPUApiTensor {
+typedef struct ApiTensor {
   GPUResult
   (*getBufferRequirements)(GPUDevice                      *device,
                            const GPUTensorDescEXT         *desc,
@@ -28,6 +28,6 @@ typedef struct GPUApiTensor {
 
   GPUResult (*createView)(GPUTensorEXT *tensor, uint64_t spanBytes);
   void (*destroy)(GPUTensorEXT *tensor);
-} GPUApiTensor;
+} ApiTensor;
 
 #endif /* gpu_gpudef_tensor_h */

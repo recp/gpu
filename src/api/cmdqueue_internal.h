@@ -51,32 +51,32 @@ typedef void (*GPUCommandBufferRecycleFn)(GPUCommandBuffer *cmdb);
 
 GPU_HIDE
 void
-gpuFinishCommandBuffer(GPUCommandBuffer         *cmdb,
-                       GPUCommandBufferRecycleFn recycle);
+finishCommandBuffer(GPUCommandBuffer         *cmdb,
+                    GPUCommandBufferRecycleFn recycle);
 
 GPU_HIDE
 void
-gpuDiscardCommandBufferState(GPUCommandBuffer         *cmdb,
-                             GPUCommandBufferRecycleFn recycle);
+discardCommandBufferState(GPUCommandBuffer         *cmdb,
+                          GPUCommandBufferRecycleFn recycle);
 
 static inline GPUDevice*
-gpuCommandQueueDevice(const GPUQueue *queue) {
+commandQueueDevice(const GPUQueue *queue) {
   return queue ? queue->_device : NULL;
 }
 
-static inline GPUApi*
-gpuCommandQueueApi(const GPUQueue *queue) {
-  return gpuDeviceApi(gpuCommandQueueDevice(queue));
+static inline Api*
+commandQueueApi(const GPUQueue *queue) {
+  return deviceApi(commandQueueDevice(queue));
 }
 
 static inline GPUDevice*
-gpuCommandBufferDevice(const GPUCommandBuffer *cmdb) {
-  return cmdb ? gpuCommandQueueDevice(cmdb->_queue) : NULL;
+commandBufferDevice(const GPUCommandBuffer *cmdb) {
+  return cmdb ? commandQueueDevice(cmdb->_queue) : NULL;
 }
 
-static inline GPUApi*
-gpuCommandBufferApi(const GPUCommandBuffer *cmdb) {
-  return gpuDeviceApi(gpuCommandBufferDevice(cmdb));
+static inline Api*
+commandBufferApi(const GPUCommandBuffer *cmdb) {
+  return deviceApi(commandBufferDevice(cmdb));
 }
 
 #endif /* gpu_cmdqueue_internal_h */

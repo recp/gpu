@@ -99,9 +99,9 @@ vk__staticSamplerAddressMode(uint32_t mode) {
 
 static GPUResult
 vk__createSampler(GPUDevice *device, const VkSamplerCreateInfo *info, GPUSampler **outSampler) {
-  GPUDeviceVk  *deviceVk;
+  DeviceVk     *deviceVk;
   GPUSampler   *sampler;
-  GPUSamplerVk *native;
+  SamplerVk    *native;
 
   if (!device || !device->_priv || !info || !outSampler) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -114,7 +114,7 @@ vk__createSampler(GPUDevice *device, const VkSamplerCreateInfo *info, GPUSampler
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native         = (GPUSamplerVk *)(sampler + 1);
+  native         = (SamplerVk *)(sampler + 1);
   native->device = deviceVk->device;
 
   if (vkCreateSampler(native->device,
@@ -151,7 +151,7 @@ vk_fillSamplerInfo(const GPUSamplerDesc *desc, VkSamplerCreateInfo *outInfo) {
 
 GPU_HIDE
 void
-vk_fillStaticSamplerInfo(const GPUStaticSamplerDesc *desc, VkSamplerCreateInfo *outInfo) {
+vk_fillStaticSamplerInfo(const StaticSamplerDesc    *desc, VkSamplerCreateInfo *outInfo) {
   VkFilter             minFilter;
   VkFilter             magFilter;
   VkSamplerMipmapMode  mipFilter;
@@ -182,7 +182,7 @@ vk_fillStaticSamplerInfo(const GPUStaticSamplerDesc *desc, VkSamplerCreateInfo *
 
 GPU_HIDE
 GPUResult
-vk_createSampler(GPUApi          *__restrict api,
+vk_createSampler(Api             *__restrict api,
                  GPUDevice       *__restrict device,
                  const GPUSamplerCreateInfo *info,
                  bool                        staticIfSupported,
@@ -198,7 +198,7 @@ vk_createSampler(GPUApi          *__restrict api,
   }
 
   vk_fillSamplerInfo(&info->desc, &samplerInfo);
-  lod = gpuSamplerLODClamp(info);
+  lod = samplerLODClamp(info);
 
   if (lod) {
     samplerInfo.minLod = lod->minLOD;
@@ -213,7 +213,7 @@ vk_createSampler(GPUApi          *__restrict api,
 GPU_HIDE
 void
 vk_destroySampler(GPUSampler *__restrict sampler) {
-  GPUSamplerVk *native;
+  SamplerVk    *native;
 
   if (!sampler) {
     return;
@@ -230,7 +230,7 @@ vk_destroySampler(GPUSampler *__restrict sampler) {
 
 GPU_HIDE
 void
-vk_initSampler(GPUApiSampler *api) {
+vk_initSampler(ApiSampler    *api) {
   api->createSampler  = vk_createSampler;
   api->destroySampler = vk_destroySampler;
 }

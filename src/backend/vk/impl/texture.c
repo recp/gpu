@@ -171,7 +171,7 @@ vk__copyAspect(GPUFormat           format,
                VkImageAspectFlags *outAspect) {
   GPUTextureAspect resolved;
 
-  if (!outAspect || !gpuFormatResolveCopyAspect(format, aspect, &resolved)) {
+  if (!outAspect || !formatResolveCopyAspect(format, aspect, &resolved)) {
     return false;
   }
 
@@ -237,7 +237,7 @@ vk__layoutSource(VkImageLayout         layout,
 }
 
 static bool
-vk__textureRangeValid(const GPUTextureVk *texture,
+vk__textureRangeValid(const TextureVk    *texture,
                       uint32_t            baseMip,
                       uint32_t            mipCount,
                       uint32_t            baseLayer,
@@ -248,14 +248,14 @@ vk__textureRangeValid(const GPUTextureVk *texture,
 }
 
 static uint32_t
-vk__textureSubresource(const GPUTextureVk *texture,
+vk__textureSubresource(const TextureVk    *texture,
                        uint32_t            mip,
                        uint32_t            layer) {
   return mip + layer * texture->mipLevelCount;
 }
 
 static bool
-vk__textureRangeFull(const GPUTextureVk *texture,
+vk__textureRangeFull(const TextureVk    *texture,
                      uint32_t            baseMip,
                      uint32_t            mipCount,
                      uint32_t            baseLayer,
@@ -265,7 +265,7 @@ vk__textureRangeFull(const GPUTextureVk *texture,
 }
 
 static void
-vk__materializeTextureLayouts(GPUTextureVk *texture) {
+vk__materializeTextureLayouts(TextureVk    *texture) {
   uint32_t i;
 
   if (!texture || !texture->layouts || !texture->layoutUniform) {
@@ -278,7 +278,7 @@ vk__materializeTextureLayouts(GPUTextureVk *texture) {
 }
 
 static void
-vk__flushTextureBarriers(GPUDeviceVk          *device,
+vk__flushTextureBarriers(DeviceVk             *device,
                          VkCommandBuffer       command,
                          VkImageMemoryBarrier *barriers,
                          uint32_t              barrierCount,
@@ -300,7 +300,7 @@ vk__flushTextureBarriers(GPUDeviceVk          *device,
 
 static void
 vk__fillTextureBarrier(VkImageMemoryBarrier *barrier,
-                       GPUTextureVk         *texture,
+                       TextureVk            *texture,
                        VkImageLayout         oldLayout,
                        VkImageLayout         newLayout,
                        uint32_t              baseMip,
@@ -327,7 +327,7 @@ vk__fillTextureBarrier(VkImageMemoryBarrier *barrier,
 
 static bool
 vk__transitionTexture(VkCommandBuffer      command,
-                      GPUTextureVk        *texture,
+                      TextureVk           *texture,
                       uint32_t             baseMip,
                       uint32_t             mipCount,
                       uint32_t             baseLayer,
@@ -534,7 +534,7 @@ vk__finalImageLayout(GPUTextureUsageFlags usage) {
 }
 
 static void
-vk__destroyTextureState(GPUTextureVk *native) {
+vk__destroyTextureState(TextureVk    *native) {
   uint32_t load;
   uint32_t store;
 
@@ -627,7 +627,7 @@ vk__getSparseTextureRequirements(GPUDevice                       *device,
                                  VkSparseImageMemoryRequirements *outNativeRequirements) {
   VkSparseImageMemoryRequirements  stackRequirements[4];
   VkMemoryRequirements             memoryRequirements;
-  GPUDeviceVk                     *deviceVk;
+  DeviceVk                        *deviceVk;
   VkSparseImageMemoryRequirements *requirements;
   VkSparseImageMemoryRequirements *selected;
   uint32_t                         count;
@@ -726,9 +726,9 @@ vk__recordTextureWrite(VkCommandBuffer              command,
                        uint64_t                     stagingOffset,
                        GPUTexture                  *texture,
                        const GPUTextureWriteRegion *region) {
-  GPUFormatLayout    formatLayout;
+  FormatLayout       formatLayout;
   VkBufferImageCopy  copy = {0};
-  GPUTextureVk      *textureVk;
+  TextureVk         *textureVk;
   VkImageAspectFlags aspect;
   VkImageLayout      finalLayout;
   uint32_t           rowBlocks;
@@ -741,9 +741,9 @@ vk__recordTextureWrite(VkCommandBuffer              command,
   }
 
   if (!vk__copyAspect(texture->format, region->aspect, &aspect)
-      || !gpuFormatAspectLayout(texture->format,
-                                region->aspect,
-                                &formatLayout)) {
+      || !formatAspectLayout(texture->format,
+                             region->aspect,
+                             &formatLayout)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -808,7 +808,7 @@ vk__recordTextureWrite(VkCommandBuffer              command,
 
 GPU_HIDE
 void
-vk_setTextureLayout(GPUTextureVk *texture,
+vk_setTextureLayout(TextureVk    *texture,
                     uint32_t      baseMip,
                     uint32_t      mipCount,
                     uint32_t      baseLayer,
@@ -858,7 +858,7 @@ vk_setTextureLayout(GPUTextureVk *texture,
 GPU_HIDE
 bool
 vk_transitionTexture(VkCommandBuffer command,
-                     GPUTextureVk   *texture,
+                     TextureVk      *texture,
                      uint32_t        baseMip,
                      uint32_t        mipCount,
                      uint32_t        baseLayer,
@@ -884,7 +884,7 @@ vk_transitionTexture(VkCommandBuffer command,
 GPU_HIDE
 bool
 vk_transitionTextureIndirectCopy(VkCommandBuffer command,
-                                 GPUTextureVk   *texture,
+                                 TextureVk      *texture,
                                  uint32_t        baseMip,
                                  uint32_t        mipCount,
                                  uint32_t        baseLayer,
@@ -909,7 +909,7 @@ vk_transitionTextureIndirectCopy(VkCommandBuffer command,
 GPU_HIDE
 bool
 vk_transitionTextureBarrier(VkCommandBuffer      command,
-                            GPUTextureVk        *texture,
+                            TextureVk           *texture,
                             uint32_t             baseMip,
                             uint32_t             mipCount,
                             uint32_t             baseLayer,
@@ -940,7 +940,7 @@ vk_textureCreateInfo(GPUDevice                  *device,
                      const GPUTextureCreateInfo *info,
                      VkImageCreateInfo          *outInfo,
                      VkImageAspectFlags         *outAspect) {
-  GPUDeviceVk          *deviceVk;
+  DeviceVk             *deviceVk;
   VkSampleCountFlagBits sampleCount;
   VkImageAspectFlags    aspect;
 
@@ -1002,15 +1002,15 @@ GPUResult
 vk_finishTexture(GPUDevice                  *device,
                  const GPUTextureCreateInfo *info,
                  const VkImageCreateInfo    *imageInfo,
-                 GPUTextureVk               *state,
+                 TextureVk                  *state,
                  GPUTexture                **outTexture) {
-  GPUDeviceVk                             *deviceVk;
+  DeviceVk                                *deviceVk;
   GPUTexture                              *texture;
-  GPUTextureVk                            *native;
-  GPUAdapterVk                            *adapterVk;
+  TextureVk                               *native;
+  AdapterVk                               *adapterVk;
 #ifdef VK_KHR_copy_memory_indirect
-  GPUInstanceVk                           *instanceVk;
-  GPUAdapterVk                            *indirectAdapterVk;
+  InstanceVk                              *instanceVk;
+  AdapterVk                               *indirectAdapterVk;
   PFN_vkGetPhysicalDeviceFormatProperties2 getFormatProperties2;
 #endif
   uint32_t                                 subresourceCount;
@@ -1087,7 +1087,7 @@ vk_finishTexture(GPUDevice                  *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native                 = (GPUTextureVk *)(texture + 1);
+  native                 = (TextureVk *)(texture + 1);
   *native                = *state;
   native->layouts        = (VkImageLayout *)(native + 1);
   texture->_priv         = native;
@@ -1118,7 +1118,7 @@ vk_getTextureMemoryRequirements(GPUDevice                  *device,
                                 GPUMemoryRequirements      *outRequirements) {
   VkImageCreateInfo    imageInfo = {0};
   VkMemoryRequirements requirements;
-  GPUDeviceVk         *deviceVk;
+  DeviceVk            *deviceVk;
   VkImage              image;
   VkImageAspectFlags   aspect;
   uint32_t             memoryTypes;
@@ -1163,8 +1163,8 @@ vk_getSparseTextureRequirements(GPUDevice                    *device,
                                 const GPUTextureCreateInfo   *info,
                                 GPUSparseTextureRequirements *outRequirements) {
   VkImageCreateInfo  imageInfo = {0};
-  GPUDeviceVk       *deviceVk;
-  GPUAdapterVk      *adapterVk;
+  DeviceVk          *deviceVk;
+  AdapterVk         *adapterVk;
   VkImage            image;
   VkImageAspectFlags aspect;
   GPUResult          result;
@@ -1215,10 +1215,10 @@ vk_createSparseTexture(GPUDevice                  *device,
                        const GPUTextureCreateInfo *info,
                        GPUHeap                    *heap,
                        GPUTexture                **outTexture) {
-  GPUTextureVk                 state     = {0};
+  TextureVk                    state     = {0};
   VkImageCreateInfo            imageInfo = {0};
   GPUSparseTextureRequirements requirements;
-  GPUDeviceVk                 *deviceVk;
+  DeviceVk                    *deviceVk;
   uint32_t                     arrayLayerCount;
   GPUResult                    result;
 
@@ -1280,11 +1280,11 @@ vk_createPlacedTexture(GPUDevice                  *device,
                        GPUHeap                    *heap,
                        uint64_t                    heapOffset,
                        GPUTexture                **outTexture) {
-  GPUTextureVk         state     = {0};
+  TextureVk            state     = {0};
   VkImageCreateInfo    imageInfo = {0};
   VkMemoryRequirements requirements;
-  GPUDeviceVk         *deviceVk;
-  GPUHeapVk           *heapVk;
+  DeviceVk            *deviceVk;
+  HeapVk              *heapVk;
   uint32_t             arrayLayerCount;
   GPUResult            result;
 
@@ -1342,11 +1342,11 @@ GPUResult
 vk_createTexture(GPUDevice                  *__restrict device,
                  const GPUTextureCreateInfo *__restrict info,
                  GPUTexture                **__restrict outTexture) {
-  GPUTextureVk          state          = {0};
+  TextureVk             state          = {0};
   VkImageCreateInfo     imageInfo      = {0};
   VkMemoryRequirements  requirements;
   VkMemoryAllocateInfo  allocationInfo = {0};
-  GPUDeviceVk          *deviceVk;
+  DeviceVk             *deviceVk;
   VkMemoryPropertyFlags memoryFlags;
   uint32_t              arrayLayerCount;
   uint32_t              subresourceCount;
@@ -1446,14 +1446,14 @@ vk_createTextureView(GPUTexture                     *__restrict texture,
 #ifdef VK_EXT_image_view_min_lod
   VkImageViewMinLodCreateInfoEXT minLodInfo      = {0};
 #endif
-  GPUTextureVk                  *textureVk;
+  TextureVk                     *textureVk;
   GPUTextureView                *view;
-  GPUTextureViewVk              *native;
+  TextureViewVk                 *native;
   float                          minLOD;
   bool                           attachmentView;
 
   textureVk = texture ? texture->_priv : NULL;
-  minLOD    = gpuTextureViewMinLOD(info);
+  minLOD    = textureViewMinLOD(info);
 
   if (!texture || !textureVk || !textureVk->image || !info || !outView || info->format != texture->format
       || !vk__imageViewType(info->viewType, &viewInfo.viewType) || !vk_formatFromGPU(info->format, &viewInfo.format)) {
@@ -1483,7 +1483,7 @@ vk_createTextureView(GPUTexture                     *__restrict texture,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native         = (GPUTextureViewVk *)(view + 1);
+  native         = (TextureViewVk *)(view + 1);
   native->device = textureVk->device;
 
   if (vkCreateImageView(native->device,
@@ -1561,7 +1561,7 @@ vk_createTextureView(GPUTexture                     *__restrict texture,
 GPU_HIDE
 void
 vk_destroyTextureView(GPUTextureView *__restrict view) {
-  GPUTextureViewVk *native;
+  TextureViewVk    *native;
 
   if (!view || !view->_ownsNative) {
     return;
@@ -1596,7 +1596,7 @@ vk_writeTexture(GPUQueue                    *__restrict queue,
                 uint64_t                                sizeBytes) {
   VkCommandBuffer command;
   GPUBuffer      *staging;
-  GPUBufferVk    *stagingVk;
+  BufferVk       *stagingVk;
   uint64_t        stagingOffset;
   GPUResult       result;
 
@@ -1645,7 +1645,7 @@ vk_writeTexture(GPUQueue                    *__restrict queue,
 
 GPU_HIDE
 void
-vk_initTexture(GPUApiTexture *api) {
+vk_initTexture(ApiTexture    *api) {
   api->create      = vk_createTexture;
   api->destroy     = vk_destroyTexture;
   api->createView  = vk_createTextureView;

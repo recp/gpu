@@ -22,7 +22,7 @@
 #include "pipeline_cache.h"
 #include "constants.h"
 
-static GPUComputeEncoderVk*
+static ComputeEncoderVk*
 vk__computeEncoder(GPUComputePassEncoder *encoder) {
   return encoder ? encoder->_priv : NULL;
 }
@@ -37,11 +37,11 @@ vk_createComputePipeline(GPUDevice                          *device,
   VkSpecializationInfo           constants = {0};
   VkPipelineShaderStageCreateInfo stage        = {0};
   VkComputePipelineCreateInfo     pipelineInfo = {0};
-  GPUDeviceVk                    *deviceVk;
-  GPUShaderLibraryVk             *library;
-  GPUPipelineLayoutVk            *layout;
-  GPUComputePipelineState        *state;
-  GPUComputePipelineVk           *native;
+  DeviceVk                       *deviceVk;
+  ShaderLibraryVk                *library;
+  PipelineLayoutVk               *layout;
+  ComputePipelineState           *state;
+  ComputePipelineVk              *native;
   uint64_t                        entryMask;
   VkResult                        result;
 
@@ -60,12 +60,12 @@ vk_createComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native         = (GPUComputePipelineVk *)(state + 1);
+  native         = (ComputePipelineVk *)(state + 1);
   native->device = deviceVk->device;
   entryMask      = UINT64_MAX;
 
-  if (gpuShaderLibraryHasEntryResourceInfo(info->library)) {
-    entryMask = gpuShaderEntryBit(info->library, info->entryPoint);
+  if (shaderLibraryHasEntryResourceInfo(info->library)) {
+    entryMask = shaderEntryBit(info->library, info->entryPoint);
 
     if (entryMask == 0u) {
       free(state);
@@ -121,8 +121,8 @@ vk_createComputePipeline(GPUDevice                          *device,
 GPU_HIDE
 void
 vk_destroyComputePipeline(GPUComputePipeline *pipeline) {
-  GPUComputePipelineState *state;
-  GPUComputePipelineVk    *native;
+  ComputePipelineState    *state;
+  ComputePipelineVk       *native;
 
   if (!pipeline) {
     return;
@@ -147,9 +147,9 @@ GPU_HIDE
 GPUComputePassEncoder*
 vk_computeCommandEncoder(GPUCommandBuffer               *cmdb,
                          const GPUComputePassCreateInfo *info) {
-  GPUCommandBufferVk    *command;
+  CommandBufferVk       *command;
   GPUComputePassEncoder *encoder;
-  GPUComputeEncoderVk   *native;
+  ComputeEncoderVk      *native;
 
   command = cmdb ? cmdb->_priv : NULL;
 
@@ -163,7 +163,7 @@ vk_computeCommandEncoder(GPUCommandBuffer               *cmdb,
   memset(native, 0, sizeof(*native));
   native->command            = command->command;
   native->bindPoint          = VK_PIPELINE_BIND_POINT_COMPUTE;
-  native->debugLabelActive   = vk_beginDebugLabel(gpuCommandBufferDevice(cmdb),
+  native->debugLabelActive   = vk_beginDebugLabel(commandBufferDevice(cmdb),
                                                   native->command,
                                                   info->label);
   encoder->_priv             = native;
@@ -177,9 +177,9 @@ vk_computeCommandEncoder(GPUCommandBuffer               *cmdb,
 GPU_HIDE
 void
 vk_setComputePipelineState(GPUComputePassEncoder   *encoder,
-                           GPUComputePipelineState *pipelineState) {
-  GPUComputeEncoderVk  *native;
-  GPUComputePipelineVk *pipeline;
+                           ComputePipelineState    *pipelineState) {
+  ComputeEncoderVk     *native;
+  ComputePipelineVk    *pipeline;
 
   native   = vk__computeEncoder(encoder);
   pipeline = pipelineState ? pipelineState->_priv : NULL;
@@ -214,7 +214,7 @@ void
 vk_computePushConstants(GPUComputePassEncoder *encoder,
                         const void            *data,
                         uint32_t               sizeBytes) {
-  GPUComputeEncoderVk *native;
+  ComputeEncoderVk    *native;
 
   native = vk__computeEncoder(encoder);
 
@@ -237,7 +237,7 @@ vk_dispatch(GPUComputePassEncoder *encoder,
             uint32_t               x,
             uint32_t               y,
             uint32_t               z) {
-  GPUComputeEncoderVk *native;
+  ComputeEncoderVk    *native;
 
   native = vk__computeEncoder(encoder);
 
@@ -253,8 +253,8 @@ void
 vk_dispatchIndirect(GPUComputePassEncoder *encoder,
                     GPUBuffer             *argsBuffer,
                     uint64_t               argsOffset) {
-  GPUComputeEncoderVk *native;
-  GPUBufferVk         *buffer;
+  ComputeEncoderVk    *native;
+  BufferVk            *buffer;
 
   native = vk__computeEncoder(encoder);
   buffer = argsBuffer ? argsBuffer->_priv : NULL;
@@ -269,7 +269,7 @@ vk_dispatchIndirect(GPUComputePassEncoder *encoder,
 GPU_HIDE
 void
 vk_endComputeEncoding(GPUComputePassEncoder *encoder) {
-  GPUComputeEncoderVk *native;
+  ComputeEncoderVk    *native;
 
   native = vk__computeEncoder(encoder);
 
@@ -278,7 +278,7 @@ vk_endComputeEncoding(GPUComputePassEncoder *encoder) {
   }
 
   if (native->debugLabelActive) {
-    vk_endDebugLabel(gpuCommandBufferDevice(encoder->_cmdb), native->command);
+    vk_endDebugLabel(commandBufferDevice(encoder->_cmdb), native->command);
   }
 
   native->command                = VK_NULL_HANDLE;
@@ -291,7 +291,7 @@ vk_endComputeEncoding(GPUComputePassEncoder *encoder) {
 
 GPU_HIDE
 void
-vk_initCompute(GPUApiCompute *api) {
+vk_initCompute(ApiCompute    *api) {
   api->createPipeline          = vk_createComputePipeline;
   api->destroyComputePipeline  = vk_destroyComputePipeline;
   api->computeCommandEncoder   = vk_computeCommandEncoder;

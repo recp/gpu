@@ -45,9 +45,9 @@ dynamic_sampler(void) {
   return desc;
 }
 
-static GPUStaticSamplerDesc
+static StaticSamplerDesc
 static_sampler(void) {
-  GPUStaticSamplerDesc desc;
+  StaticSamplerDesc    desc;
 
   memset(&desc, 0, sizeof(desc));
   desc.minFilter     = USL_RUNTIME_FILTER_NEAREST;
@@ -107,7 +107,7 @@ validate_dynamic_sampler(void) {
 
 static int
 validate_static_sampler(void) {
-  GPUStaticSamplerDesc source;
+  StaticSamplerDesc    source;
   CUDA_TEXTURE_DESC    actual;
 
   source = static_sampler();

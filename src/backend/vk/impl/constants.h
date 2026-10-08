@@ -28,7 +28,7 @@ vk_pipelineConstants(const GPUChainedStruct   *chain,
   const GPUConstant          *constant;
   uint32_t                    i;
 
-  constants = gpuPipelineConstants(chain);
+  constants = pipelineConstants(chain);
 
   if (!constants) {
     return;

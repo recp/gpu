@@ -27,9 +27,9 @@ struct GPUSurface {
   float          scale;
 };
 
-static inline GPUApi*
-gpuSurfaceApi(const GPUSurface *surface) {
-  return surface ? gpuInstanceApi(surface->inst) : NULL;
+static inline Api*
+surfaceApi(const GPUSurface *surface) {
+  return surface ? instanceApi(surface->inst) : NULL;
 }
 
 #endif /* gpu_surface_internal_h */

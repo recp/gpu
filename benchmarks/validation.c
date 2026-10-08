@@ -44,7 +44,7 @@ typedef struct ValidationFixture {
   GPUCommandBuffer      cmdb;
   GPUQueue              queue;
   GPUDevice             device;
-  GPUApi                api;
+  Api                   api;
 } ValidationFixture;
 
 #if GPU_BUILD_WITH_VALIDATION
@@ -75,7 +75,7 @@ static volatile uint64_t validationSink;
 
 static BENCH_NOINLINE void
 validation_draw(GPURenderPassEncoder *pass,
-                GPUPrimitiveType      type,
+                PrimitiveType         type,
                 size_t                firstVertex,
                 size_t                vertexCount,
                 uint32_t              instanceCount,

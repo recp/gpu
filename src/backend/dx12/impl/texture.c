@@ -139,7 +139,7 @@ dx12__textureWritePlane(GPUFormat        format,
                         uint32_t        *outPlane) {
   GPUTextureAspect resolved;
 
-  if (!outPlane || !gpuFormatResolveCopyAspect(format, aspect, &resolved)) {
+  if (!outPlane || !formatResolveCopyAspect(format, aspect, &resolved)) {
     return false;
   }
 
@@ -150,7 +150,7 @@ dx12__textureWritePlane(GPUFormat        format,
 }
 
 static bool
-dx12__textureRangeValid(const GPUTextureDX12 *texture,
+dx12__textureRangeValid(const TextureDX12    *texture,
                         uint32_t              baseMip,
                         uint32_t              mipCount,
                         uint32_t              baseLayer,
@@ -164,7 +164,7 @@ dx12__textureRangeValid(const GPUTextureDX12 *texture,
 }
 
 static uint32_t
-dx12__textureSubresource(const GPUTextureDX12 *texture,
+dx12__textureSubresource(const TextureDX12    *texture,
                          uint32_t              mip,
                          uint32_t              layer,
                          uint32_t              plane) {
@@ -173,7 +173,7 @@ dx12__textureSubresource(const GPUTextureDX12 *texture,
 }
 
 static bool
-dx12__textureRangeFull(const GPUTextureDX12 *texture,
+dx12__textureRangeFull(const TextureDX12    *texture,
                        uint32_t              baseMip,
                        uint32_t              mipCount,
                        uint32_t              baseLayer,
@@ -186,7 +186,7 @@ dx12__textureRangeFull(const GPUTextureDX12 *texture,
 }
 
 static void
-dx12__materializeTextureStates(GPUTextureDX12 *texture) {
+dx12__materializeTextureStates(TextureDX12    *texture) {
   uint32_t i;
 
   if (!texture || !texture->states || !texture->stateUniform) {
@@ -200,7 +200,7 @@ dx12__materializeTextureStates(GPUTextureDX12 *texture) {
 
 static bool
 dx12__transitionTexture(ID3D12GraphicsCommandList *commandList,
-                        GPUTextureDX12            *texture,
+                        TextureDX12               *texture,
                         uint32_t                   baseMip,
                         uint32_t                   mipCount,
                         uint32_t                   baseLayer,
@@ -324,7 +324,7 @@ dx12__sparseTextureRequirements(GPUDevice                    *device,
                                 D3D12_TILE_SHAPE             *outTileShape) {
   D3D12_PACKED_MIP_INFO packedMipInfo = {0};
   D3D12_TILE_SHAPE      tileShape = {0};
-  GPUDeviceDX12        *deviceDX12;
+  DeviceDX12           *deviceDX12;
   UINT                  tileCount;
   UINT                  arrayLayerCount;
   UINT                  subresourceTilingCount;
@@ -392,7 +392,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
       srv->ViewDimension                 = D3D12_SRV_DIMENSION_TEXTURE1D;
       srv->Texture1D.MostDetailedMip     = info->baseMipLevel;
       srv->Texture1D.MipLevels           = info->mipLevelCount;
-      srv->Texture1D.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
+      srv->Texture1D.ResourceMinLODClamp = textureViewMinLOD(info);
 
       return true;
     case GPU_TEXTURE_VIEW_1D_ARRAY:
@@ -401,7 +401,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
       srv->Texture1DArray.MipLevels           = info->mipLevelCount;
       srv->Texture1DArray.FirstArraySlice     = info->baseArrayLayer;
       srv->Texture1DArray.ArraySize           = info->arrayLayerCount;
-      srv->Texture1DArray.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
+      srv->Texture1DArray.ResourceMinLODClamp = textureViewMinLOD(info);
 
       return true;
     case GPU_TEXTURE_VIEW_2D:
@@ -418,7 +418,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
       srv->Texture2D.MostDetailedMip     = info->baseMipLevel;
       srv->Texture2D.MipLevels           = info->mipLevelCount;
       srv->Texture2D.PlaneSlice          = 0u;
-      srv->Texture2D.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
+      srv->Texture2D.ResourceMinLODClamp = textureViewMinLOD(info);
 
       return true;
     case GPU_TEXTURE_VIEW_2D_ARRAY:
@@ -428,7 +428,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
       srv->Texture2DArray.FirstArraySlice     = info->baseArrayLayer;
       srv->Texture2DArray.ArraySize           = info->arrayLayerCount;
       srv->Texture2DArray.PlaneSlice          = 0u;
-      srv->Texture2DArray.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
+      srv->Texture2DArray.ResourceMinLODClamp = textureViewMinLOD(info);
 
       return true;
     case GPU_TEXTURE_VIEW_CUBE:
@@ -443,7 +443,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
         srv->Texture2DArray.FirstArraySlice     = info->baseArrayLayer;
         srv->Texture2DArray.ArraySize           = info->arrayLayerCount;
         srv->Texture2DArray.PlaneSlice          = 0u;
-        srv->Texture2DArray.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
+        srv->Texture2DArray.ResourceMinLODClamp = textureViewMinLOD(info);
 
         return true;
       }
@@ -451,7 +451,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
       srv->ViewDimension                   = D3D12_SRV_DIMENSION_TEXTURECUBE;
       srv->TextureCube.MostDetailedMip     = info->baseMipLevel;
       srv->TextureCube.MipLevels           = info->mipLevelCount;
-      srv->TextureCube.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
+      srv->TextureCube.ResourceMinLODClamp = textureViewMinLOD(info);
 
       return true;
     case GPU_TEXTURE_VIEW_CUBE_ARRAY:
@@ -467,7 +467,7 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
         srv->Texture2DArray.FirstArraySlice     = info->baseArrayLayer;
         srv->Texture2DArray.ArraySize           = info->arrayLayerCount;
         srv->Texture2DArray.PlaneSlice          = 0u;
-        srv->Texture2DArray.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
+        srv->Texture2DArray.ResourceMinLODClamp = textureViewMinLOD(info);
 
         return true;
       }
@@ -477,14 +477,14 @@ dx12__fillTextureSrv(const GPUTextureViewCreateInfo  *info,
       srv->TextureCubeArray.MipLevels           = info->mipLevelCount;
       srv->TextureCubeArray.First2DArrayFace    = info->baseArrayLayer;
       srv->TextureCubeArray.NumCubes            = info->arrayLayerCount / 6u;
-      srv->TextureCubeArray.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
+      srv->TextureCubeArray.ResourceMinLODClamp = textureViewMinLOD(info);
 
       return true;
     case GPU_TEXTURE_VIEW_3D:
       srv->ViewDimension                 = D3D12_SRV_DIMENSION_TEXTURE3D;
       srv->Texture3D.MostDetailedMip     = info->baseMipLevel;
       srv->Texture3D.MipLevels           = info->mipLevelCount;
-      srv->Texture3D.ResourceMinLODClamp = gpuTextureViewMinLOD(info);
+      srv->Texture3D.ResourceMinLODClamp = textureViewMinLOD(info);
 
       return true;
     default:
@@ -614,7 +614,7 @@ dx12__fillTextureDsv(const GPUTextureViewCreateInfo *info,
 
 GPU_HIDE
 void
-dx12_setTextureState(GPUTextureDX12       *texture,
+dx12_setTextureState(TextureDX12          *texture,
                      uint32_t              baseMip,
                      uint32_t              mipCount,
                      uint32_t              baseLayer,
@@ -666,7 +666,7 @@ dx12_setTextureState(GPUTextureDX12       *texture,
 GPU_HIDE
 bool
 dx12_transitionTexture(ID3D12GraphicsCommandList *commandList,
-                       GPUTextureDX12            *texture,
+                       TextureDX12               *texture,
                        uint32_t                   baseMip,
                        uint32_t                   mipCount,
                        uint32_t                   baseLayer,
@@ -686,7 +686,7 @@ dx12_transitionTexture(ID3D12GraphicsCommandList *commandList,
 GPU_HIDE
 bool
 dx12_transitionTexturePlane(ID3D12GraphicsCommandList *commandList,
-                            GPUTextureDX12            *texture,
+                            TextureDX12               *texture,
                             uint32_t                   baseMip,
                             uint32_t                   mipCount,
                             uint32_t                   baseLayer,
@@ -716,7 +716,7 @@ dx12_textureDesc(GPUDevice                  *device,
                  uint32_t                   *outPlaneCount,
                  uint32_t                   *outSubresourceCount) {
   D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS levels;
-  GPUDeviceDX12                                *deviceDX12;
+  DeviceDX12                                   *deviceDX12;
   D3D12_RESOURCE_DIMENSION                      dimension;
   DXGI_FORMAT                                   format;
   uint32_t                                      mipLevelCount;
@@ -851,7 +851,7 @@ dx12_wrapTexture(GPUDevice                  *device,
                  uint32_t                    subresourceCount,
                  GPUTexture                **outTexture) {
   GPUTexture     *texture;
-  GPUTextureDX12 *native;
+  TextureDX12    *native;
   size_t          allocationSize;
 
   if (subresourceCount >
@@ -868,9 +868,9 @@ dx12_wrapTexture(GPUDevice                  *device,
   }
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-  dx12__setTextureName(resource, gpuDeviceDebugLabel(device, info->label));
+  dx12__setTextureName(resource, deviceDebugLabel(device, info->label));
 #endif
-  native                   = (GPUTextureDX12 *)(texture + 1);
+  native                   = (TextureDX12 *)(texture + 1);
   native->resource         = resource;
   native->states           = (D3D12_RESOURCE_STATES *)(native + 1);
   native->state            = initialState;
@@ -903,7 +903,7 @@ dx12_getTextureMemoryRequirements(GPUDevice                  *device,
   D3D12_RESOURCE_DESC            desc = {0};
   D3D12_CLEAR_VALUE              clearValue = {0};
   D3D12_RESOURCE_ALLOCATION_INFO allocationInfo;
-  GPUDeviceDX12                 *deviceDX12;
+  DeviceDX12                    *deviceDX12;
   D3D12_RESOURCE_STATES          initialState;
   uint32_t                       mipLevelCount;
   uint32_t                       arrayLayerCount;
@@ -966,7 +966,7 @@ dx12_getSparseTextureRequirements(GPUDevice                    *device,
                                   GPUSparseTextureRequirements *outRequirements) {
   D3D12_RESOURCE_DESC   desc = {0};
   D3D12_CLEAR_VALUE     clearValue = {0};
-  GPUDeviceDX12        *deviceDX12;
+  DeviceDX12           *deviceDX12;
   ID3D12Resource       *resource;
   D3D12_RESOURCE_STATES initialState;
   uint32_t              mipLevelCount;
@@ -1043,7 +1043,7 @@ dx12_createSparseTexture(GPUDevice                  *device,
   GPUSparseTextureRequirements requirements;
   D3D12_PACKED_MIP_INFO        packedMipInfo;
   D3D12_TILE_SHAPE             tileShape;
-  GPUDeviceDX12               *deviceDX12;
+  DeviceDX12                  *deviceDX12;
   ID3D12Resource              *resource;
   D3D12_RESOURCE_STATES        initialState;
   uint32_t                     mipLevelCount;
@@ -1112,9 +1112,9 @@ dx12_createSparseTexture(GPUDevice                  *device,
     return result;
   }
 
-  ((GPUTextureDX12 *)(*outTexture)->_priv)->packedMipInfo = packedMipInfo;
-  ((GPUTextureDX12 *)(*outTexture)->_priv)->tileShape     = tileShape;
-  ((GPUTextureDX12 *)(*outTexture)->_priv)->sparse        = true;
+  ((TextureDX12 *)(*outTexture)->_priv)->packedMipInfo = packedMipInfo;
+  ((TextureDX12 *)(*outTexture)->_priv)->tileShape     = tileShape;
+  ((TextureDX12 *)(*outTexture)->_priv)->sparse        = true;
   GPU__UNUSED(heap);
 
   return GPU_OK;
@@ -1129,8 +1129,8 @@ dx12_createPlacedTexture(GPUDevice                  *device,
                          GPUTexture                **outTexture) {
   D3D12_RESOURCE_DESC   desc = {0};
   D3D12_CLEAR_VALUE     clearValue = {0};
-  GPUDeviceDX12        *deviceDX12;
-  GPUHeapDX12          *heapDX12;
+  DeviceDX12           *deviceDX12;
+  HeapDX12             *heapDX12;
   ID3D12Resource       *resource;
   D3D12_RESOURCE_STATES initialState;
   uint32_t              mipLevelCount;
@@ -1199,7 +1199,7 @@ dx12_createTexture(GPUDevice                  *__restrict device,
   D3D12_HEAP_PROPERTIES heap = {0};
   D3D12_RESOURCE_DESC   desc = {0};
   D3D12_CLEAR_VALUE     clearValue = {0};
-  GPUDeviceDX12        *deviceDX12;
+  DeviceDX12           *deviceDX12;
   ID3D12Resource       *resource;
   D3D12_RESOURCE_STATES initialState;
   uint32_t              mipLevelCount;
@@ -1267,7 +1267,7 @@ dx12_createTexture(GPUDevice                  *__restrict device,
 GPU_HIDE
 void
 dx12_destroyTexture(GPUTexture *__restrict texture) {
-  GPUTextureDX12 *native;
+  TextureDX12    *native;
 
   if (!texture) {
     return;
@@ -1291,10 +1291,10 @@ dx12_createTextureView(GPUTexture                     *__restrict texture,
   D3D12_UNORDERED_ACCESS_VIEW_DESC uav = {0};
   D3D12_RENDER_TARGET_VIEW_DESC    rtv = {0};
   D3D12_DEPTH_STENCIL_VIEW_DESC    dsv = {0};
-  GPUDeviceDX12                   *device;
-  GPUTextureDX12                  *textureDX12;
+  DeviceDX12                      *device;
+  TextureDX12                     *textureDX12;
   GPUTextureView                  *view;
-  GPUTextureViewDX12              *native;
+  TextureViewDX12                 *native;
   DXGI_FORMAT                      format;
   GPUResult                        result;
   uint32_t                         rtvOffset;
@@ -1358,7 +1358,7 @@ dx12_createTextureView(GPUTexture                     *__restrict texture,
 
   hasSrv = (sampled || storage)
            && dx12__fillTextureSrv(info,
-                                   gpuFormatNumericType(info->format) !=
+                                   formatNumericType(info->format) !=
                                   GPU_FORMAT_NUMERIC_FLOAT,
                                    texture->sampleCount > 1u,
                                    &srv);
@@ -1389,7 +1389,7 @@ dx12_createTextureView(GPUTexture                     *__restrict texture,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  native         = (GPUTextureViewDX12 *)(view + 1);
+  native         = (TextureViewDX12 *)(view + 1);
   native->device = device;
 
   if (hasSrv) {
@@ -1507,7 +1507,7 @@ dx12_createTextureView(GPUTexture                     *__restrict texture,
 GPU_HIDE
 void
 dx12_destroyTextureView(GPUTextureView *__restrict view) {
-  GPUTextureViewDX12 *native;
+  TextureViewDX12    *native;
 
   native = view ? view->_priv : NULL;
 
@@ -1535,13 +1535,13 @@ dx12_writeTexture(GPUQueue                    *__restrict queue,
                   const GPUTextureWriteRegion *__restrict region,
                   const void                  *__restrict data,
                   uint64_t                                sizeBytes) {
-  GPUFormatDataLayout                dataLayout;
+  FormatDataLayout                   dataLayout;
   D3D12_RESOURCE_DESC                textureDesc;
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {0};
   D3D12_BOX                          sourceBox = {0};
-  GPUQueueDX12                      *queueDX12;
-  GPUDeviceDX12                     *deviceDX12;
-  GPUTextureDX12                    *native;
+  QueueDX12                         *queueDX12;
+  DeviceDX12                        *deviceDX12;
+  TextureDX12                       *native;
   ID3D12GraphicsCommandList         *commandList;
   ID3D12Resource                    *upload;
   void                              *mappedData;
@@ -1583,15 +1583,15 @@ dx12_writeTexture(GPUQueue                    *__restrict queue,
   if (!dx12__textureWritePlane(texture->format,
                                region->aspect,
                                &plane)
-      || !gpuFormatAspectDataLayout(texture->format,
-                                    region->aspect,
-                                    region->width,
-                                    region->height,
-                                    region->depth,
-                                    region->layerCount,
-                                    region->bytesPerRow,
-                                    region->rowsPerImage,
-                                    &dataLayout)) {
+      || !formatAspectDataLayout(texture->format,
+                                 region->aspect,
+                                 region->width,
+                                 region->height,
+                                 region->depth,
+                                 region->layerCount,
+                                 region->bytesPerRow,
+                                 region->rowsPerImage,
+                                 &dataLayout)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -1777,7 +1777,7 @@ dx12_writeTexture(GPUQueue                    *__restrict queue,
 
 GPU_HIDE
 void
-dx12_initTexture(GPUApiTexture *api) {
+dx12_initTexture(ApiTexture    *api) {
   api->create      = dx12_createTexture;
   api->destroy     = dx12_destroyTexture;
   api->createView  = dx12_createTextureView;

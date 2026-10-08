@@ -19,12 +19,12 @@
 
 #include "../../common.h"
 
-struct GPURenderPipelineState {
+struct RenderPipelineState {
   void *_priv;
 };
 
 struct GPURenderPipeline {
-  GPUApi              *_api;
+  Api                 *_api;
   void                *_priv;
   void                *_state;
   GPUPipelineLayout   *_layout;
@@ -52,44 +52,44 @@ struct GPURenderPipeline {
 
 GPU_HIDE
 GPUResult
-gpuCreateRenderPipeline(GPUDevice                         *device,
-                        const GPURenderPipelineCreateInfo *info,
-                        GPURenderPipeline                **outPipeline);
+createRenderPipeline(GPUDevice                         *device,
+                     const GPURenderPipelineCreateInfo *info,
+                     GPURenderPipeline                **outPipeline);
 
 GPU_HIDE
 GPURenderPipeline*
-gpuCreateRenderPipelineDesc(GPUApi *api, GPUFormat pixelFormat, bool mesh);
+createRenderPipelineDesc(Api    *api, GPUFormat pixelFormat, bool mesh);
 
 GPU_HIDE
-GPURenderPipelineState*
-gpuCompileRenderPipelineState(GPUDevice         *__restrict device,
-                              GPURenderPipeline *__restrict pipeline);
-
-GPU_HIDE
-void
-gpuPipelineSetFunction(GPURenderPipeline *__restrict pipeline,
-                       GPUShaderFunction *__restrict func,
-                       GPUFunctionType               functionType);
+RenderPipelineState*
+compileRenderPipelineState(GPUDevice         *__restrict device,
+                           GPURenderPipeline *__restrict pipeline);
 
 GPU_HIDE
 void
-gpuPipelineSetColorFormat(GPURenderPipeline *__restrict pipeline,
-                          uint32_t                      index,
-                          GPUFormat                     pixelFormat);
+pipelineSetFunction(GPURenderPipeline *__restrict pipeline,
+                    ShaderFunction    *__restrict func,
+                    FunctionType                  functionType);
 
 GPU_HIDE
 void
-gpuPipelineSetDepthFormat(GPURenderPipeline *__restrict pipeline,
-                          GPUFormat                     pixelFormat);
+pipelineSetColorFormat(GPURenderPipeline *__restrict pipeline,
+                       uint32_t                      index,
+                       GPUFormat                     pixelFormat);
 
 GPU_HIDE
 void
-gpuPipelineSetStencilFormat(GPURenderPipeline *__restrict pipeline,
-                            GPUFormat                     pixelFormat);
+pipelineSetDepthFormat(GPURenderPipeline *__restrict pipeline,
+                       GPUFormat                     pixelFormat);
 
 GPU_HIDE
 void
-gpuPipelineSetSampleCount(GPURenderPipeline *__restrict pipeline,
-                          uint32_t                      sampleCount);
+pipelineSetStencilFormat(GPURenderPipeline *__restrict pipeline,
+                         GPUFormat                     pixelFormat);
+
+GPU_HIDE
+void
+pipelineSetSampleCount(GPURenderPipeline *__restrict pipeline,
+                       uint32_t                      sampleCount);
 
 #endif /* gpu_render_pipeline_internal_h */

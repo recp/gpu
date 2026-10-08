@@ -24,11 +24,11 @@ webgpu_newLibraryWithSource(GPUDevice  *device,
                             uint32_t    compileFlags) {
   WGPUShaderSourceWGSL       sourceInfo = WGPU_SHADER_SOURCE_WGSL_INIT;
   WGPUShaderModuleDescriptor descriptor = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
-  GPUDeviceWebGPU           *native;
+  DeviceWebGPU              *native;
   GPUShaderLibrary          *library;
 
   (void)compileFlags;
-  native = gpu_webgpuDevice(device);
+  native = webgpuDevice(device);
 
   if (!native || !native->device || !source || sourceSize == 0u
       || sourceSize > (uint64_t)SIZE_MAX) {
@@ -39,7 +39,7 @@ webgpu_newLibraryWithSource(GPUDevice  *device,
     return NULL;
   }
 
-  sourceInfo.code        = gpu_webgpuStringSize(source, sourceSize);
+  sourceInfo.code        = webgpuStringSize(source, sourceSize);
   descriptor.nextInChain = &sourceInfo.chain;
 
   if (!(library->_priv = wgpuDeviceCreateShaderModule(native->device, &descriptor))) {
@@ -64,7 +64,7 @@ webgpu_destroyLibrary(GPUShaderLibrary *library) {
 }
 
 void
-webgpu_initLibrary(GPUApiLibrary *api) {
+webgpu_initLibrary(ApiLibrary    *api) {
   api->newLibraryWithSource = webgpu_newLibraryWithSource;
   api->destroyLibrary       = webgpu_destroyLibrary;
 }

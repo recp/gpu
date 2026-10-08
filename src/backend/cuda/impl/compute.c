@@ -19,11 +19,11 @@
 static bool
 cuda__validComputeInterface(const GPUDevice                    *device,
                             const GPUComputePipelineCreateInfo *info,
-                            GPUShaderPTXEntryView              *outPTX) {
+                            ShaderPTXEntryView                 *outPTX) {
   GPUShaderReflection                reflection;
-  GPUShaderPTXEntryView              ptx;
+  ShaderPTXEntryView                 ptx;
   const GPUShaderResourceReflection *resource;
-  const GPUShaderPTXParamInfo       *param;
+  const ShaderPTXParamInfo          *param;
   GPUShaderStageFlags                stage;
   uint32_t                           i;
   uint32_t                           size;
@@ -32,11 +32,11 @@ cuda__validComputeInterface(const GPUDevice                    *device,
   memset(&ptx, 0, sizeof(ptx));
 
   if (!info || !info->library || !info->entryPoint || !info->entryPoint[0]
-      || !gpuShaderEntryView(info->library,
-                             info->entryPoint,
-                             &stage,
-                             &reflection)
-      || !gpuGetShaderLibraryPTXEntry(info->library, info->entryPoint, &ptx)
+      || !shaderEntryView(info->library,
+                          info->entryPoint,
+                          &stage,
+                          &reflection)
+      || !getShaderLibraryPTXEntry(info->library, info->entryPoint, &ptx)
       || stage != GPU_SHADER_STAGE_COMPUTE_BIT
       || reflection.pushConstantSizeBytes != 0u
       || reflection.pushConstantStages != 0u
@@ -46,7 +46,7 @@ cuda__validComputeInterface(const GPUDevice                    *device,
   }
 
   for (i = 0u; i < reflection.resourceCount; i++) {
-    GPUCudaFormatInfo format;
+    CudaFormatInfo    format;
 
     resource  = &reflection.pResources[i];
     supported = resource->bindingType == GPU_BINDING_UNIFORM_BUFFER
@@ -108,16 +108,16 @@ static GPUResult
 cuda_createComputePipeline(GPUDevice                          *device,
                            const GPUComputePipelineCreateInfo *info,
                            GPUComputePipeline                 *pipeline) {
-  GPUShaderPTXEntryView             ptx;
-  GPUShaderSourceBlob               source = {0};
+  ShaderPTXEntryView                ptx;
+  ShaderSourceBlob                  source = {0};
   uint32_t                          block[3];
-  GPUComputePipelineCuda           *native;
-  GPUDeviceCuda                    *deviceNative;
-  GPUShaderLibraryCuda             *library;
-  GPUCudaModule                    *module;
+  ComputePipelineCuda              *native;
+  DeviceCuda                       *deviceNative;
+  ShaderLibraryCuda                *library;
+  CudaModule                       *module;
   const GPUPipelineConstants        *constants;
-  const GPUShaderStaticSamplerInfo *staticSamplers;
-  GPUShaderPTXParamInfo            *param;
+  const ShaderStaticSamplerInfo    *staticSamplers;
+  ShaderPTXParamInfo               *param;
   uint64_t                          entryBit;
   uint64_t                          threadCount;
   size_t                            nativeSize;
@@ -141,9 +141,9 @@ cuda_createComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!gpuGetShaderLibraryComputeWorkgroupSize(info->library,
-                                               info->entryPoint,
-                                               block)) {
+  if (!getShaderLibraryComputeWorkgroupSize(info->library,
+                                            info->entryPoint,
+                                            block)) {
     block[0] = block[1] = block[2] = 1u;
   }
 
@@ -157,9 +157,9 @@ cuda_createComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  staticSamplers = gpuGetShaderLibraryStaticSamplers(info->library,
-                                                     &staticSamplerCount);
-  entryBit       = gpuShaderEntryBit(info->library, info->entryPoint);
+  staticSamplers = getShaderLibraryStaticSamplers(info->library,
+                                                  &staticSamplerCount);
+  entryBit       = shaderEntryBit(info->library, info->entryPoint);
 
   if (staticSamplerCount > 0u && (!staticSamplers || entryBit == 0u)) {
     return GPU_ERROR_UNSUPPORTED;
@@ -190,10 +190,10 @@ cuda_createComputePipeline(GPUDevice                          *device,
 
   native->pipeline = pipeline;
 
-  constants = gpuPipelineConstants(info->chain.pNext);
+  constants = pipelineConstants(info->chain.pNext);
 
   if (constants && constants->constantCount != 0u) {
-    compiled = gpuCompileShaderLibraryEntry(info->library, info->entryPoint, constants, &source);
+    compiled = compileShaderLibraryEntry(info->library, info->entryPoint, constants, &source);
 
     if (compiled != GPU_OK) {
       free(native);
@@ -201,7 +201,7 @@ cuda_createComputePipeline(GPUDevice                          *device,
     }
 
     module = cuda_createModule(device, source.data, source.size);
-    gpuFreeShaderSourceBlob(&source);
+    freeShaderSourceBlob(&source);
 
     if (!module) {
       free(native);
@@ -290,7 +290,7 @@ cuda_createComputePipeline(GPUDevice                          *device,
 
 static void
 cuda_destroyComputePipeline(GPUComputePipeline *pipeline) {
-  GPUComputePipelineCuda *native;
+  ComputePipelineCuda    *native;
 
   native = pipeline ? pipeline->_state : NULL;
 
@@ -304,7 +304,7 @@ cuda_destroyComputePipeline(GPUComputePipeline *pipeline) {
 static GPUComputePassEncoder*
 cuda_computeCommandEncoder(GPUCommandBuffer               *cmdb,
                            const GPUComputePassCreateInfo *info) {
-  GPUCommandCuda *command;
+  CommandCuda    *command;
 
   GPU__UNUSED(info);
   command = cuda_command(cmdb);
@@ -326,9 +326,9 @@ cuda_computeCommandEncoder(GPUCommandBuffer               *cmdb,
 
 static void
 cuda_setComputePipeline(GPUComputePassEncoder   *encoder,
-                        GPUComputePipelineState *state) {
-  GPUCommandCuda         *command;
-  GPUComputePipelineCuda *native;
+                        ComputePipelineState    *state) {
+  CommandCuda            *command;
+  ComputePipelineCuda    *native;
 
   command = encoder ? encoder->_priv : NULL;
   native  = state ? state->_priv : NULL;
@@ -352,8 +352,8 @@ cuda_setComputePipeline(GPUComputePassEncoder   *encoder,
 }
 
 static bool
-cuda__paramsBound(const GPUCommandCuda *command) {
-  const GPUComputePipelineCuda *pipeline;
+cuda__paramsBound(const CommandCuda    *command) {
+  const ComputePipelineCuda    *pipeline;
   uint32_t                      i;
 
   pipeline = command ? command->pipeline : NULL;
@@ -373,7 +373,7 @@ cuda__paramsBound(const GPUCommandCuda *command) {
 
 static uint8_t*
 cuda__reserveParamData(GPUComputePassEncoder *encoder,
-                       GPUCommandCuda        *command,
+                       CommandCuda           *command,
                        uint32_t               size) {
   uint8_t *data;
   uint32_t capacity;
@@ -410,7 +410,7 @@ cuda__reserveParamData(GPUComputePassEncoder *encoder,
   command->paramDataCapacity = capacity;
   data += command->paramDataCount;
   command->paramDataCount += size;
-  gpuDeviceRecordHotPathAlloc(encoder->_device, capacity - oldCapacity);
+  deviceRecordHotPathAlloc(encoder->_device, capacity - oldCapacity);
 
   return data;
 }
@@ -420,10 +420,10 @@ cuda_dispatch(GPUComputePassEncoder *encoder,
               uint32_t               x,
               uint32_t               y,
               uint32_t               z) {
-  GPUCommandCuda  *command;
-  GPUDeviceCuda   *device;
-  GPUDispatchCuda *dispatch;
-  GPUDispatchCuda *dispatches;
+  CommandCuda     *command;
+  DeviceCuda      *device;
+  DispatchCuda    *dispatch;
+  DispatchCuda    *dispatches;
   uint8_t         *paramData;
   size_t           size;
   uint32_t         capacity;
@@ -466,7 +466,7 @@ cuda_dispatch(GPUComputePassEncoder *encoder,
 
     command->dispatches       = dispatches;
     command->dispatchCapacity = capacity;
-    gpuDeviceRecordHotPathAlloc(encoder->_device, size);
+    deviceRecordHotPathAlloc(encoder->_device, size);
   }
 
   dispatch = &command->dispatches[command->dispatchCount];
@@ -498,7 +498,7 @@ cuda_dispatch(GPUComputePassEncoder *encoder,
   dispatch->block[0] = encoder->_workgroupSize[0];
   dispatch->block[1] = encoder->_workgroupSize[1];
   dispatch->block[2] = encoder->_workgroupSize[2];
-  gpuRetainComputePipeline(dispatch->pipeline);
+  retainComputePipeline(dispatch->pipeline);
 }
 
 static void
@@ -507,7 +507,7 @@ cuda_endComputePass(GPUComputePassEncoder *encoder) {
 }
 
 void
-cuda_initCompute(GPUApiCompute *api) {
+cuda_initCompute(ApiCompute    *api) {
   api->createPipeline          = cuda_createComputePipeline;
   api->destroyComputePipeline  = cuda_destroyComputePipeline;
   api->computeCommandEncoder   = cuda_computeCommandEncoder;

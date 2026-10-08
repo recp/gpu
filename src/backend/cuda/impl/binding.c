@@ -16,28 +16,28 @@
 
 #include "../common.h"
 
-typedef struct GPUCudaBindContext {
+typedef struct CudaBindContext {
   GPUComputePassEncoder *pass;
   GPUBindGroup          *group;
   uint32_t               groupIndex;
   bool                   valid;
-} GPUCudaBindContext;
+} CudaBindContext;
 
 static bool
-cuda__paramRangeValid(const GPUComputePipelineCuda *pipeline,
+cuda__paramRangeValid(const ComputePipelineCuda    *pipeline,
                       uint32_t                      offset,
                       uint32_t                      size) {
   return pipeline && size <= pipeline->paramDataSize
          && offset <= pipeline->paramDataSize - size;
 }
 
-static const GPUBindGroupBindingPriv*
+static const BindGroupBindingPriv*
 cuda__findBinding(GPUBindGroup *group,
                   uint32_t      binding,
                   uint32_t      arrayIndex,
-                  GPUBindKind   kind) {
-  GPUBindGroupPriv              *priv;
-  const GPUBindGroupBindingPriv *item;
+                  BindKind      kind) {
+  BindGroupPriv                 *priv;
+  const BindGroupBindingPriv    *item;
   uint32_t                       i;
 
   priv = group ? group->_priv : NULL;
@@ -71,12 +71,12 @@ cuda__boundGroup(GPUComputePassEncoder *pass,
 }
 
 static uint32_t
-cuda__findParam(const GPUComputePipelineCuda *pipeline,
+cuda__findParam(const ComputePipelineCuda    *pipeline,
                 uint32_t                      groupIndex,
                 uint32_t                      binding,
                 uint32_t                      arrayIndex,
-                GPUShaderPTXParamKind         kind) {
-  const GPUShaderPTXParamInfo *param;
+                ShaderPTXParamKind            kind) {
+  const ShaderPTXParamInfo    *param;
   uint32_t                     i;
 
   if (!pipeline) {
@@ -96,10 +96,10 @@ cuda__findParam(const GPUComputePipelineCuda *pipeline,
 }
 
 static void
-cuda__bindTextureMetadata(GPUCommandCuda              *command,
-                          const GPUShaderPTXParamInfo *textureParam,
+cuda__bindTextureMetadata(CommandCuda                 *command,
+                          const ShaderPTXParamInfo    *textureParam,
                           const GPUTextureView        *view) {
-  GPUCudaTextureMetadata metadata;
+  CudaTextureMetadata    metadata;
   const GPUTexture      *texture;
   uint32_t               i;
 
@@ -115,7 +115,7 @@ cuda__bindTextureMetadata(GPUCommandCuda              *command,
   metadata.reserved        = 0u;
 
   for (i = 0u; i < command->pipeline->paramCount; i++) {
-    const GPUShaderPTXParamInfo *param;
+    const ShaderPTXParamInfo    *param;
 
     param = &command->pipeline->params[i];
 
@@ -142,11 +142,11 @@ cuda__bindTextureMetadata(GPUCommandCuda              *command,
 
 static void
 cuda__bindGroupResource(void                          *ctx,
-                        const GPUBindGroupBindingView *binding) {
-  GPUCudaBindContext     *bind;
-  GPUCommandCuda         *command;
-  GPUBindGroupPriv       *group;
-  GPUBindGroupLayoutPriv *layout;
+                        const BindGroupBindingView    *binding) {
+  CudaBindContext        *bind;
+  CommandCuda            *command;
+  BindGroupPriv          *group;
+  BindGroupLayoutPriv    *layout;
   uint32_t                logicalBinding;
   uint32_t                paramIndex;
 
@@ -217,14 +217,14 @@ cuda__resolveSampledTexture(GPUComputePassEncoder       *pass,
                             uint32_t                     activeGroupIndex,
                             GPUBindGroup                *activeGroup,
                             uint32_t                     paramIndex,
-                            const GPUShaderPTXParamInfo *param) {
-  GPUComputePipelineCuda        *pipeline;
-  GPUCommandCuda                *command;
-  const GPUBindGroupBindingPriv *textureBinding;
-  const GPUBindGroupBindingPriv *samplerBinding;
+                            const ShaderPTXParamInfo    *param) {
+  ComputePipelineCuda           *pipeline;
+  CommandCuda                   *command;
+  const BindGroupBindingPriv    *textureBinding;
+  const BindGroupBindingPriv    *samplerBinding;
   GPUBindGroup                  *textureGroup;
   GPUBindGroup                  *samplerGroup;
-  const GPUSamplerCuda          *samplerNative;
+  const SamplerCuda             *samplerNative;
   const CUDA_TEXTURE_DESC       *desc;
   CUtexObject                    textureObject;
   GPUResult                      result;
@@ -306,10 +306,10 @@ cuda__resolveTexture(GPUComputePassEncoder       *pass,
                      uint32_t                     activeGroupIndex,
                      GPUBindGroup                *activeGroup,
                      uint32_t                     paramIndex,
-                     const GPUShaderPTXParamInfo *param) {
-  GPUComputePipelineCuda        *pipeline;
-  GPUCommandCuda                *command;
-  const GPUBindGroupBindingPriv *binding;
+                     const ShaderPTXParamInfo    *param) {
+  ComputePipelineCuda           *pipeline;
+  CommandCuda                   *command;
+  const BindGroupBindingPriv    *binding;
   GPUBindGroup                  *group;
   const CUDA_TEXTURE_DESC       *desc;
   CUtexObject                    textureObject;
@@ -364,10 +364,10 @@ cuda__resolveTextureMetadata(GPUComputePassEncoder       *pass,
                              uint32_t                     activeGroupIndex,
                              GPUBindGroup                *activeGroup,
                              uint32_t                     paramIndex,
-                             const GPUShaderPTXParamInfo *param) {
-  GPUComputePipelineCuda        *pipeline;
-  GPUCommandCuda                *command;
-  const GPUBindGroupBindingPriv *binding;
+                             const ShaderPTXParamInfo    *param) {
+  ComputePipelineCuda           *pipeline;
+  CommandCuda                   *command;
+  const BindGroupBindingPriv    *binding;
   GPUBindGroup                  *group;
 
   command  = pass ? pass->_priv : NULL;
@@ -401,9 +401,9 @@ cuda_setComputeBuffer(GPUComputePassEncoder *encoder,
                       GPUBuffer             *buffer,
                       uint64_t               offset,
                       uint32_t               index) {
-  GPUCommandCuda              *command;
-  GPUBufferCuda               *native;
-  const GPUShaderPTXParamInfo *param;
+  CommandCuda                 *command;
+  BufferCuda                  *native;
+  const ShaderPTXParamInfo    *param;
   CUdeviceptr                  address;
   GPUBufferUsageFlags          usage;
 
@@ -421,8 +421,8 @@ cuda_setComputeBuffer(GPUComputePassEncoder *encoder,
   if (!command || !native || !param
       || param->kind != GPUShaderPTXParamBuffer
       || buffer->device != encoder->_device
-      || !gpuBufferHasUsage(buffer, usage)
-      || !gpuBufferOffsetValid(buffer, offset) || offset == buffer->sizeBytes
+      || !bufferHasUsage(buffer, usage)
+      || !bufferOffsetValid(buffer, offset) || offset == buffer->sizeBytes
       || native->address > UINT64_MAX - offset
       || !cuda__paramRangeValid(command->pipeline,
                                 param->dataOffset,
@@ -444,11 +444,11 @@ void
 cuda_setComputeTexture(GPUComputePassEncoder *encoder,
                        GPUTextureView        *view,
                        uint32_t               index) {
-  GPUCommandCuda              *command;
-  GPUTextureViewCuda          *native;
+  CommandCuda                 *command;
+  TextureViewCuda             *native;
   GPUTexture                  *texture;
-  GPUTextureCuda              *textureNative;
-  const GPUShaderPTXParamInfo *param;
+  TextureCuda                 *textureNative;
+  const ShaderPTXParamInfo    *param;
   CUsurfObject                 surface;
 
   command       = encoder ? encoder->_priv : NULL;
@@ -494,10 +494,10 @@ cuda_bindComputeGroup(GPUComputePassEncoder *pass,
                       GPUBindGroup          *group,
                       uint32_t               dynamicOffsetCount,
                       const uint32_t        *dynamicOffsets) {
-  GPUCudaBindContext           bind;
-  GPUCommandCuda              *command;
-  GPUComputePipelineCuda      *pipeline;
-  const GPUShaderPTXParamInfo *param;
+  CudaBindContext              bind;
+  CommandCuda                 *command;
+  ComputePipelineCuda         *pipeline;
+  const ShaderPTXParamInfo    *param;
   uint32_t                     i;
 
   command  = pass ? pass->_priv : NULL;
@@ -529,13 +529,13 @@ cuda_bindComputeGroup(GPUComputePassEncoder *pass,
     }
   }
 
-  if (!gpuForEachBindGroupBindingWithDynamicOffsets(pipelineLayout,
-                                                    groupIndex,
-                                                    group,
-                                                    dynamicOffsetCount,
-                                                    dynamicOffsets,
-                                                    cuda__bindGroupResource,
-                                                    &bind)
+  if (!forEachBindGroupBindingWithDynamicOffsets(pipelineLayout,
+                                                 groupIndex,
+                                                 group,
+                                                 dynamicOffsetCount,
+                                                 dynamicOffsets,
+                                                 cuda__bindGroupResource,
+                                                 &bind)
       || !bind.valid) {
     return false;
   }
@@ -589,7 +589,7 @@ cuda_rebindComputeGroups(GPUComputePassEncoder *pass) {
                               group,
                               pass->_boundDynamicOffsetCounts[i],
                               pass->_boundDynamicOffsets[i])) {
-      gpuFrameStatsRecordBindEmission(pass->_stats);
+      frameStatsRecordBindEmission(pass->_stats);
       continue;
     }
 
@@ -600,6 +600,6 @@ cuda_rebindComputeGroups(GPUComputePassEncoder *pass) {
 }
 
 void
-cuda_initDescriptor(GPUApiDescriptor *api) {
+cuda_initDescriptor(ApiDescriptor    *api) {
   api->bindComputeGroup = cuda_bindComputeGroup;
 }

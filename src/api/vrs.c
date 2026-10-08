@@ -24,7 +24,7 @@
 #include <math.h>
 
 static bool
-gpu_validShadingRate(GPUShadingRateEXT rate) {
+validShadingRate(GPUShadingRateEXT rate) {
   switch (rate) {
     case GPU_SHADING_RATE_1X1_EXT:
     case GPU_SHADING_RATE_1X2_EXT:
@@ -41,7 +41,7 @@ gpu_validShadingRate(GPUShadingRateEXT rate) {
 }
 
 static bool
-gpu_validRateMapInfo(const GPURasterizationRateMapCreateInfoEXT *info) {
+validRateMapInfo(const GPURasterizationRateMapCreateInfoEXT *info) {
   const GPURasterizationRateLayerEXT *layer;
   uint32_t                           i, h, v;
 
@@ -79,7 +79,7 @@ gpu_validRateMapInfo(const GPURasterizationRateMapCreateInfoEXT *info) {
 }
 
 static bool
-gpu_validRateMapCoordinate(GPUCoordinate2D coordinate) {
+validRateMapCoordinate(GPUCoordinate2D coordinate) {
   return isfinite(coordinate.x) && isfinite(coordinate.y) && coordinate.x >= 0.0f && coordinate.y >= 0.0f;
 }
 
@@ -87,7 +87,7 @@ GPU_EXPORT
 GPUResult
 GPUGetVRSCapabilitiesEXT(const GPUAdapter      *adapter,
                          GPUVRSCapabilitiesEXT *outCaps) {
-  GPUApi *api;
+  Api    *api;
 
   if (!adapter || !outCaps) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -95,7 +95,7 @@ GPUGetVRSCapabilitiesEXT(const GPUAdapter      *adapter,
 
   memset(outCaps, 0, sizeof(*outCaps));
 
-  if (!(api = gpuAdapterApi(adapter)) || !api->vrs.getCapabilities) {
+  if (!(api = adapterApi(adapter)) || !api->vrs.getCapabilities) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -109,7 +109,7 @@ GPUResult
 GPUCreateRasterizationRateMapEXT(GPUDevice                                  *device,
                                  const GPURasterizationRateMapCreateInfoEXT *info,
                                  GPURasterizationRateMapEXT                **outMap) {
-  GPUApi   *api;
+  Api      *api;
   GPUResult result;
 
   if (!outMap) {
@@ -118,7 +118,7 @@ GPUCreateRasterizationRateMapEXT(GPUDevice                                  *dev
 
   *outMap = NULL;
 
-  if (!device || !gpu_validRateMapInfo(info)) {
+  if (!device || !validRateMapInfo(info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -131,7 +131,7 @@ GPUCreateRasterizationRateMapEXT(GPUDevice                                  *dev
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->vrs.createRateMap) {
+  if (!(api = deviceApi(device)) || !api->vrs.createRateMap) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -147,13 +147,13 @@ GPUCreateRasterizationRateMapEXT(GPUDevice                                  *dev
 GPU_EXPORT
 void
 GPUDestroyRasterizationRateMapEXT(GPURasterizationRateMapEXT *map) {
-  GPUApi *api;
+  Api    *api;
 
   if (!map || !map->device) {
     return;
   }
 
-  api = gpuDeviceApi(map->device);
+  api = deviceApi(map->device);
 
   if (api && api->vrs.destroyRateMap) {
     api->vrs.destroyRateMap(map);
@@ -165,13 +165,13 @@ GPUResult
 GPUGetRasterizationRateMapPhysicalSizeEXT(const GPURasterizationRateMapEXT *map,
                                           uint32_t                          layer,
                                           GPUExtent2D                      *outSize) {
-  GPUApi *api;
+  Api    *api;
 
   if (!map || !map->device || !outSize || layer >= map->layerCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuDeviceApi(map->device)) || !api->vrs.getRateMapPhysicalSize) {
+  if (!(api = deviceApi(map->device)) || !api->vrs.getRateMapPhysicalSize) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -184,16 +184,16 @@ GPUMapRasterizationRateScreenToPhysicalEXT(const GPURasterizationRateMapEXT *map
                                            uint32_t                          layer,
                                            GPUCoordinate2D                   screen,
                                            GPUCoordinate2D                  *outPhysical) {
-  GPUApi *api;
+  Api    *api;
 
   if (!map || !map->device || !outPhysical
-      || layer >= map->layerCount || !gpu_validRateMapCoordinate(screen)
+      || layer >= map->layerCount || !validRateMapCoordinate(screen)
       || screen.x > (float)map->screenSize.width
       || screen.y > (float)map->screenSize.height) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuDeviceApi(map->device)) || !api->vrs.mapRateMapScreenToPhysical) {
+  if (!(api = deviceApi(map->device)) || !api->vrs.mapRateMapScreenToPhysical) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -210,11 +210,11 @@ GPUMapRasterizationRatePhysicalToScreenEXT(const GPURasterizationRateMapEXT *map
                                            GPUCoordinate2D                   physical,
                                            GPUCoordinate2D                  *outScreen) {
   GPUExtent2D physicalSize;
-  GPUApi     *api;
+  Api        *api;
   GPUResult   result;
 
   if (!map || !map->device || !outScreen
-      || layer >= map->layerCount || !gpu_validRateMapCoordinate(physical)) {
+      || layer >= map->layerCount || !validRateMapCoordinate(physical)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -230,7 +230,7 @@ GPUMapRasterizationRatePhysicalToScreenEXT(const GPURasterizationRateMapEXT *map
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuDeviceApi(map->device)) || !api->vrs.mapRateMapPhysicalToScreen) {
+  if (!(api = deviceApi(map->device)) || !api->vrs.mapRateMapPhysicalToScreen) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -244,7 +244,7 @@ GPU_EXPORT
 GPUResult
 GPUGetRasterizationRateMapParameterInfoEXT(const GPURasterizationRateMapEXT        *map,
                                            GPURasterizationRateMapParameterInfoEXT *outInfo) {
-  GPUApi   *api;
+  Api      *api;
   GPUResult result;
 
   if (!map || !map->device || !outInfo) {
@@ -253,7 +253,7 @@ GPUGetRasterizationRateMapParameterInfoEXT(const GPURasterizationRateMapEXT     
 
   memset(outInfo, 0, sizeof(*outInfo));
 
-  if (!(api = gpuDeviceApi(map->device)) || !api->vrs.getRateMapParameterInfo) {
+  if (!(api = deviceApi(map->device)) || !api->vrs.getRateMapParameterInfo) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -275,11 +275,11 @@ GPUCopyRasterizationRateMapParametersEXT(const GPURasterizationRateMapEXT *map,
                                          GPUBuffer                        *buffer,
                                          uint64_t                          offset) {
   GPURasterizationRateMapParameterInfoEXT info;
-  GPUApi                                 *api;
+  Api                                    *api;
   GPUResult                               result;
 
   if (!map || !map->device || !buffer || buffer->device != map->device
-      || !gpuBufferHasUsage(buffer, GPU_BUFFER_USAGE_UNIFORM)) {
+      || !bufferHasUsage(buffer, GPU_BUFFER_USAGE_UNIFORM)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -290,11 +290,11 @@ GPUCopyRasterizationRateMapParametersEXT(const GPURasterizationRateMapEXT *map,
   }
 
   if ((offset & (info.alignment - 1u)) != 0u
-      || !gpuBufferRangeValid(buffer, offset, info.sizeBytes)) {
+      || !bufferRangeValid(buffer, offset, info.sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuDeviceApi(map->device)) || !api->vrs.copyRateMapParameters) {
+  if (!(api = deviceApi(map->device)) || !api->vrs.copyRateMapParameters) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -308,12 +308,12 @@ GPUSetFragmentShadingRateEXT(GPURenderPassEncoder     *pass,
                              GPUShadingRateCombinerEXT primitiveCombiner,
                              GPUShadingRateCombinerEXT attachmentCombiner) {
   GPUDevice                     *device;
-  GPUApi                        *api;
+  Api                           *api;
   GPUShadingRateFlagsEXT         rateBit;
   GPUShadingRateCombinerFlagsEXT primitiveBit;
   GPUShadingRateCombinerFlagsEXT attachmentBit;
 
-  if (!pass || pass->_ended || !gpu_validShadingRate(rate)
+  if (!pass || pass->_ended || !validShadingRate(rate)
       || primitiveCombiner < GPU_SHADING_RATE_COMBINER_KEEP_EXT
       || primitiveCombiner > GPU_SHADING_RATE_COMBINER_MAX_EXT
       || attachmentCombiner < GPU_SHADING_RATE_COMBINER_KEEP_EXT
@@ -335,12 +335,12 @@ GPUSetFragmentShadingRateEXT(GPURenderPassEncoder     *pass,
       || (device->vrsCapabilities.rates & rateBit) == 0u
       || (device->vrsCapabilities.combiners & primitiveBit) == 0u
       || (device->vrsCapabilities.combiners & attachmentBit) == 0u) {
-    gpuDeviceRecordValidationError(device,
-                                   "GPUSetFragmentShadingRateEXT skipped: state exceeds device capabilities");
+    deviceRecordValidationError(device,
+                                "GPUSetFragmentShadingRateEXT skipped: state exceeds device capabilities");
     return;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->rce.setFragmentShadingRate) {
+  if (!(api = deviceApi(device)) || !api->rce.setFragmentShadingRate) {
     return;
   }
 

@@ -27,8 +27,8 @@
 
 GPU_HIDE
 bool
-gpuCacheFileBegin(const char        *path,
-                  GPUCacheFileGuard *guard) {
+cacheFileBegin(const char        *path,
+               CacheFileGuard    *guard) {
   char   *lockPath;
   size_t  pathLength;
 #if !defined(_WIN32) && !defined(WIN32)
@@ -108,7 +108,7 @@ gpuCacheFileBegin(const char        *path,
 
 GPU_HIDE
 void
-gpuCacheFileEnd(GPUCacheFileGuard *guard) {
+cacheFileEnd(CacheFileGuard    *guard) {
 #if !defined(_WIN32) && !defined(WIN32)
   int descriptor;
 #endif
@@ -137,7 +137,7 @@ gpuCacheFileEnd(GPUCacheFileGuard *guard) {
 
 GPU_HIDE
 char*
-gpuCacheFileTemporaryPath(const char *path, const void *identity) {
+cacheFileTemporaryPath(const char *path, const void *identity) {
   char   *temporaryPath;
   size_t  pathLength;
   int     processId;
@@ -174,7 +174,7 @@ gpuCacheFileTemporaryPath(const char *path, const void *identity) {
 
 GPU_HIDE
 bool
-gpuCacheFileReplace(const char *source, const char *destination) {
+cacheFileReplace(const char *source, const char *destination) {
   if (!source || !destination) {
     return false;
   }

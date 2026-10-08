@@ -71,11 +71,11 @@ check_device_error_callback(GPUDevice *device) {
   }
 
 #if defined(GPU_STATIC)
-  gpuDeviceReportError(device,
-                       GPU_DEVICE_ERROR_BACKEND,
-                       GPU_DEVICE_LOST_REASON_UNKNOWN,
-                       GPU_ERROR_BACKEND_FAILURE,
-                       "backend failure");
+  deviceReportError(device,
+                    GPU_DEVICE_ERROR_BACKEND,
+                    GPU_DEVICE_LOST_REASON_UNKNOWN,
+                    GPU_ERROR_BACKEND_FAILURE,
+                    "backend failure");
 
   if (capture.count != 1u || capture.device != device
       || capture.type != GPU_DEVICE_ERROR_BACKEND
@@ -113,11 +113,11 @@ check_device_error_callback(GPUDevice *device) {
     goto fail;
   }
 #if defined(GPU_STATIC)
-  gpuDeviceReportError(device,
-                       GPU_DEVICE_ERROR_BACKEND,
-                       GPU_DEVICE_LOST_REASON_UNKNOWN,
-                       GPU_ERROR_BACKEND_FAILURE,
-                       "cleared callback");
+  deviceReportError(device,
+                    GPU_DEVICE_ERROR_BACKEND,
+                    GPU_DEVICE_LOST_REASON_UNKNOWN,
+                    GPU_ERROR_BACKEND_FAILURE,
+                    "cleared callback");
 #elif GPU_BUILD_WITH_VALIDATION
   GPUDraw(&pass, 3u, 1u, 0u, 0u);
 #endif
@@ -151,11 +151,11 @@ check_device_loss_callback(GPUDevice *device) {
     }
   }
 
-  gpuDeviceReportError(&devices[0],
-                       GPU_DEVICE_ERROR_OUT_OF_MEMORY,
-                       GPU_DEVICE_LOST_REASON_REMOVED,
-                       GPU_ERROR_OUT_OF_MEMORY,
-                       "out of memory");
+  deviceReportError(&devices[0],
+                    GPU_DEVICE_ERROR_OUT_OF_MEMORY,
+                    GPU_DEVICE_LOST_REASON_REMOVED,
+                    GPU_ERROR_OUT_OF_MEMORY,
+                    "out of memory");
 
   if (capture.count != 1u || capture.type != GPU_DEVICE_ERROR_OUT_OF_MEMORY
       || capture.result != GPU_ERROR_OUT_OF_MEMORY
@@ -164,11 +164,11 @@ check_device_loss_callback(GPUDevice *device) {
     return 0;
   }
 
-  gpuDeviceReportError(&devices[0],
-                       GPU_DEVICE_ERROR_LOST,
-                       GPU_DEVICE_LOST_REASON_RESET,
-                       GPU_ERROR_BACKEND_FAILURE,
-                       "device reset");
+  deviceReportError(&devices[0],
+                    GPU_DEVICE_ERROR_LOST,
+                    GPU_DEVICE_LOST_REASON_RESET,
+                    GPU_ERROR_BACKEND_FAILURE,
+                    "device reset");
 
   if (capture.count != 2u || capture.type != GPU_DEVICE_ERROR_LOST
       || capture.lostReason != GPU_DEVICE_LOST_REASON_RESET
@@ -181,11 +181,11 @@ check_device_loss_callback(GPUDevice *device) {
   GPUSetDeviceErrorCallback(&devices[0], capture_device_error, &capture);
 
   for (i = 0u; i < GPU_ARRAY_LEN(devices); i++) {
-    gpuDeviceReportError(&devices[i],
-                         GPU_DEVICE_ERROR_LOST,
-                         GPU_DEVICE_LOST_REASON_REMOVED,
-                         GPU_ERROR_BACKEND_FAILURE,
-                         "device removed");
+    deviceReportError(&devices[i],
+                      GPU_DEVICE_ERROR_LOST,
+                      GPU_DEVICE_LOST_REASON_REMOVED,
+                      GPU_ERROR_BACKEND_FAILURE,
+                      "device removed");
   }
 
   if (capture.count != 3u || capture.device != &devices[1]
@@ -495,7 +495,7 @@ check_transient_fallback(GPUDevice *device) {
     return 0;
   }
 
-  if (gpuDeviceAdvanceFrameSlot(device) != GPU_OK) {
+  if (deviceAdvanceFrameSlot(device) != GPU_OK) {
     fprintf(stderr, "transient frame slot advance failed\n");
     return 0;
   }

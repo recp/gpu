@@ -22,11 +22,11 @@ extern "C" {
 
 #include <gpu/gpu.h>
 
-typedef struct GPUApiPipelineCache {
+typedef struct ApiPipelineCache {
   GPUResult (*create)(GPUDevice *device, const GPUPipelineCacheCreateInfo *info, GPUPipelineCache *cache);
 
   void (*destroy)(GPUPipelineCache *cache);
-} GPUApiPipelineCache;
+} ApiPipelineCache;
 
 #ifdef __cplusplus
 }

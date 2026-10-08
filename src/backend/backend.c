@@ -19,8 +19,8 @@
 
 #include "backends.h"
 
-static GPUApi*
-gpu__selectDefaultBackend(void) {
+static Api*
+selectDefaultBackend(void) {
 #if GPU_BACKEND_METAL_ONLY
   return backend_metal();
 #elif GPU_BACKEND_VULKAN_ONLY
@@ -45,43 +45,43 @@ gpu__selectDefaultBackend(void) {
 }
 
 GPU_HIDE
-GPUApi*
-gpuApiForBackend(GPUBackend backend) {
+Api*
+apiForBackend(GPUBackend backend) {
 #if GPU_BACKEND_METAL_ONLY
   if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_METAL) {
-    return gpu__selectDefaultBackend();
+    return selectDefaultBackend();
   }
 
   return NULL;
 #elif GPU_BACKEND_VULKAN_ONLY
   if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_VULKAN) {
-    return gpu__selectDefaultBackend();
+    return selectDefaultBackend();
   }
 
   return NULL;
 #elif GPU_BACKEND_DX12_ONLY
   if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_DX12) {
-    return gpu__selectDefaultBackend();
+    return selectDefaultBackend();
   }
 
   return NULL;
 #elif GPU_BACKEND_WEBGPU_ONLY
   if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_WEBGPU) {
-    return gpu__selectDefaultBackend();
+    return selectDefaultBackend();
   }
 
   return NULL;
 #elif GPU_BACKEND_CUDA_ONLY
   if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_CUDA) {
-    return gpu__selectDefaultBackend();
+    return selectDefaultBackend();
   }
 
   return NULL;
 #else
-  GPUApi *api;
+  Api    *api;
 
   if (backend == GPU_BACKEND_DEFAULT) {
-    return gpu__selectDefaultBackend();
+    return selectDefaultBackend();
   }
 
   api = NULL;

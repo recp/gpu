@@ -21,23 +21,23 @@ static bool
 webgpu_configureSwapchain(GPUSwapchain                 *swapchain,
                           const GPUSwapchainCreateInfo *info) {
   WGPUSurfaceConfiguration configuration = WGPU_SURFACE_CONFIGURATION_INIT;
-  GPUSwapchainWebGPU      *native;
-  GPUSurfaceWebGPU        *surface;
+  SwapchainWebGPU         *native;
+  SurfaceWebGPU           *surface;
 
-  native  = gpu_webgpuSwapchain(swapchain);
-  surface = gpu_webgpuSurface(info->surface);
+  native  = webgpuSwapchain(swapchain);
+  surface = webgpuSurface(info->surface);
 
   if (!native || !surface || !surface->surface) {
     return false;
   }
 
-  native->format = gpu_webgpuFormat(info->format);
+  native->format = webgpuFormat(info->format);
 
   if (native->format == WGPUTextureFormat_Undefined) {
     return false;
   }
 
-  native->presentMode = gpu_webgpuPresentMode(info->presentMode);
+  native->presentMode = webgpuPresentMode(info->presentMode);
   native->surface     = surface->surface;
 
   configuration.device      = native->device;
@@ -53,17 +53,17 @@ webgpu_configureSwapchain(GPUSwapchain                 *swapchain,
 }
 
 static GPUSwapchain*
-webgpu_createSwapchain(GPUApi                       *api,
+webgpu_createSwapchain(Api                          *api,
                        GPUDevice                    *device,
                        GPUQueue                     *queue,
                        const GPUSwapchainCreateInfo *info) {
-  GPUDeviceWebGPU    *deviceNative;
-  GPUSwapchainWebGPU *native;
+  DeviceWebGPU       *deviceNative;
+  SwapchainWebGPU    *native;
   GPUSwapchain       *swapchain;
 
   GPU__UNUSED(api);
   GPU__UNUSED(queue);
-  deviceNative = gpu_webgpuDevice(device);
+  deviceNative = webgpuDevice(device);
 
   if (!deviceNative || !deviceNative->device || !info) {
     return NULL;
@@ -93,9 +93,9 @@ webgpu_createSwapchain(GPUApi                       *api,
 static GPUResult
 webgpu_resizeSwapchain(GPUSwapchain *swapchain, GPUExtent2D size) {
   WGPUSurfaceConfiguration configuration = WGPU_SURFACE_CONFIGURATION_INIT;
-  GPUSwapchainWebGPU      *native;
+  SwapchainWebGPU         *native;
 
-  native = gpu_webgpuSwapchain(swapchain);
+  native = webgpuSwapchain(swapchain);
 
   if (!native || !native->surface || native->acquired) {
     return GPU_ERROR_BACKEND_FAILURE;
@@ -115,9 +115,9 @@ webgpu_resizeSwapchain(GPUSwapchain *swapchain, GPUExtent2D size) {
 
 static void
 webgpu_destroySwapchain(GPUSwapchain *swapchain) {
-  GPUSwapchainWebGPU *native;
+  SwapchainWebGPU    *native;
 
-  native = gpu_webgpuSwapchain(swapchain);
+  native = webgpuSwapchain(swapchain);
 
   if (native) {
     if (native->currentView) {
@@ -139,7 +139,7 @@ webgpu_destroySwapchain(GPUSwapchain *swapchain) {
 }
 
 void
-webgpu_initSwapchain(GPUApiSwapchain *api) {
+webgpu_initSwapchain(ApiSwapchain    *api) {
   api->createSwapchain  = webgpu_createSwapchain;
   api->resizeSwapchain  = webgpu_resizeSwapchain;
   api->destroySwapchain = webgpu_destroySwapchain;

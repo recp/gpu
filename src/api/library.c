@@ -29,7 +29,7 @@ _Static_assert((uint32_t)GPUShaderPTXTextureMetadataSampleCountBit ==
                  (uint32_t)USL_RUNTIME_PTX_TEXTURE_METADATA_SAMPLE_COUNT,
                "USL PTX sample metadata ABI drift");
 
-typedef struct GPUShaderEntryInfo {
+typedef struct ShaderEntryInfo {
   char    *name;
   char    *nodeName;
   char    *payloadType;
@@ -51,33 +51,33 @@ typedef struct GPUShaderEntryInfo {
   uint32_t nodeLaunch;
   uint32_t nameLength;
   bool     nodeProgramEntry;
-} GPUShaderEntryInfo;
+} ShaderEntryInfo;
 
-typedef struct GPUShaderEntryInfoList {
+typedef struct ShaderEntryInfoList {
   uint32_t           count;
-  GPUShaderEntryInfo entries[];
-} GPUShaderEntryInfoList;
+  ShaderEntryInfo    entries[];
+} ShaderEntryInfoList;
 
-typedef struct GPUShaderResourceBindingInfo {
+typedef struct ShaderResourceBindingInfo {
   uint32_t       groupIndex;
   uint32_t       binding;
   GPUBindingType bindingType;
   uint32_t       backendBinding;
-} GPUShaderResourceBindingInfo;
+} ShaderResourceBindingInfo;
 
-typedef struct GPUShaderResourceBindingInfoList {
+typedef struct ShaderResourceBindingInfoList {
   uint32_t                     count;
-  GPUShaderResourceBindingInfo entries[];
-} GPUShaderResourceBindingInfoList;
+  ShaderResourceBindingInfo    entries[];
+} ShaderResourceBindingInfoList;
 
-typedef struct GPUShaderUSLSource {
+typedef struct ShaderUSLSource {
   void                 *artifact;
   USLTargetSpec         target;
   USLCompileOptions     options;
   size_t                artifactSize;
   bool                  disableDiskCache;
   USLCapabilityAtomDesc atoms[];
-} GPUShaderUSLSource;
+} ShaderUSLSource;
 
 static const GPUFormat gpu_storageFormats[USL_RUNTIME_TEXEL_FORMAT_COUNT] = {
   [USL_RUNTIME_TEXEL_FORMAT_UNKNOWN]        = GPU_FORMAT_UNDEFINED,
@@ -145,18 +145,18 @@ static const uint32_t gpu_floatAtomicFeatures[] = {
 };
 
 static int
-gpu_shaderVisibilityFromUSLStage(uint32_t             stage,
-                                 GPUShaderStageFlags *outVisibility);
+shaderVisibilityFromUSLStage(uint32_t             stage,
+                             GPUShaderStageFlags *outVisibility);
 
 static GPUResult
-gpu_createShaderLibraryFromUSLImpl(GPUDevice         *device,
-                                   const void        *bytecodeData,
-                                   uint64_t           bytecodeSize,
-                                   bool               disableDiskCache,
-                                   GPUShaderLibrary **outLibrary);
+createShaderLibraryFromUSLImpl(GPUDevice         *device,
+                               const void        *bytecodeData,
+                               uint64_t           bytecodeSize,
+                               bool               disableDiskCache,
+                               GPUShaderLibrary **outLibrary);
 
 static void
-gpu_clearShaderUSLSource(GPUShaderLibrary *library) {
+clearShaderUSLSource(GPUShaderLibrary *library) {
   if (!library) {
     return;
   }
@@ -166,7 +166,7 @@ gpu_clearShaderUSLSource(GPUShaderLibrary *library) {
 }
 
 static void
-gpu_clearShaderMetadata(GPUShaderLibrary *library) {
+clearShaderMetadata(GPUShaderLibrary *library) {
   if (!library) {
     return;
   }
@@ -184,13 +184,13 @@ gpu_clearShaderMetadata(GPUShaderLibrary *library) {
 }
 
 static int
-gpu_setShaderUSLSource(GPUShaderLibrary        *library,
-                       const void              *artifact,
-                       uint64_t                 artifactSize,
-                       const USLTargetSpec     *target,
-                       const USLCompileOptions *options,
-                       bool                     disableDiskCache) {
-  GPUShaderUSLSource *source;
+setShaderUSLSource(GPUShaderLibrary        *library,
+                   const void              *artifact,
+                   uint64_t                 artifactSize,
+                   const USLTargetSpec     *target,
+                   const USLCompileOptions *options,
+                   bool                     disableDiskCache) {
+  ShaderUSLSource    *source;
   size_t              atomBytes;
   size_t              totalSize;
 
@@ -229,7 +229,7 @@ gpu_setShaderUSLSource(GPUShaderLibrary        *library,
 
   memcpy(source->artifact, artifact, source->artifactSize);
 
-  gpu_clearShaderUSLSource(library);
+  clearShaderUSLSource(library);
 
   library->_uslSource = source;
 
@@ -237,15 +237,15 @@ gpu_setShaderUSLSource(GPUShaderLibrary        *library,
 }
 
 static GPUResult
-gpu_compileShaderLibraryEntries(const GPUShaderLibrary     *library,
-                                const char *const          *entryPoints,
-                                uint32_t                    entryPointCount,
-                                const GPUPipelineConstants *constants,
-                                GPUShaderSourceBlob        *outSource) {
+compileShaderLibraryEntries(const GPUShaderLibrary     *library,
+                            const char *const          *entryPoints,
+                            uint32_t                    entryPointCount,
+                            const GPUPipelineConstants *constants,
+                            ShaderSourceBlob           *outSource) {
   USCompileOutput           output = {0};
   USCompileInput            input  = {0};
   USLTargetSpec             target;
-  const GPUShaderUSLSource *source;
+  const ShaderUSLSource    *source;
   const GPUConstant        *value;
   USConstant               *values;
   USResult                  result;
@@ -268,7 +268,7 @@ gpu_compileShaderLibraryEntries(const GPUShaderLibrary     *library,
   if (target.backend == USL_BACKEND_DXIL
       && target.profile > USL_TARGET_PROFILE_HLSL_SM_6_8) {
     for (i = 0u; i < entryPointCount; i++) {
-      if (gpuGetShaderLibraryEntryStage(library, entryPoints[i], &stage)
+      if (getShaderLibraryEntryStage(library, entryPoints[i], &stage)
           && (stage == GPU_SHADER_STAGE_TASK_BIT
               || stage == GPU_SHADER_STAGE_MESH_BIT)) {
         target.profile = USL_TARGET_PROFILE_HLSL_SM_6_8;
@@ -370,7 +370,7 @@ gpu_compileShaderLibraryEntries(const GPUShaderLibrary     *library,
 }
 
 static void
-gpu_clearShaderReflection(GPUShaderReflection *reflection) {
+clearShaderReflection(GPUShaderReflection *reflection) {
   if (!reflection) {
     return;
   }
@@ -380,18 +380,18 @@ gpu_clearShaderReflection(GPUShaderReflection *reflection) {
 }
 
 static int
-gpu_uslRuntimeInfoIsUsable(const USRuntimeInfo *runtimeInfo) {
+uslRuntimeInfoIsUsable(const USRuntimeInfo *runtimeInfo) {
   return runtimeInfo
          && runtimeInfo->abi_version == USL_RUNTIME_INFO_VERSION;
 }
 
 static int
-gpu_subgroupOperationsFromUSL(uint32_t                          uslOperations,
-                              GPUBackendSubgroupOperationFlags *outOperations) {
+subgroupOperationsFromUSL(uint32_t                          uslOperations,
+                          BackendSubgroupOperationFlags    *outOperations) {
   const uint32_t                   knownOperations = USL_RUNTIME_SUBGROUP_OPERATION_BASIC
                                                      | USL_RUNTIME_SUBGROUP_OPERATION_SHUFFLE
                                                      | USL_RUNTIME_SUBGROUP_OPERATION_SHUFFLE_RELATIVE;
-  GPUBackendSubgroupOperationFlags operations;
+  BackendSubgroupOperationFlags    operations;
 
   if (!outOperations || (uslOperations & ~knownOperations) != 0u) {
     return 0;
@@ -417,8 +417,8 @@ gpu_subgroupOperationsFromUSL(uint32_t                          uslOperations,
 }
 
 static int
-gpu_subgroupMatrixComponentFromUSL(uint32_t                           elementKind,
-                                   GPUSubgroupMatrixComponentTypeEXT *outType) {
+subgroupMatrixComponentFromUSL(uint32_t                           elementKind,
+                               GPUSubgroupMatrixComponentTypeEXT *outType) {
   if (!outType) {
     return 0;
   }
@@ -463,8 +463,8 @@ gpu_subgroupMatrixComponentFromUSL(uint32_t                           elementKin
 }
 
 static int
-gpu_subgroupMatrixPropertyMatches(const GPUSubgroupMatrixPropertiesEXT      *property,
-                                  const USLRuntimeSubgroupMatrixRequirement *requirement) {
+subgroupMatrixPropertyMatches(const GPUSubgroupMatrixPropertiesEXT      *property,
+                              const USLRuntimeSubgroupMatrixRequirement *requirement) {
   GPUSubgroupMatrixComponentTypeEXT type;
   GPUShaderStageFlags               stage;
   GPUSubgroupMatrixComponentTypeEXT aType;
@@ -476,20 +476,20 @@ gpu_subgroupMatrixPropertyMatches(const GPUSubgroupMatrixPropertiesEXT      *pro
       || requirement->scope != USL_RUNTIME_SUBGROUP_MATRIX_SCOPE_SUBGROUP
       || property->scope != GPU_SUBGROUP_MATRIX_SCOPE_SUBGROUP_EXT
       || property->saturatingAccumulation
-      || !gpu_shaderVisibilityFromUSLStage(requirement->stage, &stage)
+      || !shaderVisibilityFromUSLStage(requirement->stage, &stage)
       || (property->stages & stage) == 0u) {
     return 0;
   }
 
   if (requirement->operation == USL_RUNTIME_SUBGROUP_MATRIX_OPERATION_MAD) {
-    return gpu_subgroupMatrixComponentFromUSL(requirement->a_element_kind,
-                                              &aType)
-           && gpu_subgroupMatrixComponentFromUSL(requirement->b_element_kind,
-                                                 &bType)
-           && gpu_subgroupMatrixComponentFromUSL(requirement->c_element_kind,
-                                                 &cType)
-           && gpu_subgroupMatrixComponentFromUSL(requirement->result_element_kind,
-                                                 &resultType)
+    return subgroupMatrixComponentFromUSL(requirement->a_element_kind,
+                                          &aType)
+           && subgroupMatrixComponentFromUSL(requirement->b_element_kind,
+                                             &bType)
+           && subgroupMatrixComponentFromUSL(requirement->c_element_kind,
+                                             &cType)
+           && subgroupMatrixComponentFromUSL(requirement->result_element_kind,
+                                             &resultType)
            && property->m == requirement->m
            && property->n == requirement->n
            && property->k == requirement->k
@@ -503,7 +503,7 @@ gpu_subgroupMatrixPropertyMatches(const GPUSubgroupMatrixPropertiesEXT      *pro
     return 0;
   }
 
-  if (!gpu_subgroupMatrixComponentFromUSL(requirement->element_kind, &type)) {
+  if (!subgroupMatrixComponentFromUSL(requirement->element_kind, &type)) {
     return 0;
   }
 
@@ -527,8 +527,8 @@ gpu_subgroupMatrixPropertyMatches(const GPUSubgroupMatrixPropertiesEXT      *pro
 }
 
 static int
-gpu_subgroupMatrixRequirementsEnabled(const GPUDevice     *device,
-                                      const USRuntimeInfo *runtimeInfo) {
+subgroupMatrixRequirementsEnabled(const GPUDevice     *device,
+                                  const USRuntimeInfo *runtimeInfo) {
   GPUSubgroupMatrixPropertiesEXT *properties;
   size_t                          propertyBytes;
   GPUResult                       result;
@@ -583,8 +583,8 @@ gpu_subgroupMatrixRequirementsEnabled(const GPUDevice     *device,
     matched = 0;
 
     for (j = 0u; j < propertyCount; j++) {
-      if (gpu_subgroupMatrixPropertyMatches(&properties[j],
-                                            &runtimeInfo->subgroup_matrix_requirements[i])) {
+      if (subgroupMatrixPropertyMatches(&properties[j],
+                                        &runtimeInfo->subgroup_matrix_requirements[i])) {
         matched = 1;
         break;
       }
@@ -599,15 +599,15 @@ gpu_subgroupMatrixRequirementsEnabled(const GPUDevice     *device,
 }
 
 static int
-gpu_subgroupRequirementsEnabled(const GPUDevice     *device,
-                                const USRuntimeInfo *runtimeInfo) {
-  GPUApi                     *api;
+subgroupRequirementsEnabled(const GPUDevice     *device,
+                            const USRuntimeInfo *runtimeInfo) {
+  Api                        *api;
   const USLRuntimeEntryPoint *entry;
 
-  GPUBackendSubgroupOperationFlags operations;
+  BackendSubgroupOperationFlags    operations;
   GPUShaderStageFlags              stage;
 
-  if (!device || !runtimeInfo || !(api = gpuDeviceApi(device))) {
+  if (!device || !runtimeInfo || !(api = deviceApi(device))) {
     return 0;
   }
 
@@ -620,9 +620,9 @@ gpu_subgroupRequirementsEnabled(const GPUDevice     *device,
     }
 
     if (!api->device.supportsSubgroupOperations
-        || !gpu_shaderVisibilityFromUSLStage(entry->stage, &stage)
-        || !gpu_subgroupOperationsFromUSL(entry->subgroup_operation_flags,
-                                          &operations)
+        || !shaderVisibilityFromUSLStage(entry->stage, &stage)
+        || !subgroupOperationsFromUSL(entry->subgroup_operation_flags,
+                                      &operations)
         || !api->device.supportsSubgroupOperations(device->adapter,
                                                    stage,
                                                    operations)) {
@@ -634,8 +634,8 @@ gpu_subgroupRequirementsEnabled(const GPUDevice     *device,
 }
 
 static int
-gpu_shaderRequirementsEnabled(const GPUDevice     *device,
-                              const USRuntimeInfo *runtimeInfo) {
+shaderRequirementsEnabled(const GPUDevice     *device,
+                          const USRuntimeInfo *runtimeInfo) {
   const USLRuntimeCapabilityRequirement *requirement;
   const USLRuntimeCapabilityRequirement *previousRequirement;
   uint32_t                               flags;
@@ -649,7 +649,7 @@ gpu_shaderRequirementsEnabled(const GPUDevice     *device,
           | USL_BYTECODE_RUNTIME_INFO_FLAG_CAPABILITY_REQUIREMENT_OVERFLOW
           | USL_BYTECODE_RUNTIME_INFO_FLAG_SUBGROUP_MATRIX_REQUIREMENT_OVERFLOW;
 
-  if (!device || !gpu_uslRuntimeInfoIsUsable(runtimeInfo)
+  if (!device || !uslRuntimeInfoIsUsable(runtimeInfo)
       || (runtimeInfo->flags & flags) != 0u
       || runtimeInfo->entry_point_count > USL_RUNTIME_MAX_ENTRY_POINTS
       || runtimeInfo->capability_requirement_count >
@@ -706,12 +706,12 @@ gpu_shaderRequirementsEnabled(const GPUDevice     *device,
     return 0;
   }
 
-  return gpu_subgroupRequirementsEnabled(device, runtimeInfo)
-         && gpu_subgroupMatrixRequirementsEnabled(device, runtimeInfo);
+  return subgroupRequirementsEnabled(device, runtimeInfo)
+         && subgroupMatrixRequirementsEnabled(device, runtimeInfo);
 }
 
 static int
-gpu_shaderVisibilityFromUSLStage(uint32_t stage, GPUShaderStageFlags *outVisibility) {
+shaderVisibilityFromUSLStage(uint32_t stage, GPUShaderStageFlags *outVisibility) {
   if (!outVisibility) {
     return 0;
   }
@@ -757,7 +757,7 @@ gpu_shaderVisibilityFromUSLStage(uint32_t stage, GPUShaderStageFlags *outVisibil
 }
 
 static uint64_t
-gpu_shaderNameHash(const char *name, size_t length) {
+shaderNameHash(const char *name, size_t length) {
   uint64_t hash = UINT64_C(1469598103934665603);
   size_t   i;
 
@@ -769,10 +769,10 @@ gpu_shaderNameHash(const char *name, size_t length) {
   return hash;
 }
 
-static const GPUShaderEntryInfo*
-gpu_findShaderEntry(const GPUShaderLibrary *library, const char *entryPoint) {
-  const GPUShaderEntryInfoList *list;
-  const GPUShaderEntryInfo     *entry;
+static const ShaderEntryInfo*
+findShaderEntry(const GPUShaderLibrary *library, const char *entryPoint) {
+  const ShaderEntryInfoList    *list;
+  const ShaderEntryInfo        *entry;
   uint64_t                      hash;
   size_t                        length;
   uint32_t                      i;
@@ -787,7 +787,7 @@ gpu_findShaderEntry(const GPUShaderLibrary *library, const char *entryPoint) {
     return NULL;
   }
 
-  hash = gpu_shaderNameHash(entryPoint, length);
+  hash = shaderNameHash(entryPoint, length);
   list = library->_entryInfo;
 
   for (i = 0u; i < list->count; i++) {
@@ -804,8 +804,8 @@ gpu_findShaderEntry(const GPUShaderLibrary *library, const char *entryPoint) {
 }
 
 static int
-gpu_executionGraphEntryInfo(const GPUShaderEntryInfo         *entry,
-                            GPUShaderExecutionGraphEntryInfo *outEntry) {
+executionGraphEntryInfo(const ShaderEntryInfo            *entry,
+                        ShaderExecutionGraphEntryInfo    *outEntry) {
   if (!entry || !outEntry || entry->runtimeStage != USL_RUNTIME_STAGE_NODE) {
     return 0;
   }
@@ -821,7 +821,7 @@ gpu_executionGraphEntryInfo(const GPUShaderEntryInfo         *entry,
 }
 
 static int
-gpu_webgpuStorageTier1(uint32_t format) {
+webgpuStorageTier1(uint32_t format) {
   switch (format) {
     case USL_RUNTIME_TEXEL_FORMAT_RGBA8_UNORM:
     case USL_RUNTIME_TEXEL_FORMAT_RGBA8_SNORM:
@@ -848,8 +848,8 @@ gpu_webgpuStorageTier1(uint32_t format) {
 }
 
 static int
-gpu_webgpuSampledReadImage(const GPUShaderLibrary   *library,
-                           const USLRuntimeResource *resource) {
+webgpuSampledReadImage(const GPUShaderLibrary   *library,
+                       const USLRuntimeResource *resource) {
   const GPUDevice *device;
 
   if (!library || !library->_api
@@ -860,14 +860,14 @@ gpu_webgpuSampledReadImage(const GPUShaderLibrary   *library,
   }
 
   return !device->uslStorageExtAccess
-         || (gpu_webgpuStorageTier1(resource->type.texel_format)
+         || (webgpuStorageTier1(resource->type.texel_format)
              && !device->uslStorageExtFormats);
 }
 
 static int
-gpu_bindingTypeFromUSLResource(const GPUShaderLibrary   *library,
-                               const USLRuntimeResource *resource,
-                               GPUBindingType           *outType) {
+bindingTypeFromUSLResource(const GPUShaderLibrary   *library,
+                           const USLRuntimeResource *resource,
+                           GPUBindingType           *outType) {
   uint32_t typeKind;
 
   if (!resource || !outType) {
@@ -894,7 +894,7 @@ gpu_bindingTypeFromUSLResource(const GPUShaderLibrary   *library,
     case USL_RUNTIME_RESOURCE_IMAGE:
       *outType = resource->access == USL_RUNTIME_IMAGE_ACCESS_READ
                  && (typeKind == USL_RUNTIME_TYPE_TEXTURE
-                     || gpu_webgpuSampledReadImage(library, resource))
+                     || webgpuSampledReadImage(library, resource))
                    ? GPU_BINDING_SAMPLED_TEXTURE
                    : GPU_BINDING_STORAGE_TEXTURE;
       return 1;
@@ -913,7 +913,7 @@ gpu_bindingTypeFromUSLResource(const GPUShaderLibrary   *library,
 }
 
 static int
-gpu_textureViewTypeFromUSL(uint32_t source, GPUTextureViewType *outType) {
+textureViewTypeFromUSL(uint32_t source, GPUTextureViewType *outType) {
   if (!outType) {
     return 0;
   }
@@ -948,7 +948,7 @@ gpu_textureViewTypeFromUSL(uint32_t source, GPUTextureViewType *outType) {
 }
 
 static GPUTextureSampleType
-gpu_textureSampleTypeFromUSL(const USLRuntimeTypeDesc *type) {
+textureSampleTypeFromUSL(const USLRuntimeTypeDesc *type) {
   if (type
       && (type->texture_content == USL_RUNTIME_TEXTURE_CONTENT_DEPTH
           || type->texture_content == USL_RUNTIME_TEXTURE_CONTENT_DEPTH_STENCIL)) {
@@ -975,7 +975,7 @@ gpu_textureSampleTypeFromUSL(const USLRuntimeTypeDesc *type) {
 }
 
 static GPUStorageTextureAccess
-gpu_storageTextureAccessFromUSL(uint32_t access) {
+storageTextureAccessFromUSL(uint32_t access) {
   switch (access) {
     case USL_RUNTIME_IMAGE_ACCESS_READ:
       return GPU_STORAGE_TEXTURE_ACCESS_READ_ONLY;
@@ -987,16 +987,16 @@ gpu_storageTextureAccessFromUSL(uint32_t access) {
 }
 
 static GPUFormat
-gpu_storageTextureFormatFromUSL(uint32_t format) {
+storageTextureFormatFromUSL(uint32_t format) {
   return format < GPU_ARRAY_LEN(gpu_storageFormats)
            ? gpu_storageFormats[format]
            : GPU_FORMAT_UNDEFINED;
 }
 
 static int
-gpu_bindingLayoutFromUSLResource(const USLRuntimeResource    *resource,
-                                 GPUBindingType               bindingType,
-                                 GPUShaderResourceReflection *out) {
+bindingLayoutFromUSLResource(const USLRuntimeResource    *resource,
+                             GPUBindingType               bindingType,
+                             GPUShaderResourceReflection *out) {
   if (!resource || !out) {
     return 0;
   }
@@ -1012,30 +1012,30 @@ gpu_bindingLayoutFromUSLResource(const USLRuntimeResource    *resource,
         || (bindingType != GPU_BINDING_UNIFORM_BUFFER && resource->buffer_stride_bytes == 0u);
       return 1;
     case GPU_BINDING_SAMPLED_TEXTURE:
-      if (!gpu_textureViewTypeFromUSL(resource->type.texture_dim,
-                                      &out->sampledTexture.viewType)) {
+      if (!textureViewTypeFromUSL(resource->type.texture_dim,
+                                  &out->sampledTexture.viewType)) {
         return 0;
       }
 
       out->sampledTexture.sampleType =
-        gpu_textureSampleTypeFromUSL(&resource->type);
+        textureSampleTypeFromUSL(&resource->type);
       out->sampledTexture.multisampled = resource->type.is_multisampled != 0u;
       return 1;
     case GPU_BINDING_STORAGE_TEXTURE:
-      if (!gpu_textureViewTypeFromUSL(resource->type.texture_dim,
-                                      &out->storageTexture.viewType)) {
+      if (!textureViewTypeFromUSL(resource->type.texture_dim,
+                                  &out->storageTexture.viewType)) {
         return 0;
       }
 
       out->storageTexture.format =
-        gpu_storageTextureFormatFromUSL(resource->type.texel_format);
+        storageTextureFormatFromUSL(resource->type.texel_format);
 
       if (out->storageTexture.format == GPU_FORMAT_UNDEFINED) {
         return 0;
       }
 
       out->storageTexture.access =
-        gpu_storageTextureAccessFromUSL(resource->type.image_access);
+        storageTextureAccessFromUSL(resource->type.image_access);
       return 1;
     case GPU_BINDING_SAMPLER:
       out->sampler.type = resource->type.sampler_kind ==
@@ -1049,8 +1049,8 @@ gpu_bindingLayoutFromUSLResource(const USLRuntimeResource    *resource,
 }
 
 static int
-gpu_shaderResourceLayoutEqual(const GPUShaderResourceReflection *a,
-                              const GPUShaderResourceReflection *b) {
+shaderResourceLayoutEqual(const GPUShaderResourceReflection *a,
+                          const GPUShaderResourceReflection *b) {
   if (!a || !b || a->bindingType != b->bindingType) {
     return 0;
   }
@@ -1078,9 +1078,9 @@ gpu_shaderResourceLayoutEqual(const GPUShaderResourceReflection *a,
 }
 
 static int
-gpu_shaderPublicBindingFromUSLResource(const USLRuntimeResource *resource,
-                                       uint32_t                 *outGroupIndex,
-                                       uint32_t                 *outBinding) {
+shaderPublicBindingFromUSLResource(const USLRuntimeResource *resource,
+                                   uint32_t                 *outGroupIndex,
+                                   uint32_t                 *outBinding) {
   if (!resource || !outGroupIndex || !outBinding || resource->binding < 0) {
     return 0;
   }
@@ -1092,9 +1092,9 @@ gpu_shaderPublicBindingFromUSLResource(const USLRuntimeResource *resource,
 }
 
 static int
-gpu_shaderBackendBindingFromUSLResource(GPUBackend                backend,
-                                        const USLRuntimeResource *resource,
-                                        uint32_t                 *outBinding) {
+shaderBackendBindingFromUSLResource(GPUBackend                backend,
+                                    const USLRuntimeResource *resource,
+                                    uint32_t                 *outBinding) {
   if (!resource || !outBinding || resource->binding < 0) {
     return 0;
   }
@@ -1133,8 +1133,8 @@ gpu_shaderBackendBindingFromUSLResource(GPUBackend                backend,
 }
 
 static int
-gpu_staticSamplerDescEqual(const GPUStaticSamplerDesc *a,
-                           const GPUStaticSamplerDesc *b) {
+staticSamplerDescEqual(const StaticSamplerDesc    *a,
+                       const StaticSamplerDesc    *b) {
   return a && b
          && a->minFilter == b->minFilter
          && a->magFilter == b->magFilter
@@ -1147,10 +1147,10 @@ gpu_staticSamplerDescEqual(const GPUStaticSamplerDesc *a,
 }
 
 static void
-gpu_staticSamplerInfoFromUSL(const USLRuntimeStaticSampler *source,
-                             GPUShaderStageFlags            visibility,
-                             uint64_t                       entryMask,
-                             GPUShaderStaticSamplerInfo    *out) {
+staticSamplerInfoFromUSL(const USLRuntimeStaticSampler *source,
+                         GPUShaderStageFlags            visibility,
+                         uint64_t                       entryMask,
+                         ShaderStaticSamplerInfo       *out) {
   memset(out, 0, sizeof(*out));
   out->desc.logicalIndex  = source->id;
   out->desc.minFilter     = source->min_filter;
@@ -1179,24 +1179,24 @@ gpu_staticSamplerInfoFromUSL(const USLRuntimeStaticSampler *source,
 }
 
 static int
-gpu_staticSamplerInfoEqual(const GPUShaderStaticSamplerInfo *a,
-                           const GPUShaderStaticSamplerInfo *b) {
+staticSamplerInfoEqual(const ShaderStaticSamplerInfo    *a,
+                       const ShaderStaticSamplerInfo    *b) {
   return a && b
          && a->hlslIndex == b->hlslIndex
          && a->spirvGroup == b->spirvGroup
          && a->spirvBinding == b->spirvBinding
          && a->wgslGroup == b->wgslGroup
          && a->wgslBinding == b->wgslBinding
-         && gpu_staticSamplerDescEqual(&a->desc, &b->desc);
+         && staticSamplerDescEqual(&a->desc, &b->desc);
 }
 
 static int
-gpu_resolvePTXStaticSamplers(const USRuntimeInfo                  *runtime,
-                             const GPUShaderStaticSamplerInfoList *samplers,
-                             GPUShaderPTXInfo                     *ptx) {
-  GPUShaderStaticSamplerInfo     item;
+resolvePTXStaticSamplers(const USRuntimeInfo                  *runtime,
+                         const ShaderStaticSamplerInfoList    *samplers,
+                         ShaderPTXInfo                        *ptx) {
+  ShaderStaticSamplerInfo        item;
   const USLRuntimeStaticSampler *source;
-  GPUShaderPTXParamInfo         *param;
+  ShaderPTXParamInfo            *param;
   uint32_t                       i;
   uint32_t                       samplerIndex;
   uint32_t                       sourceIndex;
@@ -1234,12 +1234,12 @@ gpu_resolvePTXStaticSamplers(const USRuntimeInfo                  *runtime,
       return 0;
     }
 
-    gpu_staticSamplerInfoFromUSL(source, 0u, 0u, &item);
+    staticSamplerInfoFromUSL(source, 0u, 0u, &item);
 
     samplerIndex = UINT32_MAX;
 
     for (matchIndex = 0u; matchIndex < samplers->count; matchIndex++) {
-      if (gpu_staticSamplerInfoEqual(&samplers->items[matchIndex], &item)) {
+      if (staticSamplerInfoEqual(&samplers->items[matchIndex], &item)) {
         samplerIndex = matchIndex;
         break;
       }
@@ -1256,12 +1256,12 @@ gpu_resolvePTXStaticSamplers(const USRuntimeInfo                  *runtime,
 }
 
 static int
-gpu_reserveMetadata(size_t *totalSize,
-                    size_t  alignment,
-                    size_t  headerSize,
-                    size_t  itemCount,
-                    size_t  itemSize,
-                    size_t *outOffset) {
+reserveMetadata(size_t *totalSize,
+                size_t  alignment,
+                size_t  headerSize,
+                size_t  itemCount,
+                size_t  itemSize,
+                size_t *outOffset) {
   size_t alignedSize;
   size_t blockSize;
 
@@ -1295,8 +1295,8 @@ gpu_reserveMetadata(size_t *totalSize,
 }
 
 static int
-gpu_runtimeTextSize(const char text[USL_RUNTIME_NAME_TEXT_MAX],
-                    size_t    *outSize) {
+runtimeTextSize(const char text[USL_RUNTIME_NAME_TEXT_MAX],
+                size_t    *outSize) {
   size_t i;
 
   if (!text || !outSize) {
@@ -1314,7 +1314,7 @@ gpu_runtimeTextSize(const char text[USL_RUNTIME_NAME_TEXT_MAX],
 }
 
 static char*
-gpu_storeMetadataText(char **cursor, const char *text, size_t size) {
+storeMetadataText(char **cursor, const char *text, size_t size) {
   char *stored;
 
   stored = *cursor;
@@ -1325,9 +1325,9 @@ gpu_storeMetadataText(char **cursor, const char *text, size_t size) {
 }
 
 static const USLRuntimeResource*
-gpu_findRuntimeResource(const USRuntimeInfo *runtimeInfo,
-                        uint32_t             entryIndex,
-                        uint32_t             paramIndex) {
+findRuntimeResource(const USRuntimeInfo *runtimeInfo,
+                    uint32_t             entryIndex,
+                    uint32_t             paramIndex) {
   const USLRuntimeResource *resource;
   uint32_t                  i;
 
@@ -1348,12 +1348,12 @@ gpu_findRuntimeResource(const USRuntimeInfo *runtimeInfo,
 }
 
 static int
-gpu_ptxPairShape(const USRuntimeInfo                *runtimeInfo,
-                 const USLRuntimeSampledTexturePair *pair,
-                 const USLRuntimeResource          **outTexture,
-                 const USLRuntimeResource          **outSampler,
-                 uint32_t                           *outTextureCount,
-                 uint32_t                           *outSamplerCount) {
+ptxPairShape(const USRuntimeInfo                *runtimeInfo,
+             const USLRuntimeSampledTexturePair *pair,
+             const USLRuntimeResource          **outTexture,
+             const USLRuntimeResource          **outSampler,
+             uint32_t                           *outTextureCount,
+             uint32_t                           *outSamplerCount) {
   const USLRuntimeResource *sampler;
   const USLRuntimeResource *texture;
   uint32_t                  samplerCount;
@@ -1367,14 +1367,14 @@ gpu_ptxPairShape(const USRuntimeInfo                *runtimeInfo,
     return 0;
   }
 
-  texture = gpu_findRuntimeResource(runtimeInfo,
-                                    pair->entry_index,
-                                    pair->texture_param_index);
+  texture = findRuntimeResource(runtimeInfo,
+                                pair->entry_index,
+                                pair->texture_param_index);
   sampler = (pair->flags & USL_RUNTIME_SAMPLED_TEXTURE_PAIR_STATIC_SAMPLER) != 0u
               ? NULL
-              : gpu_findRuntimeResource(runtimeInfo,
-                                        pair->entry_index,
-                                        pair->sampler_param_index);
+              : findRuntimeResource(runtimeInfo,
+                                    pair->entry_index,
+                                    pair->sampler_param_index);
 
   if (!texture || texture->kind != USL_RUNTIME_RESOURCE_TEXTURE
       || texture->binding < 0 || texture->descriptor_count == 0u
@@ -1422,8 +1422,8 @@ gpu_ptxPairShape(const USRuntimeInfo                *runtimeInfo,
 }
 
 static int
-gpu_ptxResourceUsesPair(const USRuntimeInfo      *runtimeInfo,
-                        const USLRuntimeResource *resource) {
+ptxResourceUsesPair(const USRuntimeInfo      *runtimeInfo,
+                    const USLRuntimeResource *resource) {
   const USLRuntimeSampledTexturePair *pair;
 
   if (!runtimeInfo || !resource || resource->ptx_index < 0
@@ -1445,9 +1445,9 @@ gpu_ptxResourceUsesPair(const USRuntimeInfo      *runtimeInfo,
 }
 
 static int
-gpu_ptxEntryParamCount(const USRuntimeInfo *runtimeInfo,
-                       uint32_t             entryIndex,
-                       uint32_t            *outCount) {
+ptxEntryParamCount(const USRuntimeInfo *runtimeInfo,
+                   uint32_t             entryIndex,
+                   uint32_t            *outCount) {
   const USLRuntimeSampledTexturePair *pair;
   const USLRuntimeResource           *resource;
   uint32_t                            count;
@@ -1472,12 +1472,12 @@ gpu_ptxEntryParamCount(const USRuntimeInfo *runtimeInfo,
       continue;
     }
 
-    if (!gpu_ptxPairShape(runtimeInfo,
-                          pair,
-                          &texture,
-                          &sampler,
-                          &textureCount,
-                          &samplerCount)
+    if (!ptxPairShape(runtimeInfo,
+                      pair,
+                      &texture,
+                      &sampler,
+                      &textureCount,
+                      &samplerCount)
         || textureCount > UINT32_MAX / samplerCount
         || (uint32_t)pair->ptx_index >
           UINT32_MAX - textureCount * samplerCount) {
@@ -1505,7 +1505,7 @@ gpu_ptxEntryParamCount(const USRuntimeInfo *runtimeInfo,
 
     if (resource->ptx_index >= 0) {
       span = (resource->kind == USL_RUNTIME_RESOURCE_TEXTURE
-              && !gpu_ptxResourceUsesPair(runtimeInfo, resource))
+              && !ptxResourceUsesPair(runtimeInfo, resource))
              || resource->kind == USL_RUNTIME_RESOURCE_BUFFER
              || resource->kind == USL_RUNTIME_RESOURCE_IMAGE
                ? resource->descriptor_count
@@ -1551,7 +1551,7 @@ gpu_ptxEntryParamCount(const USRuntimeInfo *runtimeInfo,
 }
 
 static void
-gpu_initPTXParam(GPUShaderPTXParamInfo *param) {
+initPTXParam(ShaderPTXParamInfo    *param) {
   memset(param, 0, sizeof(*param));
   param->groupIndex        = UINT32_MAX;
   param->binding           = UINT32_MAX;
@@ -1563,10 +1563,10 @@ gpu_initPTXParam(GPUShaderPTXParamInfo *param) {
 }
 
 static int
-gpu_storePTXParam(GPUShaderPTXParamInfo       *params,
-                  uint32_t                     paramCount,
-                  uint32_t                     index,
-                  const GPUShaderPTXParamInfo *source) {
+storePTXParam(ShaderPTXParamInfo          *params,
+              uint32_t                     paramCount,
+              uint32_t                     index,
+              const ShaderPTXParamInfo    *source) {
   if (!params || !source || index >= paramCount
       || params[index].kind != GPUShaderPTXParamInvalid
       || source->kind == GPUShaderPTXParamInvalid) {
@@ -1579,11 +1579,11 @@ gpu_storePTXParam(GPUShaderPTXParamInfo       *params,
 }
 
 static int
-gpu_fillShaderPTXEntry(const GPUShaderLibrary *library,
-                       const USRuntimeInfo    *runtimeInfo,
-                       uint32_t                entryIndex,
-                       GPUShaderPTXEntryInfo  *entry,
-                       GPUShaderPTXParamInfo  *params) {
+fillShaderPTXEntry(const GPUShaderLibrary *library,
+                   const USRuntimeInfo    *runtimeInfo,
+                   uint32_t                entryIndex,
+                   ShaderPTXEntryInfo     *entry,
+                   ShaderPTXParamInfo     *params) {
   const USLRuntimeSampledTexturePair *pair;
   const USLRuntimeResource           *resource;
   uint32_t                            dataOffset;
@@ -1596,11 +1596,11 @@ gpu_fillShaderPTXEntry(const GPUShaderLibrary *library,
   }
 
   for (uint32_t paramIndex = 0u; paramIndex < entry->paramCount; paramIndex++) {
-    gpu_initPTXParam(&params[paramIndex]);
+    initPTXParam(&params[paramIndex]);
   }
 
   for (uint32_t pairIndex = 0u; pairIndex < runtimeInfo->sampled_texture_pair_count; pairIndex++) {
-    GPUShaderPTXParamInfo     pairParam;
+    ShaderPTXParamInfo        pairParam;
     const USLRuntimeResource *sampler;
     const USLRuntimeResource *texture;
     uint32_t                  samplerCount;
@@ -1612,17 +1612,17 @@ gpu_fillShaderPTXEntry(const GPUShaderLibrary *library,
       continue;
     }
 
-    if (!gpu_ptxPairShape(runtimeInfo,
-                          pair,
-                          &texture,
-                          &sampler,
-                          &textureCount,
-                          &samplerCount)) {
+    if (!ptxPairShape(runtimeInfo,
+                      pair,
+                      &texture,
+                      &sampler,
+                      &textureCount,
+                      &samplerCount)) {
       return 0;
     }
 
     for (uint32_t pairParamIndex = 0u; pairParamIndex < textureCount * samplerCount; pairParamIndex++) {
-      gpu_initPTXParam(&pairParam);
+      initPTXParam(&pairParam);
       pairParam.kind        = GPUShaderPTXParamSampledTexture;
       pairParam.bindingType = GPU_BINDING_SAMPLED_TEXTURE;
       pairParam.groupIndex  = texture->group;
@@ -1651,29 +1651,29 @@ gpu_fillShaderPTXEntry(const GPUShaderLibrary *library,
           runtimeInfo->static_samplers[pair->static_sampler_id].id;
       }
 
-      if (!gpu_storePTXParam(params,
-                             entry->paramCount,
-                             (uint32_t)pair->ptx_index + pairParamIndex,
-                             &pairParam)) {
+      if (!storePTXParam(params,
+                         entry->paramCount,
+                         (uint32_t)pair->ptx_index + pairParamIndex,
+                         &pairParam)) {
         return 0;
       }
     }
   }
 
   for (uint32_t resourceIndex = 0u; resourceIndex < runtimeInfo->resource_count; resourceIndex++) {
-    GPUShaderPTXParamInfo resourceParam;
+    ShaderPTXParamInfo    resourceParam;
     GPUBindingType        bindingType;
 
     resource = &runtimeInfo->resources[resourceIndex];
 
     if (!resource->used || resource->entry_index != entryIndex
         || resource->binding < 0
-        || !gpu_bindingTypeFromUSLResource(library, resource, &bindingType)) {
+        || !bindingTypeFromUSLResource(library, resource, &bindingType)) {
       continue;
     }
 
     count = 0u;
-    gpu_initPTXParam(&resourceParam);
+    initPTXParam(&resourceParam);
     resourceParam.bindingType = bindingType;
     resourceParam.groupIndex  = resource->group;
     resourceParam.binding     = (uint32_t)resource->binding;
@@ -1686,7 +1686,7 @@ gpu_fillShaderPTXEntry(const GPUShaderLibrary *library,
         resourceParam.kind = GPUShaderPTXParamSurface;
         count              = resource->descriptor_count;
       } else if (resource->kind == USL_RUNTIME_RESOURCE_TEXTURE
-                 && !gpu_ptxResourceUsesPair(runtimeInfo, resource)) {
+                 && !ptxResourceUsesPair(runtimeInfo, resource)) {
         resourceParam.kind = GPUShaderPTXParamTexture;
         count              = resource->descriptor_count;
       }
@@ -1694,17 +1694,17 @@ gpu_fillShaderPTXEntry(const GPUShaderLibrary *library,
       for (uint32_t resourceParamIndex = 0u; resourceParamIndex < count; resourceParamIndex++) {
         resourceParam.arrayIndex = resourceParamIndex;
 
-        if (!gpu_storePTXParam(params,
-                               entry->paramCount,
-                               (uint32_t)resource->ptx_index + resourceParamIndex,
-                               &resourceParam)) {
+        if (!storePTXParam(params,
+                           entry->paramCount,
+                           (uint32_t)resource->ptx_index + resourceParamIndex,
+                           &resourceParam)) {
           return 0;
         }
       }
     }
 
     if (resource->ptx_texture_metadata_index >= 0) {
-      gpu_initPTXParam(&resourceParam);
+      initPTXParam(&resourceParam);
       resourceParam.kind          = GPUShaderPTXParamTextureMetadata;
       resourceParam.bindingType   = bindingType;
       resourceParam.groupIndex    = resource->group;
@@ -1714,10 +1714,10 @@ gpu_fillShaderPTXEntry(const GPUShaderLibrary *library,
       for (uint32_t metadataIndex = 0u; metadataIndex < resource->descriptor_count; metadataIndex++) {
         resourceParam.arrayIndex = metadataIndex;
 
-        if (!gpu_storePTXParam(params,
-                               entry->paramCount,
-                               (uint32_t)resource->ptx_texture_metadata_index + metadataIndex,
-                               &resourceParam)) {
+        if (!storePTXParam(params,
+                           entry->paramCount,
+                           (uint32_t)resource->ptx_texture_metadata_index + metadataIndex,
+                           &resourceParam)) {
           return 0;
         }
       }
@@ -1747,17 +1747,17 @@ gpu_fillShaderPTXEntry(const GPUShaderLibrary *library,
 }
 
 static int
-gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
-                             const USReflection *usReflection) {
+setShaderLibraryMetadata(GPUShaderLibrary   *library,
+                         const USReflection *usReflection) {
   const USRuntimeInfo              *runtimeInfo;
   GPUShaderResourceReflection      *entryResources;
-  GPUShaderResourceBindingInfoList *resourceBindings;
-  GPUShaderStaticSamplerInfoList   *staticSamplers;
-  GPUShaderPTXParamInfo            *ptxParams;
-  GPUShaderPTXEntryInfo            *ptxEntries;
-  GPUShaderPTXInfo                 *ptxInfo;
+  ShaderResourceBindingInfoList    *resourceBindings;
+  ShaderStaticSamplerInfoList      *staticSamplers;
+  ShaderPTXParamInfo               *ptxParams;
+  ShaderPTXEntryInfo               *ptxEntries;
+  ShaderPTXInfo                    *ptxInfo;
   GPUShaderResourceReflection      *resources;
-  GPUShaderEntryInfoList           *entryInfo;
+  ShaderEntryInfoList              *entryInfo;
   uint8_t                          *metadata;
   char                             *textCursor;
   size_t                            constantOffset;
@@ -1794,7 +1794,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
                 | USL_BYTECODE_RUNTIME_INFO_FLAG_SAMPLED_TEXTURE_PAIR_OVERFLOW
                 | USL_BYTECODE_RUNTIME_INFO_FLAG_SAMPLED_TEXTURE_PAIR_INVALID;
 
-  if (!gpu_uslRuntimeInfoIsUsable(runtimeInfo)
+  if (!uslRuntimeInfoIsUsable(runtimeInfo)
       || (runtimeInfo->flags & flags) != 0u
       || runtimeInfo->entry_point_count > USL_RUNTIME_MAX_ENTRY_POINTS
       || runtimeInfo->resource_count > USL_RUNTIME_MAX_RESOURCES
@@ -1812,7 +1812,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
     for (uint32_t ptxCountIndex = 0u; ptxCountIndex < runtimeInfo->entry_point_count; ptxCountIndex++) {
       uint32_t count;
 
-      if (!gpu_ptxEntryParamCount(runtimeInfo, ptxCountIndex, &count)
+      if (!ptxEntryParamCount(runtimeInfo, ptxCountIndex, &count)
           || ptxParamCount > UINT32_MAX - count) {
         return 0;
       }
@@ -1832,7 +1832,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
 
     textEntry = &runtimeInfo->entry_points[textEntryIndex];
 
-    if (!gpu_runtimeTextSize(textEntry->name, &size)
+    if (!runtimeTextSize(textEntry->name, &size)
         || textSize > SIZE_MAX - size) {
       return 0;
     }
@@ -1840,7 +1840,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
     textSize += size;
 
     if (textEntry->stage == USL_RUNTIME_STAGE_NODE && textEntry->node_id[0] != '\0') {
-      if (!gpu_runtimeTextSize(textEntry->node_id, &totalNodeNameSize)
+      if (!runtimeTextSize(textEntry->node_id, &totalNodeNameSize)
           || textSize > SIZE_MAX - totalNodeNameSize) {
         return 0;
       }
@@ -1849,7 +1849,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
     }
 
     if (textEntry->payload_size_bytes > 0u) {
-      if (!gpu_runtimeTextSize(textEntry->payload_type, &totalPayloadTypeSize)
+      if (!runtimeTextSize(textEntry->payload_type, &totalPayloadTypeSize)
           || textSize > SIZE_MAX - totalPayloadTypeSize) {
         return 0;
       }
@@ -1869,7 +1869,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
     }
 
     if (resource->entry_index >= runtimeInfo->entry_point_count
-        || !gpu_runtimeTextSize(resource->param, &totalParamSize)
+        || !runtimeTextSize(resource->param, &totalParamSize)
         || textSize > SIZE_MAX - totalParamSize) {
       return 0;
     }
@@ -1880,66 +1880,66 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
 
   totalSize = 0u;
 
-  if (!gpu_reserveMetadata(&totalSize,
-                           _Alignof(USLRuntimeSpecConstant),
-                           0u,
-                           runtimeInfo->spec_constant_count,
-                           sizeof(USLRuntimeSpecConstant),
-                           &constantOffset)
-      || !gpu_reserveMetadata(&totalSize,
-                              _Alignof(GPUShaderEntryInfoList),
-                              sizeof(*entryInfo),
-                              runtimeInfo->entry_point_count,
-                              sizeof(entryInfo->entries[0]),
-                              &entryInfoOffset)
-      || !gpu_reserveMetadata(&totalSize,
-                              _Alignof(GPUShaderResourceReflection),
-                              0u,
-                              usedResourceCount,
-                              sizeof(entryResources[0]),
-                              &entryResourceOffset)
-      || !gpu_reserveMetadata(&totalSize,
-                              _Alignof(GPUShaderResourceBindingInfoList),
-                              sizeof(*resourceBindings),
-                              usedResourceCount,
-                              sizeof(resourceBindings->entries[0]),
-                              &resourceBindingOffset)
-      || !gpu_reserveMetadata(&totalSize,
-                              _Alignof(GPUShaderResourceReflection),
-                              0u,
-                              usedResourceCount,
-                              sizeof(resources[0]),
-                              &resourceOffset)
-      || !gpu_reserveMetadata(&totalSize,
-                              _Alignof(GPUShaderStaticSamplerInfoList),
-                              sizeof(*staticSamplers),
-                              runtimeInfo->static_sampler_count,
-                              sizeof(staticSamplers->items[0]),
-                              &staticSamplerOffset)
-      || !gpu_reserveMetadata(&totalSize,
-                              _Alignof(GPUShaderPTXInfo),
-                              0u,
-                              backend == GPU_BACKEND_CUDA ? 1u : 0u,
-                              sizeof(*ptxInfo),
-                              &ptxInfoOffset)
-      || !gpu_reserveMetadata(&totalSize,
-                              _Alignof(GPUShaderPTXEntryInfo),
-                              0u,
-                              backend == GPU_BACKEND_CUDA ? runtimeInfo->entry_point_count : 0u,
-                              sizeof(ptxEntries[0]),
-                              &ptxEntryOffset)
-      || !gpu_reserveMetadata(&totalSize,
-                              _Alignof(GPUShaderPTXParamInfo),
-                              0u,
-                              ptxParamCount,
-                              sizeof(ptxParams[0]),
-                              &ptxParamOffset)
-      || !gpu_reserveMetadata(&totalSize,
-                              _Alignof(char),
-                              0u,
-                              textSize,
-                              sizeof(char),
-                              &textOffset)) {
+  if (!reserveMetadata(&totalSize,
+                       _Alignof(USLRuntimeSpecConstant),
+                       0u,
+                       runtimeInfo->spec_constant_count,
+                       sizeof(USLRuntimeSpecConstant),
+                       &constantOffset)
+      || !reserveMetadata(&totalSize,
+                          _Alignof(ShaderEntryInfoList),
+                          sizeof(*entryInfo),
+                          runtimeInfo->entry_point_count,
+                          sizeof(entryInfo->entries[0]),
+                          &entryInfoOffset)
+      || !reserveMetadata(&totalSize,
+                          _Alignof(GPUShaderResourceReflection),
+                          0u,
+                          usedResourceCount,
+                          sizeof(entryResources[0]),
+                          &entryResourceOffset)
+      || !reserveMetadata(&totalSize,
+                          _Alignof(ShaderResourceBindingInfoList),
+                          sizeof(*resourceBindings),
+                          usedResourceCount,
+                          sizeof(resourceBindings->entries[0]),
+                          &resourceBindingOffset)
+      || !reserveMetadata(&totalSize,
+                          _Alignof(GPUShaderResourceReflection),
+                          0u,
+                          usedResourceCount,
+                          sizeof(resources[0]),
+                          &resourceOffset)
+      || !reserveMetadata(&totalSize,
+                          _Alignof(ShaderStaticSamplerInfoList),
+                          sizeof(*staticSamplers),
+                          runtimeInfo->static_sampler_count,
+                          sizeof(staticSamplers->items[0]),
+                          &staticSamplerOffset)
+      || !reserveMetadata(&totalSize,
+                          _Alignof(ShaderPTXInfo),
+                          0u,
+                          backend == GPU_BACKEND_CUDA ? 1u : 0u,
+                          sizeof(*ptxInfo),
+                          &ptxInfoOffset)
+      || !reserveMetadata(&totalSize,
+                          _Alignof(ShaderPTXEntryInfo),
+                          0u,
+                          backend == GPU_BACKEND_CUDA ? runtimeInfo->entry_point_count : 0u,
+                          sizeof(ptxEntries[0]),
+                          &ptxEntryOffset)
+      || !reserveMetadata(&totalSize,
+                          _Alignof(ShaderPTXParamInfo),
+                          0u,
+                          ptxParamCount,
+                          sizeof(ptxParams[0]),
+                          &ptxParamOffset)
+      || !reserveMetadata(&totalSize,
+                          _Alignof(char),
+                          0u,
+                          textSize,
+                          sizeof(char),
+                          &textOffset)) {
     return 0;
   }
 
@@ -1948,31 +1948,31 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
   }
 
   entryInfo             = entryInfoOffset != SIZE_MAX
-                ? (GPUShaderEntryInfoList *)(metadata + entryInfoOffset)
+                ? (ShaderEntryInfoList *)(metadata + entryInfoOffset)
                 : NULL;
   entryResources        = entryResourceOffset != SIZE_MAX
                      ? (GPUShaderResourceReflection *)(metadata +
                                                        entryResourceOffset)
                      : NULL;
   resourceBindings      = resourceBindingOffset != SIZE_MAX
-                       ? (GPUShaderResourceBindingInfoList *)(metadata +
-                                                              resourceBindingOffset)
+                       ? (ShaderResourceBindingInfoList *)(metadata +
+                                                           resourceBindingOffset)
                        : NULL;
   resources             = resourceOffset != SIZE_MAX
                 ? (GPUShaderResourceReflection *)(metadata + resourceOffset)
                 : NULL;
   staticSamplers        = staticSamplerOffset != SIZE_MAX
-                     ? (GPUShaderStaticSamplerInfoList *)(metadata +
-                                                          staticSamplerOffset)
+                     ? (ShaderStaticSamplerInfoList *)(metadata +
+                                                       staticSamplerOffset)
                      : NULL;
   ptxInfo               = ptxInfoOffset != SIZE_MAX
-              ? (GPUShaderPTXInfo *)(metadata + ptxInfoOffset)
+              ? (ShaderPTXInfo *)(metadata + ptxInfoOffset)
               : NULL;
   ptxEntries            = ptxEntryOffset != SIZE_MAX
-                 ? (GPUShaderPTXEntryInfo *)(metadata + ptxEntryOffset)
+                 ? (ShaderPTXEntryInfo *)(metadata + ptxEntryOffset)
                  : NULL;
   ptxParams             = ptxParamOffset != SIZE_MAX
-                ? (GPUShaderPTXParamInfo *)(metadata + ptxParamOffset)
+                ? (ShaderPTXParamInfo *)(metadata + ptxParamOffset)
                 : NULL;
   textCursor            = textOffset != SIZE_MAX ? (char *)(metadata + textOffset) : NULL;
   entryResourceCount    = 0u;
@@ -1990,19 +1990,19 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
     paramStart          = 0u;
 
     for (uint32_t ptxEntryIndex = 0u; ptxEntryIndex < ptxInfo->entryCount; ptxEntryIndex++) {
-      GPUShaderPTXEntryInfo *ptxEntry;
+      ShaderPTXEntryInfo    *ptxEntry;
 
       ptxEntry             = &ptxInfo->entries[ptxEntryIndex];
       ptxEntry->paramStart = paramStart;
 
-      if (!gpu_ptxEntryParamCount(runtimeInfo, ptxEntryIndex, &ptxEntry->paramCount)
+      if (!ptxEntryParamCount(runtimeInfo, ptxEntryIndex, &ptxEntry->paramCount)
           || paramStart > ptxInfo->paramCount
           || ptxEntry->paramCount > ptxInfo->paramCount - paramStart
-          || !gpu_fillShaderPTXEntry(library,
-                                     runtimeInfo,
-                                     ptxEntryIndex,
-                                     ptxEntry,
-                                     ptxEntry->paramCount > 0u ? ptxInfo->params + paramStart : NULL)) {
+          || !fillShaderPTXEntry(library,
+                                 runtimeInfo,
+                                 ptxEntryIndex,
+                                 ptxEntry,
+                                 ptxEntry->paramCount > 0u ? ptxInfo->params + paramStart : NULL)) {
         free(metadata);
         return 0;
       }
@@ -2018,23 +2018,23 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
 
   for (uint32_t entryIndex = 0u; entryIndex < runtimeInfo->entry_point_count; entryIndex++) {
     const USLRuntimeEntryPoint *sourceEntry;
-    GPUShaderEntryInfo         *dst;
+    ShaderEntryInfo            *dst;
     size_t                      nameSize;
     GPUShaderStageFlags         stage;
 
     sourceEntry = &runtimeInfo->entry_points[entryIndex];
 
-    if (!gpu_shaderVisibilityFromUSLStage(sourceEntry->stage, &stage)
-        || !gpu_runtimeTextSize(sourceEntry->name, &nameSize)) {
+    if (!shaderVisibilityFromUSLStage(sourceEntry->stage, &stage)
+        || !runtimeTextSize(sourceEntry->name, &nameSize)) {
       free(metadata);
       return 0;
     }
 
     dst                        = &entryInfo->entries[entryInfo->count++];
-    dst->name                  = gpu_storeMetadataText(&textCursor,
-                                                       sourceEntry->name,
-                                                       nameSize);
-    dst->nameHash              = gpu_shaderNameHash(sourceEntry->name, nameSize - 1u);
+    dst->name                  = storeMetadataText(&textCursor,
+                                                   sourceEntry->name,
+                                                   nameSize);
+    dst->nameHash              = shaderNameHash(sourceEntry->name, nameSize - 1u);
     dst->nameLength            = (uint32_t)(nameSize - 1u);
     dst->stage                 = stage;
     dst->runtimeStage          = sourceEntry->stage;
@@ -2061,27 +2061,27 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
     if (sourceEntry->stage == USL_RUNTIME_STAGE_NODE && sourceEntry->node_id[0] != '\0') {
       size_t nodeNameSize;
 
-      if (!gpu_runtimeTextSize(sourceEntry->node_id, &nodeNameSize)) {
+      if (!runtimeTextSize(sourceEntry->node_id, &nodeNameSize)) {
         free(metadata);
         return 0;
       }
 
-      dst->nodeName = gpu_storeMetadataText(&textCursor,
-                                            sourceEntry->node_id,
-                                            nodeNameSize);
+      dst->nodeName = storeMetadataText(&textCursor,
+                                        sourceEntry->node_id,
+                                        nodeNameSize);
     }
 
     if (sourceEntry->payload_size_bytes > 0u) {
       size_t payloadTypeSize;
 
-      if (!gpu_runtimeTextSize(sourceEntry->payload_type, &payloadTypeSize)) {
+      if (!runtimeTextSize(sourceEntry->payload_type, &payloadTypeSize)) {
         free(metadata);
         return 0;
       }
 
-      dst->payloadType = gpu_storeMetadataText(&textCursor,
-                                               sourceEntry->payload_type,
-                                               payloadTypeSize);
+      dst->payloadType = storeMetadataText(&textCursor,
+                                           sourceEntry->payload_type,
+                                           payloadTypeSize);
     }
 
     dst->workgroupSize[0] = sourceEntry->workgroup_size[0]
@@ -2103,7 +2103,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
   }
 
   for (uint32_t entryResourceIndex = 0u; entryResourceIndex < entryInfo->count; entryResourceIndex++) {
-    GPUShaderEntryInfo *entry;
+    ShaderEntryInfo    *entry;
     uint32_t            capacity;
 
     entry    = &entryInfo->entries[entryResourceIndex];
@@ -2124,8 +2124,8 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
     GPUShaderResourceReflection  *canonical;
     GPUShaderResourceReflection  *entryResource;
     const USLRuntimeResource     *sourceResource;
-    GPUShaderEntryInfo           *shaderEntry;
-    GPUShaderResourceBindingInfo *bindingInfo;
+    ShaderEntryInfo              *shaderEntry;
+    ShaderResourceBindingInfo    *bindingInfo;
     size_t                        paramSize;
     GPUShaderStageFlags           resourceVisibility;
     GPUBindingType                bindingType;
@@ -2145,25 +2145,25 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
     memset(&resourceLayout, 0, sizeof(resourceLayout));
 
     if (arrayCount == 0u
-        || !gpu_shaderVisibilityFromUSLStage(sourceResource->stage, &resourceVisibility)
+        || !shaderVisibilityFromUSLStage(sourceResource->stage, &resourceVisibility)
         || resourceVisibility != shaderEntry->stage
-        || !gpu_bindingTypeFromUSLResource(library, sourceResource, &bindingType)
-        || !gpu_shaderPublicBindingFromUSLResource(sourceResource,
-                                                   &groupIndex,
-                                                   &binding)
-        || !gpu_shaderBackendBindingFromUSLResource(backend,
-                                                    sourceResource,
-                                                    &backendBinding)
-        || !gpu_runtimeTextSize(sourceResource->param, &paramSize)) {
+        || !bindingTypeFromUSLResource(library, sourceResource, &bindingType)
+        || !shaderPublicBindingFromUSLResource(sourceResource,
+                                               &groupIndex,
+                                               &binding)
+        || !shaderBackendBindingFromUSLResource(backend,
+                                                sourceResource,
+                                                &backendBinding)
+        || !runtimeTextSize(sourceResource->param, &paramSize)) {
       free(metadata);
       return 0;
     }
 
     resourceLayout.bindingType = bindingType;
 
-    if (!gpu_bindingLayoutFromUSLResource(sourceResource,
-                                          bindingType,
-                                          &resourceLayout)) {
+    if (!bindingLayoutFromUSLResource(sourceResource,
+                                      bindingType,
+                                      &resourceLayout)) {
       free(metadata);
       return 0;
     }
@@ -2171,7 +2171,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
     bindingInfo = NULL;
 
     for (uint32_t bindingIndex = 0u; bindingIndex < resourceBindings->count; bindingIndex++) {
-      GPUShaderResourceBindingInfo *bindingItem;
+      ShaderResourceBindingInfo    *bindingItem;
 
       bindingItem = &resourceBindings->entries[bindingIndex];
 
@@ -2213,7 +2213,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
 
     if (canonical) {
       if (canonical->arrayCount != arrayCount
-          || !gpu_shaderResourceLayoutEqual(canonical, &resourceLayout)) {
+          || !shaderResourceLayoutEqual(canonical, &resourceLayout)) {
         free(metadata);
         return 0;
       }
@@ -2224,9 +2224,9 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
     } else {
       canonical                   = &resources[resourceCount++];
       *canonical                  = resourceLayout;
-      canonical->name             = gpu_storeMetadataText(&textCursor,
-                                                          sourceResource->param,
-                                                          paramSize);
+      canonical->name             = storeMetadataText(&textCursor,
+                                                      sourceResource->param,
+                                                      paramSize);
       canonical->groupIndex       = groupIndex;
       canonical->binding          = binding;
       canonical->bindingType      = bindingType;
@@ -2269,7 +2269,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
   }
 
   for (uint32_t samplerIndex = 0u; samplerIndex < runtimeInfo->static_sampler_count; samplerIndex++) {
-    GPUShaderStaticSamplerInfo     samplerItem;
+    ShaderStaticSamplerInfo        samplerItem;
     const USLRuntimeStaticSampler *sourceSampler;
     uint64_t                       entryMask;
     GPUShaderStageFlags            samplerVisibility;
@@ -2277,7 +2277,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
 
     sourceSampler = &runtimeInfo->static_samplers[samplerIndex];
 
-    if (!gpu_shaderVisibilityFromUSLStage(sourceSampler->stage, &samplerVisibility)) {
+    if (!shaderVisibilityFromUSLStage(sourceSampler->stage, &samplerVisibility)) {
       free(metadata);
       return 0;
     }
@@ -2297,9 +2297,9 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
       return 0;
     }
 
-    gpu_staticSamplerInfoFromUSL(sourceSampler, samplerVisibility, entryMask, &samplerItem);
+    staticSamplerInfoFromUSL(sourceSampler, samplerVisibility, entryMask, &samplerItem);
 
-    if (!gpuStaticSamplerDescIsValid(&samplerItem.desc)) {
+    if (!staticSamplerDescIsValid(&samplerItem.desc)) {
       free(metadata);
       return 0;
     }
@@ -2307,7 +2307,7 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
     duplicate = UINT32_MAX;
 
     for (uint32_t samplerMatchIndex = 0u; samplerMatchIndex < staticSamplers->count; samplerMatchIndex++) {
-      if (gpu_staticSamplerInfoEqual(&staticSamplers->items[samplerMatchIndex], &samplerItem)) {
+      if (staticSamplerInfoEqual(&staticSamplers->items[samplerMatchIndex], &samplerItem)) {
         duplicate = samplerMatchIndex;
         break;
       }
@@ -2322,12 +2322,12 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
     staticSamplers->items[staticSamplers->count++] = samplerItem;
   }
 
-  if (!gpu_resolvePTXStaticSamplers(runtimeInfo, staticSamplers, ptxInfo)) {
+  if (!resolvePTXStaticSamplers(runtimeInfo, staticSamplers, ptxInfo)) {
     free(metadata);
     return 0;
   }
 
-  gpu_clearShaderMetadata(library);
+  clearShaderMetadata(library);
 
   if (constantOffset != SIZE_MAX) {
     library->_constants = (USLRuntimeSpecConstant *)(metadata + constantOffset);
@@ -2356,8 +2356,8 @@ gpu_setShaderLibraryMetadata(GPUShaderLibrary   *library,
 }
 
 static GPUResult
-gpu_copyShaderReflection(const GPUShaderReflection *src,
-                         GPUShaderReflection       *dst) {
+copyShaderReflection(const GPUShaderReflection *src,
+                     GPUShaderReflection       *dst) {
   const GPUShaderResourceReflection *srcResources;
   GPUShaderResourceReflection       *dstResources;
   uint8_t                           *storage;
@@ -2431,15 +2431,15 @@ gpu_copyShaderReflection(const GPUShaderReflection *src,
 }
 
 static GPUResult
-gpu_createShaderLibraryFromBackendText(GPUDevice         *device,
-                                       const void        *sourceData,
-                                       uint64_t           sourceSize,
-                                       uint32_t           defineCount,
-                                       uint32_t           compileFlags,
-                                       GPUShaderLibrary **outLibrary) {
-  GPUApi *api;
+createShaderLibraryFromBackendText(GPUDevice         *device,
+                                   const void        *sourceData,
+                                   uint64_t           sourceSize,
+                                   uint32_t           defineCount,
+                                   uint32_t           compileFlags,
+                                   GPUShaderLibrary **outLibrary) {
+  Api    *api;
 
-  if (!(api = gpuDeviceApi(device))) {
+  if (!(api = deviceApi(device))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -2466,54 +2466,54 @@ gpu_createShaderLibraryFromBackendText(GPUDevice         *device,
 }
 
 static GPUResult
-gpu_createShaderLibraryFromMSLText(GPUDevice                        *device,
-                                   const GPUShaderLibraryCreateInfo *info,
-                                   GPUShaderLibrary                **outLibrary) {
-  GPUApi *api;
+createShaderLibraryFromMSLText(GPUDevice                        *device,
+                               const GPUShaderLibraryCreateInfo *info,
+                               GPUShaderLibrary                **outLibrary) {
+  Api    *api;
 
-  api = gpuDeviceApi(device);
+  api = deviceApi(device);
 
   if (!api || api->backend != GPU_BACKEND_METAL) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  return gpu_createShaderLibraryFromBackendText(device,
-                                                info->sourceData,
-                                                info->sourceSize,
-                                                info->defineCount,
-                                                GPU_SHADER_SOURCE_COMPILE_NONE,
-                                                outLibrary);
+  return createShaderLibraryFromBackendText(device,
+                                            info->sourceData,
+                                            info->sourceSize,
+                                            info->defineCount,
+                                            GPU_SHADER_SOURCE_COMPILE_NONE,
+                                            outLibrary);
 }
 
 static GPUResult
-gpu_createShaderLibraryFromWGSLText(GPUDevice                        *device,
-                                    const GPUShaderLibraryCreateInfo *info,
-                                    GPUShaderLibrary                **outLibrary) {
-  GPUApi *api;
+createShaderLibraryFromWGSLText(GPUDevice                        *device,
+                                const GPUShaderLibraryCreateInfo *info,
+                                GPUShaderLibrary                **outLibrary) {
+  Api    *api;
 
-  api = gpuDeviceApi(device);
+  api = deviceApi(device);
 
   if (!api || api->backend != GPU_BACKEND_WEBGPU) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  return gpu_createShaderLibraryFromBackendText(device,
-                                                info->sourceData,
-                                                info->sourceSize,
-                                                info->defineCount,
-                                                GPU_SHADER_SOURCE_COMPILE_NONE,
-                                                outLibrary);
+  return createShaderLibraryFromBackendText(device,
+                                            info->sourceData,
+                                            info->sourceSize,
+                                            info->defineCount,
+                                            GPU_SHADER_SOURCE_COMPILE_NONE,
+                                            outLibrary);
 }
 
 static GPUResult
-gpu_createShaderLibraryFromBackendBinary(GPUDevice         *device,
-                                         const void        *sourceData,
-                                         uint64_t           sourceSize,
-                                         uint32_t           defineCount,
-                                         GPUShaderLibrary **outLibrary) {
-  GPUApi *api;
+createShaderLibraryFromBackendBinary(GPUDevice         *device,
+                                     const void        *sourceData,
+                                     uint64_t           sourceSize,
+                                     uint32_t           defineCount,
+                                     GPUShaderLibrary **outLibrary) {
+  Api    *api;
 
-  if (!(api = gpuDeviceApi(device))) {
+  if (!(api = deviceApi(device))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -2535,30 +2535,30 @@ gpu_createShaderLibraryFromBackendBinary(GPUDevice         *device,
 }
 
 static GPUResult
-gpu_createShaderLibraryFromBinary(GPUDevice                        *device,
-                                  const GPUShaderLibraryCreateInfo *info,
-                                  GPUShaderLibrary                **outLibrary) {
-  GPUApi *api;
+createShaderLibraryFromBinary(GPUDevice                        *device,
+                              const GPUShaderLibraryCreateInfo *info,
+                              GPUShaderLibrary                **outLibrary) {
+  Api    *api;
 
-  api = gpuDeviceApi(device);
+  api = deviceApi(device);
 
   if (!api || api->backend != GPU_BACKEND_VULKAN) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  return gpu_createShaderLibraryFromBackendBinary(device,
-                                                  info->sourceData,
-                                                  info->sourceSize,
-                                                  info->defineCount,
-                                                  outLibrary);
+  return createShaderLibraryFromBackendBinary(device,
+                                              info->sourceData,
+                                              info->sourceSize,
+                                              info->defineCount,
+                                              outLibrary);
 }
 
 static GPUResult
-gpu_createShaderLibraryFromUSLImpl(GPUDevice         *device,
-                                   const void        *bytecodeData,
-                                   uint64_t           bytecodeSize,
-                                   bool               disableDiskCache,
-                                   GPUShaderLibrary **outLibrary) {
+createShaderLibraryFromUSLImpl(GPUDevice         *device,
+                               const void        *bytecodeData,
+                               uint64_t           bytecodeSize,
+                               bool               disableDiskCache,
+                               GPUShaderLibrary **outLibrary) {
   GPUShaderLibraryCreateInfo  info                = {0};
   USReflection                bootstrapReflection = {0};
   USCompileOutput             compileOutput       = {0};
@@ -2566,7 +2566,7 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice         *device,
   USLTargetSpec               target;
   USLCapabilityAtomDesc       targetAtoms[USL_RUNTIME_TARGET_MAX_ATOMS];
   USCompileInput              compileInput;
-  GPUApi                     *api;
+  Api                        *api;
   const char                 *payloadBackend;
   const char                 *bootstrapEntry = NULL;
   const char                 *payloadEncoding;
@@ -2590,11 +2590,11 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice         *device,
 
   *outLibrary = NULL;
 
-  if (!(api = gpuDeviceApi(device))) {
+  if (!(api = deviceApi(device))) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  if (!gpu_uslDefaultTarget(api->backend, &target)) {
+  if (!uslDefaultTarget(api->backend, &target)) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -2602,13 +2602,13 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice         *device,
 
   if (api->backend == GPU_BACKEND_CUDA) {
     if (device->uslTargetVersion != 0u
-        && !gpu_uslCUDAPTXAtom(&targetAtoms[targetAtomCount++],
-                               device->uslTargetVersion)) {
+        && !uslCUDAPTXAtom(&targetAtoms[targetAtomCount++],
+                           device->uslTargetVersion)) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
-    if (!gpu_uslCUDASMAtom(&targetAtoms[targetAtomCount++],
-                           device->uslTargetArchitecture)) {
+    if (!uslCUDASMAtom(&targetAtoms[targetAtomCount++],
+                       device->uslTargetArchitecture)) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -3172,8 +3172,8 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice         *device,
     goto cleanup;
   }
 
-  if (!gpu_shaderRequirementsEnabled(device,
-                                     &compileOutput.reflection.runtime)) {
+  if (!shaderRequirementsEnabled(device,
+                                 &compileOutput.reflection.runtime)) {
     rc = GPU_ERROR_UNSUPPORTED;
     goto cleanup;
   }
@@ -3184,41 +3184,41 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice         *device,
     info.sourceKind       = GPU_SHADER_SOURCE_SPIRV_BINARY;
     info.sourceData       = compileOutput.backend_data;
     info.sourceSize       = compileOutput.backend_size;
-    rc                    = gpu_createShaderLibraryFromBinary(device, &info, outLibrary);
+    rc                    = createShaderLibraryFromBinary(device, &info, outLibrary);
   } else if (target.backend == USL_BACKEND_DXIL) {
-    rc = gpu_createShaderLibraryFromBackendBinary(device,
-                                                  compileOutput.backend_data,
-                                                  compileOutput.backend_size,
-                                                  0u,
-                                                  outLibrary);
+    rc = createShaderLibraryFromBackendBinary(device,
+                                              compileOutput.backend_data,
+                                              compileOutput.backend_size,
+                                              0u,
+                                              outLibrary);
   } else if (target.backend == USL_BACKEND_METAL
              || target.backend == USL_BACKEND_HLSL
              || target.backend == USL_BACKEND_WGSL
              || target.backend == USL_BACKEND_PTX) {
-    rc = gpu_createShaderLibraryFromBackendText(device,
-                                                compileOutput.backend_data,
-                                                compileOutput.backend_size,
-                                                0u,
-                                                sourceCompileFlags,
-                                                outLibrary);
+    rc = createShaderLibraryFromBackendText(device,
+                                            compileOutput.backend_data,
+                                            compileOutput.backend_size,
+                                            0u,
+                                            sourceCompileFlags,
+                                            outLibrary);
   } else {
     rc = GPU_ERROR_UNSUPPORTED;
   }
 
   if (rc == GPU_OK && outLibrary && *outLibrary) {
-    if (!gpu_setShaderLibraryMetadata(*outLibrary,
-                                      &compileOutput.reflection)) {
+    if (!setShaderLibraryMetadata(*outLibrary,
+                                  &compileOutput.reflection)) {
       GPUDestroyShaderLibrary(*outLibrary);
       *outLibrary = NULL;
       rc          = GPU_ERROR_BACKEND_FAILURE;
     } else if ((target.backend == USL_BACKEND_HLSL
                 || target.backend == USL_BACKEND_DXIL)
-               && !gpu_setShaderUSLSource(*outLibrary,
-                                          bytecodeData,
-                                          bytecodeSize,
-                                          &target,
-                                          &compileOptions,
-                                          disableDiskCache)) {
+               && !setShaderUSLSource(*outLibrary,
+                                      bytecodeData,
+                                      bytecodeSize,
+                                      &target,
+                                      &compileOptions,
+                                      disableDiskCache)) {
       GPUDestroyShaderLibrary(*outLibrary);
       *outLibrary = NULL;
       rc          = GPU_ERROR_OUT_OF_MEMORY;
@@ -3234,28 +3234,28 @@ cleanup:
 
 GPU_HIDE
 GPUResult
-gpuCompileShaderLibraryEntry(const GPUShaderLibrary     *library,
-                             const char                 *entryPoint,
-                             const GPUPipelineConstants *constants,
-                             GPUShaderSourceBlob        *outSource) {
+compileShaderLibraryEntry(const GPUShaderLibrary     *library,
+                          const char                 *entryPoint,
+                          const GPUPipelineConstants *constants,
+                          ShaderSourceBlob           *outSource) {
   if (!entryPoint || entryPoint[0] == '\0') {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  return gpu_compileShaderLibraryEntries(library,
-                                         &entryPoint,
-                                         1u,
-                                         constants,
-                                         outSource);
+  return compileShaderLibraryEntries(library,
+                                     &entryPoint,
+                                     1u,
+                                     constants,
+                                     outSource);
 }
 
 GPU_HIDE
 GPUResult
-gpuCompileShaderLibraryEntryMask(const GPUShaderLibrary *library,
-                                 uint64_t                entryMask,
-                                 GPUShaderSourceBlob    *outSource) {
+compileShaderLibraryEntryMask(const GPUShaderLibrary *library,
+                              uint64_t                entryMask,
+                              ShaderSourceBlob       *outSource) {
   const char                   *entryPoints[USL_RUNTIME_MAX_ENTRY_POINTS];
-  const GPUShaderEntryInfoList *entries;
+  const ShaderEntryInfoList    *entries;
   uint32_t                      entryPointCount;
   uint32_t                      i;
 
@@ -3282,16 +3282,16 @@ gpuCompileShaderLibraryEntryMask(const GPUShaderLibrary *library,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  return gpu_compileShaderLibraryEntries(library,
-                                         entryPoints,
-                                         entryPointCount,
-                                         NULL,
-                                         outSource);
+  return compileShaderLibraryEntries(library,
+                                     entryPoints,
+                                     entryPointCount,
+                                     NULL,
+                                     outSource);
 }
 
 GPU_HIDE
 void
-gpuFreeShaderSourceBlob(GPUShaderSourceBlob *source) {
+freeShaderSourceBlob(ShaderSourceBlob    *source) {
   if (!source) {
     return;
   }
@@ -3302,13 +3302,13 @@ gpuFreeShaderSourceBlob(GPUShaderSourceBlob *source) {
 
 GPU_HIDE
 uint64_t
-gpuShaderEntryBit(const GPUShaderLibrary *library, const char *entryPoint) {
-  const GPUShaderEntryInfoList *list;
-  const GPUShaderEntryInfo     *entry;
+shaderEntryBit(const GPUShaderLibrary *library, const char *entryPoint) {
+  const ShaderEntryInfoList    *list;
+  const ShaderEntryInfo        *entry;
   ptrdiff_t                     index;
 
   list  = library ? library->_entryInfo : NULL;
-  entry = gpu_findShaderEntry(library, entryPoint);
+  entry = findShaderEntry(library, entryPoint);
 
   if (!list || !entry) {
     return 0u;
@@ -3326,13 +3326,13 @@ gpuShaderEntryBit(const GPUShaderLibrary *library, const char *entryPoint) {
 
 GPU_HIDE
 uint32_t
-gpuShaderWGSLStaticGroups(const GPUShaderLibrary *library,
-                          uint64_t                entryMask) {
-  const GPUShaderStaticSamplerInfo *samplers;
+shaderWGSLStaticGroups(const GPUShaderLibrary *library,
+                       uint64_t                entryMask) {
+  const ShaderStaticSamplerInfo    *samplers;
   uint32_t                          samplerCount;
   uint32_t                          groupMask;
 
-  samplers  = gpuGetShaderLibraryStaticSamplers(library, &samplerCount);
+  samplers  = getShaderLibraryStaticSamplers(library, &samplerCount);
   groupMask = 0u;
 
   for (uint32_t i = 0u; samplers && i < samplerCount; i++) {
@@ -3357,11 +3357,11 @@ gpuShaderWGSLStaticGroups(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
-gpuGetShaderLibraryWorkgroupSize(const GPUShaderLibrary *library,
-                                 const char             *entryPoint,
-                                 GPUShaderStageFlags     stage,
-                                 uint32_t                outSize[3]) {
-  const GPUShaderEntryInfo *entry;
+getShaderLibraryWorkgroupSize(const GPUShaderLibrary *library,
+                              const char             *entryPoint,
+                              GPUShaderStageFlags     stage,
+                              uint32_t                outSize[3]) {
+  const ShaderEntryInfo    *entry;
 
   if (outSize) {
     outSize[0] = 1u;
@@ -3373,7 +3373,7 @@ gpuGetShaderLibraryWorkgroupSize(const GPUShaderLibrary *library,
     return 0;
   }
 
-  entry = gpu_findShaderEntry(library, entryPoint);
+  entry = findShaderEntry(library, entryPoint);
 
   if (!entry || entry->stage != stage
       || (stage == GPU_SHADER_STAGE_COMPUTE_BIT
@@ -3390,23 +3390,23 @@ gpuGetShaderLibraryWorkgroupSize(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
-gpuGetShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
-                                        const char             *entryPoint,
-                                        uint32_t                outSize[3]) {
-  return gpuGetShaderLibraryWorkgroupSize(library,
-                                          entryPoint,
-                                          GPU_SHADER_STAGE_COMPUTE_BIT,
-                                          outSize);
+getShaderLibraryComputeWorkgroupSize(const GPUShaderLibrary *library,
+                                     const char             *entryPoint,
+                                     uint32_t                outSize[3]) {
+  return getShaderLibraryWorkgroupSize(library,
+                                       entryPoint,
+                                       GPU_SHADER_STAGE_COMPUTE_BIT,
+                                       outSize);
 }
 
 GPU_HIDE
 int
-gpuGetShaderLibraryPTXEntry(const GPUShaderLibrary *library,
-                            const char             *entryPoint,
-                            GPUShaderPTXEntryView  *outEntry) {
-  const GPUShaderEntryInfoList *entries;
-  const GPUShaderEntryInfo     *entry;
-  const GPUShaderPTXEntryInfo  *ptxEntry;
+getShaderLibraryPTXEntry(const GPUShaderLibrary *library,
+                         const char             *entryPoint,
+                         ShaderPTXEntryView     *outEntry) {
+  const ShaderEntryInfoList    *entries;
+  const ShaderEntryInfo        *entry;
+  const ShaderPTXEntryInfo     *ptxEntry;
   ptrdiff_t                     entryIndex;
 
   if (outEntry) {
@@ -3414,7 +3414,7 @@ gpuGetShaderLibraryPTXEntry(const GPUShaderLibrary *library,
   }
 
   entries = library ? library->_entryInfo : NULL;
-  entry   = gpu_findShaderEntry(library, entryPoint);
+  entry   = findShaderEntry(library, entryPoint);
 
   if (!entries || !entry || !outEntry || !library->_ptxInfo
       || library->_ptxInfo->entryCount != entries->count) {
@@ -3446,12 +3446,12 @@ gpuGetShaderLibraryPTXEntry(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
-gpuGetShaderLibraryMeshOutputInfo(const GPUShaderLibrary *library,
-                                  const char             *entryPoint,
-                                  uint32_t               *outTopology,
-                                  uint32_t               *outMaxVertices,
-                                  uint32_t               *outMaxPrimitives) {
-  const GPUShaderEntryInfo *entry;
+getShaderLibraryMeshOutputInfo(const GPUShaderLibrary *library,
+                               const char             *entryPoint,
+                               uint32_t               *outTopology,
+                               uint32_t               *outMaxVertices,
+                               uint32_t               *outMaxPrimitives) {
+  const ShaderEntryInfo    *entry;
 
   if (outTopology) {
     *outTopology = USL_RUNTIME_MESH_TOPOLOGY_UNKNOWN;
@@ -3469,7 +3469,7 @@ gpuGetShaderLibraryMeshOutputInfo(const GPUShaderLibrary *library,
     return 0;
   }
 
-  entry = gpu_findShaderEntry(library, entryPoint);
+  entry = findShaderEntry(library, entryPoint);
 
   if (!entry || entry->stage != GPU_SHADER_STAGE_MESH_BIT) {
     return 0;
@@ -3484,10 +3484,10 @@ gpuGetShaderLibraryMeshOutputInfo(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
-gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
-                              const char             *entryPoint,
-                              GPUShaderStageFlags    *outStage) {
-  const GPUShaderEntryInfo *entry;
+getShaderLibraryEntryStage(const GPUShaderLibrary *library,
+                           const char             *entryPoint,
+                           GPUShaderStageFlags    *outStage) {
+  const ShaderEntryInfo    *entry;
 
   if (outStage) {
     *outStage = 0u;
@@ -3497,7 +3497,7 @@ gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
     return 0;
   }
 
-  entry = gpu_findShaderEntry(library, entryPoint);
+  entry = findShaderEntry(library, entryPoint);
 
   if (!entry) {
     return 0;
@@ -3510,21 +3510,21 @@ gpuGetShaderLibraryEntryStage(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
-gpuGetShaderLibraryExecutionGraphEntry(const GPUShaderLibrary           *library,
-                                       const char                       *entryPoint,
-                                       GPUShaderExecutionGraphEntryInfo *outEntry) {
+getShaderLibraryExecutionGraphEntry(const GPUShaderLibrary           *library,
+                                    const char                       *entryPoint,
+                                    ShaderExecutionGraphEntryInfo    *outEntry) {
   if (outEntry) {
     memset(outEntry, 0, sizeof(*outEntry));
   }
 
-  return outEntry && gpu_executionGraphEntryInfo(gpu_findShaderEntry(library, entryPoint),
-                                                 outEntry);
+  return outEntry && executionGraphEntryInfo(findShaderEntry(library, entryPoint),
+                                             outEntry);
 }
 
 GPU_HIDE
 uint32_t
-gpuGetShaderLibraryExecutionGraphEntryCount(const GPUShaderLibrary *library) {
-  const GPUShaderEntryInfoList *list;
+getShaderLibraryExecutionGraphEntryCount(const GPUShaderLibrary *library) {
+  const ShaderEntryInfoList    *list;
   uint32_t                      count;
   uint32_t                      i;
 
@@ -3545,10 +3545,10 @@ gpuGetShaderLibraryExecutionGraphEntryCount(const GPUShaderLibrary *library) {
 
 GPU_HIDE
 int
-gpuGetShaderLibraryExecutionGraphEntryAt(const GPUShaderLibrary           *library,
-                                         uint32_t                          index,
-                                         GPUShaderExecutionGraphEntryInfo *outEntry) {
-  const GPUShaderEntryInfoList *list;
+getShaderLibraryExecutionGraphEntryAt(const GPUShaderLibrary           *library,
+                                      uint32_t                          index,
+                                      ShaderExecutionGraphEntryInfo    *outEntry) {
+  const ShaderEntryInfoList    *list;
 
   if (outEntry) {
     memset(outEntry, 0, sizeof(*outEntry));
@@ -3561,7 +3561,7 @@ gpuGetShaderLibraryExecutionGraphEntryAt(const GPUShaderLibrary           *libra
   }
 
   for (uint32_t i = 0u; i < list->count; i++) {
-    const GPUShaderEntryInfo *entry;
+    const ShaderEntryInfo    *entry;
 
     entry = &list->entries[i];
 
@@ -3570,7 +3570,7 @@ gpuGetShaderLibraryExecutionGraphEntryAt(const GPUShaderLibrary           *libra
     }
 
     if (index == 0u) {
-      return gpu_executionGraphEntryInfo(entry, outEntry);
+      return executionGraphEntryInfo(entry, outEntry);
     }
 
     index--;
@@ -3581,12 +3581,12 @@ gpuGetShaderLibraryExecutionGraphEntryAt(const GPUShaderLibrary           *libra
 
 GPU_HIDE
 int
-gpuGetShaderLibraryPayloadInfo(const GPUShaderLibrary *library,
-                               const char             *entryPoint,
-                               GPUShaderStageFlags     stage,
-                               uint32_t               *outSizeBytes,
-                               const char            **outType) {
-  const GPUShaderEntryInfo *entry;
+getShaderLibraryPayloadInfo(const GPUShaderLibrary *library,
+                            const char             *entryPoint,
+                            GPUShaderStageFlags     stage,
+                            uint32_t               *outSizeBytes,
+                            const char            **outType) {
+  const ShaderEntryInfo    *entry;
 
   if (outSizeBytes) {
     *outSizeBytes = 0u;
@@ -3600,7 +3600,7 @@ gpuGetShaderLibraryPayloadInfo(const GPUShaderLibrary *library,
     return 0;
   }
 
-  entry = gpu_findShaderEntry(library, entryPoint);
+  entry = findShaderEntry(library, entryPoint);
 
   if (!entry || entry->stage != stage) {
     return 0;
@@ -3614,13 +3614,13 @@ gpuGetShaderLibraryPayloadInfo(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
-gpuGetShaderLibraryRayInterfaceInfo(const GPUShaderLibrary *library,
-                                    const char             *entryPoint,
-                                    GPUShaderStageFlags     stage,
-                                    uint32_t               *outPayloadSizeBytes,
-                                    uint32_t               *outHitAttributeSizeBytes,
-                                    uint32_t               *outCallableDataSizeBytes) {
-  const GPUShaderEntryInfo *entry;
+getShaderLibraryRayInterfaceInfo(const GPUShaderLibrary *library,
+                                 const char             *entryPoint,
+                                 GPUShaderStageFlags     stage,
+                                 uint32_t               *outPayloadSizeBytes,
+                                 uint32_t               *outHitAttributeSizeBytes,
+                                 uint32_t               *outCallableDataSizeBytes) {
+  const ShaderEntryInfo    *entry;
 
   if (outPayloadSizeBytes) {
     *outPayloadSizeBytes = 0u;
@@ -3639,7 +3639,7 @@ gpuGetShaderLibraryRayInterfaceInfo(const GPUShaderLibrary *library,
     return 0;
   }
 
-  entry = gpu_findShaderEntry(library, entryPoint);
+  entry = findShaderEntry(library, entryPoint);
 
   if (!entry || entry->stage != stage) {
     return 0;
@@ -3654,24 +3654,24 @@ gpuGetShaderLibraryRayInterfaceInfo(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
-gpuShaderLibraryHasEntryResourceInfo(const GPUShaderLibrary *library) {
+shaderLibraryHasEntryResourceInfo(const GPUShaderLibrary *library) {
   return library && library->_entryInfo;
 }
 
 GPU_HIDE
 const GPUShaderReflection*
-gpuShaderReflectionView(const GPUShaderLibrary *library) {
+shaderReflectionView(const GPUShaderLibrary *library) {
   return library ? &library->_reflection : NULL;
 }
 
 GPU_HIDE
 int
-gpuShaderEntryView(const GPUShaderLibrary *library,
-                   const char             *entryPoint,
-                   GPUShaderStageFlags    *outStage,
-                   GPUShaderReflection    *outReflection) {
+shaderEntryView(const GPUShaderLibrary *library,
+                const char             *entryPoint,
+                GPUShaderStageFlags    *outStage,
+                GPUShaderReflection    *outReflection) {
   const GPUShaderResourceReflection *resources;
-  const GPUShaderEntryInfo          *entry;
+  const ShaderEntryInfo             *entry;
 
   if (!library || !entryPoint || !outStage || !outReflection
       || !library->_entryInfo) {
@@ -3681,7 +3681,7 @@ gpuShaderEntryView(const GPUShaderLibrary *library,
   memset(outReflection, 0, sizeof(*outReflection));
   *outStage = 0u;
   resources = library->_entryResources;
-  entry     = gpu_findShaderEntry(library, entryPoint);
+  entry     = findShaderEntry(library, entryPoint);
 
   if (!entry) {
     return 0;
@@ -3703,11 +3703,11 @@ gpuShaderEntryView(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
-gpuGetShaderResourceBackendBinding(const GPUShaderLibrary            *library,
-                                   const GPUShaderResourceReflection *resource,
-                                   uint32_t                          *outBinding) {
-  const GPUShaderResourceBindingInfoList *list;
-  const GPUShaderResourceBindingInfo     *entry;
+getShaderResourceBackendBinding(const GPUShaderLibrary            *library,
+                                const GPUShaderResourceReflection *resource,
+                                uint32_t                          *outBinding) {
+  const ShaderResourceBindingInfoList    *list;
+  const ShaderResourceBindingInfo        *entry;
   uint32_t                                i;
 
   if (!library || !resource || !outBinding) {
@@ -3735,9 +3735,9 @@ gpuGetShaderResourceBackendBinding(const GPUShaderLibrary            *library,
 }
 
 GPU_HIDE
-const GPUShaderStaticSamplerInfo*
-gpuGetShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
-                                  uint32_t               *outCount) {
+const ShaderStaticSamplerInfo*
+getShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
+                               uint32_t               *outCount) {
   if (outCount) {
     *outCount = library && library->_staticSamplers
                   ? library->_staticSamplers->count
@@ -3751,7 +3751,7 @@ gpuGetShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
-gpuStaticSamplerDescIsValid(const GPUStaticSamplerDesc *desc) {
+staticSamplerDescIsValid(const StaticSamplerDesc    *desc) {
   if (!desc) {
     return 0;
   }
@@ -3775,11 +3775,11 @@ gpuStaticSamplerDescIsValid(const GPUStaticSamplerDesc *desc) {
 
 GPU_HIDE
 int
-gpuStaticSamplerToSamplerDesc(const GPUStaticSamplerDesc *source,
-                              GPUSamplerDesc             *outDesc) {
+staticSamplerToSamplerDesc(const StaticSamplerDesc    *source,
+                           GPUSamplerDesc             *outDesc) {
   GPUAddressMode addressMode;
 
-  if (!source || !outDesc || !gpuStaticSamplerDescIsValid(source)
+  if (!source || !outDesc || !staticSamplerDescIsValid(source)
       || source->coordSpace != USL_RUNTIME_COORD_NORMALIZED
       || source->maxAnisotropy > 16u) {
     return 0;
@@ -3820,9 +3820,9 @@ gpuStaticSamplerToSamplerDesc(const GPUStaticSamplerDesc *source,
 }
 
 GPU_HIDE
-GPUShaderFunction*
-gpuShaderFunction(GPUShaderLibrary *lib, const char *name) {
-  GPUApi *api;
+ShaderFunction*
+shaderFunction(GPUShaderLibrary *lib, const char *name) {
+  Api    *api;
 
   if (!lib || !name || !(api = lib->_api) || !api->library.newFunction)
     return NULL;
@@ -3832,9 +3832,9 @@ gpuShaderFunction(GPUShaderLibrary *lib, const char *name) {
 
 GPU_HIDE
 void
-gpuDestroyShaderFunction(GPUShaderLibrary  *library,
-                         GPUShaderFunction *function) {
-  GPUApi *api;
+destroyShaderFunction(GPUShaderLibrary  *library,
+                      ShaderFunction    *function) {
+  Api    *api;
 
   if (!library || !function || !(api = library->_api)
       || !api->library.destroyFunction) {
@@ -3871,19 +3871,19 @@ GPUCreateShaderLibrary(GPUDevice                        *device,
 
   switch (info->sourceKind) {
     case GPU_SHADER_SOURCE_MSL_TEXT:
-      return gpu_createShaderLibraryFromMSLText(device, info, outLibrary);
+      return createShaderLibraryFromMSLText(device, info, outLibrary);
     case GPU_SHADER_SOURCE_WGSL_TEXT:
-      return gpu_createShaderLibraryFromWGSLText(device, info, outLibrary);
+      return createShaderLibraryFromWGSLText(device, info, outLibrary);
     case GPU_SHADER_SOURCE_USL_BYTECODE:
-      return gpu_createShaderLibraryFromUSLImpl(device,
-                                                info->sourceData,
-                                                info->sourceSize,
-                                                info->disableDiskCache,
-                                                outLibrary);
+      return createShaderLibraryFromUSLImpl(device,
+                                            info->sourceData,
+                                            info->sourceSize,
+                                            info->disableDiskCache,
+                                            outLibrary);
     case GPU_SHADER_SOURCE_USL_TEXT:
       return GPU_ERROR_INVALID_ARGUMENT;
     case GPU_SHADER_SOURCE_SPIRV_BINARY:
-      return gpu_createShaderLibraryFromBinary(device, info, outLibrary);
+      return createShaderLibraryFromBinary(device, info, outLibrary);
     default:
       return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -3905,11 +3905,11 @@ GPUCreateShaderLibraryFromUSL(GPUDevice         *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  return gpu_createShaderLibraryFromUSLImpl(device,
-                                            artifactData,
-                                            artifactSize,
-                                            false,
-                                            outLibrary);
+  return createShaderLibraryFromUSLImpl(device,
+                                        artifactData,
+                                        artifactSize,
+                                        false,
+                                        outLibrary);
 }
 
 GPU_EXPORT
@@ -3920,25 +3920,25 @@ GPUGetShaderReflection(const GPUShaderLibrary *library,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  return gpu_copyShaderReflection(&library->_reflection, outReflection);
+  return copyShaderReflection(&library->_reflection, outReflection);
 }
 
 GPU_EXPORT
 void
 GPUFreeShaderReflection(GPUShaderReflection *reflection) {
-  gpu_clearShaderReflection(reflection);
+  clearShaderReflection(reflection);
 }
 
 GPU_EXPORT
 void
 GPUDestroyShaderLibrary(GPUShaderLibrary *library) {
-  GPUApi *api;
+  Api    *api;
 
   if (!library)
     return;
 
-  gpu_clearShaderUSLSource(library);
-  gpu_clearShaderMetadata(library);
+  clearShaderUSLSource(library);
+  clearShaderMetadata(library);
 
   if (!(api = library->_api)) {
     free(library);

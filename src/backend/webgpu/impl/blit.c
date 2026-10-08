@@ -155,7 +155,7 @@ static const char gpu_blitSintWGSL[] =
   "  return textureLoad(gpuBlitSource, coord, 0);\n"
   "}\n";
 
-static const GPUBlitShaderSet webgpu_blitTextureShaders = {
+static const BlitShaderSet    webgpu_blitTextureShaders = {
   .filteringFloat = {
     .data = gpu_blitFloatWGSL,
     .size = sizeof(gpu_blitFloatWGSL) - 1u
@@ -182,5 +182,5 @@ GPU_HIDE
 void
 webgpu_blitTexture(GPUCommandBuffer         *cmdb,
                    const GPUTextureBlitInfo *info) {
-  gpuBlitTextureRenderFallback(cmdb, info, &webgpu_blitTextureShaders);
+  blitTextureRenderFallback(cmdb, info, &webgpu_blitTextureShaders);
 }

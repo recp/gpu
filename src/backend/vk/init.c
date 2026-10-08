@@ -17,13 +17,13 @@
 #include "common.h"
 #include "impl.h"
 
-GPUApi vk = {
+Api    vk = {
   .initialized = false,
   .backend     = GPU_BACKEND_VULKAN
 };
 
 GPU_HIDE
-GPUApi*
+Api*
 backend_vk(void) {
   /* todo: init */
 

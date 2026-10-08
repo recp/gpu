@@ -30,7 +30,7 @@ mt_wrapBuffer(GPUDevice                 *device,
   }
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-  if (gpuDeviceDebugMarkersEnabled(device)
+  if (deviceDebugMarkersEnabled(device)
       && info->label && info->label[0] != '\0') {
     nativeBuffer.label = [NSString stringWithUTF8String:info->label];
   }
@@ -59,7 +59,7 @@ GPUResult
 mt_createBuffer(GPUDevice                 *__restrict device,
                 const GPUBufferCreateInfo *__restrict info,
                 GPUBuffer                **__restrict outBuffer) {
-  GPUDeviceMT  *deviceMT;
+  DeviceMT     *deviceMT;
   id<MTLBuffer> buffer;
   GPUResult     result;
 
@@ -242,7 +242,7 @@ mt_bufferContents(GPUBuffer *__restrict buff) {
 
 GPU_HIDE
 void
-mt_initBuff(GPUApiBuffer *api) {
+mt_initBuff(ApiBuffer    *api) {
   api->create   = mt_createBuffer;
   api->destroy  = mt_destroyBuffer;
   api->write    = mt_writeBuffer;

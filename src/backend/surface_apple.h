@@ -21,17 +21,17 @@
 
 GPU_HIDE
 void*
-gpuCreateMetalLayer(void *nativeHandle, GPUSurfaceType type, float scale);
+createMetalLayer(void *nativeHandle, GPUSurfaceType type, float scale);
 
 GPU_HIDE
 void
-gpuResizeMetalLayer(void    *metalLayer,
-                    uint32_t width,
-                    uint32_t height,
-                    float    scale);
+resizeMetalLayer(void    *metalLayer,
+                 uint32_t width,
+                 uint32_t height,
+                 float    scale);
 
 GPU_HIDE
 void
-gpuDestroyMetalLayer(void *metalLayer);
+destroyMetalLayer(void *metalLayer);
 
 #endif /* gpu_backend_surface_apple_h */

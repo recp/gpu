@@ -22,13 +22,13 @@ GPUResult
 GPUGetSubgroupMatrixPropertiesEXT(const GPUAdapter               *adapter,
                                   uint32_t                       *inoutPropertyCount,
                                   GPUSubgroupMatrixPropertiesEXT *outProperties) {
-  GPUApi *api;
+  Api    *api;
 
   if (!adapter || !inoutPropertyCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuAdapterApi(adapter)) || !api->device.getSubgroupMatrixProperties) {
+  if (!(api = adapterApi(adapter)) || !api->device.getSubgroupMatrixProperties) {
     *inoutPropertyCount = 0u;
     return GPU_ERROR_UNSUPPORTED;
   }

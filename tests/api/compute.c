@@ -203,12 +203,12 @@ check_compute_disk_cache(GPUDevice                    *device,
   char                       lockPath[168];
   GPUComputePipeline        *pipeline;
   GPUPipelineCache          *cache;
-  GPUApi                    *api;
+  Api                       *api;
   FILE                      *file;
   long                       fileSize;
   int                        ok;
 
-  if (!(api = gpuDeviceApi(device))) {
+  if (!(api = deviceApi(device))) {
     return 0;
   }
 
@@ -383,13 +383,13 @@ check_compute_push_constant_shadowing_calls(GPUDevice *activeDevice) {
   GPUQueue              queue  = {0};
   GPUCommandBuffer      cmdb   = {0};
   GPUComputePassEncoder pass   = {0};
-  GPUApi               *api;
+  Api                  *api;
   void ( *oldPushConstants)(GPUComputePassEncoder *, const void *, uint32_t);
   uint32_t              value;
   int                   ok;
   uint32_t              i;
 
-  if (!(api = gpuDeviceApi(activeDevice))) {
+  if (!(api = deviceApi(activeDevice))) {
     fprintf(stderr, "compute push constant shadowing has no device api\n");
     return 0;
   }
@@ -639,7 +639,7 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
   GPUComputePassEncoder        pass             = {0};
   GPUBuffer                    indirectBuffer   = {0};
   GPUBuffer                    wrongUsageBuffer = {0};
-  GPUApi                      *api;
+  Api                         *api;
   void ( *oldDispatch)(GPUComputePassEncoder *, uint32_t, uint32_t, uint32_t);
   void ( *oldDispatchIndirect)(GPUComputePassEncoder *, GPUBuffer *, uint64_t);
   bool ( *oldMultiDispatchIndirect)(GPUComputePassEncoder *, GPUBuffer *, uint64_t, uint32_t, uint32_t);
@@ -648,7 +648,7 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
   GPUValidationMode            savedValidationMode;
   int                          ok = 0;
 
-  if (!(api = gpuDeviceApi(device))) {
+  if (!(api = deviceApi(device))) {
     fprintf(stderr, "compute dispatch validation has no device api\n");
     return 0;
   }

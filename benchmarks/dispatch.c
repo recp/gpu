@@ -85,12 +85,12 @@ typedef enum BenchAllocPath {
 #  define BENCH_BACKEND_MODE "multi"
 #endif
 
-static GPUApi *volatile  benchApi;
+static Api    *volatile  benchApi;
 static volatile uint64_t benchSink;
 
 static BENCH_NOINLINE void
 bench_draw(GPURenderPassEncoder *pass,
-           GPUPrimitiveType      type,
+           PrimitiveType         type,
            size_t                start,
            size_t                count,
            uint32_t              instanceCount,
@@ -438,9 +438,9 @@ bench_parseIterations(const char *value, uint64_t *outIterations) {
 int
 main(int argc, char *argv[]) {
   GPUBindGroupLayoutEntry  layoutEntry;
-  GPUBindGroupLayoutPriv   bindGroupLayoutPriv;
-  GPUPipelineLayoutPriv    pipelineLayoutPriv;
-  GPUBindGroupPriv         bindGroupPriv[2];
+  BindGroupLayoutPriv      bindGroupLayoutPriv;
+  PipelineLayoutPriv       pipelineLayoutPriv;
+  BindGroupPriv            bindGroupPriv[2];
   GPUBindGroupLayout      *pipelineLayouts[1];
   GPUBindGroup            *bindGroups[2];
   GPUBindGroupLayout       bindGroupLayout;
@@ -452,7 +452,7 @@ main(int argc, char *argv[]) {
   GPUCommandBuffer         cmdb;
   GPUQueue                 queue;
   GPUDevice                device;
-  GPUApi                   api;
+  Api                      api;
   double                   drawSamples[BENCH_DRAW_COUNT][BENCH_REPEATS];
   double                   bindSamples[BENCH_BIND_COUNT][BENCH_REPEATS];
   double                   vertexSamples[BENCH_VERTEX_COUNT][BENCH_REPEATS];

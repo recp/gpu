@@ -22,7 +22,7 @@
 #include "texture_internal.h"
 
 static bool
-gpuValidMemoryRequirements(const GPUMemoryRequirements *requirements) {
+validMemoryRequirements(const GPUMemoryRequirements *requirements) {
   return requirements
          && requirements->sizeBytes > 0u
          && requirements->alignmentBytes > 0u
@@ -31,8 +31,8 @@ gpuValidMemoryRequirements(const GPUMemoryRequirements *requirements) {
 }
 
 static bool
-gpuValidSparseTextureRequirements(const GPUTextureCreateInfo         *info,
-                                  const GPUSparseTextureRequirements *requirements) {
+validSparseTextureRequirements(const GPUTextureCreateInfo         *info,
+                               const GPUSparseTextureRequirements *requirements) {
   uint32_t mipLevelCount;
 
   if (!info || !requirements
@@ -59,8 +59,8 @@ gpuValidSparseTextureRequirements(const GPUTextureCreateInfo         *info,
 }
 
 static bool
-gpuValidSparseBufferRequirements(const GPUBufferCreateInfo         *info,
-                                 const GPUSparseBufferRequirements *requirements) {
+validSparseBufferRequirements(const GPUBufferCreateInfo         *info,
+                              const GPUSparseBufferRequirements *requirements) {
   uint64_t minimumTileCount;
 
   if (!info || !requirements
@@ -79,19 +79,19 @@ gpuValidSparseBufferRequirements(const GPUBufferCreateInfo         *info,
 }
 
 static uint32_t
-gpuSparseMipExtent(uint32_t extent, uint32_t mipLevel) {
+sparseMipExtent(uint32_t extent, uint32_t mipLevel) {
   extent >>= mipLevel < 32u ? mipLevel : 31u;
   return extent ? extent : 1u;
 }
 
 static uint32_t
-gpuDivideRoundUpU32(uint32_t value, uint32_t divisor) {
+divideRoundUpU32(uint32_t value, uint32_t divisor) {
   return value / divisor + (value % divisor != 0u);
 }
 
 static bool
-gpuSparseBufferMappingValid(const GPUQueue               *queue,
-                            const GPUSparseBufferMapping *mapping) {
+sparseBufferMappingValid(const GPUQueue               *queue,
+                         const GPUSparseBufferMapping *mapping) {
   const GPUSparseBufferRequirements *requirements;
   GPUBuffer                         *buffer;
   uint64_t                           heapTileCount;
@@ -128,8 +128,8 @@ gpuSparseBufferMappingValid(const GPUQueue               *queue,
 }
 
 static bool
-gpuSparseTextureMappingValid(const GPUQueue                *queue,
-                             const GPUSparseTextureMapping *mapping) {
+sparseTextureMappingValid(const GPUQueue                *queue,
+                          const GPUSparseTextureMapping *mapping) {
   const GPUSparseTextureRequirements *requirements;
   GPUTexture                         *texture;
   uint64_t                            heapTileCount;
@@ -150,7 +150,7 @@ gpuSparseTextureMappingValid(const GPUQueue                *queue,
       || mapping->tileWidth == 0u || mapping->tileHeight == 0u
       || mapping->tileDepth == 0u
       || mapping->mipLevel >= texture->mipLevelCount
-      || mapping->arrayLayer >= gpuTextureArrayLayerCount(texture)) {
+      || mapping->arrayLayer >= textureArrayLayerCount(texture)) {
     return false;
   }
 
@@ -171,13 +171,13 @@ gpuSparseTextureMappingValid(const GPUQueue                *queue,
       return false;
     }
   } else {
-    tileCountX = gpuDivideRoundUpU32(gpuSparseMipExtent(texture->width, mapping->mipLevel),
-                                     requirements->tileWidth);
-    tileCountY = gpuDivideRoundUpU32(gpuSparseMipExtent(texture->height, mapping->mipLevel),
-                                     requirements->tileHeight);
+    tileCountX = divideRoundUpU32(sparseMipExtent(texture->width, mapping->mipLevel),
+                                  requirements->tileWidth);
+    tileCountY = divideRoundUpU32(sparseMipExtent(texture->height, mapping->mipLevel),
+                                  requirements->tileHeight);
     tileCountZ = texture->dimension == GPU_TEXTURE_DIMENSION_3D
-                   ? gpuDivideRoundUpU32(gpuSparseMipExtent(texture->depthOrLayers, mapping->mipLevel),
-                                         requirements->tileDepth)
+                   ? divideRoundUpU32(sparseMipExtent(texture->depthOrLayers, mapping->mipLevel),
+                                      requirements->tileDepth)
                    : 1u;
 
     if (mapping->tileX >= tileCountX
@@ -220,7 +220,7 @@ gpuSparseTextureMappingValid(const GPUQueue                *queue,
 }
 
 static GPUResult
-gpuSubmitSparseFenceMarker(GPUQueue *queue, GPUFence *fence) {
+submitSparseFenceMarker(GPUQueue *queue, GPUFence *fence) {
   GPUQueueSubmitInfo submitInfo = {0};
   GPUCommandBuffer  *commandBuffer;
   GPUResult          result;
@@ -248,7 +248,7 @@ GPUResult
 GPUGetBufferMemoryRequirements(GPUDevice                 *__restrict device,
                                const GPUBufferCreateInfo *__restrict info,
                                GPUMemoryRequirements     *__restrict outRequirements) {
-  GPUApi   *api;
+  Api      *api;
   GPUResult result;
 
   if (!outRequirements) {
@@ -257,7 +257,7 @@ GPUGetBufferMemoryRequirements(GPUDevice                 *__restrict device,
 
   memset(outRequirements, 0, sizeof(*outRequirements));
 
-  result = gpuValidateBufferCreateInfo(device, info);
+  result = validateBufferCreateInfo(device, info);
 
   if (result != GPU_OK) {
     return result;
@@ -267,7 +267,7 @@ GPUGetBufferMemoryRequirements(GPUDevice                 *__restrict device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->memory.getBufferRequirements) {
+  if (!(api = deviceApi(device)) || !api->memory.getBufferRequirements) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -280,7 +280,7 @@ GPUGetBufferMemoryRequirements(GPUDevice                 *__restrict device,
     return result;
   }
 
-  if (!gpuValidMemoryRequirements(outRequirements)) {
+  if (!validMemoryRequirements(outRequirements)) {
     memset(outRequirements, 0, sizeof(*outRequirements));
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -293,7 +293,7 @@ GPUResult
 GPUGetTextureMemoryRequirements(GPUDevice                  *__restrict device,
                                 const GPUTextureCreateInfo *__restrict info,
                                 GPUMemoryRequirements      *__restrict outRequirements) {
-  GPUApi   *api;
+  Api      *api;
   GPUResult result;
 
   if (!outRequirements) {
@@ -302,7 +302,7 @@ GPUGetTextureMemoryRequirements(GPUDevice                  *__restrict device,
 
   memset(outRequirements, 0, sizeof(*outRequirements));
 
-  result = gpuValidateTextureCreateInfo(device, info);
+  result = validateTextureCreateInfo(device, info);
 
   if (result != GPU_OK) {
     return result;
@@ -312,7 +312,7 @@ GPUGetTextureMemoryRequirements(GPUDevice                  *__restrict device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->memory.getTextureRequirements) {
+  if (!(api = deviceApi(device)) || !api->memory.getTextureRequirements) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -325,7 +325,7 @@ GPUGetTextureMemoryRequirements(GPUDevice                  *__restrict device,
     return result;
   }
 
-  if (!gpuValidMemoryRequirements(outRequirements)) {
+  if (!validMemoryRequirements(outRequirements)) {
     memset(outRequirements, 0, sizeof(*outRequirements));
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -338,7 +338,7 @@ GPUResult
 GPUGetSparseBufferRequirements(GPUDevice                   *__restrict device,
                                const GPUBufferCreateInfo   *__restrict info,
                                GPUSparseBufferRequirements *__restrict outRequirements) {
-  GPUApi   *api;
+  Api      *api;
   GPUResult result;
 
   if (!outRequirements) {
@@ -347,7 +347,7 @@ GPUGetSparseBufferRequirements(GPUDevice                   *__restrict device,
 
   memset(outRequirements, 0, sizeof(*outRequirements));
 
-  result = gpuValidateBufferCreateInfo(device, info);
+  result = validateBufferCreateInfo(device, info);
 
   if (result != GPU_OK) {
     return result;
@@ -359,7 +359,7 @@ GPUGetSparseBufferRequirements(GPUDevice                   *__restrict device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->memory.getSparseBufferRequirements) {
+  if (!(api = deviceApi(device)) || !api->memory.getSparseBufferRequirements) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -372,7 +372,7 @@ GPUGetSparseBufferRequirements(GPUDevice                   *__restrict device,
     return result;
   }
 
-  if (!gpuValidSparseBufferRequirements(info, outRequirements)) {
+  if (!validSparseBufferRequirements(info, outRequirements)) {
     memset(outRequirements, 0, sizeof(*outRequirements));
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -385,7 +385,7 @@ GPUResult
 GPUGetSparseTextureRequirements(GPUDevice                    *__restrict device,
                                 const GPUTextureCreateInfo   *__restrict info,
                                 GPUSparseTextureRequirements *__restrict outRequirements) {
-  GPUApi   *api;
+  Api      *api;
   GPUResult result;
 
   if (!outRequirements) {
@@ -394,7 +394,7 @@ GPUGetSparseTextureRequirements(GPUDevice                    *__restrict device,
 
   memset(outRequirements, 0, sizeof(*outRequirements));
 
-  result = gpuValidateTextureCreateInfo(device, info);
+  result = validateTextureCreateInfo(device, info);
 
   if (result != GPU_OK) {
     return result;
@@ -404,7 +404,7 @@ GPUGetSparseTextureRequirements(GPUDevice                    *__restrict device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->memory.getSparseTextureRequirements) {
+  if (!(api = deviceApi(device)) || !api->memory.getSparseTextureRequirements) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -417,7 +417,7 @@ GPUGetSparseTextureRequirements(GPUDevice                    *__restrict device,
     return result;
   }
 
-  if (!gpuValidSparseTextureRequirements(info, outRequirements)) {
+  if (!validSparseTextureRequirements(info, outRequirements)) {
     memset(outRequirements, 0, sizeof(*outRequirements));
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -430,7 +430,7 @@ GPUResult
 GPUCreateHeap(GPUDevice               *__restrict device,
               const GPUHeapCreateInfo *__restrict info,
               GPUHeap                **__restrict outHeap) {
-  GPUApi   *api;
+  Api      *api;
   GPUResult result;
 
   if (!outHeap) {
@@ -462,7 +462,7 @@ GPUCreateHeap(GPUDevice               *__restrict device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->memory.createHeap) {
+  if (!(api = deviceApi(device)) || !api->memory.createHeap) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -496,9 +496,9 @@ GPUCreateHeap(GPUDevice               *__restrict device,
 GPU_EXPORT
 void
 GPUDestroyHeap(GPUHeap *__restrict heap) {
-  GPUApi *api;
+  Api    *api;
 
-  if (!heap || !(api = gpuDeviceApi(heap->device))) {
+  if (!heap || !(api = deviceApi(heap->device))) {
     return;
   }
 
@@ -515,7 +515,7 @@ GPUCreatePlacedBuffer(GPUDevice                 *__restrict device,
                       uint64_t                              heapOffset,
                       GPUBuffer                **__restrict outBuffer) {
   GPUMemoryRequirements requirements;
-  GPUApi               *api;
+  Api                  *api;
   GPUResult             result;
 
   if (!outBuffer) {
@@ -537,11 +537,11 @@ GPUCreatePlacedBuffer(GPUDevice                 *__restrict device,
     return result;
   }
 
-  if (!gpuHeapRangeValid(heap, &requirements, heapOffset)) {
+  if (!heapRangeValid(heap, &requirements, heapOffset)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->memory.createPlacedBuffer) {
+  if (!(api = deviceApi(device)) || !api->memory.createPlacedBuffer) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -577,7 +577,7 @@ GPUCreatePlacedTexture(GPUDevice                  *__restrict device,
                        uint64_t                               heapOffset,
                        GPUTexture                **__restrict outTexture) {
   GPUMemoryRequirements requirements;
-  GPUApi               *api;
+  Api                  *api;
   GPUResult             result;
 
   if (!outTexture) {
@@ -599,11 +599,11 @@ GPUCreatePlacedTexture(GPUDevice                  *__restrict device,
     return result;
   }
 
-  if (!gpuHeapRangeValid(heap, &requirements, heapOffset)) {
+  if (!heapRangeValid(heap, &requirements, heapOffset)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->memory.createPlacedTexture) {
+  if (!(api = deviceApi(device)) || !api->memory.createPlacedTexture) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -645,7 +645,7 @@ GPUCreateSparseBuffer(GPUDevice                 *__restrict device,
                       GPUHeap                   *__restrict heap,
                       GPUBuffer                **__restrict outBuffer) {
   GPUSparseBufferRequirements requirements;
-  GPUApi                     *api;
+  Api                        *api;
   GPUResult                   result;
 
   if (!outBuffer) {
@@ -670,7 +670,7 @@ GPUCreateSparseBuffer(GPUDevice                 *__restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->memory.createSparseBuffer) {
+  if (!(api = deviceApi(device)) || !api->memory.createSparseBuffer) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -701,7 +701,7 @@ GPUCreateSparseTexture(GPUDevice                  *__restrict device,
                        GPUHeap                    *__restrict heap,
                        GPUTexture                **__restrict outTexture) {
   GPUSparseTextureRequirements requirements;
-  GPUApi                      *api;
+  Api                         *api;
   GPUResult                    result;
 
   if (!outTexture) {
@@ -726,7 +726,7 @@ GPUCreateSparseTexture(GPUDevice                  *__restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(api = gpuDeviceApi(device)) || !api->memory.createSparseTexture) {
+  if (!(api = deviceApi(device)) || !api->memory.createSparseTexture) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -762,7 +762,7 @@ GPUResult
 GPUQueueSubmitSparse(GPUQueue                       *__restrict queue,
                      const GPUQueueSparseSubmitInfo *__restrict info) {
   GPUQueueSparseSubmitInfo backendInfo;
-  GPUApi                  *api;
+  Api                     *api;
   GPUPipelineStageMask     validStages;
   GPUResult                result;
   uint32_t                 bufferIndex;
@@ -792,13 +792,13 @@ GPUQueueSubmitSparse(GPUQueue                       *__restrict queue,
   }
 
   for (bufferIndex = 0u; bufferIndex < info->bufferMappingCount; bufferIndex++) {
-    if (!gpuSparseBufferMappingValid(queue, &info->pBufferMappings[bufferIndex])) {
+    if (!sparseBufferMappingValid(queue, &info->pBufferMappings[bufferIndex])) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
 
   for (textureIndex = 0u; textureIndex < info->textureMappingCount; textureIndex++) {
-    if (!gpuSparseTextureMappingValid(queue, &info->pTextureMappings[textureIndex])) {
+    if (!sparseTextureMappingValid(queue, &info->pTextureMappings[textureIndex])) {
       return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
@@ -822,7 +822,7 @@ GPUQueueSubmitSparse(GPUQueue                       *__restrict queue,
     }
   }
 
-  if (!(api = gpuCommandQueueApi(queue)) || !api->memory.submitSparse) {
+  if (!(api = commandQueueApi(queue)) || !api->memory.submitSparse) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -831,6 +831,6 @@ GPUQueueSubmitSparse(GPUQueue                       *__restrict queue,
   result            = api->memory.submitSparse(queue, &backendInfo);
 
   return result == GPU_OK && info->fence
-           ? gpuSubmitSparseFenceMarker(queue, info->fence)
+           ? submitSparseFenceMarker(queue, info->fence)
            : result;
 }

@@ -76,7 +76,7 @@ dx12__bufferInitialState(GPUBufferUsageFlags usage, bool defaultHeap) {
 
 static bool
 dx12__recordBufferTransfer(ID3D12GraphicsCommandList *commandList,
-                           GPUBufferDX12             *buffer,
+                           BufferDX12                *buffer,
                            ID3D12Resource            *staging,
                            uint64_t                   stagingOffset,
                            uint64_t                   bufferOffset,
@@ -174,7 +174,7 @@ dx12_wrapBuffer(GPUDevice                 *device,
                 GPUBuffer                **outBuffer) {
   D3D12_RESOURCE_DESC  desc;
   GPUBuffer           *buffer;
-  GPUBufferDX12       *native;
+  BufferDX12          *native;
 
   if (!device || !info || !resource || !outBuffer) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -194,10 +194,10 @@ dx12_wrapBuffer(GPUDevice                 *device,
   }
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
-  dx12__setBufferName(resource, gpuDeviceDebugLabel(device, info->label));
+  dx12__setBufferName(resource, deviceDebugLabel(device, info->label));
 #endif
 
-  native              = (GPUBufferDX12 *)(buffer + 1);
+  native              = (BufferDX12 *)(buffer + 1);
   native->resource    = resource;
   native->gpuAddress  = resource->lpVtbl->GetGPUVirtualAddress(resource);
   native->sizeBytes   = desc.Width;
@@ -220,7 +220,7 @@ dx12_getBufferMemoryRequirements(GPUDevice                 *device,
                                  GPUMemoryRequirements     *outRequirements) {
   D3D12_RESOURCE_DESC             desc = {0};
   D3D12_RESOURCE_ALLOCATION_INFO  allocationInfo;
-  GPUDeviceDX12                  *deviceDX12;
+  DeviceDX12                     *deviceDX12;
   GPUResult                       result;
 
   if (!device || !(deviceDX12 = device->_priv) || !info || !outRequirements) {
@@ -262,7 +262,7 @@ dx12_getSparseBufferRequirements(GPUDevice                   *device,
                                  const GPUBufferCreateInfo   *info,
                                  GPUSparseBufferRequirements *outRequirements) {
   D3D12_RESOURCE_DESC  desc = {0};
-  GPUDeviceDX12       *deviceDX12;
+  DeviceDX12          *deviceDX12;
   ID3D12Resource      *resource;
   UINT                 tileCount;
   GPUResult            result;
@@ -322,9 +322,9 @@ dx12_createSparseBuffer(GPUDevice                 *device,
                         GPUHeap                   *heap,
                         GPUBuffer                **outBuffer) {
   D3D12_RESOURCE_DESC  desc = {0};
-  GPUDeviceDX12       *deviceDX12;
+  DeviceDX12          *deviceDX12;
   GPUBuffer           *buffer;
-  GPUBufferDX12       *native;
+  BufferDX12          *native;
   GPUResult            result;
   HRESULT              nativeResult;
 
@@ -343,7 +343,7 @@ dx12_createSparseBuffer(GPUDevice                 *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native       = (GPUBufferDX12 *)(buffer + 1);
+  native       = (BufferDX12 *)(buffer + 1);
   nativeResult = deviceDX12->d3dDevice->lpVtbl->CreateReservedResource(deviceDX12->d3dDevice,
                                                                        &desc,
                                                                        D3D12_RESOURCE_STATE_COMMON,
@@ -358,7 +358,7 @@ dx12_createSparseBuffer(GPUDevice                 *device,
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   dx12__setBufferName(native->resource,
-                      gpuDeviceDebugLabel(device, info->label));
+                      deviceDebugLabel(device, info->label));
 #endif
 
   native->gpuAddress  = native->resource->lpVtbl->GetGPUVirtualAddress(native->resource);
@@ -384,10 +384,10 @@ dx12_createPlacedBuffer(GPUDevice                 *device,
                         uint64_t                   heapOffset,
                         GPUBuffer                **outBuffer) {
   D3D12_RESOURCE_DESC    desc = {0};
-  GPUDeviceDX12         *deviceDX12;
-  GPUHeapDX12           *heapDX12;
+  DeviceDX12            *deviceDX12;
+  HeapDX12              *heapDX12;
   GPUBuffer             *buffer;
-  GPUBufferDX12         *native;
+  BufferDX12            *native;
   D3D12_RESOURCE_STATES  initialState;
   GPUResult              usageResult;
   HRESULT                result;
@@ -407,7 +407,7 @@ dx12_createPlacedBuffer(GPUDevice                 *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native       = (GPUBufferDX12 *)(buffer + 1);
+  native       = (BufferDX12 *)(buffer + 1);
   initialState = dx12__bufferInitialState(info->usage, true);
   result       = deviceDX12->d3dDevice->lpVtbl->CreatePlacedResource(deviceDX12->d3dDevice,
                                                                      heapDX12->heap,
@@ -425,7 +425,7 @@ dx12_createPlacedBuffer(GPUDevice                 *device,
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   dx12__setBufferName(native->resource,
-                      gpuDeviceDebugLabel(device, info->label));
+                      deviceDebugLabel(device, info->label));
 #endif
 
   native->gpuAddress  = native->resource->lpVtbl->GetGPUVirtualAddress(native->resource);
@@ -445,7 +445,7 @@ dx12_createPlacedBuffer(GPUDevice                 *device,
 GPU_HIDE
 bool
 dx12_transitionBuffer(ID3D12GraphicsCommandList *commandList,
-                      GPUBufferDX12             *buffer,
+                      BufferDX12                *buffer,
                       D3D12_RESOURCE_STATES      state) {
   D3D12_RESOURCE_BARRIER barrier = {0};
 
@@ -481,9 +481,9 @@ dx12_createBuffer(GPUDevice                 *__restrict device,
   D3D12_RESOURCE_DESC    desc = {0};
   D3D12_HEAP_PROPERTIES  heap = {0};
   D3D12_RANGE            readRange = {0};
-  GPUDeviceDX12         *deviceDX12;
+  DeviceDX12            *deviceDX12;
   GPUBuffer             *buffer;
-  GPUBufferDX12         *native;
+  BufferDX12            *native;
   uint64_t               allocationSize;
   D3D12_RESOURCE_STATES  initialState;
   GPUResult              usageResult;
@@ -512,7 +512,7 @@ dx12_createBuffer(GPUDevice                 *__restrict device,
   }
 
   deviceDX12 = device->_priv;
-  native     = (GPUBufferDX12 *)(buffer + 1);
+  native     = (BufferDX12 *)(buffer + 1);
 
   storage         = (info->usage & GPU_BUFFER_USAGE_STORAGE) != 0u;
   rayInput        = (info->usage & GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT) != 0u;
@@ -563,7 +563,7 @@ dx12_createBuffer(GPUDevice                 *__restrict device,
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   dx12__setBufferName(native->resource,
-                      gpuDeviceDebugLabel(device, info->label));
+                      deviceDebugLabel(device, info->label));
 #endif
 
   native->gpuAddress  = native->resource->lpVtbl->GetGPUVirtualAddress(native->resource);
@@ -583,7 +583,7 @@ dx12_createBuffer(GPUDevice                 *__restrict device,
 GPU_HIDE
 void
 dx12_destroyBuffer(GPUBuffer *__restrict buffer) {
-  GPUBufferDX12 *native;
+  BufferDX12    *native;
 
   if (!buffer) {
     return;
@@ -611,8 +611,8 @@ dx12_writeBuffer(GPUQueue   *__restrict queue,
                  uint64_t               sizeBytes) {
   ID3D12GraphicsCommandList *commandList;
   ID3D12Resource            *staging;
-  GPUQueueDX12              *queueDX12;
-  GPUBufferDX12             *native;
+  QueueDX12                 *queueDX12;
+  BufferDX12                *native;
   void                      *mapped;
   uint64_t                   stagingOffset;
   GPUResult                  result;
@@ -622,7 +622,7 @@ dx12_writeBuffer(GPUQueue   *__restrict queue,
 
   if (!queue || !buffer || queue->_device != buffer->device
       || !queueDX12 || !native || !data || sizeBytes > SIZE_MAX
-      || !gpuBufferRangeValid(buffer, dstOffset, sizeBytes)) {
+      || !bufferRangeValid(buffer, dstOffset, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -674,8 +674,8 @@ dx12_readBuffer(GPUQueue  *__restrict queue,
   D3D12_RANGE                readRange;
   ID3D12GraphicsCommandList *commandList;
   ID3D12Resource            *staging;
-  GPUQueueDX12              *queueDX12;
-  GPUBufferDX12             *native;
+  QueueDX12                 *queueDX12;
+  BufferDX12                *native;
   void                      *mapped;
   uint64_t                   stagingOffset;
   GPUResult                  result;
@@ -685,7 +685,7 @@ dx12_readBuffer(GPUQueue  *__restrict queue,
 
   if (!queue || !buffer || queue->_device != buffer->device
       || !queueDX12 || !native || !outData || sizeBytes > SIZE_MAX
-      || !gpuBufferRangeValid(buffer, srcOffset, sizeBytes)) {
+      || !bufferRangeValid(buffer, srcOffset, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -748,7 +748,7 @@ dx12_readBuffer(GPUQueue  *__restrict queue,
 GPU_HIDE
 void*
 dx12_bufferContents(GPUBuffer *__restrict buffer) {
-  GPUBufferDX12 *native;
+  BufferDX12    *native;
 
   native = buffer ? buffer->_priv : NULL;
 
@@ -757,7 +757,7 @@ dx12_bufferContents(GPUBuffer *__restrict buffer) {
 
 GPU_HIDE
 void
-dx12_initBuff(GPUApiBuffer *api) {
+dx12_initBuff(ApiBuffer    *api) {
   api->create   = dx12_createBuffer;
   api->destroy  = dx12_destroyBuffer;
   api->write    = dx12_writeBuffer;

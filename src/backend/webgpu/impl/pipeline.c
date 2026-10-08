@@ -218,12 +218,12 @@ webgpu_createPipeline(GPUDevice                         *device,
   WGPUBlendState               blends[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   WGPUDepthStencilState        depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  GPUWebGPUPipelineError       error;
+  WebGPUPipelineError          error;
 #endif
   WGPUVertexBufferLayout      *vertexBuffers;
   WGPUVertexAttribute         *vertexAttributes;
-  GPUDeviceWebGPU             *native;
-  GPURenderPipelineWebGPU     *state;
+  DeviceWebGPU                *native;
+  RenderPipelineWebGPU        *state;
   WGPUShaderModule             module;
   const GPUVertexBufferLayout *vertexSource;
   WGPUVertexAttribute         *attribute;
@@ -239,7 +239,7 @@ webgpu_createPipeline(GPUDevice                         *device,
   uint32_t                     targetIndex;
   GPUResult                    result;
 
-  native = gpu_webgpuDevice(device);
+  native = webgpuDevice(device);
   module = info && info->library ? info->library->_priv : NULL;
 
   if (!native || !native->device || !info || !module || !info->layout
@@ -311,7 +311,7 @@ webgpu_createPipeline(GPUDevice                         *device,
 
   for (targetIndex = 0u; targetIndex < info->colorTargetCount; targetIndex++) {
     targets[targetIndex]           = (WGPUColorTargetState)WGPU_COLOR_TARGET_STATE_INIT;
-    targets[targetIndex].format    = gpu_webgpuFormat(info->pColorTargets[targetIndex].format);
+    targets[targetIndex].format    = webgpuFormat(info->pColorTargets[targetIndex].format);
     targets[targetIndex].writeMask = webgpu_colorWriteMask(info->pColorTargets[targetIndex].blend.writeMask);
 
     if (targets[targetIndex].format == WGPUTextureFormat_Undefined) {
@@ -334,11 +334,11 @@ webgpu_createPipeline(GPUDevice                         *device,
 
   automaticGroupMask = 0u;
 
-  if (gpuShaderLibraryHasEntryResourceInfo(info->library)) {
-    vertexEntryMask    = gpuShaderEntryBit(info->library, info->vertexEntry);
-    fragmentEntryMask  = gpuShaderEntryBit(info->library, info->fragmentEntry);
+  if (shaderLibraryHasEntryResourceInfo(info->library)) {
+    vertexEntryMask    = shaderEntryBit(info->library, info->vertexEntry);
+    fragmentEntryMask  = shaderEntryBit(info->library, info->fragmentEntry);
     entryMask          = vertexEntryMask | fragmentEntryMask;
-    automaticGroupMask = gpuShaderWGSLStaticGroups(info->library, entryMask);
+    automaticGroupMask = shaderWGSLStaticGroups(info->library, entryMask);
 
     if (vertexEntryMask == 0u || fragmentEntryMask == 0u
         || automaticGroupMask == UINT32_MAX) {
@@ -351,21 +351,21 @@ webgpu_createPipeline(GPUDevice                         *device,
 
   automaticGroupMask &= ~requiredBindGroupMask;
 
-  if (gpu_webgpuCreatePipelineLayout(device,
-                                     info->layout,
-                                     requiredBindGroupMask,
-                                     automaticGroupMask,
-                                     &state->layout) != GPU_OK) {
+  if (webgpuCreatePipelineLayout(device,
+                                 info->layout,
+                                 requiredBindGroupMask,
+                                 automaticGroupMask,
+                                 &state->layout) != GPU_OK) {
     free(state);
     free(vertexBuffers);
     free(vertexAttributes);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  descriptor.label               = gpu_webgpuString(info->label);
+  descriptor.label               = webgpuString(info->label);
   descriptor.layout              = state->layout.layout;
   descriptor.vertex.module       = module;
-  descriptor.vertex.entryPoint   = gpu_webgpuString(info->vertexEntry);
+  descriptor.vertex.entryPoint   = webgpuString(info->vertexEntry);
   descriptor.vertex.bufferCount  = info->vertex.bufferLayoutCount;
   descriptor.vertex.buffers      = vertexBuffers;
   descriptor.primitive.topology  = webgpu_topology(info->primitiveTopology);
@@ -380,7 +380,7 @@ webgpu_createPipeline(GPUDevice                         *device,
   descriptor.multisample.alphaToCoverageEnabled = info->multisample.alphaToCoverageEnable;
 
   if (info->depthStencilFormat != GPU_FORMAT_UNDEFINED) {
-    depthStencil.format = gpu_webgpuFormat(info->depthStencilFormat);
+    depthStencil.format = webgpuFormat(info->depthStencilFormat);
 
     if (depthStencil.format == WGPUTextureFormat_Undefined) {
       free(vertexBuffers);
@@ -413,7 +413,7 @@ webgpu_createPipeline(GPUDevice                         *device,
   }
 
   fragment.module      = module;
-  fragment.entryPoint  = gpu_webgpuString(info->fragmentEntry);
+  fragment.entryPoint  = webgpuString(info->fragmentEntry);
   fragment.targetCount = info->colorTargetCount;
   fragment.targets     = targets;
   descriptor.fragment  = &fragment;
@@ -425,11 +425,11 @@ webgpu_createPipeline(GPUDevice                         *device,
 
   result = GPU_OK;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  gpu_webgpuBeginPipelineError(device, &error);
+  webgpuBeginPipelineError(device, &error);
 #endif
   state->pipeline = wgpuDeviceCreateRenderPipeline(native->device, &descriptor);
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  result = gpu_webgpuEndPipelineError(&error);
+  result = webgpuEndPipelineError(&error);
 #endif
   free(vertexBuffers);
   free(vertexAttributes);
@@ -438,7 +438,7 @@ webgpu_createPipeline(GPUDevice                         *device,
     if (state->pipeline)
       wgpuRenderPipelineRelease(state->pipeline);
 
-    gpu_webgpuDestroyPipelineLayout(&state->layout);
+    webgpuDestroyPipelineLayout(&state->layout);
     free(state);
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
@@ -451,7 +451,7 @@ webgpu_createPipeline(GPUDevice                         *device,
 
 static void
 webgpu_destroyPipeline(GPURenderPipeline *pipeline) {
-  GPURenderPipelineWebGPU *state;
+  RenderPipelineWebGPU    *state;
 
   state = pipeline ? pipeline->_state : NULL;
 
@@ -460,7 +460,7 @@ webgpu_destroyPipeline(GPURenderPipeline *pipeline) {
       wgpuRenderPipelineRelease(state->pipeline);
     }
 
-    gpu_webgpuDestroyPipelineLayout(&state->layout);
+    webgpuDestroyPipelineLayout(&state->layout);
     free(state);
   }
 
@@ -468,7 +468,7 @@ webgpu_destroyPipeline(GPURenderPipeline *pipeline) {
 }
 
 void
-webgpu_initPipeline(GPUApiRender *api) {
+webgpu_initPipeline(ApiRender    *api) {
   api->createPipeline        = webgpu_createPipeline;
   api->destroyRenderPipeline = webgpu_destroyPipeline;
 }

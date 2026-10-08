@@ -24,40 +24,40 @@
 
 #define GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS 8u
 
-static GPUApi*
-gpu_transferPassApi(const GPUTransferPassEncoder *pass) {
-  return pass ? gpuCommandBufferApi(pass->_cmdb) : NULL;
+static Api*
+transferPassApi(const GPUTransferPassEncoder *pass) {
+  return pass ? commandBufferApi(pass->_cmdb) : NULL;
 }
 
 #if GPU_BUILD_WITH_VALIDATION
 static bool
-gpu_validLoadOp(GPULoadOp op) {
+validLoadOp(GPULoadOp op) {
   return op == GPU_LOAD_OP_LOAD
          || op == GPU_LOAD_OP_CLEAR
          || op == GPU_LOAD_OP_DONT_CARE;
 }
 
 static bool
-gpu_validStoreOp(GPUStoreOp op) {
+validStoreOp(GPUStoreOp op) {
   return op == GPU_STORE_OP_STORE
          || op == GPU_STORE_OP_DONT_CARE;
 }
 #endif
 
 static bool
-gpu_validIndirectCommandRange(const GPUIndirectCommandRangeEXT *range,
-                              GPUDevice                        *device,
-                              uint32_t                          commandCount,
-                              uint64_t                          commandSize) {
+validIndirectCommandRange(const GPUIndirectCommandRangeEXT *range,
+                          GPUDevice                        *device,
+                          uint32_t                          commandCount,
+                          uint64_t                          commandSize) {
   uint64_t address;
 
   if (!range || !range->buffer || !device || commandCount == 0u
       || range->buffer->device != device
-      || !gpuBufferHasUsage(range->buffer,
-                            GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT)
+      || !bufferHasUsage(range->buffer,
+                         GPU_BUFFER_USAGE_INDIRECT | GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT)
       || range->buffer->_gpuAddress == 0u
       || range->offset > UINT64_MAX - range->buffer->_gpuAddress
-      || !gpuBufferRangeValid(range->buffer, range->offset, range->sizeBytes)
+      || !bufferRangeValid(range->buffer, range->offset, range->sizeBytes)
       || range->strideBytes < commandSize
       || (range->strideBytes & 3u) != 0u
       || commandCount > range->sizeBytes / range->strideBytes) {
@@ -70,7 +70,7 @@ gpu_validIndirectCommandRange(const GPUIndirectCommandRangeEXT *range,
 }
 
 static bool
-gpu_validAddressCopyFlags(GPUAddressCopyFlagsEXT flags) {
+validAddressCopyFlags(GPUAddressCopyFlagsEXT flags) {
   const GPUAddressCopyFlagsEXT known = GPU_ADDRESS_COPY_DEVICE_LOCAL_BIT_EXT
                                       | GPU_ADDRESS_COPY_SPARSE_BIT_EXT
                                       | GPU_ADDRESS_COPY_PROTECTED_BIT_EXT;
@@ -80,8 +80,8 @@ gpu_validAddressCopyFlags(GPUAddressCopyFlagsEXT flags) {
 }
 
 static bool
-gpu_indirectTextureAspect(GPUIndirectTextureAspectFlagsEXT aspect,
-                          GPUTextureAspect                *outAspect) {
+indirectTextureAspect(GPUIndirectTextureAspectFlagsEXT aspect,
+                      GPUTextureAspect                *outAspect) {
   if (!outAspect || aspect == 0u || (aspect & (aspect - 1u)) != 0u) {
     return false;
   }
@@ -102,16 +102,16 @@ gpu_indirectTextureAspect(GPUIndirectTextureAspectFlagsEXT aspect,
 }
 
 static bool
-gpu_validIndirectTextureSubresource(const GPUIndirectTextureSubresourceEXT *subresource,
-                                    const GPUTexture                       *texture) {
+validIndirectTextureSubresource(const GPUIndirectTextureSubresourceEXT *subresource,
+                                const GPUTexture                       *texture) {
   GPUTextureAspect resolved;
   GPUTextureAspect aspect;
   uint32_t         layers;
 
   if (!subresource || !texture || subresource->layerCount == 0u
       || subresource->mipLevel >= texture->mipLevelCount
-      || !gpu_indirectTextureAspect(subresource->aspectMask, &aspect)
-      || !gpuFormatResolveCopyAspect(texture->format, aspect, &resolved)) {
+      || !indirectTextureAspect(subresource->aspectMask, &aspect)
+      || !formatResolveCopyAspect(texture->format, aspect, &resolved)) {
     return false;
   }
 
@@ -129,7 +129,7 @@ gpu_validIndirectTextureSubresource(const GPUIndirectTextureSubresourceEXT *subr
 
 #if GPU_BUILD_WITH_VALIDATION
 static bool
-gpu_textureViewHasUsage(const GPUTextureView *view, GPUTextureUsageFlags usage) {
+textureViewHasUsage(const GPUTextureView *view, GPUTextureUsageFlags usage) {
   const GPUTexture *texture;
 
   texture = view ? view->_texture : NULL;
@@ -138,12 +138,12 @@ gpu_textureViewHasUsage(const GPUTextureView *view, GPUTextureUsageFlags usage) 
 }
 
 static uint32_t
-gpu_textureViewSampleCount(const GPUTextureView *view) {
+textureViewSampleCount(const GPUTextureView *view) {
   return view && view->_texture ? view->_texture->sampleCount : 0u;
 }
 
 static uint32_t
-gpu_textureViewExtent(uint32_t extent, const GPUTextureView *view) {
+textureViewExtent(uint32_t extent, const GPUTextureView *view) {
   uint32_t result;
 
   if (!view) {
@@ -160,7 +160,7 @@ gpu_textureViewExtent(uint32_t extent, const GPUTextureView *view) {
 }
 
 static bool
-gpu_formatIsDepthStencil(GPUFormat format) {
+formatIsDepthStencil(GPUFormat format) {
   return format == GPU_FORMAT_DEPTH16_UNORM
          || format == GPU_FORMAT_STENCIL8
          || format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8
@@ -169,7 +169,7 @@ gpu_formatIsDepthStencil(GPUFormat format) {
 }
 
 static bool
-gpu_formatHasDepth(GPUFormat format) {
+formatHasDepth(GPUFormat format) {
   return format == GPU_FORMAT_DEPTH16_UNORM
          || format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8
          || format == GPU_FORMAT_DEPTH32_FLOAT
@@ -177,7 +177,7 @@ gpu_formatHasDepth(GPUFormat format) {
 }
 
 static bool
-gpu_formatHasStencil(GPUFormat format) {
+formatHasStencil(GPUFormat format) {
   return format == GPU_FORMAT_STENCIL8
          || format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8
          || format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
@@ -185,8 +185,8 @@ gpu_formatHasStencil(GPUFormat format) {
 #endif
 
 static bool
-gpu_textureCopySubresourcesOverlap(const GPUTexture                    *texture,
-                                   const GPUTextureToTextureCopyRegion *region) {
+textureCopySubresourcesOverlap(const GPUTexture                    *texture,
+                               const GPUTextureToTextureCopyRegion *region) {
   uint32_t srcLayerEnd;
   uint32_t dstLayerEnd;
 
@@ -206,8 +206,8 @@ gpu_textureCopySubresourcesOverlap(const GPUTexture                    *texture,
 }
 
 static bool
-gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
-                              const GPUDevice               *device) {
+validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
+                          const GPUDevice               *device) {
 #if GPU_BUILD_WITH_VALIDATION
   const GPUShadingRateAttachmentEXT          *shadingRate;
   const GPURasterizationRateMapRenderPassEXT *rateMap;
@@ -243,11 +243,11 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
     return false;
   }
 
-  if (!gpuValidPassTimestampWrites(info->timestampWrites, device)) {
+  if (!validPassTimestampWrites(info->timestampWrites, device)) {
     return false;
   }
 
-  if (!gpuRenderPassVRSExtensions(info, &shadingRate, &rateMap)) {
+  if (!renderPassVRSExtensions(info, &shadingRate, &rateMap)) {
     return false;
   }
 
@@ -265,8 +265,8 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
 
   if (shadingRate
       && (!shadingRate->view
-          || !gpu_textureViewHasUsage(shadingRate->view,
-                                      GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT)
+          || !textureViewHasUsage(shadingRate->view,
+                                  GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT)
           || shadingRate->view->_texture->device != device
           || shadingRate->view->format != GPU_FORMAT_R8_UINT
           || shadingRate->view->viewType != GPU_TEXTURE_VIEW_2D
@@ -296,54 +296,54 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
     color = &info->pColorAttachments[i];
 
     if (!color->view
-        || !gpu_textureViewHasUsage(color->view, GPU_TEXTURE_USAGE_COLOR_TARGET)
+        || !textureViewHasUsage(color->view, GPU_TEXTURE_USAGE_COLOR_TARGET)
         || color->view->_texture->device != device
-        || gpu_formatIsDepthStencil(color->view->format)
+        || formatIsDepthStencil(color->view->format)
         || (color->resolveView
-            && (!gpu_textureViewHasUsage(color->resolveView, GPU_TEXTURE_USAGE_COLOR_TARGET)
+            && (!textureViewHasUsage(color->resolveView, GPU_TEXTURE_USAGE_COLOR_TARGET)
                 || color->resolveView->_texture->device != device
-                || gpu_formatIsDepthStencil(color->resolveView->format)
+                || formatIsDepthStencil(color->resolveView->format)
                 || color->resolveView->format != color->view->format
-                || gpu_textureViewExtent(color->resolveView->_texture->width,
-                                         color->resolveView) !=
-                   gpu_textureViewExtent(color->view->_texture->width, color->view)
-                || gpu_textureViewExtent(color->resolveView->_texture->height,
-                                         color->resolveView) !=
-                   gpu_textureViewExtent(color->view->_texture->height, color->view)
+                || textureViewExtent(color->resolveView->_texture->width,
+                                     color->resolveView) !=
+                   textureViewExtent(color->view->_texture->width, color->view)
+                || textureViewExtent(color->resolveView->_texture->height,
+                                     color->resolveView) !=
+                   textureViewExtent(color->view->_texture->height, color->view)
                 || color->resolveView->arrayLayerCount != color->view->arrayLayerCount
-                || gpu_textureViewSampleCount(color->view) <= 1u
-                || gpu_textureViewSampleCount(color->resolveView) != 1u))
-        || !gpu_validLoadOp(color->loadOp)
-        || !gpu_validStoreOp(color->storeOp)) {
+                || textureViewSampleCount(color->view) <= 1u
+                || textureViewSampleCount(color->resolveView) != 1u))
+        || !validLoadOp(color->loadOp)
+        || !validStoreOp(color->storeOp)) {
       return false;
     }
 
     if (sampleCount != 0u
-        && sampleCount != gpu_textureViewSampleCount(color->view)) {
+        && sampleCount != textureViewSampleCount(color->view)) {
       return false;
     }
 
-    sampleCount = gpu_textureViewSampleCount(color->view);
+    sampleCount = textureViewSampleCount(color->view);
   }
 
   depthStencil = info->pDepthStencilAttachment;
 
   if (depthStencil) {
     if (!depthStencil->view
-        || !gpu_textureViewHasUsage(depthStencil->view, GPU_TEXTURE_USAGE_DEPTH_STENCIL)
+        || !textureViewHasUsage(depthStencil->view, GPU_TEXTURE_USAGE_DEPTH_STENCIL)
         || depthStencil->view->_texture->device != device
-        || !gpu_formatIsDepthStencil(depthStencil->view->format)
-        || !gpu_validLoadOp(depthStencil->depthLoadOp)
-        || !gpu_validStoreOp(depthStencil->depthStoreOp)
-        || !gpu_validLoadOp(depthStencil->stencilLoadOp)
-        || !gpu_validStoreOp(depthStencil->stencilStoreOp)
-        || (gpu_formatHasDepth(depthStencil->view->format)
+        || !formatIsDepthStencil(depthStencil->view->format)
+        || !validLoadOp(depthStencil->depthLoadOp)
+        || !validStoreOp(depthStencil->depthStoreOp)
+        || !validLoadOp(depthStencil->stencilLoadOp)
+        || !validStoreOp(depthStencil->stencilStoreOp)
+        || (formatHasDepth(depthStencil->view->format)
            ? (depthStencil->depthLoadOp == GPU_LOAD_OP_CLEAR
               && (depthStencil->clearDepth < 0.0f
                   || depthStencil->clearDepth > 1.0f))
            : (depthStencil->depthLoadOp != GPU_LOAD_OP_DONT_CARE
               || depthStencil->depthStoreOp != GPU_STORE_OP_DONT_CARE))
-        || (gpu_formatHasStencil(depthStencil->view->format)
+        || (formatHasStencil(depthStencil->view->format)
            ? (depthStencil->stencilLoadOp == GPU_LOAD_OP_CLEAR
               && depthStencil->clearStencil > UINT8_MAX)
            : (depthStencil->stencilLoadOp != GPU_LOAD_OP_DONT_CARE
@@ -352,7 +352,7 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
     }
 
     if (sampleCount != 0u
-        && sampleCount != gpu_textureViewSampleCount(depthStencil->view)) {
+        && sampleCount != textureViewSampleCount(depthStencil->view)) {
       return false;
     }
   }
@@ -367,13 +367,13 @@ gpu_validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
          && info->colorAttachmentCount <= GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS
          && (info->colorAttachmentCount == 0u || info->pColorAttachments)
          && (info->colorAttachmentCount > 0u || info->pDepthStencilAttachment)
-         && gpuValidPassTimestampWrites(info->timestampWrites, device);
+         && validPassTimestampWrites(info->timestampWrites, device);
 #endif
 }
 
 static void
-gpu_setRenderPassEncoderInfo(GPURenderPassEncoder          *encoder,
-                             const GPURenderPassCreateInfo *info) {
+setRenderPassEncoderInfo(GPURenderPassEncoder          *encoder,
+                         const GPURenderPassCreateInfo *info) {
 #if GPU_BUILD_WITH_VALIDATION
   const GPURenderPassDepthStencilAttachment *depthStencil;
   const GPURenderPassColorAttachment        *color;
@@ -394,7 +394,7 @@ gpu_setRenderPassEncoderInfo(GPURenderPassEncoder          *encoder,
     color = &info->pColorAttachments[i];
 
     encoder->_colorAttachmentFormats[i]      = color->view->format;
-    encoder->_colorAttachmentSampleCounts[i] = gpu_textureViewSampleCount(color->view);
+    encoder->_colorAttachmentSampleCounts[i] = textureViewSampleCount(color->view);
     encoder->_colorAttachmentHasResolve[i]   = color->resolveView != NULL;
   }
 
@@ -402,7 +402,7 @@ gpu_setRenderPassEncoderInfo(GPURenderPassEncoder          *encoder,
 
   if (depthStencil) {
     encoder->_depthStencilFormat      = depthStencil->view->format;
-    encoder->_depthStencilSampleCount = gpu_textureViewSampleCount(depthStencil->view);
+    encoder->_depthStencilSampleCount = textureViewSampleCount(depthStencil->view);
   } else {
     encoder->_depthStencilFormat      = GPU_FORMAT_UNDEFINED;
     encoder->_depthStencilSampleCount = 0u;
@@ -411,7 +411,7 @@ gpu_setRenderPassEncoderInfo(GPURenderPassEncoder          *encoder,
 }
 
 static uint32_t
-gpu_copyMipExtent(uint32_t extent, uint32_t mipLevel) {
+copyMipExtent(uint32_t extent, uint32_t mipLevel) {
   uint32_t mipExtent;
 
   mipExtent = extent >> mipLevel;
@@ -420,8 +420,8 @@ gpu_copyMipExtent(uint32_t extent, uint32_t mipLevel) {
 }
 
 static bool
-gpu_validTextureCopyRegion(const GPUTextureSubresourceRegion *region,
-                           const GPUTexture                  *texture) {
+validTextureCopyRegion(const GPUTextureSubresourceRegion *region,
+                       const GPUTexture                  *texture) {
   const GPUTextureLocation *location;
   GPUTextureAspect          aspect;
   uint32_t                  mipWidth;
@@ -440,14 +440,14 @@ gpu_validTextureCopyRegion(const GPUTextureSubresourceRegion *region,
   location = &region->texture;
 
   if (location->mipLevel >= texture->mipLevelCount
-      || !gpuFormatResolveCopyAspect(texture->format,
-                                     location->aspect,
-                                     &aspect)) {
+      || !formatResolveCopyAspect(texture->format,
+                                  location->aspect,
+                                  &aspect)) {
     return false;
   }
 
-  mipWidth  = gpu_copyMipExtent(texture->width, location->mipLevel);
-  mipHeight = gpu_copyMipExtent(texture->height, location->mipLevel);
+  mipWidth  = copyMipExtent(texture->width, location->mipLevel);
+  mipHeight = copyMipExtent(texture->height, location->mipLevel);
 
   if (location->x > mipWidth
       || region->width > mipWidth - location->x
@@ -456,13 +456,13 @@ gpu_validTextureCopyRegion(const GPUTextureSubresourceRegion *region,
     return false;
   }
 
-  if (!gpuFormatCopyAligned(texture->format,
-                            location->x,
-                            location->y,
-                            region->width,
-                            region->height,
-                            mipWidth,
-                            mipHeight)) {
+  if (!formatCopyAligned(texture->format,
+                         location->x,
+                         location->y,
+                         region->width,
+                         region->height,
+                         mipWidth,
+                         mipHeight)) {
     return false;
   }
 
@@ -479,7 +479,7 @@ gpu_validTextureCopyRegion(const GPUTextureSubresourceRegion *region,
   }
 
   if (texture->dimension == GPU_TEXTURE_DIMENSION_3D) {
-    mipDepth = gpu_copyMipExtent(texture->depthOrLayers, location->mipLevel);
+    mipDepth = copyMipExtent(texture->depthOrLayers, location->mipLevel);
     return location->baseArrayLayer == 0
            && region->layerCount == 1
            && location->z <= mipDepth
@@ -493,23 +493,23 @@ gpu_validTextureCopyRegion(const GPUTextureSubresourceRegion *region,
 }
 
 static bool
-gpu_validBufferTextureCopy(const GPUBufferTextureCopyRegion *region,
-                           const GPUTexture                 *texture,
-                           uint64_t                         *outBytes) {
-  GPUFormatDataLayout layout;
+validBufferTextureCopy(const GPUBufferTextureCopyRegion *region,
+                       const GPUTexture                 *texture,
+                       uint64_t                         *outBytes) {
+  FormatDataLayout    layout;
 
   if (!region || !texture || !outBytes
-      || !gpu_validTextureCopyRegion(&region->texture, texture)
+      || !validTextureCopyRegion(&region->texture, texture)
       || texture->sampleCount != 1u
-      || !gpuFormatAspectDataLayout(texture->format,
-                                    region->texture.texture.aspect,
-                                    region->texture.width,
-                                    region->texture.height,
-                                    region->texture.depth,
-                                    region->texture.layerCount,
-                                    region->bytesPerRow,
-                                    region->rowsPerImage,
-                                    &layout)) {
+      || !formatAspectDataLayout(texture->format,
+                                 region->texture.texture.aspect,
+                                 region->texture.width,
+                                 region->texture.height,
+                                 region->texture.depth,
+                                 region->texture.layerCount,
+                                 region->bytesPerRow,
+                                 region->rowsPerImage,
+                                 &layout)) {
     return false;
   }
 
@@ -519,7 +519,7 @@ gpu_validBufferTextureCopy(const GPUBufferTextureCopyRegion *region,
 }
 
 static void
-gpu_destroyRenderPass(GPUApi *api, GPURenderPassDesc *pass) {
+gpu_destroyRenderPass(Api    *api, RenderPassDesc    *pass) {
   if (!pass) {
     return;
   }
@@ -535,19 +535,19 @@ gpu_destroyRenderPass(GPUApi *api, GPURenderPassDesc *pass) {
 GPU_EXPORT
 GPURenderPassEncoder*
 GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) {
-  GPURenderPassDesc    *desc;
+  RenderPassDesc       *desc;
   GPURenderPassEncoder *encoder;
   GPUDevice            *device;
-  GPUApi               *api;
+  Api                  *api;
   bool                  wroteBeginTimestamp;
 
-  device = gpuCommandBufferDevice(cmdb);
+  device = commandBufferDevice(cmdb);
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder
-      || !gpu_validRenderPassCreateInfo(info, device))
+      || !validRenderPassCreateInfo(info, device))
     return NULL;
 
-  if (!(api = gpuDeviceApi(device)))
+  if (!(api = deviceApi(device)))
     return NULL;
 
   if (!api->renderPass.beginRenderPass || !api->rce.renderCommandEncoder)
@@ -591,7 +591,7 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
     encoder->_stats             = device->runtimeConfig.enableStats
                                    ? &device->currentFrameStats
                                    : NULL;
-    gpu_setRenderPassEncoderInfo(encoder, info);
+    setRenderPassEncoderInfo(encoder, info);
     cmdb->_activeEncoder = true;
   } else if (wroteBeginTimestamp) {
     api->cmdbuf.writeTimestamp(cmdb,
@@ -606,7 +606,7 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
 GPU_EXPORT
 void
 GPUEndRenderPass(GPURenderPassEncoder *pass) {
-  GPUApi *api;
+  Api    *api;
 #if GPU_BUILD_WITH_VALIDATION
   GPUDevice *device;
 #endif
@@ -619,8 +619,8 @@ GPUEndRenderPass(GPURenderPassEncoder *pass) {
     device = pass->_cmdb && pass->_cmdb->_queue
                ? pass->_cmdb->_queue->_device
                : NULL;
-    gpuDeviceRecordValidationError(device,
-                                   "GPUEndRenderPass requires ending the active occlusion query");
+    deviceRecordValidationError(device,
+                                "GPUEndRenderPass requires ending the active occlusion query");
 #endif
     return;
   }
@@ -631,7 +631,7 @@ GPUEndRenderPass(GPURenderPassEncoder *pass) {
     pass->_cmdb->_activeEncoder = false;
   }
 
-  if (!(api = gpuCommandBufferApi(pass->_cmdb)) || !api->rce.endEncoding)
+  if (!(api = commandBufferApi(pass->_cmdb)) || !api->rce.endEncoding)
     return;
 
   api->rce.endEncoding(pass);
@@ -649,19 +649,19 @@ GPUTransferPassEncoder*
 GPUBeginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
   GPUTransferPassEncoder *pass;
   GPUDevice              *device;
-  GPUApi                 *api;
+  Api                    *api;
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return NULL;
   }
 
-  device = gpuCommandBufferDevice(cmdb);
+  device = commandBufferDevice(cmdb);
 
-  if (!(api = gpuDeviceApi(device)) || !api->renderPass.beginTransferPass) {
+  if (!(api = deviceApi(device)) || !api->renderPass.beginTransferPass) {
     return NULL;
   }
 
-  label = gpuDeviceDebugLabel(device, label);
+  label = deviceDebugLabel(device, label);
 
   if ((pass = api->renderPass.beginTransferPass(cmdb, label))) {
     pass->_cmdb          = cmdb;
@@ -677,18 +677,18 @@ GPUCopyBufferToBuffer(GPUTransferPassEncoder    *pass,
                       GPUBuffer                 *src,
                       GPUBuffer                 *dst,
                       const GPUBufferCopyRegion *region) {
-  GPUApi *api;
+  Api    *api;
 
   if (!pass || pass->_ended
       || !src || !dst || !region || region->sizeBytes == 0
-      || !gpuBufferHasUsage(src, GPU_BUFFER_USAGE_COPY_SRC)
-      || !gpuBufferHasUsage(dst, GPU_BUFFER_USAGE_COPY_DST)
-      || !gpuBufferRangeValid(src, region->srcOffset, region->sizeBytes)
-      || !gpuBufferRangeValid(dst, region->dstOffset, region->sizeBytes)) {
+      || !bufferHasUsage(src, GPU_BUFFER_USAGE_COPY_SRC)
+      || !bufferHasUsage(dst, GPU_BUFFER_USAGE_COPY_DST)
+      || !bufferRangeValid(src, region->srcOffset, region->sizeBytes)
+      || !bufferRangeValid(dst, region->dstOffset, region->sizeBytes)) {
     return;
   }
 
-  if (!(api = gpu_transferPassApi(pass)) || !api->renderPass.copyBufferToBuffer) {
+  if (!(api = transferPassApi(pass)) || !api->renderPass.copyBufferToBuffer) {
     return;
   }
 
@@ -701,18 +701,18 @@ GPUCopyBufferToTexture(GPUTransferPassEncoder           *pass,
                        GPUBuffer                        *src,
                        GPUTexture                       *dst,
                        const GPUBufferTextureCopyRegion *region) {
-  GPUApi  *api;
+  Api     *api;
   uint64_t copyBytes;
 
   if (!pass || pass->_ended
-      || !src || !dst || !gpu_validBufferTextureCopy(region, dst, &copyBytes)
-      || !gpuBufferHasUsage(src, GPU_BUFFER_USAGE_COPY_SRC)
+      || !src || !dst || !validBufferTextureCopy(region, dst, &copyBytes)
+      || !bufferHasUsage(src, GPU_BUFFER_USAGE_COPY_SRC)
       || (dst->usage & GPU_TEXTURE_USAGE_COPY_DST) == 0
-      || !gpuBufferRangeValid(src, region->bufferOffset, copyBytes)) {
+      || !bufferRangeValid(src, region->bufferOffset, copyBytes)) {
     return;
   }
 
-  if (!(api = gpu_transferPassApi(pass)) || !api->renderPass.copyBufferToTexture) {
+  if (!(api = transferPassApi(pass)) || !api->renderPass.copyBufferToTexture) {
     return;
   }
 
@@ -725,18 +725,18 @@ GPUCopyTextureToBuffer(GPUTransferPassEncoder           *pass,
                        GPUTexture                       *src,
                        GPUBuffer                        *dst,
                        const GPUBufferTextureCopyRegion *region) {
-  GPUApi  *api;
+  Api     *api;
   uint64_t copyBytes;
 
   if (!pass || pass->_ended
-      || !src || !dst || !gpu_validBufferTextureCopy(region, src, &copyBytes)
+      || !src || !dst || !validBufferTextureCopy(region, src, &copyBytes)
       || (src->usage & GPU_TEXTURE_USAGE_COPY_SRC) == 0
-      || !gpuBufferHasUsage(dst, GPU_BUFFER_USAGE_COPY_DST)
-      || !gpuBufferRangeValid(dst, region->bufferOffset, copyBytes)) {
+      || !bufferHasUsage(dst, GPU_BUFFER_USAGE_COPY_DST)
+      || !bufferRangeValid(dst, region->bufferOffset, copyBytes)) {
     return;
   }
 
-  if (!(api = gpu_transferPassApi(pass)) || !api->renderPass.copyTextureToBuffer) {
+  if (!(api = transferPassApi(pass)) || !api->renderPass.copyTextureToBuffer) {
     return;
   }
 
@@ -751,7 +751,7 @@ GPUCopyTextureToTexture(GPUTransferPassEncoder              *pass,
                         const GPUTextureToTextureCopyRegion *region) {
   GPUTextureSubresourceRegion srcRegion;
   GPUTextureSubresourceRegion dstRegion;
-  GPUApi                     *api;
+  Api                        *api;
   GPUTextureAspect            srcAspect;
   GPUTextureAspect            dstAspect;
 
@@ -781,20 +781,20 @@ GPUCopyTextureToTexture(GPUTransferPassEncoder              *pass,
   dstRegion.depth      = region->depth;
   dstRegion.layerCount = region->layerCount;
 
-  if (!gpuFormatResolveCopyAspect(src->format,
-                                  region->src.aspect,
-                                  &srcAspect)
-      || !gpuFormatResolveCopyAspect(dst->format,
-                                     region->dst.aspect,
-                                     &dstAspect)
+  if (!formatResolveCopyAspect(src->format,
+                               region->src.aspect,
+                               &srcAspect)
+      || !formatResolveCopyAspect(dst->format,
+                                  region->dst.aspect,
+                                  &dstAspect)
       || srcAspect != dstAspect
-      || !gpu_validTextureCopyRegion(&srcRegion, src)
-      || !gpu_validTextureCopyRegion(&dstRegion, dst)
-      || (src == dst && gpu_textureCopySubresourcesOverlap(src, region))) {
+      || !validTextureCopyRegion(&srcRegion, src)
+      || !validTextureCopyRegion(&dstRegion, dst)
+      || (src == dst && textureCopySubresourcesOverlap(src, region))) {
     return;
   }
 
-  if (!(api = gpu_transferPassApi(pass)) || !api->renderPass.copyTextureToTexture) {
+  if (!(api = transferPassApi(pass)) || !api->renderPass.copyTextureToTexture) {
     return;
   }
 
@@ -806,22 +806,22 @@ void
 GPUCopyMemoryIndirectEXT(GPUTransferPassEncoder             *pass,
                          const GPUIndirectMemoryCopyInfoEXT *info) {
   GPUDevice *device;
-  GPUApi    *api;
+  Api       *api;
 
-  device = pass && pass->_cmdb ? gpuCommandBufferDevice(pass->_cmdb) : NULL;
+  device = pass && pass->_cmdb ? commandBufferDevice(pass->_cmdb) : NULL;
 
   if (!pass || pass->_ended || !info
       || !GPUIsFeatureEnabled(device, GPU_FEATURE_INDIRECT_MEMORY_COPY)
-      || !gpu_validIndirectCommandRange(&info->commands,
-                                        device,
-                                        info->commandCount,
-                                        sizeof(GPUIndirectMemoryCopyCommandEXT))
-      || !gpu_validAddressCopyFlags(info->srcFlags)
-      || !gpu_validAddressCopyFlags(info->dstFlags)) {
+      || !validIndirectCommandRange(&info->commands,
+                                    device,
+                                    info->commandCount,
+                                    sizeof(GPUIndirectMemoryCopyCommandEXT))
+      || !validAddressCopyFlags(info->srcFlags)
+      || !validAddressCopyFlags(info->dstFlags)) {
     return;
   }
 
-  if (!(api = gpu_transferPassApi(pass))
+  if (!(api = transferPassApi(pass))
       || !api->renderPass.copyMemoryIndirect) {
     return;
   }
@@ -834,10 +834,10 @@ void
 GPUCopyMemoryToTextureIndirectEXT(GPUTransferPassEncoder                      *pass,
                                   const GPUIndirectMemoryToTextureCopyInfoEXT *info) {
   GPUDevice *device;
-  GPUApi    *api;
+  Api       *api;
   uint32_t   i;
 
-  device = pass && pass->_cmdb ? gpuCommandBufferDevice(pass->_cmdb) : NULL;
+  device = pass && pass->_cmdb ? commandBufferDevice(pass->_cmdb) : NULL;
 
   if (!pass || pass->_ended || !info || !info->dst
       || !info->pTextureSubresources || info->dst->device != device
@@ -845,22 +845,22 @@ GPUCopyMemoryToTextureIndirectEXT(GPUTransferPassEncoder                      *p
       || info->dst->sampleCount != 1u
       || !GPUIsFeatureEnabled(device,
                               GPU_FEATURE_INDIRECT_MEMORY_TO_TEXTURE_COPY)
-      || !gpu_validIndirectCommandRange(&info->commands,
-                                        device,
-                                        info->commandCount,
-                                        sizeof(GPUIndirectMemoryToTextureCommandEXT))
-      || !gpu_validAddressCopyFlags(info->srcFlags)) {
+      || !validIndirectCommandRange(&info->commands,
+                                    device,
+                                    info->commandCount,
+                                    sizeof(GPUIndirectMemoryToTextureCommandEXT))
+      || !validAddressCopyFlags(info->srcFlags)) {
     return;
   }
 
   for (i = 0u; i < info->commandCount; i++) {
-    if (!gpu_validIndirectTextureSubresource(&info->pTextureSubresources[i],
-                                             info->dst)) {
+    if (!validIndirectTextureSubresource(&info->pTextureSubresources[i],
+                                         info->dst)) {
       return;
     }
   }
 
-  if (!(api = gpu_transferPassApi(pass))
+  if (!(api = transferPassApi(pass))
       || !api->renderPass.copyMemoryToTextureIndirect) {
     return;
   }
@@ -871,7 +871,7 @@ GPUCopyMemoryToTextureIndirectEXT(GPUTransferPassEncoder                      *p
 GPU_EXPORT
 void
 GPUEndTransferPass(GPUTransferPassEncoder *pass) {
-  GPUApi *api;
+  Api    *api;
 
   if (!pass || pass->_ended) {
     return;
@@ -883,7 +883,7 @@ GPUEndTransferPass(GPUTransferPassEncoder *pass) {
     pass->_cmdb->_activeEncoder = false;
   }
 
-  if (!(api = gpu_transferPassApi(pass)) || !api->renderPass.endTransferPass) {
+  if (!(api = transferPassApi(pass)) || !api->renderPass.endTransferPass) {
     return;
   }
 

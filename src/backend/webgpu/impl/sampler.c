@@ -57,7 +57,7 @@ webgpu_compareFunction(GPUCompareOp op) {
 }
 
 static GPUResult
-webgpu_createSampler(GPUApi          *__restrict api,
+webgpu_createSampler(Api             *__restrict api,
                      GPUDevice       *__restrict device,
                      const GPUSamplerCreateInfo *info,
                      bool                        staticIfSupported,
@@ -75,10 +75,10 @@ webgpu_createSampler(GPUApi          *__restrict api,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  if (!(sampler->_priv = gpu_webgpuCreateSampler(device,
+  if (!(sampler->_priv = webgpuCreateSampler(device,
                                                 &info->desc,
                                                 info->label,
-                                                gpuSamplerLODClamp(info)))) {
+                                                samplerLODClamp(info)))) {
     free(sampler);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -102,20 +102,20 @@ webgpu_destroySampler(GPUSampler *__restrict sampler) {
 }
 
 WGPUSampler
-gpu_webgpuCreateSampler(GPUDevice                *device,
+webgpuCreateSampler(GPUDevice                *device,
                        const GPUSamplerDesc     *desc,
                        const char               *label,
                        const GPUSamplerLODClamp *lod) {
   WGPUSamplerDescriptor descriptor = WGPU_SAMPLER_DESCRIPTOR_INIT;
-  GPUDeviceWebGPU      *native;
+  DeviceWebGPU         *native;
 
-  native = gpu_webgpuDevice(device);
+  native = webgpuDevice(device);
 
   if (!native || !native->device || !desc) {
     return NULL;
   }
 
-  descriptor.label         = gpu_webgpuString(label);
+  descriptor.label         = webgpuString(label);
   descriptor.addressModeU  = webgpu_addressMode(desc->addressU);
   descriptor.addressModeV  = webgpu_addressMode(desc->addressV);
   descriptor.addressModeW  = webgpu_addressMode(desc->addressW);
@@ -138,7 +138,7 @@ gpu_webgpuCreateSampler(GPUDevice                *device,
 }
 
 void
-webgpu_initSampler(GPUApiSampler *api) {
+webgpu_initSampler(ApiSampler    *api) {
   api->createSampler  = webgpu_createSampler;
   api->destroySampler = webgpu_destroySampler;
 }

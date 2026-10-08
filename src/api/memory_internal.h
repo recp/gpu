@@ -29,9 +29,9 @@ struct GPUHeap {
 };
 
 static inline bool
-gpuHeapRangeValid(const GPUHeap               *heap,
-                  const GPUMemoryRequirements *requirements,
-                  uint64_t                     offset) {
+heapRangeValid(const GPUHeap               *heap,
+               const GPUMemoryRequirements *requirements,
+               uint64_t                     offset) {
   return heap && requirements
          && requirements->sizeBytes > 0u
          && requirements->alignmentBytes > 0u

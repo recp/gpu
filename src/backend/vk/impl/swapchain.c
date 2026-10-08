@@ -53,7 +53,7 @@ vk__storeOp(uint32_t index) {
 }
 
 static VkResult
-vk__createRenderPass(GPUSwapchainVk *swapchain,
+vk__createRenderPass(SwapchainVk    *swapchain,
                      uint32_t        loadIndex,
                      uint32_t        storeIndex,
                      VkRenderPass   *outRenderPass) {
@@ -99,8 +99,8 @@ vk__createRenderPass(GPUSwapchainVk *swapchain,
 }
 
 static void
-vk__destroyResources(GPUSwapchainVk *swapchain) {
-  GPUDeviceVk *device;
+vk__destroyResources(SwapchainVk    *swapchain) {
+  DeviceVk    *device;
   uint32_t     i;
   uint32_t     load;
   uint32_t     store;
@@ -285,7 +285,7 @@ vk__preTransform(const VkSurfaceCapabilitiesKHR *caps) {
 }
 
 static bool
-vk__allocateArrays(GPUSwapchainVk *swapchain, uint32_t count) {
+vk__allocateArrays(SwapchainVk    *swapchain, uint32_t count) {
   swapchain->images         = calloc(count, sizeof(*swapchain->images));
   swapchain->imageViews     = calloc(count, sizeof(*swapchain->imageViews));
   swapchain->framebuffers   = calloc(count, sizeof(*swapchain->framebuffers));
@@ -301,15 +301,15 @@ vk__allocateArrays(GPUSwapchainVk *swapchain, uint32_t count) {
 }
 
 static bool
-vk__createImageState(GPUSwapchainVk *swapchain) {
+vk__createImageState(SwapchainVk    *swapchain) {
   VkSemaphoreCreateInfo   semaphoreInfo   = {0};
   VkFenceCreateInfo       fenceInfo       = {0};
   VkImageViewCreateInfo   viewInfo        = {0};
   VkFramebufferCreateInfo framebufferInfo = {0};
-  GPUDeviceVk            *device;
+  DeviceVk               *device;
   GPUTexture             *texture;
   GPUTextureView         *view;
-  GPUTextureViewVk       *nativeView;
+  TextureViewVk          *nativeView;
   uint32_t                count;
   uint32_t                load;
   uint32_t                store;
@@ -443,9 +443,9 @@ vk__createImageState(GPUSwapchainVk *swapchain) {
 }
 
 static bool
-vk__waitPresent(GPUSwapchainVk *swapchain) {
+vk__waitPresent(SwapchainVk    *swapchain) {
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
-  GPUDeviceVk *device;
+  DeviceVk    *device;
   VkResult     result;
 #endif
 
@@ -469,7 +469,7 @@ vk__waitPresent(GPUSwapchainVk *swapchain) {
 }
 
 static bool
-vk__waitResourcesIdle(GPUSwapchainVk *swapchain) {
+vk__waitResourcesIdle(SwapchainVk    *swapchain) {
   if (!swapchain || !swapchain->device) {
     return false;
   }
@@ -487,7 +487,7 @@ vk__createResources(GPUSwapchain  *swapchainObj,
   VkSurfaceCapabilitiesKHR caps;
   VkSurfaceFormatKHR       surfaceFormat;
   VkSwapchainCreateInfoKHR info = {0};
-  GPUSwapchainVk          *swapchain;
+  SwapchainVk             *swapchain;
   VkSurfaceFormatKHR      *formats;
   VkPresentModeKHR        *modes;
   VkPresentModeKHR         presentMode;
@@ -503,10 +503,10 @@ vk__createResources(GPUSwapchain  *swapchainObj,
   modeCount   = 0u;
 
 #if defined(__APPLE__)
-  gpuResizeMetalLayer(swapchain->surface->metalLayer,
-                      width,
-                      height,
-                      swapchainObj->backingScaleFactor);
+  resizeMetalLayer(swapchain->surface->metalLayer,
+                   width,
+                   height,
+                   swapchainObj->backingScaleFactor);
 #endif
 
   result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(swapchain->physicalDevice,
@@ -624,14 +624,14 @@ vk__createResources(GPUSwapchain  *swapchainObj,
 
 GPU_HIDE
 VkResult
-vk_presentSwapchain(GPUSwapchainVk *swapchain,
+vk_presentSwapchain(SwapchainVk    *swapchain,
                     VkQueue         queue,
                     VkSemaphore     waitSemaphore,
                     uint32_t        imageIndex) {
   VkPresentInfoKHR info   = {0};
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
   VkPresentIdKHR   idInfo = {0};
-  GPUDeviceVk     *device;
+  DeviceVk        *device;
   uint64_t         presentId;
 #endif
   VkResult         result;
@@ -675,15 +675,15 @@ vk_presentSwapchain(GPUSwapchainVk *swapchain,
 
 GPU_HIDE
 GPUSwapchain*
-vk_createSwapchain(GPUApi                       *__restrict api,
+vk_createSwapchain(Api                          *__restrict api,
                    GPUDevice                    *__restrict device,
                    GPUQueue                     *__restrict cmdQue,
                    const GPUSwapchainCreateInfo *__restrict info) {
-  GPUDeviceVk    *deviceVk;
-  GPUAdapterVk   *adapterVk;
+  DeviceVk       *deviceVk;
+  AdapterVk      *adapterVk;
   GPUSwapchain   *swapchainObj;
-  GPUSwapchainVk *swapchain;
-  GPUSurfaceVk   *surface;
+  SwapchainVk    *swapchain;
+  SurfaceVk      *surface;
   VkBool32        presentSupported;
 
   GPU__UNUSED(api);
@@ -699,7 +699,7 @@ vk_createSwapchain(GPUApi                       *__restrict api,
   presentSupported = VK_FALSE;
 
   if (vkGetPhysicalDeviceSurfaceSupportKHR(adapterVk->physicalDevice,
-                                           ((GPUQueueVk *)cmdQue->_priv)->familyIndex,
+                                           ((QueueVk *)cmdQue->_priv)->familyIndex,
                                            surface->surface,
                                            &presentSupported) != VK_SUCCESS
       || !presentSupported) {
@@ -743,9 +743,9 @@ vk_createSwapchain(GPUApi                       *__restrict api,
 GPU_HIDE
 GPUResult
 vk_resizeSwapchain(GPUSwapchain *swapchainObj, GPUExtent2D size) {
-  GPUSwapchainVk  replacement;
+  SwapchainVk     replacement;
   GPUSwapchain    replacementObj;
-  GPUSwapchainVk *swapchain;
+  SwapchainVk    *swapchain;
   uint32_t        i;
 
   if (!swapchainObj || !swapchainObj->_priv || size.width == 0u || size.height == 0u) {
@@ -797,7 +797,7 @@ vk_resizeSwapchain(GPUSwapchain *swapchainObj, GPUExtent2D size) {
 GPU_HIDE
 void
 vk_destroySwapchain(GPUSwapchain *swapchainObj) {
-  GPUSwapchainVk *swapchain;
+  SwapchainVk    *swapchain;
 
   if (!swapchainObj) {
     return;
@@ -816,7 +816,7 @@ vk_destroySwapchain(GPUSwapchain *swapchainObj) {
 
 GPU_HIDE
 void
-vk_initSwapchain(GPUApiSwapchain *apiSwapchain) {
+vk_initSwapchain(ApiSwapchain    *apiSwapchain) {
   apiSwapchain->createSwapchain  = vk_createSwapchain;
   apiSwapchain->resizeSwapchain  = vk_resizeSwapchain;
   apiSwapchain->destroySwapchain = vk_destroySwapchain;

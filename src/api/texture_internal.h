@@ -55,11 +55,11 @@ struct GPUTextureView {
 
 GPU_HIDE
 GPUResult
-gpuValidateTextureCreateInfo(const GPUDevice            *device,
-                             const GPUTextureCreateInfo *info);
+validateTextureCreateInfo(const GPUDevice            *device,
+                          const GPUTextureCreateInfo *info);
 
 static inline float
-gpuTextureViewMinLOD(const GPUTextureViewCreateInfo *info) {
+textureViewMinLOD(const GPUTextureViewCreateInfo *info) {
   const GPUTextureViewMinLODEXT *lod;
 
   lod = info ? (const GPUTextureViewMinLODEXT *)info->chain.pNext : NULL;
@@ -67,7 +67,7 @@ gpuTextureViewMinLOD(const GPUTextureViewCreateInfo *info) {
 }
 
 static inline uint32_t
-gpuTextureArrayLayerCount(const GPUTexture *texture) {
+textureArrayLayerCount(const GPUTexture *texture) {
   if (!texture) {
     return 0u;
   }
@@ -78,11 +78,11 @@ gpuTextureArrayLayerCount(const GPUTexture *texture) {
 }
 
 static inline bool
-gpuTextureSubresourceRangeValid(const GPUTexture *texture,
-                                uint32_t          baseMip,
-                                uint32_t          mipCount,
-                                uint32_t          baseLayer,
-                                uint32_t          layerCount) {
+textureSubresourceRangeValid(const GPUTexture *texture,
+                             uint32_t          baseMip,
+                             uint32_t          mipCount,
+                             uint32_t          baseLayer,
+                             uint32_t          layerCount) {
   uint32_t arrayLayerCount;
 
   if (!texture || mipCount == 0u || layerCount == 0u
@@ -91,7 +91,7 @@ gpuTextureSubresourceRangeValid(const GPUTexture *texture,
     return false;
   }
 
-  arrayLayerCount = gpuTextureArrayLayerCount(texture);
+  arrayLayerCount = textureArrayLayerCount(texture);
 
   return baseLayer < arrayLayerCount
          && layerCount <= arrayLayerCount - baseLayer;

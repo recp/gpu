@@ -20,7 +20,7 @@
 
 static const uint8_t webgpu_zeroPushConstants[GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT];
 
-static GPUCommandWebGPU*
+static CommandWebGPU*
 webgpu_computeCommand(GPUComputePassEncoder *encoder) {
   return encoder ? encoder->_priv : NULL;
 }
@@ -33,15 +33,15 @@ webgpu_createComputePipeline(GPUDevice                          *device,
   char                          constantIDs[USL_RUNTIME_MAX_SPEC_CONSTANTS][11];
   WGPUComputePipelineDescriptor descriptor = WGPU_COMPUTE_PIPELINE_DESCRIPTOR_INIT;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  GPUWebGPUPipelineError         error;
+  WebGPUPipelineError            error;
 #endif
-  GPUComputePipelineWebGPU     *state;
-  GPUDeviceWebGPU              *native;
+  ComputePipelineWebGPU        *state;
+  DeviceWebGPU                 *native;
   uint64_t                      entryMask;
   uint32_t                      automaticGroupMask;
   GPUResult                     result;
 
-  native = gpu_webgpuDevice(device);
+  native = webgpuDevice(device);
 
   if (!native || !native->device || !info || !info->library
       || !info->library->_priv || !info->layout || !info->layout->_native
@@ -55,9 +55,9 @@ webgpu_createComputePipeline(GPUDevice                          *device,
 
   automaticGroupMask = 0u;
 
-  if (gpuShaderLibraryHasEntryResourceInfo(info->library)) {
-    entryMask          = gpuShaderEntryBit(info->library, info->entryPoint);
-    automaticGroupMask = gpuShaderWGSLStaticGroups(info->library, entryMask);
+  if (shaderLibraryHasEntryResourceInfo(info->library)) {
+    entryMask          = shaderEntryBit(info->library, info->entryPoint);
+    automaticGroupMask = shaderWGSLStaticGroups(info->library, entryMask);
 
     if (entryMask == 0u || automaticGroupMask == UINT32_MAX) {
       free(state);
@@ -67,37 +67,37 @@ webgpu_createComputePipeline(GPUDevice                          *device,
 
   automaticGroupMask &= ~pipeline->_requiredBindGroupMask;
 
-  if (gpu_webgpuCreatePipelineLayout(device,
-                                     info->layout,
-                                     pipeline->_requiredBindGroupMask,
-                                     automaticGroupMask,
-                                     &state->layout) != GPU_OK) {
+  if (webgpuCreatePipelineLayout(device,
+                                 info->layout,
+                                 pipeline->_requiredBindGroupMask,
+                                 automaticGroupMask,
+                                 &state->layout) != GPU_OK) {
     free(state);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  descriptor.label              = gpu_webgpuString(info->label);
+  descriptor.label              = webgpuString(info->label);
   descriptor.layout             = state->layout.layout;
   descriptor.compute.module     = info->library->_priv;
-  descriptor.compute.entryPoint = gpu_webgpuString(info->entryPoint);
+  descriptor.compute.entryPoint = webgpuString(info->entryPoint);
 
   descriptor.compute.constantCount = webgpu_pipelineConstants(info->chain.pNext, constantEntries, constantIDs);
   descriptor.compute.constants     = descriptor.compute.constantCount ? constantEntries : NULL;
 
   result = GPU_OK;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  gpu_webgpuBeginPipelineError(device, &error);
+  webgpuBeginPipelineError(device, &error);
 #endif
   state->pipeline = wgpuDeviceCreateComputePipeline(native->device, &descriptor);
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  result = gpu_webgpuEndPipelineError(&error);
+  result = webgpuEndPipelineError(&error);
 #endif
 
   if (!state->pipeline || result != GPU_OK) {
     if (state->pipeline)
       wgpuComputePipelineRelease(state->pipeline);
 
-    gpu_webgpuDestroyPipelineLayout(&state->layout);
+    webgpuDestroyPipelineLayout(&state->layout);
     free(state);
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
@@ -114,7 +114,7 @@ webgpu_createComputePipeline(GPUDevice                          *device,
 
 static void
 webgpu_destroyComputePipeline(GPUComputePipeline *pipeline) {
-  GPUComputePipelineWebGPU *state;
+  ComputePipelineWebGPU    *state;
 
   if (!pipeline) {
     return;
@@ -127,7 +127,7 @@ webgpu_destroyComputePipeline(GPUComputePipeline *pipeline) {
       wgpuComputePipelineRelease(state->pipeline);
     }
 
-    gpu_webgpuDestroyPipelineLayout(&state->layout);
+    webgpuDestroyPipelineLayout(&state->layout);
   }
 
   free(state);
@@ -138,16 +138,16 @@ static GPUComputePassEncoder*
 webgpu_computeCommandEncoder(GPUCommandBuffer               *cmdb,
                              const GPUComputePassCreateInfo *info) {
   WGPUComputePassDescriptor descriptor = WGPU_COMPUTE_PASS_DESCRIPTOR_INIT;
-  GPUCommandWebGPU         *command;
+  CommandWebGPU            *command;
 
-  command = gpu_webgpuCommand(cmdb);
+  command = webgpuCommand(cmdb);
 
   if (!command || !command->encoder || command->computeEncoder) {
     return NULL;
   }
 
   memset(&command->compute, 0, sizeof(command->compute));
-  descriptor.label = gpu_webgpuString(info->label);
+  descriptor.label = webgpuString(info->label);
 
   if (info->timestampWrites) {
     command->timestampWrites = (WGPUPassTimestampWrites)WGPU_PASS_TIMESTAMP_WRITES_INIT;
@@ -175,16 +175,16 @@ static void
 webgpu_computePushConstants(GPUComputePassEncoder *encoder,
                             const void            *data,
                             uint32_t               sizeBytes) {
-  GPUCommandWebGPU *command;
+  CommandWebGPU    *command;
   uint32_t          dynamicOffset;
 
   command = webgpu_computeCommand(encoder);
 
   if (!command || !command->computeEncoder
-      || !gpu_webgpuUploadPushConstants(command,
-                                        data,
-                                        sizeBytes,
-                                        &dynamicOffset)) {
+      || !webgpuUploadPushConstants(command,
+                                    data,
+                                    sizeBytes,
+                                    &dynamicOffset)) {
     return;
   }
 
@@ -197,12 +197,12 @@ webgpu_computePushConstants(GPUComputePassEncoder *encoder,
 
 static void
 webgpu_setComputePipeline(GPUComputePassEncoder   *encoder,
-                          GPUComputePipelineState *state) {
-  GPUComputePipelineWebGPU *nativeState;
-  GPUCommandWebGPU         *command;
+                          ComputePipelineState    *state) {
+  ComputePipelineWebGPU    *nativeState;
+  CommandWebGPU            *command;
 
   command     = webgpu_computeCommand(encoder);
-  nativeState = (GPUComputePipelineWebGPU *)state;
+  nativeState = (ComputePipelineWebGPU *)state;
 
   if (!command || !command->computeEncoder || !nativeState
       || !nativeState->pipeline) {
@@ -211,7 +211,7 @@ webgpu_setComputePipeline(GPUComputePassEncoder   *encoder,
 
   wgpuComputePassEncoderSetPipeline(command->computeEncoder,
                                     nativeState->pipeline);
-  gpu_webgpuBindComputeAutomaticGroups(encoder, &nativeState->layout);
+  webgpuBindComputeAutomaticGroups(encoder, &nativeState->layout);
 
   if (nativeState->layout.pushConstantSizeBytes > 0u) {
     webgpu_computePushConstants(encoder,
@@ -229,7 +229,7 @@ webgpu_dispatch(GPUComputePassEncoder *encoder,
                 uint32_t               x,
                 uint32_t               y,
                 uint32_t               z) {
-  GPUCommandWebGPU *command;
+  CommandWebGPU    *command;
 
   command = webgpu_computeCommand(encoder);
 
@@ -242,7 +242,7 @@ static void
 webgpu_dispatchIndirect(GPUComputePassEncoder *encoder,
                         GPUBuffer             *argsBuffer,
                         uint64_t               argsOffset) {
-  GPUCommandWebGPU *command;
+  CommandWebGPU    *command;
 
   command = webgpu_computeCommand(encoder);
 
@@ -255,7 +255,7 @@ webgpu_dispatchIndirect(GPUComputePassEncoder *encoder,
 
 static void
 webgpu_endComputeEncoding(GPUComputePassEncoder *encoder) {
-  GPUCommandWebGPU *command;
+  CommandWebGPU    *command;
 
   command = webgpu_computeCommand(encoder);
 
@@ -269,7 +269,7 @@ webgpu_endComputeEncoding(GPUComputePassEncoder *encoder) {
 }
 
 void
-webgpu_initCompute(GPUApiCompute *api) {
+webgpu_initCompute(ApiCompute    *api) {
   api->createPipeline          = webgpu_createComputePipeline;
   api->destroyComputePipeline  = webgpu_destroyComputePipeline;
   api->computeCommandEncoder   = webgpu_computeCommandEncoder;

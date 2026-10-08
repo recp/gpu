@@ -43,15 +43,15 @@ dx12_getConfigurationInterface(ID3D12DeviceFactory *factory,
 
 GPU_HIDE
 void
-dx12_initDevice(GPUApiDevice *apiDevice);
+dx12_initDevice(ApiDevice    *apiDevice);
 
-/* GPU_HIDE void dx12_initRenderPipeline(GPUApiRender* api); */
-/* GPU_HIDE void dx12_initRCE(GPUApiRCE* api); */
-/* GPU_HIDE void dx12_initCmdBuff(GPUApiCommandBuffer* api); */
+/* GPU_HIDE void dx12_initRenderPipeline(ApiRender* api); */
+/* GPU_HIDE void dx12_initRCE(ApiRCE* api); */
+/* GPU_HIDE void dx12_initCmdBuff(ApiCommandBuffer* api); */
 
 GPU_HIDE
 void
-dx12_initCmdQue(GPUApiCommandQueue *api);
+dx12_initCmdQue(ApiCommandQueue    *api);
 
 GPU_HIDE
 GPUQueue*
@@ -64,11 +64,11 @@ dx12_destroyCommandQueue(GPUQueue *queue);
 
 GPU_HIDE
 bool
-dx12_waitCommandQueueIdle(GPUQueueDX12 *queue);
+dx12_waitCommandQueueIdle(QueueDX12    *queue);
 
 GPU_HIDE
 bool
-dx12_waitQueueFence(GPUQueueDX12 *queue,
+dx12_waitQueueFence(QueueDX12    *queue,
                     UINT64        value,
                     HANDLE        event);
 
@@ -88,31 +88,31 @@ dx12_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
 
 GPU_HIDE
 void
-dx12_initCmdbuf(GPUApiCommandBuffer *api);
+dx12_initCmdbuf(ApiCommandBuffer    *api);
 
 GPU_HIDE
 void
-dx12_initQuery(GPUApiCommandBuffer *api);
+dx12_initQuery(ApiCommandBuffer    *api);
 
 GPU_HIDE
 void
-dx12_initLibrary(GPUApiLibrary *api);
+dx12_initLibrary(ApiLibrary    *api);
 
 GPU_HIDE
 void
-dx12_initPipelineCache(GPUApiPipelineCache *api);
+dx12_initPipelineCache(ApiPipelineCache    *api);
 
 GPU_HIDE
 void
-dx12_initRenderPipeline(GPUApiRender *api);
+dx12_initRenderPipeline(ApiRender    *api);
 
 GPU_HIDE
 void
-dx12_initCompute(GPUApiCompute *api);
+dx12_initCompute(ApiCompute    *api);
 
 GPU_HIDE
 void
-dx12_initRenderPass(GPUApiRenderPass *api);
+dx12_initRenderPass(ApiRenderPass    *api);
 
 GPU_HIDE
 void
@@ -126,27 +126,27 @@ dx12_blitTexture(GPUCommandBuffer         *cmdb,
 
 GPU_HIDE
 void
-dx12_resetCopyScratch(GPUCommandBufferDX12 *command);
+dx12_resetCopyScratch(CommandBufferDX12    *command);
 
 GPU_HIDE
 void
-dx12_destroyCopyScratch(GPUCommandBufferDX12 *command);
+dx12_destroyCopyScratch(CommandBufferDX12    *command);
 
 GPU_HIDE
 void
-dx12_initRCE(GPUApiRCE *api);
+dx12_initRCE(ApiRCE    *api);
 
 GPU_HIDE
 void
-dx12_initBuff(GPUApiBuffer *api);
+dx12_initBuff(ApiBuffer    *api);
 
 GPU_HIDE
 void
-dx12_initMemory(GPUApiMemory *api);
+dx12_initMemory(ApiMemory    *api);
 
 GPU_HIDE
 void
-dx12_initTexture(GPUApiTexture *api);
+dx12_initTexture(ApiTexture    *api);
 
 GPU_HIDE
 GPUResult
@@ -245,72 +245,72 @@ dx12_flushTransfers(GPUQueue *queue);
 
 GPU_HIDE
 void
-dx12_initSampler(GPUApiSampler *api);
+dx12_initSampler(ApiSampler    *api);
 
 GPU_HIDE
 void
-dx12_destroyDescriptorHeaps(GPUDeviceDX12 *device);
+dx12_destroyDescriptorHeaps(DeviceDX12    *device);
 
-/* GPU_HIDE void dx12_initPass(GPUApiRenderPass* api); */
-/* GPU_HIDE void dx12_initDepthStencil(GPUApiDepthStencil* api); */
-/* GPU_HIDE void dx12_initVertex(GPUApiVertex* api); */
-/* GPU_HIDE void dx12_initLibrary(GPUApiLibrary* api); */
-
-GPU_HIDE
-void
-dx12_initSwapchain(GPUApiSwapchain *apiSwapchain);
+/* GPU_HIDE void dx12_initPass(ApiRenderPass* api); */
+/* GPU_HIDE void dx12_initDepthStencil(ApiDepthStencil* api); */
+/* GPU_HIDE void dx12_initVertex(ApiVertex* api); */
+/* GPU_HIDE void dx12_initLibrary(ApiLibrary* api); */
 
 GPU_HIDE
 void
-dx12_initFrame(GPUApiFrame *apiFrame);
+dx12_initSwapchain(ApiSwapchain    *apiSwapchain);
 
 GPU_HIDE
 void
-dx12_initDescriptor(GPUApiDescriptor *apiDescriptor);
+dx12_initFrame(ApiFrame    *apiFrame);
 
 GPU_HIDE
 void
-dx12_initInstance(GPUApiInstance *apiInstance);
+dx12_initDescriptor(ApiDescriptor    *apiDescriptor);
 
 GPU_HIDE
 void
-dx12_initSurface(GPUApiSurface *apiDevice);
+dx12_initInstance(ApiInstance    *apiInstance);
 
 GPU_HIDE
 void
-dx12_initVRS(GPUApiVRS *api);
+dx12_initSurface(ApiSurface    *apiDevice);
 
 GPU_HIDE
 void
-dx12_initRayQuery(GPUApiRayQuery *api);
+dx12_initVRS(ApiVRS    *api);
 
 GPU_HIDE
 void
-dx12_initRayTracing(GPUApiRayTracing *api);
+dx12_initRayQuery(ApiRayQuery    *api);
 
 GPU_HIDE
 void
-dx12_initExecutionGraph(GPUApiExecutionGraph *api);
+dx12_initRayTracing(ApiRayTracing    *api);
 
 GPU_HIDE
 void
-dx12_initSamplerFeedback(GPUApiSamplerFeedback *api);
+dx12_initExecutionGraph(ApiExecutionGraph    *api);
 
 GPU_HIDE
 void
-dx12_initMultiGPU(GPUApiMultiGPU *api);
+dx12_initSamplerFeedback(ApiSamplerFeedback    *api);
 
 GPU_HIDE
 void
-dx12_resetGraphInitializations(GPUCommandBufferDX12 *command);
+dx12_initMultiGPU(ApiMultiGPU    *api);
 
 GPU_HIDE
 void
-dx12_submitGraphInitializations(GPUCommandBufferDX12 *command);
+dx12_resetGraphInitializations(CommandBufferDX12    *command);
 
 GPU_HIDE
 void
-dx12_destroyGraphInputScratch(GPUCommandBufferDX12 *command);
+dx12_submitGraphInitializations(CommandBufferDX12    *command);
+
+GPU_HIDE
+void
+dx12_destroyGraphInputScratch(CommandBufferDX12    *command);
 
 GPU_HIDE
 void
@@ -335,7 +335,7 @@ dx12_bindRayTracingGroup(GPURayTracingPassEncoderEXT *pass,
 
 GPU_HIDE
 bool
-dx12_compileShader(GPUDeviceDX12              *device,
+dx12_compileShader(DeviceDX12                 *device,
                    GPUShaderLibrary           *library,
                    const char                 *entry,
                    GPUShaderStageFlags         stage,
@@ -344,14 +344,14 @@ dx12_compileShader(GPUDeviceDX12              *device,
 
 GPU_HIDE
 bool
-dx12_compileRayLibrary(GPUDeviceDX12    *device,
+dx12_compileRayLibrary(DeviceDX12       *device,
                        GPUShaderLibrary *library,
                        uint64_t          entryMask,
                        DX12ShaderCode   *outCode);
 
 GPU_HIDE
 bool
-dx12_compileExecutionGraphLibrary(GPUDeviceDX12    *device,
+dx12_compileExecutionGraphLibrary(DeviceDX12       *device,
                                   GPUShaderLibrary *library,
                                   uint64_t          entryMask,
                                   DX12ShaderCode   *outCode);

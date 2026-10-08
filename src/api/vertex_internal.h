@@ -19,38 +19,38 @@
 
 #include "../common.h"
 
-struct GPUVertexDescriptor {
+struct VertexDescriptor {
   void *_priv;
 };
 
 GPU_HIDE
-GPUVertexDescriptor*
-gpuCreateVertexDesc(GPUApi *api);
+VertexDescriptor*
+createVertexDesc(Api    *api);
 
 GPU_HIDE
 void
-gpuDestroyVertexDesc(GPUApi *api, GPUVertexDescriptor *vert);
+gpuDestroyVertexDesc(Api    *api, VertexDescriptor    *vert);
 
 GPU_HIDE
 void
-gpuVertexDescAttrib(GPUApi              *__restrict api,
-                    GPUVertexDescriptor *__restrict vertex,
-                    uint32_t                        attribIndex,
-                    GPUVertexFormat                 format,
-                    uint32_t                        offset,
-                    uint32_t                        bufferIndex);
+vertexDescAttrib(Api                 *__restrict api,
+                 VertexDescriptor    *__restrict vertex,
+                 uint32_t                        attribIndex,
+                 GPUVertexFormat                 format,
+                 uint32_t                        offset,
+                 uint32_t                        bufferIndex);
 
 GPU_HIDE
 void
-gpuVertexDescLayout(GPUApi              *__restrict api,
-                    GPUVertexDescriptor *__restrict vertex,
-                    uint32_t                        layoutIndex,
-                    uint32_t                        stride,
-                    GPUVertexStepMode               stepMode);
+vertexDescLayout(Api                 *__restrict api,
+                 VertexDescriptor    *__restrict vertex,
+                 uint32_t                        layoutIndex,
+                 uint32_t                        stride,
+                 GPUVertexStepMode               stepMode);
 
 GPU_HIDE
 void
-gpuPipelineSetVertexDesc(GPURenderPipeline   *__restrict pipeline,
-                         GPUVertexDescriptor *__restrict vert);
+pipelineSetVertexDesc(GPURenderPipeline   *__restrict pipeline,
+                      VertexDescriptor    *__restrict vert);
 
 #endif /* gpu_vertex_internal_h */

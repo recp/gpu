@@ -28,7 +28,7 @@
 
 #if defined(__APPLE__)
 static inline uint32_t
-gpu_uslParseLeadingU32(const char *text) {
+uslParseLeadingU32(const char *text) {
   uint32_t value = 0;
 
   if (!text || text[0] < '0' || text[0] > '9') {
@@ -44,7 +44,7 @@ gpu_uslParseLeadingU32(const char *text) {
 }
 
 static inline uint32_t
-gpu_uslAppleRuntimePlatformMajor(void) {
+uslAppleRuntimePlatformMajor(void) {
   char   version[64];
   size_t versionSize = sizeof(version);
 
@@ -56,7 +56,7 @@ gpu_uslAppleRuntimePlatformMajor(void) {
                    NULL,
                    0) == 0
       && versionSize > 0) {
-    return gpu_uslParseLeadingU32(version);
+    return uslParseLeadingU32(version);
   }
 
 #  if TARGET_OS_TV && defined(__TV_OS_VERSION_MAX_ALLOWED)
@@ -73,7 +73,7 @@ gpu_uslAppleRuntimePlatformMajor(void) {
 }
 
 static inline USLTargetPlatform
-gpu_uslAppleTargetPlatform(void) {
+uslAppleTargetPlatform(void) {
 #  if TARGET_OS_TV
   return USL_TARGET_PLATFORM_TVOS;
 #  elif defined(TARGET_OS_VISION) && TARGET_OS_VISION
@@ -88,7 +88,7 @@ gpu_uslAppleTargetPlatform(void) {
 }
 
 static inline USLTargetProfile
-gpu_uslAppleMetalProfile(USLTargetPlatform platform, uint32_t platformMajor) {
+uslAppleMetalProfile(USLTargetPlatform platform, uint32_t platformMajor) {
   if (platform == USL_TARGET_PLATFORM_MACOS) {
     if (platformMajor >= 26u)
       return USL_TARGET_PROFILE_MSL_4_0;
@@ -138,7 +138,7 @@ gpu_uslAppleMetalProfile(USLTargetPlatform platform, uint32_t platformMajor) {
 #endif
 
 static inline int
-gpu_uslDefaultMetalTarget(USLTargetSpec *outTarget) {
+uslDefaultMetalTarget(USLTargetSpec *outTarget) {
 #if defined(__APPLE__)
   USLTargetPlatform platform;
   uint32_t          platformMajor;
@@ -149,13 +149,13 @@ gpu_uslDefaultMetalTarget(USLTargetSpec *outTarget) {
   }
 
 #if defined(__APPLE__)
-  platform      = gpu_uslAppleTargetPlatform();
-  platformMajor = gpu_uslAppleRuntimePlatformMajor();
+  platform      = uslAppleTargetPlatform();
+  platformMajor = uslAppleRuntimePlatformMajor();
 
   if (platform != USL_TARGET_PLATFORM_NONE && platformMajor > 0) {
     return us_target_platform(outTarget,
                               USL_BACKEND_METAL,
-                              gpu_uslAppleMetalProfile(platform, platformMajor),
+                              uslAppleMetalProfile(platform, platformMajor),
                               platform,
                               platformMajor) == USLOk;
   }
@@ -167,7 +167,7 @@ gpu_uslDefaultMetalTarget(USLTargetSpec *outTarget) {
 }
 
 static inline int
-gpu_uslDefaultVulkanTarget(USLTargetSpec *outTarget) {
+uslDefaultVulkanTarget(USLTargetSpec *outTarget) {
   return outTarget
          && us_target_init(outTarget,
                            USL_BACKEND_SPIRV,
@@ -175,7 +175,7 @@ gpu_uslDefaultVulkanTarget(USLTargetSpec *outTarget) {
 }
 
 static inline USLTargetProfile
-gpu_uslVulkanProfile(uint32_t major, uint32_t minor) {
+uslVulkanProfile(uint32_t major, uint32_t minor) {
   if (major == 0u) {
     return USL_TARGET_PROFILE_NONE;
   }
@@ -200,7 +200,7 @@ gpu_uslVulkanProfile(uint32_t major, uint32_t minor) {
 }
 
 static inline bool
-gpu_uslVulkanHalfRoundtrip(uint32_t vendor, uint32_t device, uint32_t driver) {
+uslVulkanHalfRoundtrip(uint32_t vendor, uint32_t device, uint32_t driver) {
   /* exact native-tested device/driver pairs; do not widen to a driver range. */
 #if defined(_WIN32) || defined(WIN32)
   return vendor == 0x10deu && device == 0x1fbcu && driver == 2500657152u;
@@ -216,7 +216,7 @@ gpu_uslVulkanHalfRoundtrip(uint32_t vendor, uint32_t device, uint32_t driver) {
 }
 
 static inline int
-gpu_uslDX12NativeEnabled(void) {
+uslDX12NativeEnabled(void) {
   const char *value;
 
   value = getenv("GPU_DX12_NATIVE_DXIL");
@@ -225,17 +225,17 @@ gpu_uslDX12NativeEnabled(void) {
 }
 
 static inline int
-gpu_uslDefaultDX12Target(USLTargetSpec *outTarget) {
+uslDefaultDX12Target(USLTargetSpec *outTarget) {
   /* keep HLSL + DXC as production default until native library parity closes.
    * the opt-in path exists for focused native-DXIL correctness gates. */
   return outTarget
          && us_target_init(outTarget,
-                           gpu_uslDX12NativeEnabled() ? USL_BACKEND_DXIL : USL_BACKEND_HLSL,
+                           uslDX12NativeEnabled() ? USL_BACKEND_DXIL : USL_BACKEND_HLSL,
                            USL_TARGET_PROFILE_HLSL_SM_6_0) == USLOk;
 }
 
 static inline int
-gpu_uslDefaultWebGPUTarget(USLTargetSpec *outTarget) {
+uslDefaultWebGPUTarget(USLTargetSpec *outTarget) {
   return outTarget
          && us_target_init(outTarget,
                            USL_BACKEND_WGSL,
@@ -243,7 +243,7 @@ gpu_uslDefaultWebGPUTarget(USLTargetSpec *outTarget) {
 }
 
 static inline int
-gpu_uslDefaultCUDATarget(USLTargetSpec *outTarget) {
+uslDefaultCUDATarget(USLTargetSpec *outTarget) {
   return outTarget
          && us_target_init(outTarget,
                            USL_BACKEND_PTX,
@@ -251,7 +251,7 @@ gpu_uslDefaultCUDATarget(USLTargetSpec *outTarget) {
 }
 
 static inline int
-gpu_uslCUDAExactSM(uint32_t architecture) {
+uslCUDAExactSM(uint32_t architecture) {
   switch (architecture) {
     case 90u:
     case 100u:
@@ -268,7 +268,7 @@ gpu_uslCUDAExactSM(uint32_t architecture) {
 }
 
 static inline uint32_t
-gpu_uslCUDATargetSM(uint32_t architecture) {
+uslCUDATargetSM(uint32_t architecture) {
   switch (architecture) {
     case 50u:
     case 52u:
@@ -298,13 +298,13 @@ gpu_uslCUDATargetSM(uint32_t architecture) {
 }
 
 static inline int
-gpu_uslCUDASMAtom(USLCapabilityAtomDesc *outAtom,
-                  uint32_t               architecture) {
+uslCUDASMAtom(USLCapabilityAtomDesc *outAtom,
+              uint32_t               architecture) {
   char     architectureText[USL_CAPABILITY_ATOM_TEXT_MAX];
   uint32_t targetArchitecture;
   int      architectureLength;
 
-  targetArchitecture = gpu_uslCUDATargetSM(architecture);
+  targetArchitecture = uslCUDATargetSM(architecture);
 
   if (!outAtom || targetArchitecture == 0u) {
     return 0;
@@ -313,7 +313,7 @@ gpu_uslCUDASMAtom(USLCapabilityAtomDesc *outAtom,
   architectureLength = snprintf(architectureText,
                                 sizeof(architectureText),
                                 targetArchitecture == architecture
-                                && gpu_uslCUDAExactSM(architecture)
+                                && uslCUDAExactSM(architecture)
                                   ? "sm_%ua"
                                   : "sm_%u",
                                 targetArchitecture);
@@ -324,7 +324,7 @@ gpu_uslCUDASMAtom(USLCapabilityAtomDesc *outAtom,
 }
 
 static inline uint32_t
-gpu_uslCUDAPTXVersion(int driverVersion) {
+uslCUDAPTXVersion(int driverVersion) {
   if (driverVersion >= 13030)
     return 903u;
 
@@ -392,7 +392,7 @@ gpu_uslCUDAPTXVersion(int driverVersion) {
 }
 
 static inline int
-gpu_uslCUDAPTXAtom(USLCapabilityAtomDesc *outAtom, uint32_t version) {
+uslCUDAPTXAtom(USLCapabilityAtomDesc *outAtom, uint32_t version) {
   char versionText[USL_CAPABILITY_ATOM_TEXT_MAX];
   int  versionLength;
 
@@ -411,22 +411,22 @@ gpu_uslCUDAPTXAtom(USLCapabilityAtomDesc *outAtom, uint32_t version) {
 }
 
 static inline int
-gpu_uslDefaultTarget(GPUBackend backend, USLTargetSpec *outTarget) {
+uslDefaultTarget(GPUBackend backend, USLTargetSpec *outTarget) {
   switch (backend) {
     case GPU_BACKEND_METAL:
-      return gpu_uslDefaultMetalTarget(outTarget);
+      return uslDefaultMetalTarget(outTarget);
 
     case GPU_BACKEND_VULKAN:
-      return gpu_uslDefaultVulkanTarget(outTarget);
+      return uslDefaultVulkanTarget(outTarget);
 
     case GPU_BACKEND_DX12:
-      return gpu_uslDefaultDX12Target(outTarget);
+      return uslDefaultDX12Target(outTarget);
 
     case GPU_BACKEND_WEBGPU:
-      return gpu_uslDefaultWebGPUTarget(outTarget);
+      return uslDefaultWebGPUTarget(outTarget);
 
     case GPU_BACKEND_CUDA:
-      return gpu_uslDefaultCUDATarget(outTarget);
+      return uslDefaultCUDATarget(outTarget);
 
     default:
       return 0;

@@ -18,12 +18,12 @@
 #include "../impl.h"
 
 static GPUFrame*
-webgpu_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
+webgpu_beginFrame(Api    *api, GPUSwapchain *swapchain) {
   WGPUSurfaceTexture  surfaceTexture = WGPU_SURFACE_TEXTURE_INIT;
-  GPUSwapchainWebGPU *native;
+  SwapchainWebGPU    *native;
 
   GPU__UNUSED(api);
-  native = gpu_webgpuSwapchain(swapchain);
+  native = webgpuSwapchain(swapchain);
 
   if (!native || native->acquired) {
     return NULL;
@@ -39,13 +39,13 @@ webgpu_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
 
     switch (surfaceTexture.status) {
       case WGPUSurfaceGetCurrentTextureStatus_Outdated:
-        gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_OUT_OF_DATE);
+        swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_OUT_OF_DATE);
         break;
       case WGPUSurfaceGetCurrentTextureStatus_Lost:
-        gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
+        swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
         break;
       default:
-        gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
+        swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
         break;
     }
 
@@ -88,15 +88,15 @@ webgpu_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
   native->acquired         = true;
 
   if (surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal) {
-    gpuSwapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SUBOPTIMAL);
+    swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SUBOPTIMAL);
   }
 
   return &native->frame;
 }
 
 static void
-webgpu_endFrame(GPUApi *api, GPUFrame *frame) {
-  GPUSwapchainWebGPU *native;
+webgpu_endFrame(Api    *api, GPUFrame *frame) {
+  SwapchainWebGPU    *native;
 
   GPU__UNUSED(api);
   native = frame ? frame->_priv : NULL;
@@ -119,7 +119,7 @@ webgpu_endFrame(GPUApi *api, GPUFrame *frame) {
 }
 
 void
-webgpu_initFrame(GPUApiFrame *api) {
+webgpu_initFrame(ApiFrame    *api) {
   api->beginFrame = webgpu_beginFrame;
   api->endFrame   = webgpu_endFrame;
 }

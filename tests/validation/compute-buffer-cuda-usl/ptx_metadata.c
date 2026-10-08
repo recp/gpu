@@ -113,7 +113,7 @@ validate_resource(const GPUShaderReflection *reflection,
 }
 
 static int
-validate_param(const GPUShaderPTXParamInfo *param,
+validate_param(const ShaderPTXParamInfo    *param,
                uint32_t                     group,
                uint32_t                     binding,
                GPUBindingType               bindingType,
@@ -131,7 +131,7 @@ validate_param(const GPUShaderPTXParamInfo *param,
 
 static int
 validate_contract(const GPUShaderLibrary *library) {
-  const GPUShaderPTXInfo *info;
+  const ShaderPTXInfo    *info;
   const PTXSource        *ptx;
 
   if (!library || library->_reflection.resourceCount != 3u
@@ -196,7 +196,7 @@ validate_contract(const GPUShaderLibrary *library) {
 int
 validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
   GPUDevice         device;
-  GPUApi            api;
+  Api               api;
   GPUShaderLibrary *library;
   GPUResult         result;
   int               valid;

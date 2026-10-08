@@ -81,9 +81,9 @@ mt_vertexStepFunction(GPUVertexStepMode mode) {
 }
 
 GPU_HIDE
-GPUVertexDescriptor*
+VertexDescriptor*
 mt_newVertexDesc(void) {
-  GPUVertexDescriptor *vdec;
+  VertexDescriptor    *vdec;
   MTLVertexDescriptor *mtvdesc;
 
   mtvdesc     = [MTLVertexDescriptor new];
@@ -95,7 +95,7 @@ mt_newVertexDesc(void) {
 
 GPU_HIDE
 void
-mt_destroyVertexDesc(GPUVertexDescriptor *vert) {
+mt_destroyVertexDesc(VertexDescriptor    *vert) {
   if (!vert) {
     return;
   }
@@ -109,7 +109,7 @@ mt_destroyVertexDesc(GPUVertexDescriptor *vert) {
 
 GPU_HIDE
 void
-mt_attrib(GPUVertexDescriptor *__restrict vert,
+mt_attrib(VertexDescriptor    *__restrict vert,
           uint32_t                        attribIndex,
           GPUVertexFormat                 format,
           uint32_t                        offset,
@@ -132,7 +132,7 @@ mt_attrib(GPUVertexDescriptor *__restrict vert,
 
 GPU_HIDE
 void
-mt_layout(GPUVertexDescriptor *__restrict vert,
+mt_layout(VertexDescriptor    *__restrict vert,
           uint32_t                        layoutIndex,
           uint32_t                        stride,
           GPUVertexStepMode               stepMode) {
@@ -155,7 +155,7 @@ mt_layout(GPUVertexDescriptor *__restrict vert,
 GPU_HIDE
 void
 mt_vertexDesc(GPURenderPipeline   *__restrict pipeline,
-              GPUVertexDescriptor *__restrict vert) {
+              VertexDescriptor    *__restrict vert) {
   MTRenderPipelineDesc *native;
 
   native = pipeline->_priv;
@@ -164,7 +164,7 @@ mt_vertexDesc(GPURenderPipeline   *__restrict pipeline,
 
 GPU_HIDE
 void
-mt_initVertex(GPUApiVertex *api) {
+mt_initVertex(ApiVertex    *api) {
   api->newVertexDesc     = mt_newVertexDesc;
   api->destroyVertexDesc = mt_destroyVertexDesc;
   api->attrib            = mt_attrib;

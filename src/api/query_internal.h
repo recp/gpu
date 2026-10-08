@@ -28,8 +28,8 @@ struct GPUQuerySet {
 };
 
 static GPU_INLINE bool
-gpuValidPassTimestampWrites(const GPUPassTimestampWrites *writes,
-                            const GPUDevice              *device) {
+validPassTimestampWrites(const GPUPassTimestampWrites *writes,
+                         const GPUDevice              *device) {
   return !writes
          || (device
              && GPUIsFeatureEnabled(device, GPU_FEATURE_TIMESTAMPS)

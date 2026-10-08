@@ -392,8 +392,8 @@ dx12__copyShaderBlob(const void     *data,
 }
 
 static bool
-dx12__useLibraryBinary(GPUShaderLibraryDX12 *library,
-                       GPUShaderSourceBlob  *selectedSource,
+dx12__useLibraryBinary(ShaderLibraryDX12    *library,
+                       ShaderSourceBlob     *selectedSource,
                        const void           *source,
                        uint64_t              sourceSize,
                        DX12ShaderCode       *outCode) {
@@ -420,7 +420,7 @@ dx12__useLibraryBinary(GPUShaderLibraryDX12 *library,
 }
 
 static DX12ShaderCacheEntry*
-dx12__findShader(GPUShaderLibraryDX12       *library,
+dx12__findShader(ShaderLibraryDX12          *library,
                  const char                 *entry,
                  GPUShaderStageFlags         stage,
                  const GPUPipelineConstants *constants) {
@@ -443,7 +443,7 @@ dx12__findShader(GPUShaderLibraryDX12       *library,
 }
 
 static bool
-dx12__getCachedShader(GPUShaderLibraryDX12       *library,
+dx12__getCachedShader(ShaderLibraryDX12          *library,
                       const char                 *entry,
                       GPUShaderStageFlags         stage,
                       const GPUPipelineConstants *constants,
@@ -465,7 +465,7 @@ dx12__getCachedShader(GPUShaderLibraryDX12       *library,
 }
 
 static bool
-dx12__cacheShader(GPUShaderLibraryDX12       *library,
+dx12__cacheShader(ShaderLibraryDX12          *library,
                   const char                 *entry,
                   GPUShaderStageFlags         stage,
                   const GPUPipelineConstants *constants,
@@ -690,7 +690,7 @@ dx12__dxcProfileName(uint32_t       targetProfile,
 }
 
 static bool
-dx12__compileDXC(GPUDeviceDX12  *device,
+dx12__compileDXC(DeviceDX12     *device,
                  const char     *source,
                  uint64_t        sourceSize,
                  const char     *entry,
@@ -1168,16 +1168,16 @@ dx12_hasLinearAlgebraCompiler(HMODULE module) {
 
 GPU_HIDE
 bool
-dx12_compileShader(GPUDeviceDX12              *device,
+dx12_compileShader(DeviceDX12                 *device,
                    GPUShaderLibrary           *library,
                    const char                 *entry,
                    GPUShaderStageFlags         stage,
                    const GPUPipelineConstants *constants,
                    DX12ShaderCode             *outCode) {
-  GPUShaderSourceBlob   selectedSource;
+  ShaderSourceBlob      selectedSource;
   DX12ShaderCode        compiled;
   wchar_t               dxcProfile[16];
-  GPUShaderLibraryDX12 *native;
+  ShaderLibraryDX12    *native;
   const char           *source;
   uint64_t              sourceSize;
   uint32_t              minimumMinor;
@@ -1202,10 +1202,10 @@ dx12_compileShader(GPUDeviceDX12              *device,
   memset(&selectedSource, 0, sizeof(selectedSource));
   source       = native->source;
   sourceSize   = native->sourceSize;
-  sourceResult = gpuCompileShaderLibraryEntry(library,
-                                              entry,
-                                              constants,
-                                              &selectedSource);
+  sourceResult = compileShaderLibraryEntry(library,
+                                           entry,
+                                           constants,
+                                           &selectedSource);
 
   if (sourceResult == GPU_OK) {
     source     = selectedSource.data;
@@ -1230,7 +1230,7 @@ dx12_compileShader(GPUDeviceDX12              *device,
                               dx12_dxcPrefixes[stage],
                               minimumMinor,
                               dxcProfile)) {
-      gpuFreeShaderSourceBlob(&selectedSource);
+      freeShaderSourceBlob(&selectedSource);
       return false;
     }
 
@@ -1249,7 +1249,7 @@ dx12_compileShader(GPUDeviceDX12              *device,
                                   &compiled);
   }
 
-  gpuFreeShaderSourceBlob(&selectedSource);
+  freeShaderSourceBlob(&selectedSource);
 
   return success && dx12__cacheShader(native,
                                       entry,
@@ -1261,15 +1261,15 @@ dx12_compileShader(GPUDeviceDX12              *device,
 
 GPU_HIDE
 bool
-dx12_compileRayLibrary(GPUDeviceDX12    *device,
+dx12_compileRayLibrary(DeviceDX12       *device,
                        GPUShaderLibrary *library,
                        uint64_t          entryMask,
                        DX12ShaderCode   *outCode) {
-  GPUShaderSourceBlob   selectedSource;
+  ShaderSourceBlob      selectedSource;
   DX12ShaderCode        compiled;
   char                  cacheEntry[64];
   wchar_t               profile[16];
-  GPUShaderLibraryDX12 *native;
+  ShaderLibraryDX12    *native;
   const char           *source;
   uint64_t              sourceSize;
   GPUResult             sourceResult;
@@ -1309,9 +1309,9 @@ dx12_compileRayLibrary(GPUDeviceDX12    *device,
   memset(&selectedSource, 0, sizeof(selectedSource));
   source       = native->source;
   sourceSize   = native->sourceSize;
-  sourceResult = gpuCompileShaderLibraryEntryMask(library,
-                                                  entryMask,
-                                                  &selectedSource);
+  sourceResult = compileShaderLibraryEntryMask(library,
+                                               entryMask,
+                                               &selectedSource);
 
   if (sourceResult == GPU_OK) {
     source     = selectedSource.data;
@@ -1335,7 +1335,7 @@ dx12_compileRayLibrary(GPUDeviceDX12    *device,
                                  device->shaderF16Enabled || device->subgroupMatrixEnabled,
                                  &compiled);
 
-  gpuFreeShaderSourceBlob(&selectedSource);
+  freeShaderSourceBlob(&selectedSource);
 
   return success && dx12__cacheShader(native,
                                       cacheEntry,
@@ -1347,15 +1347,15 @@ dx12_compileRayLibrary(GPUDeviceDX12    *device,
 
 GPU_HIDE
 bool
-dx12_compileExecutionGraphLibrary(GPUDeviceDX12    *device,
+dx12_compileExecutionGraphLibrary(DeviceDX12       *device,
                                   GPUShaderLibrary *library,
                                   uint64_t          entryMask,
                                   DX12ShaderCode   *outCode) {
-  GPUShaderSourceBlob   selectedSource;
+  ShaderSourceBlob      selectedSource;
   DX12ShaderCode        compiled;
   char                  cacheEntry[64];
   wchar_t               profile[16];
-  GPUShaderLibraryDX12 *native;
+  ShaderLibraryDX12    *native;
   const char           *source;
   uint64_t              sourceSize;
   GPUResult             sourceResult;
@@ -1396,9 +1396,9 @@ dx12_compileExecutionGraphLibrary(GPUDeviceDX12    *device,
   memset(&selectedSource, 0, sizeof(selectedSource));
   source       = native->source;
   sourceSize   = native->sourceSize;
-  sourceResult = gpuCompileShaderLibraryEntryMask(library,
-                                                  entryMask,
-                                                  &selectedSource);
+  sourceResult = compileShaderLibraryEntryMask(library,
+                                               entryMask,
+                                               &selectedSource);
 
   if (sourceResult == GPU_OK) {
     source     = selectedSource.data;
@@ -1422,7 +1422,7 @@ dx12_compileExecutionGraphLibrary(GPUDeviceDX12    *device,
                                  device->shaderF16Enabled || device->subgroupMatrixEnabled,
                                  &compiled);
 
-  gpuFreeShaderSourceBlob(&selectedSource);
+  freeShaderSourceBlob(&selectedSource);
 
   return success && dx12__cacheShader(native,
                                       cacheEntry,
@@ -1447,10 +1447,10 @@ dx12_createRenderPipeline(GPUDevice                         *__restrict device,
   DX12ShaderCode                     fragmentCode = {0};
   DX12PipelineKey                    rootKey;
   GPUStencilFaceState                defaultFace;
-  GPUDeviceDX12                     *deviceDX12;
-  GPUShaderLibraryDX12              *library;
-  GPUPipelineLayoutDX12             *layout;
-  GPURenderPipelineDX12             *native;
+  DeviceDX12                        *deviceDX12;
+  ShaderLibraryDX12                 *library;
+  PipelineLayoutDX12                *layout;
+  RenderPipelineDX12                *native;
   ID3D12RootSignature               *rootSignature;
   const GPUMeshPipelineEXT          *mesh;
   const GPUDepthStencilState        *depthStencil;
@@ -1498,15 +1498,15 @@ dx12_createRenderPipeline(GPUDevice                         *__restrict device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  entryMask = gpuShaderEntryBit(info->library, info->fragmentEntry);
+  entryMask = shaderEntryBit(info->library, info->fragmentEntry);
 
   if (mesh) {
     if (mesh->taskEntry)
-      entryMask |= gpuShaderEntryBit(info->library, mesh->taskEntry);
+      entryMask |= shaderEntryBit(info->library, mesh->taskEntry);
 
-    entryMask |= gpuShaderEntryBit(info->library, mesh->meshEntry);
+    entryMask |= shaderEntryBit(info->library, mesh->meshEntry);
   } else {
-    entryMask |= gpuShaderEntryBit(info->library, info->vertexEntry);
+    entryMask |= shaderEntryBit(info->library, info->vertexEntry);
   }
 
   rootResult = dx12_createShaderRootSignature(device,
@@ -1546,7 +1546,7 @@ dx12_createRenderPipeline(GPUDevice                         *__restrict device,
                           info->library,
                           info->fragmentEntry,
                           GPU_SHADER_STAGE_FRAGMENT_BIT,
-                          gpuPipelineConstants(info->chain.pNext),
+                          pipelineConstants(info->chain.pNext),
                           &fragmentCode)) {
     fprintf(stderr,
             "GPU Direct3D 12 fragment shader '%s' failed to compile\n",
@@ -1558,7 +1558,7 @@ dx12_createRenderPipeline(GPUDevice                         *__restrict device,
                                    info->library,
                                    info->vertexEntry,
                                    GPU_SHADER_STAGE_VERTEX_BIT,
-                                   gpuPipelineConstants(info->chain.pNext),
+                                   pipelineConstants(info->chain.pNext),
                                    &vertexCode)) {
     fprintf(stderr,
             "GPU Direct3D 12 vertex shader '%s' failed to compile\n",
@@ -1571,7 +1571,7 @@ dx12_createRenderPipeline(GPUDevice                         *__restrict device,
                              info->library,
                              mesh->taskEntry,
                              GPU_SHADER_STAGE_TASK_BIT,
-                             gpuPipelineConstants(info->chain.pNext),
+                             pipelineConstants(info->chain.pNext),
                              &taskCode)) {
     fprintf(stderr,
             "GPU Direct3D 12 task shader '%s' failed to compile\n",
@@ -1583,7 +1583,7 @@ dx12_createRenderPipeline(GPUDevice                         *__restrict device,
                                   info->library,
                                   mesh->meshEntry,
                                   GPU_SHADER_STAGE_MESH_BIT,
-                                  gpuPipelineConstants(info->chain.pNext),
+                                  pipelineConstants(info->chain.pNext),
                                   &meshCode)) {
     fprintf(stderr,
             "GPU Direct3D 12 mesh shader '%s' failed to compile\n",
@@ -1743,7 +1743,7 @@ done:
 GPU_HIDE
 void
 dx12_destroyRenderPipeline(GPURenderPipeline *pipeline) {
-  GPURenderPipelineDX12 *native;
+  RenderPipelineDX12    *native;
 
   if (!pipeline) {
     return;
@@ -1768,7 +1768,7 @@ dx12_destroyRenderPipeline(GPURenderPipeline *pipeline) {
 
 GPU_HIDE
 void
-dx12_initRenderPipeline(GPUApiRender *api) {
+dx12_initRenderPipeline(ApiRender    *api) {
   api->createPipeline        = dx12_createRenderPipeline;
   api->destroyRenderPipeline = dx12_destroyRenderPipeline;
 }

@@ -76,7 +76,7 @@ check_format(GPUDevice         *device,
   GPUCommandBuffer             *buffers[1];
   GPUTexture                   *textures[2] = {0};
   GPUTextureView               *views[2]    = {0};
-  GPUAdapterMT                 *native;
+  AdapterMT                    *native;
   GPUCommandBuffer             *cmdb       = NULL;
   GPURenderPassEncoder          *render     = NULL;
   GPUTransferPassEncoder        *copy       = NULL;

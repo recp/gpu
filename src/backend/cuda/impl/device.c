@@ -18,7 +18,7 @@
 #include "../../../api/usl_target.h"
 
 static void
-cuda__queueWait(GPUQueueCuda *queue) {
+cuda__queueWait(QueueCuda    *queue) {
 #if defined(_WIN32) || defined(WIN32)
   SleepConditionVariableCS(&queue->condition, &queue->lock, INFINITE);
 #else
@@ -27,7 +27,7 @@ cuda__queueWait(GPUQueueCuda *queue) {
 }
 
 static void
-cuda__releaseDispatches(GPUCommandCuda *command) {
+cuda__releaseDispatches(CommandCuda    *command) {
   uint32_t i;
 
   for (i = 0u; i < command->dispatchCount; i++) {
@@ -38,8 +38,8 @@ cuda__releaseDispatches(GPUCommandCuda *command) {
 }
 
 static void
-cuda__completionLoop(GPUQueueCuda *queue) {
-  GPUCommandCuda *command;
+cuda__completionLoop(QueueCuda    *queue) {
+  CommandCuda    *command;
   CUresult        result;
 
   for (;;) {
@@ -77,7 +77,7 @@ cuda__completionLoop(GPUQueueCuda *queue) {
       cuda_report(queue->queue._device, result, "event synchronization");
     }
 
-    gpuFinishCommandBuffer(&command->command, cuda_recycleCommand);
+    finishCommandBuffer(&command->command, cuda_recycleCommand);
   }
 }
 
@@ -96,9 +96,9 @@ cuda__completionThread(void *userData) {
 #endif
 
 static void
-cuda__destroyQueue(GPUQueueCuda *queue) {
-  GPUCommandCuda *command;
-  GPUCommandCuda *next;
+cuda__destroyQueue(QueueCuda    *queue) {
+  CommandCuda    *command;
+  CommandCuda    *next;
 
   if (!queue || !queue->driver) {
     return;
@@ -149,9 +149,9 @@ cuda__destroyQueue(GPUQueueCuda *queue) {
 
 static bool
 cuda__initQueue(GPUDevice     *device,
-                GPUDeviceCuda *native,
-                GPUQueueCuda  *queue) {
-  GPUCommandCuda *command;
+                DeviceCuda    *native,
+                QueueCuda     *queue) {
+  CommandCuda    *command;
   CUresult        result;
   uint32_t        i;
 
@@ -225,7 +225,7 @@ cuda_getAvailableAdapters(GPUInstance *__restrict inst,
                           uint32_t                maxNumberOfItems) {
   GPUAdapter *head;
   GPUAdapter *tail;
-  GPUCUDA    *driver;
+  CUDA       *driver;
   uint32_t    emitted;
   int         count;
   int         ordinal;
@@ -242,8 +242,8 @@ cuda_getAvailableAdapters(GPUInstance *__restrict inst,
   emitted = 0u;
 
   for (ordinal = 0; ordinal < count && emitted < maxNumberOfItems; ordinal++) {
-    GPUAdapterCuda  candidate = {0};
-    GPUAdapterCuda *native;
+    AdapterCuda     candidate = {0};
+    AdapterCuda    *native;
     GPUAdapter     *adapter;
 
     candidate.driver  = driver;
@@ -349,7 +349,7 @@ cuda_destroyAdapter(GPUAdapter *__restrict adapter) {
 static GPUResult
 cuda_getAdapterProperties(const GPUAdapter     *__restrict adapter,
                           GPUAdapterProperties *__restrict outProperties) {
-  GPUAdapterCuda *native;
+  AdapterCuda    *native;
 
   native = cuda_adapter(adapter);
 
@@ -372,7 +372,7 @@ cuda_getAdapterIdentity(const GPUAdapter   *__restrict adapter,
 #if defined(_WIN32) || defined(WIN32)
   char            luid[8];
 #endif
-  GPUAdapterCuda *native;
+  AdapterCuda    *native;
 #if defined(_WIN32) || defined(WIN32)
   unsigned int    nodeMask;
 #endif
@@ -406,46 +406,46 @@ cuda_getAdapterIdentity(const GPUAdapter   *__restrict adapter,
 }
 
 static bool
-cuda_hasSubgroups(const GPUAdapterCuda *adapter) {
+cuda_hasSubgroups(const AdapterCuda    *adapter) {
   return adapter && adapter->computeMajor >= 3 && adapter->warpSize == 32;
 }
 
 static bool
-cuda_hasShaderF16(const GPUAdapterCuda *adapter) {
+cuda_hasShaderF16(const AdapterCuda    *adapter) {
   return adapter
          && (adapter->computeMajor > 5
              || (adapter->computeMajor == 5 && adapter->computeMinor >= 3));
 }
 
 static bool
-cuda_hasSubgroupMatrix(const GPUAdapterCuda *adapter) {
+cuda_hasSubgroupMatrix(const AdapterCuda    *adapter) {
   return cuda_hasSubgroups(adapter) && adapter->computeMajor >= 7;
 }
 
 static bool
-cuda_hasAtomic64(const GPUAdapterCuda *adapter) {
+cuda_hasAtomic64(const AdapterCuda    *adapter) {
   return adapter && adapter->computeMajor >= 5;
 }
 
 static bool
-cuda_hasShaderSubgroupClock(const GPUAdapterCuda *adapter) {
+cuda_hasShaderSubgroupClock(const AdapterCuda    *adapter) {
   return adapter && adapter->computeMajor >= 2;
 }
 
 static bool
-cuda_hasShaderDeviceClock(const GPUAdapterCuda *adapter) {
+cuda_hasShaderDeviceClock(const AdapterCuda    *adapter) {
   return adapter && adapter->computeMajor >= 3;
 }
 
 static bool
-cuda_hasComputeDerivatives(const GPUAdapterCuda *adapter) {
+cuda_hasComputeDerivatives(const AdapterCuda    *adapter) {
   return cuda_hasSubgroups(adapter) && adapter->computeMajor >= 7;
 }
 
 static bool
 cuda_supportsFeature(const GPUAdapter *__restrict adapter,
                      GPUFeature                   feature) {
-  GPUAdapterCuda *native;
+  AdapterCuda    *native;
 
   native = cuda_adapter(adapter);
 
@@ -491,9 +491,9 @@ cuda_supportsFeature(const GPUAdapter *__restrict adapter,
 static bool
 cuda_supportsSubgroupOperations(const GPUAdapter     *__restrict adapter,
                                 GPUShaderStageFlags              stage,
-                                GPUBackendSubgroupOperationFlags operations) {
-  GPUAdapterCuda                        *native;
-  const GPUBackendSubgroupOperationFlags supported = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT
+                                BackendSubgroupOperationFlags    operations) {
+  AdapterCuda                           *native;
+  const BackendSubgroupOperationFlags    supported = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT
                                                      | GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT
                                                      | GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
 
@@ -506,7 +506,7 @@ cuda_supportsSubgroupOperations(const GPUAdapter     *__restrict adapter,
 static void
 cuda_getLimits(const GPUAdapter *__restrict adapter,
                GPULimits        *__restrict outLimits) {
-  GPUAdapterCuda *native;
+  AdapterCuda    *native;
 
   native = cuda_adapter(adapter);
 
@@ -535,7 +535,7 @@ static void
 cuda_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
                            GPUFormat                         format,
                            GPUFormatCapabilities *__restrict outCapabilities) {
-  GPUCudaFormatInfo info;
+  CudaFormatInfo    info;
 
   if (outCapabilities) {
     memset(outCapabilities, 0, sizeof(*outCapabilities));
@@ -553,7 +553,7 @@ static GPUResult
 cuda_getSubgroupMatrixProperties(const GPUAdapter               *__restrict adapter,
                                  uint32_t                       *__restrict inoutPropertyCount,
                                  GPUSubgroupMatrixPropertiesEXT *__restrict outProperties) {
-  GPUAdapterCuda *native;
+  AdapterCuda    *native;
   uint32_t        capacity;
 
   native = cuda_adapter(adapter);
@@ -588,11 +588,11 @@ cuda_getSubgroupMatrixProperties(const GPUAdapter               *__restrict adap
 
 static GPUDevice*
 cuda_createDevice(GPUAdapter   *__restrict adapter,
-                  const GPUQueueCreateInfo queueInfos[],
+                  const QueueCreateInfo    queueInfos[],
                   uint32_t                 queueInfoCount,
                   uint64_t                 enabledFeatureMask) {
-  GPUAdapterCuda *adapterNative;
-  GPUDeviceCuda  *native;
+  AdapterCuda    *adapterNative;
+  DeviceCuda     *native;
   GPUDevice      *device;
   uint64_t        supportedMask;
   uint32_t        queueCount;
@@ -686,7 +686,7 @@ cuda_createDevice(GPUAdapter   *__restrict adapter,
   device->queueFamilies = GPU_QUEUE_COMPUTE_BIT;
 
   device->uslTargetArchitecture = (uint32_t)(adapterNative->computeMajor * 10 + adapterNative->computeMinor);
-  device->uslTargetVersion      = gpu_uslCUDAPTXVersion(adapterNative->driver->driverVersion);
+  device->uslTargetVersion      = uslCUDAPTXVersion(adapterNative->driver->driverVersion);
 
   if (device->uslTargetVersion == 0u) {
     free(native->queues);
@@ -735,8 +735,8 @@ cuda_createDevice(GPUAdapter   *__restrict adapter,
 
 static GPUResult
 cuda_waitIdle(GPUDevice *__restrict device) {
-  GPUDeviceCuda *native;
-  GPUQueueCuda  *queue;
+  DeviceCuda    *native;
+  QueueCuda     *queue;
   GPUResult      result;
   CUresult       cudaResult;
   uint32_t       i;
@@ -785,7 +785,7 @@ cuda_waitIdle(GPUDevice *__restrict device) {
 
 static void
 cuda_destroyDevice(GPUDevice *__restrict device) {
-  GPUDeviceCuda *native;
+  DeviceCuda    *native;
   uint32_t       i;
 
   native = cuda_device(device);
@@ -806,7 +806,7 @@ cuda_destroyDevice(GPUDevice *__restrict device) {
 }
 
 void
-cuda_queueLock(GPUQueueCuda *queue) {
+cuda_queueLock(QueueCuda    *queue) {
 #if defined(_WIN32) || defined(WIN32)
   EnterCriticalSection(&queue->lock);
 #else
@@ -815,7 +815,7 @@ cuda_queueLock(GPUQueueCuda *queue) {
 }
 
 void
-cuda_queueUnlock(GPUQueueCuda *queue) {
+cuda_queueUnlock(QueueCuda    *queue) {
 #if defined(_WIN32) || defined(WIN32)
   LeaveCriticalSection(&queue->lock);
 #else
@@ -824,7 +824,7 @@ cuda_queueUnlock(GPUQueueCuda *queue) {
 }
 
 void
-cuda_queueSignal(GPUQueueCuda *queue) {
+cuda_queueSignal(QueueCuda    *queue) {
 #if defined(_WIN32) || defined(WIN32)
   WakeAllConditionVariable(&queue->condition);
 #else
@@ -832,9 +832,9 @@ cuda_queueSignal(GPUQueueCuda *queue) {
 #endif
 }
 
-GPUCommandCuda*
-cuda_createCommand(GPUQueueCuda *queue) {
-  GPUCommandCuda *command;
+CommandCuda*
+cuda_createCommand(QueueCuda    *queue) {
+  CommandCuda    *command;
 
   if (!queue || !queue->driver) {
     return NULL;
@@ -869,8 +869,8 @@ cuda_createCommand(GPUQueueCuda *queue) {
 
 void
 cuda_recycleCommand(GPUCommandBuffer *cmdb) {
-  GPUCommandCuda *command;
-  GPUQueueCuda   *queue;
+  CommandCuda    *command;
+  QueueCuda      *queue;
 
   command = cuda_command(cmdb);
   queue   = command ? command->owner : NULL;
@@ -894,7 +894,7 @@ cuda_recycleCommand(GPUCommandBuffer *cmdb) {
 }
 
 void
-cuda_initDevice(GPUApiDevice *api) {
+cuda_initDevice(ApiDevice    *api) {
   api->getAvailableAdapters        = cuda_getAvailableAdapters;
   api->selectAdapter               = cuda_selectAdapter;
   api->destroyAdapter              = cuda_destroyAdapter;

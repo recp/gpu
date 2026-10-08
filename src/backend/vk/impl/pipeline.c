@@ -363,10 +363,10 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkSpecializationMapEntry            constantEntries[USL_RUNTIME_MAX_SPEC_CONSTANTS];
   uint32_t                           constantData[USL_RUNTIME_MAX_SPEC_CONSTANTS];
   VkSpecializationInfo               constants = {0};
-  GPUDeviceVk                       *deviceVk;
-  GPUShaderLibraryVk                *library;
-  GPUPipelineLayoutVk               *layout;
-  GPURenderPipelineVk               *native;
+  DeviceVk                          *deviceVk;
+  ShaderLibraryVk                   *library;
+  PipelineLayoutVk                  *layout;
+  RenderPipelineVk                  *native;
   const GPUMeshPipelineEXT          *mesh;
   const GPUDepthStencilState        *depthState;
   VkVertexInputBindingDescription   *vertexBindings;
@@ -540,14 +540,14 @@ vk_createRenderPipeline(GPUDevice                         *device,
   native->device = deviceVk->device;
   entryMask      = UINT64_MAX;
 
-  if (gpuShaderLibraryHasEntryResourceInfo(info->library)) {
-    entryMask = gpuShaderEntryBit(info->library, info->fragmentEntry);
+  if (shaderLibraryHasEntryResourceInfo(info->library)) {
+    entryMask = shaderEntryBit(info->library, info->fragmentEntry);
 
     if (mesh) {
-      entryMask |= gpuShaderEntryBit(info->library, mesh->taskEntry);
-      entryMask |= gpuShaderEntryBit(info->library, mesh->meshEntry);
+      entryMask |= shaderEntryBit(info->library, mesh->taskEntry);
+      entryMask |= shaderEntryBit(info->library, mesh->meshEntry);
     } else {
-      entryMask |= gpuShaderEntryBit(info->library, info->vertexEntry);
+      entryMask |= shaderEntryBit(info->library, info->vertexEntry);
     }
 
     if (entryMask == 0u) {
@@ -764,7 +764,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
 GPU_HIDE
 void
 vk_destroyRenderPipeline(GPURenderPipeline *pipeline) {
-  GPURenderPipelineVk *native;
+  RenderPipelineVk    *native;
 
   if (!pipeline) {
     return;
@@ -790,7 +790,7 @@ vk_destroyRenderPipeline(GPURenderPipeline *pipeline) {
 
 GPU_HIDE
 void
-vk_initRenderPipeline(GPUApiRender *api) {
+vk_initRenderPipeline(ApiRender    *api) {
   api->createPipeline        = vk_createRenderPipeline;
   api->destroyRenderPipeline = vk_destroyRenderPipeline;
 }
