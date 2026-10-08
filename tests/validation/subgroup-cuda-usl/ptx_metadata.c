@@ -83,7 +83,8 @@ validate_contract(const GPUShaderLibrary *library) {
          && strstr(ptx, ".target sm_70")
          && strstr(ptx, entryDecl)
          && strstr(ptx, ".reqntid 64, 1, 1")
-         && ptx_count(ptx, "activemask.b32") == 1u
+         && ptx_count(ptx, "activemask.b32") == 0u
+         && ptx_count(ptx, "vote.sync.ballot.b32") == 1u
          && ptx_count(ptx, "shfl.sync.bfly.b32") ==
            (GPU_PTX_SUBGROUP_RELATIVE ? 0u : 1u)
          && ptx_count(ptx, "shfl.sync.down.b32") ==
