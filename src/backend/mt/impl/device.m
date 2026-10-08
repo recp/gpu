@@ -702,21 +702,23 @@ mt_selectCommandMode(id<MTLDevice>  device,
   bool        explicitSparse;
   bool        rayQuery;
   bool        supportsMetal4;
+  bool        tensorResources;
 
   if (!outMode) {
     return false;
   }
 
-  mode           = getenv("GPU_METAL_MODE");
-  explicitSparse = (enabledFeatureMask &
+  mode            = getenv("GPU_METAL_MODE");
+  explicitSparse  = (enabledFeatureMask &
                     (UINT64_C(1) <<
                      GPU_FEATURE_SPARSE_EXPLICIT_PLACEMENT)) != 0u;
-  rayQuery       = (enabledFeatureMask &
+  rayQuery        = (enabledFeatureMask &
                     (UINT64_C(1) << GPU_FEATURE_RAY_QUERY)) != 0u;
-  supportsMetal4 = mt_supportsMetal4(device);
+  supportsMetal4  = mt_supportsMetal4(device);
+  tensorResources = (enabledFeatureMask & (UINT64_C(1) << GPU_FEATURE_TENSOR_RESOURCES_EXT)) != 0u;
 
   if (mode && strcmp(mode, "classic") == 0) {
-    if (explicitSparse) {
+    if (explicitSparse || tensorResources) {
       return false;
     }
 
@@ -751,8 +753,8 @@ mt_selectCommandMode(id<MTLDevice>  device,
                ? MTCommandMode4
                : MTCommandModeClassic;
 
-  if (explicitSparse && *outMode != MTCommandMode4) {
-    NSLog(@"Sparse placement requires Metal 4; requested features select classic Metal");
+  if ((explicitSparse || tensorResources) && *outMode != MTCommandMode4) {
+    NSLog(@"Requested placement/tensor resources require Metal 4; other features select classic Metal");
     return false;
   }
 
@@ -979,6 +981,15 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_SHADER_F16:
       return true;
+    case GPU_FEATURE_TENSOR_RESOURCES_EXT:
+#if MT_HAS_METAL4
+      mode = getenv("GPU_METAL_MODE");
+
+      return (!mode || strcmp(mode, "classic") != 0)
+             && mt_supportsMetal4(adapterMT->device);
+#else
+      return false;
+#endif
     case GPU_FEATURE_DESCRIPTOR_INDEXING:
     case GPU_FEATURE_BINDLESS:
       device = adapterMT->device;

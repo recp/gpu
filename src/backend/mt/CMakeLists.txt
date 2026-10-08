@@ -22,6 +22,7 @@ target_sources(gpu PRIVATE
   impl/renderpass.m
   impl/swapchain.m
   impl/texture_view_pool.m
+  impl/tensor.m
   impl/vertex.m
   impl/vrs.m
 )

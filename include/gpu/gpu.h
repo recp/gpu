@@ -32,6 +32,7 @@ extern "C" {
 #include "pass.h"
 #include "cmdqueue.h"
 #include "buffer.h"
+#include "tensor.h"
 #include "memory.h"
 #include "multigpu.h"
 #include "cmd-enc.h"

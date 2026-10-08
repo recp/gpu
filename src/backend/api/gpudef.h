@@ -47,6 +47,7 @@ extern "C" {
 #include "ray.h"
 #include "execution-graph.h"
 #include "sampler-feedback.h"
+#include "tensor.h"
 
 typedef struct GPUApi {
   GPUBackend            backend;
@@ -77,6 +78,7 @@ typedef struct GPUApi {
   GPUApiRayTracing      rayTracing;
   GPUApiExecutionGraph  executionGraph;
   GPUApiSamplerFeedback samplerFeedback;
+  GPUApiTensor          tensor;
   void                 *reserved;
 } GPUApi;
 

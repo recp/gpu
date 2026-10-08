@@ -137,7 +137,7 @@ gpu_reportDeviceLostOnce(GPUDevice *device) {
 static bool
 gpu_knownFeature(GPUFeature feature) {
   return feature >= GPU_FEATURE_COMPUTE
-         && feature <= GPU_FEATURE_TEXTURE_VIEW_MIN_LOD;
+         && feature <= GPU_FEATURE_TENSOR_RESOURCES_EXT;
 }
 
 static bool
@@ -263,7 +263,7 @@ gpu_adapterSupportsMask(const GPUAdapter *adapter, uint64_t requiredMask) {
   GPUFeature feature;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_TEXTURE_VIEW_MIN_LOD;
+       feature <= GPU_FEATURE_TENSOR_RESOURCES_EXT;
        feature = (GPUFeature)(feature + 1)) {
     bit = gpu_featureBit(feature);
 
@@ -378,7 +378,7 @@ gpu_supportedFeatureMask(const GPUAdapter *adapter) {
   mask = 0;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_TEXTURE_VIEW_MIN_LOD;
+       feature <= GPU_FEATURE_TENSOR_RESOURCES_EXT;
        feature = (GPUFeature)(feature + 1)) {
     if (gpu_adapterSupportsFeature(adapter, feature)) {
       mask |= gpu_featureBit(feature);
@@ -399,7 +399,7 @@ gpu_fillFeatureSet(uint64_t       mask,
   count = 0u;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_TEXTURE_VIEW_MIN_LOD
+       feature <= GPU_FEATURE_TENSOR_RESOURCES_EXT
          && count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & gpu_featureBit(feature)) {
@@ -2053,6 +2053,29 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
 
   if (!(api = gpuDeviceApi(device)) || !name || name[0] == '\0') {
     return NULL;
+  }
+
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_TENSOR_RESOURCES_EXT)
+      && api->tensor.getBufferRequirements && api->tensor.createView && api->tensor.destroy) {
+    if (strcmp(name, "GPUGetTensorBufferRequirementsEXT") == 0) {
+      return (GPUProc)GPUGetTensorBufferRequirementsEXT;
+    }
+
+    if (strcmp(name, "GPUCreateTensorViewEXT") == 0) {
+      return (GPUProc)GPUCreateTensorViewEXT;
+    }
+
+    if (strcmp(name, "GPUGetTensorDescEXT") == 0) {
+      return (GPUProc)GPUGetTensorDescEXT;
+    }
+
+    if (strcmp(name, "GPUGetTensorBufferEXT") == 0) {
+      return (GPUProc)GPUGetTensorBufferEXT;
+    }
+
+    if (strcmp(name, "GPUDestroyTensorEXT") == 0) {
+      return (GPUProc)GPUDestroyTensorEXT;
+    }
   }
 
   if (api->multigpu.createInterop && api->multigpu.destroyInterop) {

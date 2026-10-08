@@ -59,6 +59,10 @@ mt_initTexture(GPUApiTexture *api);
 
 GPU_HIDE
 void
+mt_initTensor(GPUApiTensor *api);
+
+GPU_HIDE
+void
 mt_initRenderPass(GPUApiRenderPass *api);
 
 GPU_HIDE

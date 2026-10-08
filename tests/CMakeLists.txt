@@ -825,12 +825,19 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/api/texture_transfer.c
     ${PROJECT_SOURCE_DIR}/tests/api/texture_view_render.c
     ${PROJECT_SOURCE_DIR}/tests/api/threading.c
+    ${PROJECT_SOURCE_DIR}/tests/api/tensor.c
     ${PROJECT_SOURCE_DIR}/tests/api/untyped_pointer.c
     ${PROJECT_SOURCE_DIR}/tests/api/volume_texture.c
     ${PROJECT_SOURCE_DIR}/tests/api/vrs.c
     ${PROJECT_SOURCE_DIR}/tests/api/webgpu_pipeline.c
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
+  if(GPU_BUILD_METAL)
+    target_sources(gpu-api-test PRIVATE ${PROJECT_SOURCE_DIR}/tests/api/metal_tensor.m)
+    target_compile_definitions(gpu-api-test PRIVATE GPU_TEST_METAL_TENSORS=1)
+    gpu_link_apple_framework(gpu-api-test Metal "${GPU_FRAMEWORK_METAL}")
+    gpu_link_apple_framework(gpu-api-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+  endif()
   if(GPU_BUILD_METAL AND NOT BUILD_SHARED_LIBS)
     target_sources(gpu-api-test PRIVATE
       ${PROJECT_SOURCE_DIR}/tests/api/metal_error.m
