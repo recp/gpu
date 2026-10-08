@@ -15,6 +15,7 @@
  */
 
 #include "test.h"
+#include "../../src/api/buffer_internal.h"
 #include "../../src/api/ml_internal.h"
 #include "../../src/api/memory_internal.h"
 #include "../../src/api/cmdqueue_internal.h"
@@ -261,21 +262,23 @@ cleanup:
 
 static int
 host_binding(GPUDevice *device, GPUMLBindingsCreateInfoEXT *info) {
-  GPUMLTensorBindingEXT           items[3];
-  GPUBufferHostMemoryEXT          host         = {0};
-  GPUBufferCreateInfo             bufferInfo   = {0};
-  GPUTensorViewCreateInfoEXT      viewInfo     = {0};
-  GPUTensorBufferRequirementsEXT  requirements;
-  GPUBuffer                      *buffers[2]   = {NULL};
-  GPUTensorEXT                   *tensors[2]   = {NULL};
-  const GPUMLTensorBindingEXT    *original;
-  GPUMLBindingsEXT               *bindings     = NULL;
-  uint8_t                        *allocation   = NULL;
-  uint8_t                        *bytes;
-  uint64_t                        extent;
-  size_t                          page;
-  uint32_t                        i;
-  int                             ok           = 0;
+  GPUMLTensorBindingEXT          items[3];
+  GPUBufferHostMemoryEXT         host       = {0};
+  GPUBufferCreateInfo            bufferInfo = {0};
+  GPUTensorViewCreateInfoEXT     viewInfo   = {0};
+  GPUTensorBufferRequirementsEXT requirements;
+  GPUBuffer                     *buffers[5] = {NULL};
+  GPUTensorEXT                  *tensors[6] = {NULL};
+  const GPUMLTensorBindingEXT   *original;
+  GPUMLBindingsEXT              *bindings   = NULL;
+  uint8_t                       *allocation = NULL;
+  uint8_t                       *bytes;
+  uint64_t                       extent;
+  size_t                         page;
+  GPUResult                      result;
+  uint32_t                       i;
+  uint32_t                       slot;
+  int                            ok         = 0;
 
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_BUFFER_HOST_MEMORY_EXT))
     return 1;
@@ -284,9 +287,9 @@ host_binding(GPUDevice *device, GPUMLBindingsCreateInfoEXT *info) {
   page     = gpu_test_host_page_size();
   extent   = 0u;
 
-  for (i = 0u; i < 2u; i++) {
+  for (i = 0u; i < 3u; i++) {
     if (GPUGetTensorBufferRequirementsEXT(device,
-                                         GPUGetTensorDescEXT(original[i == 0u ? 0u : 2u].tensor),
+                                         GPUGetTensorDescEXT(original[i].tensor),
                                          &requirements) != GPU_OK)
       goto cleanup;
 
@@ -294,48 +297,96 @@ host_binding(GPUDevice *device, GPUMLBindingsCreateInfoEXT *info) {
       extent = requirements.sizeBytes;
   }
 
-  if (page == 0u || extent > SIZE_MAX - 2u * page)
+  if (page == 0u || page > SIZE_MAX / 4u || extent > (SIZE_MAX - 4u * page) / 3u)
     goto cleanup;
 
   extent = (extent + page - 1u) / page * page;
 
-  if (!(allocation = malloc((size_t)extent + page)))
+  if (!(allocation = malloc((size_t)(3u * extent) + page)))
     goto cleanup;
 
   bytes = (uint8_t *)(((uintptr_t)allocation + page - 1u) / page * page);
+  memset(bytes, 0xa5, (size_t)(3u * extent));
+
   host.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_HOST_MEMORY_EXT;
   host.chain.structSize = sizeof(host);
-  host.pData            = bytes;
-  host.allocationSize   = extent;
+  host.allocationSize   = 2u * extent;
 
-  bufferInfo.chain.pNext = &host;
-  bufferInfo.sizeBytes   = extent;
-  bufferInfo.usage       = GPU_BUFFER_USAGE_STORAGE;
+  bufferInfo.sizeBytes = 2u * extent;
+  bufferInfo.usage     = GPU_BUFFER_USAGE_STORAGE;
 
-  for (i = 0u; i < 2u; i++) {
+  for (i = 0u; i < 5u; i++) {
+    if (i == 3u) {
+      bufferInfo.chain.pNext = NULL;
+    } else {
+      bufferInfo.chain.pNext = &host;
+      host.pData            = i == 4u ? buffers[3]->_hostMemory : bytes + (i == 2u ? extent : 0u);
+    }
+
     if (GPUCreateBuffer(device, &bufferInfo, &buffers[i]) != GPU_OK)
       goto cleanup;
+  }
 
-    viewInfo.buffer = buffers[i];
-    viewInfo.pDesc  = GPUGetTensorDescEXT(original[i == 0u ? 0u : 2u].tensor);
+  for (i = 0u; i < 6u; i++) {
+    slot            = i < 3u ? i : (i == 3u ? 0u : 2u);
+    viewInfo.buffer = buffers[i == 5u ? 1u : i];
+    viewInfo.pDesc  = GPUGetTensorDescEXT(original[slot].tensor);
 
     if (GPUCreateTensorViewEXT(device, &viewInfo, &tensors[i]) != GPU_OK)
       goto cleanup;
   }
 
   memcpy(items, original, sizeof(items));
-  items[0].tensor = tensors[0];
-  items[2].tensor = tensors[1];
   info->pBindings = items;
-  ok = GPUCreateMLBindingsEXT(device, info, &bindings) == GPU_ERROR_UNSUPPORTED && !bindings;
-  info->pBindings = original;
+
+  for (i = 0u; i < 3u; i++) {
+    items[i].tensor = tensors[i];
+  }
+
+  /* reads alias; overlapping allocations still have disjoint writable tensor spans. */
+  if ((result = GPUCreateMLBindingsEXT(device, info, &bindings)) != GPU_OK) {
+    fprintf(stderr, "ML disjoint host binding failed: result=%d\n", result);
+    goto cleanup;
+  }
+
+  GPUDestroyMLBindingsEXT(bindings);
+  bindings        = NULL;
+  items[1].tensor = original[1].tensor;
+  items[2].tensor = tensors[5];
+
+  if ((result = GPUCreateMLBindingsEXT(device, info, &bindings)) != GPU_ERROR_INVALID_ARGUMENT || bindings) {
+    fprintf(stderr, "ML writable import/import overlap was not rejected: result=%d\n", result);
+    goto cleanup;
+  }
+
+  /* an import aliases ordinary shared storage through a different buffer handle. */
+  items[0].tensor = tensors[3];
+  items[2].tensor = tensors[4];
+
+  if ((result = GPUCreateMLBindingsEXT(device, info, &bindings)) != GPU_ERROR_INVALID_ARGUMENT || bindings) {
+    fprintf(stderr, "ML writable import/shared overlap was not rejected: result=%d\n", result);
+    goto cleanup;
+  }
+
+  items[2].tensor = tensors[2];
+
+  if (GPUCreateMLBindingsEXT(device, info, &bindings) != GPU_OK)
+    goto cleanup;
+
+  printf("ML host aliases: read/read allowed, disjoint spans allowed, writable import/import and import/shared rejected\n");
+  ok = 1;
 
 cleanup:
+  info->pBindings = original;
   GPUDestroyMLBindingsEXT(bindings);
 
-  for (i = 0u; i < 2u; i++) {
+  for (i = 0u; i < 6u; i++) {
     GPUDestroyTensorEXT(tensors[i]);
-    GPUDestroyBuffer(buffers[i]);
+  }
+
+  /* the imported wrapper must be released before its ordinary shared owner. */
+  for (i = 5u; i > 0u; i--) {
+    GPUDestroyBuffer(buffers[i - 1u]);
   }
 
   free(allocation);
@@ -368,13 +419,15 @@ run_profile(GPUDevice          *device,
             MLShape             shape,
             GPUBindGroupLayout *groupLayout,
             GPUComputePipeline *prepare,
-            GPUComputePipeline *consume) {
+            GPUComputePipeline *consume,
+            bool                imported) {
   GPUMLPipelineCreateInfoEXT     pipelineInfo    = {0};
   GPUMLBindingsCreateInfoEXT     bindingInfo     = {0};
   GPUTensorDescEXT               desc            = {0};
   GPUTensorViewCreateInfoEXT     viewInfo        = {0};
   GPUTensorBufferRequirementsEXT requirements[3] = {0};
   GPUBufferCreateInfo            bufferInfo      = {0};
+  GPUBufferHostMemoryEXT         host            = {0};
   GPUBindGroupEntry              entries[4]      = {0};
   GPUBindGroupCreateInfo         groupInfo       = {0};
   GPUMLTensorBindingEXT          tensorBindings[3];
@@ -384,21 +437,26 @@ run_profile(GPUDevice          *device,
   GPUCommandBuffer               invalid         = {0};
   uint64_t                       strides[3][2];
   uint64_t                       sizes[4];
-  GPUBuffer                     *buffers[4] = {NULL};
-  GPUTensorEXT                  *tensors[3] = {NULL};
-  GPUMLPipelineEXT              *pipeline   = NULL;
-  GPUMLPipelineEXT              *cached     = NULL;
-  GPUMLBindingsEXT              *bindings   = NULL;
-  GPUBindGroup                  *group      = NULL;
-  GPUCommandBuffer              *cmdb       = NULL;
-  GPUTransferPassEncoder        *transfer   = NULL;
-  GPUComputePassEncoder         *pass       = NULL;
-  GPUFence                      *fence      = NULL;
+  uint8_t                       *allocations[4]  = {NULL};
+  uint8_t                       *hostData[4]     = {NULL};
+  GPUBuffer                     *buffers[4]      = {NULL};
+  GPUTensorEXT                  *tensors[3]      = {NULL};
+  GPUMLPipelineEXT              *pipeline        = NULL;
+  GPUMLPipelineEXT              *cached          = NULL;
+  GPUMLBindingsEXT              *bindings        = NULL;
+  GPUBindGroup                  *group           = NULL;
+  GPUCommandBuffer              *cmdb            = NULL;
+  GPUTransferPassEncoder        *transfer        = NULL;
+  GPUComputePassEncoder         *pass            = NULL;
+  GPUFence                      *fence           = NULL;
   GPUQueue                      *queue;
   const GPUMLPipelineInfoEXT    *info;
-  uint8_t                       *data       = NULL;
+  uint8_t                       *data            = NULL;
   float                         *values;
   uint64_t                       offset;
+  uint64_t                       extent;
+  uint64_t                       pageGuards      = 0u;
+  size_t                         page;
   uint32_t                       i;
   uint32_t                       j;
   uint32_t                       row;
@@ -408,7 +466,7 @@ run_profile(GPUDevice          *device,
   int                            expected;
   int                            a;
   int                            b;
-  int                            ok = 0;
+  int                            ok              = 0;
 
   pipelineInfo.model     = model;
   pipelineInfo.profileId = profileId;
@@ -448,6 +506,8 @@ run_profile(GPUDevice          *device,
 
   }
 
+  page = gpu_test_host_page_size();
+
   shape.aStride = (uint32_t)strides[0][1];
   shape.bStride = (uint32_t)strides[1][1];
   shape.cStride = (uint32_t)strides[2][1];
@@ -462,22 +522,43 @@ run_profile(GPUDevice          *device,
     bufferInfo.sizeBytes = sizes[i];
     bufferInfo.usage     = GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
 
+    if (imported) {
+      if (page == 0u || page > SIZE_MAX / 2u || sizes[i] > SIZE_MAX - 2u * page)
+        goto cleanup;
+
+      extent = (sizes[i] + page - 1u) / page * page;
+
+      if (!(allocations[i] = malloc((size_t)extent + page)))
+        goto cleanup;
+
+      hostData[i] = (uint8_t *)(((uintptr_t)allocations[i] + page - 1u) / page * page);
+      memset(hostData[i], 0xa5, (size_t)extent);
+
+      host.chain.sType       = GPU_STRUCTURE_TYPE_BUFFER_HOST_MEMORY_EXT;
+      host.chain.structSize  = sizeof(host);
+      host.pData             = hostData[i];
+      host.allocationSize    = extent;
+      bufferInfo.chain.pNext = &host;
+    }
+
     if (GPUCreateBuffer(device, &bufferInfo, &buffers[i]) != GPU_OK) {
       goto cleanup;
     }
 
-    if (!(data = malloc((size_t)sizes[i]))) {
-      goto cleanup;
+    if (!imported) {
+      if (!(data = malloc((size_t)sizes[i]))) {
+        goto cleanup;
+      }
+
+      memset(data, 0xa5, (size_t)sizes[i]);
+
+      if (GPUQueueWriteBuffer(queue, buffers[i], 0u, data, sizes[i]) != GPU_OK) {
+        goto cleanup;
+      }
+
+      free(data);
+      data = NULL;
     }
-
-    memset(data, 0xa5, (size_t)sizes[i]);
-
-    if (GPUQueueWriteBuffer(queue, buffers[i], 0u, data, sizes[i]) != GPU_OK) {
-      goto cleanup;
-    }
-
-    free(data);
-    data = NULL;
 
     if (i < 3u) {
       desc.pDimensions = info->pBindings[i].shape.pDimensions;
@@ -503,9 +584,9 @@ run_profile(GPUDevice          *device,
   bindingInfo.pBindings    = tensorBindings;
   bindingInfo.bindingCount = 3u;
 
-  if (!invalid_bindings(device, &bindingInfo, buffers[0])
-      || !placement_alias(device, &bindingInfo)
-      || !host_binding(device, &bindingInfo)
+  if ((!imported && (!invalid_bindings(device, &bindingInfo, buffers[0])
+                    || !placement_alias(device, &bindingInfo)
+                    || !host_binding(device, &bindingInfo)))
       || GPUCreateMLBindingsEXT(device, &bindingInfo, &bindings) != GPU_OK) {
     goto cleanup;
   }
@@ -620,6 +701,20 @@ run_profile(GPUDevice          *device,
       }
     }
 
+    if (imported) {
+      extent = (sizes[i] + page - 1u) / page * page;
+
+      for (offset = sizes[i]; offset < extent; offset++) {
+        if (hostData[i][offset] != 0xa5u) {
+          fprintf(stderr, "ML host padding changed: profile=%u buffer=%u offset=%llu\n", profileId, i,
+                  (unsigned long long)offset);
+          goto cleanup;
+        }
+
+        pageGuards++;
+      }
+    }
+
     if (i == 3u) {
       values = (float *)data;
 
@@ -647,8 +742,9 @@ run_profile(GPUDevice          *device,
     data = NULL;
   }
 
-  printf("ML profile=%u outputs=%u guards=1024 network-passes=4 repeated-native-pipeline=yes\n", profileId,
-         ROUNDS * shape.m * shape.n);
+  printf("ML profile=%u storage=%s outputs=%u guards=1024 page-guards=%llu network-passes=4 "
+         "repeated-native-pipeline=yes\n", profileId, imported ? "host" : "owned", ROUNDS * shape.m * shape.n,
+         (unsigned long long)pageGuards);
   ok = 1;
 
 cleanup:
@@ -675,6 +771,7 @@ cleanup:
 
   for (i = 0u; i < 4u; i++) {
     GPUDestroyBuffer(buffers[i]);
+    free(allocations[i]);
   }
 
   GPUDestroyHeap(bindingInfo.scratch);
@@ -818,10 +915,16 @@ gpu_test_ml(GPUDevice *baseDevice) {
     goto cleanup;
   }
 
-  if (!make_compute(device, &library, &group, &layout, &prepare, &consume)
-      || !run_profile(device, model, 3u, shapes[0], group, prepare, consume)
-      || !run_profile(device, model, 1u, shapes[1], group, prepare, consume)) {
+  if (!make_compute(device, &library, &group, &layout, &prepare, &consume)) {
     goto cleanup;
+  }
+
+  for (i = 0u; i < GPU_ARRAY_LEN(shapes); i++) {
+    if (!run_profile(device, model, profiles[i].id, shapes[i], group, prepare, consume, false)
+        || (GPUIsFeatureEnabled(device, GPU_FEATURE_BUFFER_HOST_MEMORY_EXT)
+            && !run_profile(device, model, profiles[i].id, shapes[i], group, prepare, consume, true))) {
+      goto cleanup;
+    }
   }
 
   ok = 1;

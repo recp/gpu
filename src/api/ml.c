@@ -179,15 +179,18 @@ writeOverlap(const GPUTensorEXT *a, const GPUTensorEXT *b) {
   secondOffset = b->offsetBytes;
 
   if (first != second) {
-    if (!first->_heap || first->_heap != second->_heap) {
+    if (first->_hostMemory && second->_hostMemory) {
+      firstOffset  += (uintptr_t)first->_hostMemory;
+      secondOffset += (uintptr_t)second->_hostMemory;
+    } else if (first->_heap && first->_heap == second->_heap) {
+      firstOffset  += first->_heapOffset;
+      secondOffset += second->_heapOffset;
+    } else {
       return false;
     }
-
-    firstOffset  += first->_heapOffset;
-    secondOffset += second->_heapOffset;
   }
 
-  /* validated buffer/heap spans cannot wrap at either interval end. */
+  /* validated buffer, heap and host spans cannot wrap at either interval end. */
   return firstOffset < secondOffset + b->sizeBytes
          && secondOffset < firstOffset + a->sizeBytes;
 }
@@ -403,8 +406,16 @@ GPUCreateMLBindingsEXT(GPUDevice                        *device,
       break;
     }
 
-    if (tensor->buffer->_sharedPeer || tensor->buffer->_hostImported) {
+    if (tensor->buffer->_sharedPeer
+        || (tensor->buffer->_hostImported && !tensor->buffer->_hostMemory)) {
       result = GPU_ERROR_UNSUPPORTED;
+      break;
+    }
+
+    if (tensor->buffer->_hostMemory
+        && (tensor->offsetBytes > UINTPTR_MAX - (uintptr_t)tensor->buffer->_hostMemory
+            || tensor->sizeBytes > UINTPTR_MAX - (uintptr_t)tensor->buffer->_hostMemory - tensor->offsetBytes)) {
+      result = GPU_ERROR_INVALID_ARGUMENT;
       break;
     }
 
