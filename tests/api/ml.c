@@ -927,6 +927,11 @@ gpu_test_ml(GPUDevice *baseDevice) {
     }
   }
 
+#if defined(GPU_TEST_METAL_TENSORS)
+  if (!gpu_test_metal_ml_scratch(device))
+    goto cleanup;
+#endif
+
   ok = 1;
 
 cleanup:

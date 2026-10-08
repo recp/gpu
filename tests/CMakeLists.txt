@@ -837,7 +837,10 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     GPU_TEST_ML_ROOT="${PROJECT_SOURCE_DIR}/tests/api/ml")
   target_link_libraries(gpu-api-test PRIVATE gpu)
   if(GPU_BUILD_METAL)
-    target_sources(gpu-api-test PRIVATE ${PROJECT_SOURCE_DIR}/tests/api/metal_tensor.m)
+    target_sources(gpu-api-test PRIVATE
+      ${PROJECT_SOURCE_DIR}/tests/api/metal_tensor.m
+      ${PROJECT_SOURCE_DIR}/tests/api/ml/scratch.m
+    )
     target_compile_definitions(gpu-api-test PRIVATE GPU_TEST_METAL_TENSORS=1)
     gpu_link_apple_framework(gpu-api-test Metal "${GPU_FRAMEWORK_METAL}")
     gpu_link_apple_framework(gpu-api-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
