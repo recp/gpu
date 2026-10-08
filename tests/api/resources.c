@@ -316,10 +316,12 @@ check_buffer_device_dispatch(GPUDevice *activeDevice) {
   GPUQueue            queue        = {0};
   GPUQueue            foreignQueue = {0};
   GPUDevice           device       = {0};
+  GPUChainedStruct    extensions[3] = {0};
   Api                 scopedApi;
   uint32_t            source[4] = { 2u, 4u, 6u, 8u };
   uint32_t            result[4] = {0};
   GPUBuffer          *buffer;
+  uint32_t            i;
 
   if (!activeDevice || !deviceApi(activeDevice)) {
     fprintf(stderr, "buffer dispatch has no device api\n");
@@ -345,6 +347,27 @@ check_buffer_device_dispatch(GPUDevice *activeDevice) {
   info.usage            = GPU_BUFFER_USAGE_COPY_SRC |
                           GPU_BUFFER_USAGE_COPY_DST;
   buffer                = NULL;
+
+  extensions[0].sType      = GPU_STRUCTURE_TYPE_PIPELINE_CONSTANTS;
+  extensions[0].structSize = sizeof(extensions[0]);
+  extensions[1].sType      = GPU_STRUCTURE_TYPE_PIPELINE_CONSTANTS;
+  extensions[1].structSize = 1u;
+  extensions[2].sType      = GPU_STRUCTURE_TYPE_PIPELINE_CONSTANTS;
+  extensions[2].structSize = sizeof(extensions[2]);
+  extensions[2].pNext      = &extensions[2];
+
+  for (i = 0u; i < 3u; i++) {
+    info.chain.pNext = &extensions[i];
+    buffer           = (GPUBuffer *)(uintptr_t)1u;
+
+    if (GPUCreateBuffer(&device, &info, &buffer) != GPU_ERROR_INVALID_ARGUMENT
+        || buffer != NULL || gScopedBufferCreateCalls != 0u) {
+      fprintf(stderr, "buffer silently ignored extension chain %u\n", i);
+      return 0;
+    }
+  }
+
+  info.chain.pNext = NULL;
 
   if (GPUCreateBuffer(&device, &info, &buffer) != GPU_OK
       || buffer != &gScopedBuffer || buffer->device != &device

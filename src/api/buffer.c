@@ -51,6 +51,10 @@ validateBufferCreateInfo(const GPUDevice           *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (info->chain.pNext) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
   if ((info->usage &
        (GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
         GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT)) != 0u
