@@ -85,6 +85,11 @@ run_bindless(void *ctx) {
 }
 
 static int
+run_chains(void *ctx) {
+  return gpu_test_chains(((GPUApiTestContext *)ctx)->device);
+}
+
+static int
 run_resources(void *ctx) {
   return gpu_test_resources(((GPUApiTestContext *)ctx)->device);
 }
@@ -446,7 +451,7 @@ main(int argc, char **argv) {
   GPUInstanceCreateInfo instanceInfo  = {0};
   GPURuntimeConfig      runtimeConfig = {0};
   GPUApiTestContext     ctx;
-  GPUApiTest            tests[44];
+  GPUApiTest            tests[45];
   GPUInstance          *instance;
   GPUAdapter           *adapter;
   GPUDevice            *device;
@@ -666,6 +671,8 @@ main(int argc, char **argv) {
   tests[41] = (GPUApiTest){ "tensor", run_tensor, &ctx };
   tests[42] = (GPUApiTest){ "ml", run_ml, &ctx };
   tests[43] = (GPUApiTest){ "host-buffer", run_host_buffer, &ctx };
+
+  tests[44] = (GPUApiTest){ "chains", run_chains, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

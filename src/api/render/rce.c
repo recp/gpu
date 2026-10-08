@@ -1215,8 +1215,10 @@ GPUApplyDynamicState(GPURenderPassEncoder           *pass,
   GPUApi             *api;
   GPUDynamicStateMask dirtyMask;
 
-  if (!pass || pass->_ended || !info)
+  if (!pass || pass->_ended || !info || info->chain.pNext) {
     return;
+  }
+
 #if GPU_BUILD_WITH_VALIDATION
   if (!validDynamicStateApplyInfo(info))
     return;

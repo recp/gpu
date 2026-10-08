@@ -107,6 +107,9 @@ gpu_test_queue(GPUInstance *instance,
                GPUDevice   *device);
 
 int
+gpu_test_chains(GPUDevice *device);
+
+int
 gpu_test_sampler(GPUDevice *device);
 
 int

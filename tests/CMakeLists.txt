@@ -789,6 +789,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/api/barrier.c
     ${PROJECT_SOURCE_DIR}/tests/api/bindgroup.c
     ${PROJECT_SOURCE_DIR}/tests/api/buffer_descriptor_array.c
+    ${PROJECT_SOURCE_DIR}/tests/api/chains.c
     ${PROJECT_SOURCE_DIR}/tests/api/compute.c
     ${PROJECT_SOURCE_DIR}/tests/api/clock_derivative.c
     ${PROJECT_SOURCE_DIR}/tests/api/coordinate.c

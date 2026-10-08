@@ -413,6 +413,10 @@ GPUQueueSubmit(GPUQueue                 *__restrict cmdq,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   result = prepareQueueSubmit(cmdq,
                               info->commandBufferCount,
                               info->ppCommandBuffers,
@@ -469,6 +473,10 @@ GPUQueueSubmitEx(GPUQueue                   *__restrict cmdq,
   if ((info->waitCount > 0u && !info->pWaits)
       || (info->signalCount > 0u && !info->pSignals)) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   if (info->waitCount == 0u && info->signalCount == 0u) {
@@ -552,6 +560,10 @@ GPUCreateFence(GPUDevice                *__restrict device,
 
   if (info && info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (info && info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   if (!(fence = calloc(1, sizeof(*fence)))) {
@@ -719,6 +731,10 @@ GPUCreateSemaphore(GPUDevice                    *__restrict device,
 
   if (info && info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (info && info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   if (!(api = deviceApi(device)) || !api->cmdque.createSemaphore

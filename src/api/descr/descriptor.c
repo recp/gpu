@@ -3836,6 +3836,10 @@ GPUCreatePipelineLayout(GPUDevice                         *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   if (info->bindGroupLayoutCount > 0 && !info->ppBindGroupLayouts) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -4205,6 +4209,10 @@ GPUCreateBindGroup(GPUDevice                    *device,
 
   if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   layout  = info->layout;

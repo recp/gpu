@@ -1438,6 +1438,10 @@ GPUCreatePipelineCache(GPUDevice                        *__restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   api = deviceApi(device);
 
   if (info->enableDiskCache

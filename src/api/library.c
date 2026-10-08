@@ -3869,6 +3869,10 @@ GPUCreateShaderLibrary(GPUDevice                        *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   switch (info->sourceKind) {
     case GPU_SHADER_SOURCE_MSL_TEXT:
       return createShaderLibraryFromMSLText(device, info, outLibrary);

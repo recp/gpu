@@ -121,6 +121,10 @@ GPUCreateSwapchain(GPUDevice                    *__restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   result = GPUGetFormatCapabilities(device->adapter,
                                     info->format,
                                     &formatCaps);

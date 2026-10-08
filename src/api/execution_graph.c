@@ -270,6 +270,10 @@ GPUCreateExecutionGraphEXT(GPUDevice                            *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_EXECUTION_GRAPH)) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -399,6 +403,10 @@ GPUCreateExecutionGraphInstanceEXT(GPUDevice                                    
                           GPU_STRUCTURE_TYPE_EXECUTION_GRAPH_INSTANCE_CREATE_INFO_EXT,
                           sizeof(*info))) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   api = info->graph->_api;

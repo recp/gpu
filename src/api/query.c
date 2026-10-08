@@ -94,6 +94,10 @@ GPUCreateQuerySet(GPUDevice                   *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   if (info->type == GPU_QUERY_TIMESTAMP
       && !GPUIsFeatureEnabled(device, GPU_FEATURE_TIMESTAMPS)) {
     return GPU_ERROR_UNSUPPORTED;

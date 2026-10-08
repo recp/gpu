@@ -191,6 +191,10 @@ adapterRequestMask(const GPUAdapterRequestOptions *options,
       return GPU_ERROR_INVALID_ARGUMENT;
     }
 
+    if (options->chain.pNext) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+
     preference = options->powerPreference;
     workload   = options->workload;
 
@@ -954,6 +958,10 @@ buildQueueCreateInfos(const GPUDeviceCreateInfo *info,
   if (info->queues.chain.structSize != 0
       && info->queues.chain.structSize < sizeof(info->queues)) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (info->queues.chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   queueInfo    = &info->queues;
@@ -1808,6 +1816,10 @@ GPUConfigureRuntime(GPUDevice *device, const GPURuntimeConfig *config) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (config->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   device->runtimeConfig = *config;
 
   return GPU_OK;
@@ -1827,6 +1839,10 @@ GPUConfigureTransientAllocator(GPUDevice                         *device,
 
   if (!device || !validTransientAllocatorConfig(config, &capacityBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (config->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   buffer      = NULL;
@@ -2424,6 +2440,10 @@ GPUCreateDevice(GPUAdapter                *adapter,
       return GPU_ERROR_INVALID_ARGUMENT;
     }
 
+    if (info->chain.pNext) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
+
     featureResult = validateFeatureSet(adapter, &info->required, true);
 
     if (featureResult != GPU_OK) {
@@ -2518,6 +2538,10 @@ GPURequestDevice(GPUAdapter                *adapter,
         || (info->chain.structSize != 0u
             && info->chain.structSize < sizeof(*info))) {
       return GPU_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (info->chain.pNext) {
+      return GPU_ERROR_UNSUPPORTED;
     }
 
     result = validateFeatureSet(adapter, &info->required, true);

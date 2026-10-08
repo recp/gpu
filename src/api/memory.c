@@ -788,6 +788,10 @@ GPUQueueSubmitSparse(GPUQueue                       *__restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   if ((info->bufferMappingCount > 0u
        && !GPUIsFeatureEnabled(queue->_device, GPU_FEATURE_SPARSE_BUFFERS))
       || (info->textureMappingCount > 0u

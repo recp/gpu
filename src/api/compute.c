@@ -533,7 +533,8 @@ GPUBeginComputePassWithInfo(GPUCommandBuffer               *cmdb,
       || (info->chain.sType != GPU_STRUCTURE_TYPE_NONE
           && info->chain.sType != GPU_STRUCTURE_TYPE_COMPUTE_PASS_CREATE_INFO)
       || (info->chain.structSize != 0u
-          && info->chain.structSize < sizeof(*info))) {
+          && info->chain.structSize < sizeof(*info))
+      || info->chain.pNext) {
     return NULL;
   }
 

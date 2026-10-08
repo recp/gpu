@@ -74,6 +74,10 @@ GPUCreateInstance(const GPUInstanceCreateInfo *__restrict info,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   if (!(api = apiForBackend(info->preferredBackend)) || !api->instance.createInstance) {
     return GPU_ERROR_UNSUPPORTED;
   }

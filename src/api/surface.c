@@ -108,7 +108,7 @@ parseSurfaceCreateInfo(GPUInstance                *inst,
       }
 
       default:
-        break;
+        return false;
     }
 
     chain = (const GPUChainedStruct *)chain->pNext;

@@ -359,6 +359,9 @@ validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
 
   return info->colorAttachmentCount > 0 || depthStencil != NULL;
 #else
+  const GPUShadingRateAttachmentEXT          *shadingRate;
+  const GPURasterizationRateMapRenderPassEXT *rateMap;
+
   return info
          && (info->chain.sType == GPU_STRUCTURE_TYPE_NONE
              || info->chain.sType == GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO)
@@ -367,7 +370,9 @@ validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
          && info->colorAttachmentCount <= GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS
          && (info->colorAttachmentCount == 0u || info->pColorAttachments)
          && (info->colorAttachmentCount > 0u || info->pDepthStencilAttachment)
-         && validPassTimestampWrites(info->timestampWrites, device);
+         && validPassTimestampWrites(info->timestampWrites, device)
+         && (!info->chain.pNext
+             || renderPassVRSExtensions(info, &shadingRate, &rateMap));
 #endif
 }
 
