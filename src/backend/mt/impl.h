@@ -19,55 +19,55 @@
 
 GPU_HIDE
 void
-mt_initDevice(ApiDevice    *apiDevice);
+mt_initDevice(GPUDeviceApi *apiDevice);
 
 GPU_HIDE
 void
-mt_initRenderPipeline(ApiRender    *api);
+mt_initRenderPipeline(GPURenderApi *api);
 
 GPU_HIDE
 void
-mt_initRCE(ApiRCE    *api);
+mt_initRCE(GPURCEApi *api);
 
 GPU_HIDE
 void
-mt_initCompute(ApiCompute    *api);
+mt_initCompute(GPUComputeApi *api);
 
 GPU_HIDE
 void
-mt_initCmdBuff(ApiCommandBuffer    *api);
+mt_initCmdBuff(GPUCommandBufferApi *api);
 
 GPU_HIDE
 void
-mt_initCmdQue(ApiCommandQueue    *api);
+mt_initCmdQue(GPUCommandQueueApi *api);
 
 GPU_HIDE
 void
-mt_initBuff(ApiBuffer    *api);
+mt_initBuff(GPUBufferApi *api);
 
 GPU_HIDE
 void
-mt_initMemory(ApiMemory    *api);
+mt_initMemory(GPUMemoryApi *api);
 
 GPU_HIDE
 void
-mt_initMultiGPU(ApiMultiGPU    *api);
+mt_initMultiGPU(GPUMultiGPUApi *api);
 
 GPU_HIDE
 void
-mt_initTexture(ApiTexture    *api);
+mt_initTexture(GPUTextureApi *api);
 
 GPU_HIDE
 void
-mt_initTensor(ApiTensor    *api);
+mt_initTensor(GPUTensorApi *api);
 
 GPU_HIDE
 void
-mt_initML(ApiML *api);
+mt_initML(GPUMLApi *api);
 
 GPU_HIDE
 void
-mt_initRenderPass(ApiRenderPass    *api);
+mt_initRenderPass(GPURenderPassApi *api);
 
 GPU_HIDE
 void
@@ -76,51 +76,51 @@ mt_encodeBarriers(GPUCommandBuffer      *cmdb,
 
 GPU_HIDE
 void
-mt_initDepthStencil(ApiDepthStencil    *api);
+mt_initDepthStencil(GPUDepthStencilApi *api);
 
 GPU_HIDE
 void
-mt_initVertex(ApiVertex    *api);
+mt_initVertex(GPUVertexApi *api);
 
 GPU_HIDE
 void
-mt_initLibrary(ApiLibrary    *api);
+mt_initLibrary(GPULibraryApi *api);
 
 GPU_HIDE
 void
-mt_initSampler(ApiSampler    *api);
+mt_initSampler(GPUSamplerApi *api);
 
 GPU_HIDE
 void
-mt_initSwapchain(ApiSwapchain    *api);
+mt_initSwapchain(GPUSwapchainApi *api);
 
 GPU_HIDE
 void
-mt_initFrame(ApiFrame    *api);
+mt_initFrame(GPUFrameApi *api);
 
 GPU_HIDE
 void
-mt_initInstance(ApiInstance    *api);
+mt_initInstance(GPUInstanceApi *api);
 
 GPU_HIDE
 void
-mt_initSurface(ApiSurface    *apiDevice);
+mt_initSurface(GPUSurfaceApi *apiDevice);
 
 GPU_HIDE
 void
-mt_initPipelineCache(ApiPipelineCache    *api);
+mt_initPipelineCache(GPUPipelineCacheApi *api);
 
 GPU_HIDE
 void
-mt_initVRS(ApiVRS    *api);
+mt_initVRS(GPUVRSApi *api);
 
 GPU_HIDE
 void
-mt_initRayQuery(ApiRayQuery    *api);
+mt_initRayQuery(GPURayQueryApi *api);
 
 GPU_HIDE
 void
-mt_initDescriptor(ApiDescriptor    *api);
+mt_initDescriptor(GPUDescriptorApi *api);
 
 GPU_HIDE
 void

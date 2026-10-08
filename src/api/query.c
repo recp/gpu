@@ -80,7 +80,7 @@ GPUResult
 GPUCreateQuerySet(GPUDevice                   *device,
                   const GPUQuerySetCreateInfo *info,
                   GPUQuerySet                **outSet) {
-  Api         *api;
+  GPUApi      *api;
   GPUQuerySet *set;
   GPUResult    result;
 
@@ -132,7 +132,7 @@ GPUCreateQuerySet(GPUDevice                   *device,
 GPU_EXPORT
 void
 GPUDestroyQuerySet(GPUQuerySet *set) {
-  Api    *api;
+  GPUApi *api;
 
   if (!set) {
     return;
@@ -150,7 +150,7 @@ GPUResult
 GPUGetTimestampPeriod(GPUQueue *queue,
                       double   *outNanosecondsPerTick) {
   GPUDevice *device;
-  Api       *api;
+  GPUApi    *api;
   GPUResult  result;
 
   if (!outNanosecondsPerTick) {
@@ -194,7 +194,7 @@ GPUBeginOcclusionQuery(GPURenderPassEncoder *pass,
                        GPUQuerySet          *set,
                        uint32_t              queryIndex) {
   GPUDevice *device;
-  Api       *api;
+  GPUApi    *api;
 
   device = pass && pass->_cmdb && pass->_cmdb->_queue
              ? pass->_cmdb->_queue->_device
@@ -220,7 +220,7 @@ void
 GPUEndOcclusionQuery(GPURenderPassEncoder *pass) {
   GPUQuerySet *set;
   GPUDevice   *device;
-  Api         *api;
+  GPUApi      *api;
   uint32_t     queryIndex;
 
   set    = pass ? pass->_occlusionQuerySet : NULL;
@@ -249,7 +249,7 @@ GPUBeginPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
                                 GPUQuerySet      *set,
                                 uint32_t          queryIndex) {
   GPUDevice *device;
-  Api       *api;
+  GPUApi    *api;
 
   device = cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
 
@@ -274,7 +274,7 @@ GPU_EXPORT
 void
 GPUEndPipelineStatisticsQuery(GPUCommandBuffer *cmdb, GPUQuerySet *set) {
   GPUDevice *device;
-  Api       *api;
+  GPUApi    *api;
   uint32_t   queryIndex;
 
   device = cmdb && cmdb->_queue ? cmdb->_queue->_device : NULL;
@@ -305,7 +305,7 @@ GPUResolveQuerySet(GPUCommandBuffer *cmdb,
                    GPUBuffer        *dstBuffer,
                    uint64_t          dstOffset) {
   GPUDevice *device;
-  Api       *api;
+  GPUApi    *api;
   uint64_t   resultBytes;
   uint64_t   resultStride;
 

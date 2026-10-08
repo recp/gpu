@@ -64,14 +64,14 @@
 #  define MT_ENCODER_STAGES(stages) UINT64_C(0)
 #endif
 
-typedef CALayer ViewLayer;
+typedef CALayer GPUViewLayer;
 
 #if TARGET_OS_IOS
 #import <UIKit/UIKit.h>
-typedef UIView ViewHandle;
+typedef UIView GPUViewHandle;
 #elif TARGET_OS_MAC
 #import <AppKit/AppKit.h>
-typedef NSView ViewHandle;
+typedef NSView GPUViewHandle;
 #else
 #error "Unsupported platform"
 #endif
@@ -85,7 +85,7 @@ typedef enum MTCommandMode {
 
 typedef struct MTTextureViewPoolPage MTTextureViewPoolPage;
 
-typedef struct AdapterMT {
+typedef struct GPUAdapterMT {
   id<MTLDevice>           device;
   MTLReadWriteTextureTier storageTier;
   os_unfair_lock          subgroupLock;
@@ -107,23 +107,23 @@ typedef struct AdapterMT {
   bool                    subgroupRelative;
   bool                    subgroupMatrixProbed;
   bool                    subgroups;
-} AdapterMT;
+} GPUAdapterMT;
 
 enum {
   MT_TRANSFER_SLOT_COUNT  = 3u,
   MT_RESIDENCY_CACHE_SIZE = 64u
 };
 
-typedef struct SwapchainMetal {
+typedef struct GPUSwapchainMetal {
   CAMetalLayer  *layer;
   void          *objc;
   GPUFrame       frame;
   GPUTexture     target;
   GPUTextureView targetView;
   bool           frameActive;
-} SwapchainMetal;
+} GPUSwapchainMetal;
 
-typedef struct DeviceMT {
+typedef struct GPUDeviceMT {
   id<MTLDevice>          device;
   id                     compiler;
   id                     textureViewPlaceholder;
@@ -132,7 +132,7 @@ typedef struct DeviceMT {
   os_unfair_lock         textureViewPoolLock;
   uint32_t               nCreatedQueues;
   MTCommandMode          commandMode;
-} DeviceMT;
+} GPUDeviceMT;
 
 typedef struct MTShaderFunction {
   id<MTLFunction>           function;
@@ -160,21 +160,21 @@ typedef struct MTRenderPipelineDesc {
   NSArray *fragmentIntersectionFunctions4;
 } MTRenderPipelineDesc;
 
-typedef struct TextureMT {
+typedef struct GPUTextureMT {
   id<MTLTexture> texture;
   id<MTLTexture> stencilCopyView;
-} TextureMT;
+} GPUTextureMT;
 
 typedef struct MTTextureViewSlot {
   MTTextureViewPoolPage *page;
   uint32_t               index;
 } MTTextureViewSlot;
 
-typedef struct HeapMT {
+typedef struct GPUHeapMT {
   id<MTLHeap> heap;
-} HeapMT;
+} GPUHeapMT;
 
-typedef struct AccelerationStructureMT {
+typedef struct GPUAccelerationStructureMT {
   id<MTLAccelerationStructure>        structure;
   id<MTLBuffer>                       instanceBuffer;
   NSMutableArray                     *classicGeometry;
@@ -183,7 +183,7 @@ typedef struct AccelerationStructureMT {
   MTLAccelerationStructureDescriptor *classicDescriptor;
   id                                  modernDescriptor;
   uint64_t                            instanceCapacity;
-} AccelerationStructureMT;
+} GPUAccelerationStructureMT;
 
 typedef struct MTIntersectionFunctionTable {
   id<MTLIntersectionFunctionTable> table;
@@ -319,7 +319,7 @@ struct MTCommandBuffer {
   MTArgumentState                        taskArguments;
   MTArgumentState                        meshArguments;
   MTArgumentState                        computeArguments;
-  RenderPassDesc                         renderPass;
+  GPURenderPassDesc                      renderPass;
   MTRenderPass                           renderPassState;
   GPURenderPassEncoder                   renderEncoder;
   MTRenderEncoder                        renderState;
@@ -467,12 +467,12 @@ mt_setArgumentAccelerationStructure(GPUCommandBuffer            *cmdb,
 GPU_HIDE
 void
 mt_useComputeRayResources(id<MTLComputeCommandEncoder> encoder,
-                          AccelerationStructureMT     *structure);
+                          GPUAccelerationStructureMT  *structure);
 
 GPU_HIDE
 void
 mt_useRenderRayResources(id<MTLRenderCommandEncoder> encoder,
-                         AccelerationStructureMT    *structure,
+                         GPUAccelerationStructureMT *structure,
                          MTLRenderStages             stages);
 
 GPU_HIDE

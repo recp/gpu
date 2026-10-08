@@ -92,7 +92,7 @@ webgpu_isDepthStencilFormat(GPUFormat format) {
 }
 
 static bool
-webgpu_textureWithinLimits(const DeviceWebGPU         *native,
+webgpu_textureWithinLimits(const GPUDeviceWebGPU      *native,
                            const GPUTextureCreateInfo *info,
                            WGPUTextureDimension        dimension) {
   const WGPULimits *limits;
@@ -120,8 +120,8 @@ webgpu_createTexture(GPUDevice                  *__restrict device,
                      const GPUTextureCreateInfo *__restrict info,
                      GPUTexture                **__restrict outTexture) {
   WGPUTextureDescriptor descriptor = WGPU_TEXTURE_DESCRIPTOR_INIT;
-  FormatLayout          layout;
-  DeviceWebGPU         *native;
+  GPUFormatLayout       layout;
+  GPUDeviceWebGPU      *native;
   GPUTexture           *texture;
   uint32_t              mipLevelCount;
   uint32_t              sampleCount;
@@ -278,7 +278,7 @@ webgpu_writeTexture(GPUQueue                    *__restrict queue,
   WGPUTexelCopyBufferLayout layout      = WGPU_TEXEL_COPY_BUFFER_LAYOUT_INIT;
   WGPUTexelCopyTextureInfo  destination = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
   WGPUExtent3D              extent      = WGPU_EXTENT_3D_INIT;
-  DeviceWebGPU             *native;
+  GPUDeviceWebGPU          *native;
 
   native = webgpuDevice(commandQueueDevice(queue));
 
@@ -322,7 +322,7 @@ webgpu_writeTexture(GPUQueue                    *__restrict queue,
 }
 
 void
-webgpu_initTexture(ApiTexture    *api) {
+webgpu_initTexture(GPUTextureApi *api) {
   api->create      = webgpu_createTexture;
   api->destroy     = webgpu_destroyTexture;
   api->createView  = webgpu_createTextureView;

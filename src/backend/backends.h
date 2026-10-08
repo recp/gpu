@@ -24,7 +24,7 @@
     && !GPU_BACKEND_WEBGPU_ONLY \
     && !GPU_BACKEND_CUDA_ONLY
 GPU_HIDE
-Api*
+GPUApi*
 backend_metal(void);
 #endif
 
@@ -33,7 +33,7 @@ backend_metal(void);
     && !GPU_BACKEND_WEBGPU_ONLY \
     && !GPU_BACKEND_CUDA_ONLY
 GPU_HIDE
-Api*
+GPUApi*
 backend_dx12(void);
 #endif
 
@@ -43,19 +43,19 @@ backend_dx12(void);
     && !GPU_BACKEND_WEBGPU_ONLY \
     && !GPU_BACKEND_CUDA_ONLY
 GPU_HIDE
-Api*
+GPUApi*
 backend_vk(void);
 #endif
 
 #if defined(GPU_ENABLE_WEBGPU)
 GPU_HIDE
-Api*
+GPUApi*
 backend_webgpu(void);
 #endif
 
 #if defined(GPU_ENABLE_CUDA)
 GPU_HIDE
-Api*
+GPUApi*
 backend_cuda(void);
 #endif
 

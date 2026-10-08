@@ -21,7 +21,7 @@
 GPU_HIDE
 bool
 schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  Api    *api;
+  GPUApi *api;
 
   if (!cmdb || cmdb->_submitted || !frame || !frame->drawable
       || commandBufferDevice(cmdb) != frame->device) {

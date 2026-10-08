@@ -19,8 +19,8 @@
 #include "vertex_internal.h"
 
 GPU_HIDE
-VertexDescriptor*
-createVertexDesc(Api    *api) {
+GPUVertexDescriptor*
+createVertexDesc(GPUApi *api) {
   if (!api || !api->vertex.newVertexDesc)
     return NULL;
 
@@ -29,7 +29,7 @@ createVertexDesc(Api    *api) {
 
 GPU_HIDE
 void
-gpuDestroyVertexDesc(Api    *api, VertexDescriptor    *vert) {
+gpuDestroyVertexDesc(GPUApi *api, GPUVertexDescriptor *vert) {
   if (!vert)
     return;
 
@@ -43,8 +43,8 @@ gpuDestroyVertexDesc(Api    *api, VertexDescriptor    *vert) {
 
 GPU_HIDE
 void
-vertexDescAttrib(Api                 *__restrict api,
-                 VertexDescriptor    *__restrict vert,
+vertexDescAttrib(GPUApi              *__restrict api,
+                 GPUVertexDescriptor *__restrict vert,
                  uint32_t                        attribIndex,
                  GPUVertexFormat                 format,
                  uint32_t                        offset,
@@ -57,8 +57,8 @@ vertexDescAttrib(Api                 *__restrict api,
 
 GPU_HIDE
 void
-vertexDescLayout(Api                 *__restrict api,
-                 VertexDescriptor    *__restrict vert,
+vertexDescLayout(GPUApi              *__restrict api,
+                 GPUVertexDescriptor *__restrict vert,
                  uint32_t                        layoutIndex,
                  uint32_t                        stride,
                  GPUVertexStepMode               stepMode) {
@@ -71,8 +71,8 @@ vertexDescLayout(Api                 *__restrict api,
 GPU_HIDE
 void
 pipelineSetVertexDesc(GPURenderPipeline   *__restrict pipeline,
-                      VertexDescriptor    *__restrict vert) {
-  Api    *api;
+                      GPUVertexDescriptor *__restrict vert) {
+  GPUApi *api;
 
   if (!pipeline || !vert || !(api = pipeline->_api)
       || !api->vertex.vertexDesc)

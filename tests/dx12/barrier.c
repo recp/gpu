@@ -76,7 +76,7 @@ texture_barrier(GPUCommandBuffer    *cmdb,
 }
 
 static bool
-texture_states_are(const TextureDX12    *texture,
+texture_states_are(const GPUTextureDX12 *texture,
                    D3D12_RESOURCE_STATES expected) {
   uint32_t i;
 
@@ -98,7 +98,7 @@ texture_states_are(const TextureDX12    *texture,
 }
 
 static bool
-has_debug_errors(DeviceDX12    *device) {
+has_debug_errors(GPUDeviceDX12 *device) {
   ID3D12InfoQueue *infoQueue;
   D3D12_MESSAGE   *message;
   UINT64           messageCount;
@@ -164,18 +164,18 @@ run_barrier_case(GPUAdapter *adapter, bool forceLegacy) {
   GPUFenceCreateInfo    fenceInfo         = {0};
   GPUQueueSubmitInfo    submitInfo        = {0};
   GPUDevice            *device;
-  DeviceDX12           *deviceDX12;
+  GPUDeviceDX12        *deviceDX12;
   GPUQueue             *queue;
   GPUCommandBuffer     *cmdb;
-  CommandBufferDX12    *command;
+  GPUCommandBufferDX12 *command;
   GPUBuffer            *vertexBuffer;
   GPUBuffer            *indexBuffer;
   GPUBuffer            *indirectBuffer;
-  BufferDX12           *nativeVertex;
-  BufferDX12           *nativeIndex;
-  BufferDX12           *nativeIndirect;
+  GPUBufferDX12        *nativeVertex;
+  GPUBufferDX12        *nativeIndex;
+  GPUBufferDX12        *nativeIndirect;
   GPUTexture           *texture;
-  TextureDX12          *native;
+  GPUTextureDX12       *native;
   GPUFence             *fence;
   const uint64_t        vertexBufferSize   = 48u;
   const uint64_t        indexBufferSize    = 6u;
@@ -499,7 +499,7 @@ run_occlusion_case(GPUAdapter *adapter) {
   GPUFenceCreateInfo                  fenceInfo          = {0};
   GPUQueueSubmitInfo                  submitInfo         = {0};
   GPUDevice                          *device;
-  DeviceDX12                         *deviceDX12;
+  GPUDeviceDX12                      *deviceDX12;
   GPUQueue                           *queue;
   GPUCommandBuffer                   *cmdb;
   GPUTexture                         *target;

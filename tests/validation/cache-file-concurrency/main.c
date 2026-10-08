@@ -168,7 +168,7 @@ cache_sleep(uint32_t milliseconds) {
 
 static int
 cache_child(const char *path, uint32_t writer) {
-  CacheFileGuard    guard;
+  GPUCacheFileGuard guard;
   CacheRecord       current;
   CacheRecord       next;
   char             *temporaryPath;

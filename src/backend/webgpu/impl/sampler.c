@@ -57,7 +57,7 @@ webgpu_compareFunction(GPUCompareOp op) {
 }
 
 static GPUResult
-webgpu_createSampler(Api             *__restrict api,
+webgpu_createSampler(GPUApi          *__restrict api,
                      GPUDevice       *__restrict device,
                      const GPUSamplerCreateInfo *info,
                      bool                        staticIfSupported,
@@ -107,7 +107,7 @@ webgpuCreateSampler(GPUDevice                *device,
                        const char               *label,
                        const GPUSamplerLODClamp *lod) {
   WGPUSamplerDescriptor descriptor = WGPU_SAMPLER_DESCRIPTOR_INIT;
-  DeviceWebGPU         *native;
+  GPUDeviceWebGPU      *native;
 
   native = webgpuDevice(device);
 
@@ -138,7 +138,7 @@ webgpuCreateSampler(GPUDevice                *device,
 }
 
 void
-webgpu_initSampler(ApiSampler    *api) {
+webgpu_initSampler(GPUSamplerApi *api) {
   api->createSampler  = webgpu_createSampler;
   api->destroySampler = webgpu_destroySampler;
 }

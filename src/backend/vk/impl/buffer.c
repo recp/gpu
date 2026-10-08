@@ -19,7 +19,7 @@
 #include "../../../api/buffer_internal.h"
 
 static void
-vk__destroyBufferState(BufferVk    *native);
+vk__destroyBufferState(GPUBufferVk *native);
 
 static bool
 vk__bufferUsage(GPUBufferUsageFlags usage, VkBufferUsageFlags *outUsage) {
@@ -97,7 +97,7 @@ vk__bufferUsage(GPUBufferUsageFlags usage, VkBufferUsageFlags *outUsage) {
 }
 
 static void
-vk__destroyBufferState(BufferVk    *native) {
+vk__destroyBufferState(GPUBufferVk *native) {
   if (!native || !native->device) {
     return;
   }
@@ -120,12 +120,12 @@ vk__createBuffer(GPUDevice                 *__restrict device,
                  const GPUBufferCreateInfo *__restrict info,
                  bool                                  hostVisible,
                  GPUBuffer                **__restrict outBuffer) {
-  BufferVk                  state           = {0};
+  GPUBufferVk               state           = {0};
   VkBufferCreateInfo        bufferInfo      = {0};
   VkMemoryAllocateInfo      allocationInfo  = {0};
   VkMemoryAllocateFlagsInfo allocationFlags = {0};
   VkMemoryRequirements      requirements;
-  DeviceVk                 *deviceVk;
+  GPUDeviceVk              *deviceVk;
   VkMemoryPropertyFlags     memoryFlags;
   VkMemoryPropertyFlags     preferredFlags;
   VkMemoryPropertyFlags     requiredFlags;
@@ -215,7 +215,7 @@ vk__createBuffer(GPUDevice                 *__restrict device,
 }
 
 static void
-vk__bufferBarrier(DeviceVk            *device,
+vk__bufferBarrier(GPUDeviceVk         *device,
                   VkCommandBuffer      command,
                   VkBuffer             buffer,
                   VkDeviceSize         offset,
@@ -253,7 +253,7 @@ vk_findMemoryType(GPUDevice             *device,
                   uint32_t              *outIndex,
                   VkMemoryPropertyFlags *outFlags) {
   VkPhysicalDeviceMemoryProperties properties;
-  AdapterVk                       *adapterVk;
+  GPUAdapterVk                    *adapterVk;
   uint32_t                         i;
   VkMemoryPropertyFlags            flags;
   uint32_t                         j;
@@ -300,7 +300,7 @@ GPUResult
 vk_bufferCreateInfo(GPUDevice                 *device,
                     const GPUBufferCreateInfo *info,
                     VkBufferCreateInfo        *outInfo) {
-  DeviceVk    *deviceVk;
+  GPUDeviceVk *deviceVk;
 
   if (!device || !(deviceVk = device->_priv) || !info || !outInfo
       || !vk__bufferUsage(info->usage, &outInfo->usage)) {
@@ -327,7 +327,7 @@ vk_getBufferMemoryRequirements(GPUDevice                 *device,
                                GPUMemoryRequirements     *outRequirements) {
   VkBufferCreateInfo   bufferInfo = {0};
   VkMemoryRequirements requirements;
-  DeviceVk            *deviceVk;
+  GPUDeviceVk         *deviceVk;
   VkBuffer             buffer;
   uint32_t             memoryTypes;
   GPUResult            result;
@@ -375,10 +375,10 @@ vk_createPlacedBuffer(GPUDevice                 *device,
   VkBufferCreateInfo        bufferInfo  = {0};
   VkBufferDeviceAddressInfo addressInfo = {0};
   VkMemoryRequirements      requirements;
-  DeviceVk                 *deviceVk;
-  HeapVk                   *heapVk;
+  GPUDeviceVk              *deviceVk;
+  GPUHeapVk                *heapVk;
   GPUBuffer                *buffer;
-  BufferVk                 *native;
+  GPUBufferVk              *native;
   GPUResult                 result;
 
   if (!device || !(deviceVk = device->_priv) || !info || !heap
@@ -396,7 +396,7 @@ vk_createPlacedBuffer(GPUDevice                 *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native         = (BufferVk *)(buffer + 1);
+  native         = (GPUBufferVk *)(buffer + 1);
   native->device = deviceVk->device;
 
   if (vkCreateBuffer(native->device,
@@ -471,7 +471,7 @@ vk_getSparseBufferRequirements(GPUDevice                   *device,
                                GPUSparseBufferRequirements *outRequirements) {
   VkBufferCreateInfo   bufferInfo = {0};
   VkMemoryRequirements requirements;
-  DeviceVk            *deviceVk;
+  GPUDeviceVk         *deviceVk;
   VkBuffer             buffer;
   uint32_t             memoryTypes;
   GPUResult            result;
@@ -523,10 +523,10 @@ vk_createSparseBuffer(GPUDevice                 *device,
   VkBufferDeviceAddressInfo   addressInfo = {0};
   VkMemoryRequirements        requirements;
   GPUSparseBufferRequirements sparseRequirements;
-  DeviceVk                   *deviceVk;
-  HeapVk                     *heapVk;
+  GPUDeviceVk                *deviceVk;
+  GPUHeapVk                  *heapVk;
   GPUBuffer                  *buffer;
-  BufferVk                   *native;
+  GPUBufferVk                *native;
   GPUResult                   result;
 
   if (!device || !(deviceVk = device->_priv) || !info || !heap
@@ -559,7 +559,7 @@ vk_createSparseBuffer(GPUDevice                 *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native         = (BufferVk *)(buffer + 1);
+  native         = (GPUBufferVk *)(buffer + 1);
   native->device = deviceVk->device;
 
   if (vkCreateBuffer(native->device,
@@ -625,12 +625,12 @@ GPUResult
 vk_wrapBuffer(GPUDevice                 *device,
               const GPUBufferCreateInfo *info,
               const VkBufferCreateInfo  *bufferInfo,
-              BufferVk                  *state,
+              GPUBufferVk               *state,
               GPUBuffer                **outBuffer) {
   VkBufferDeviceAddressInfo addressInfo = {0};
-  DeviceVk                 *deviceVk;
+  GPUDeviceVk              *deviceVk;
   GPUBuffer                *buffer;
-  BufferVk                 *native;
+  GPUBufferVk              *native;
 
   deviceVk = device ? device->_priv : NULL;
 
@@ -646,7 +646,7 @@ vk_wrapBuffer(GPUDevice                 *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native            = (BufferVk *)(buffer + 1);
+  native            = (GPUBufferVk *)(buffer + 1);
   *native           = *state;
   buffer->_priv     = native;
   buffer->device    = device;
@@ -732,8 +732,8 @@ vk_writeBuffer(GPUQueue   *__restrict queue,
                uint64_t               sizeBytes) {
   VkCommandBuffer     command;
   GPUBuffer          *staging;
-  BufferVk           *stagingVk;
-  BufferVk           *native;
+  GPUBufferVk        *stagingVk;
+  GPUBufferVk        *native;
   VkBufferCopy        copy  = {0};
   VkMappedMemoryRange range = {0};
   uint64_t            stagingOffset;
@@ -836,8 +836,8 @@ vk_readBuffer(GPUQueue  *__restrict queue,
               uint64_t              sizeBytes) {
   VkCommandBuffer     command;
   GPUBuffer          *staging;
-  BufferVk           *stagingVk;
-  BufferVk           *native;
+  GPUBufferVk        *stagingVk;
+  GPUBufferVk        *native;
   VkBufferCopy        copy  = {0};
   VkMappedMemoryRange range = {0};
   uint64_t            stagingOffset;
@@ -948,7 +948,7 @@ vk_readBuffer(GPUQueue  *__restrict queue,
 GPU_HIDE
 void*
 vk_bufferContents(GPUBuffer *__restrict buffer) {
-  BufferVk    *native;
+  GPUBufferVk *native;
 
   native = buffer ? buffer->_priv : NULL;
 
@@ -957,7 +957,7 @@ vk_bufferContents(GPUBuffer *__restrict buffer) {
 
 GPU_HIDE
 void
-vk_initBuff(ApiBuffer    *api) {
+vk_initBuff(GPUBufferApi *api) {
   api->create   = vk_createBuffer;
   api->destroy  = vk_destroyBuffer;
   api->write    = vk_writeBuffer;

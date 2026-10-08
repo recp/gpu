@@ -52,7 +52,7 @@ graph_dispatch_buffer(GPUComputePassEncoder                 *pass,
 
 int
 gpu_test_execution_graph_validation(void) {
-  Api                             api           = {0};
+  GPUApi                          api           = {0};
   GPUDevice                       device        = {0};
   GPUDevice                       foreignDevice = {0};
   GPUBuffer                       buffer        = {0};

@@ -24,7 +24,7 @@
 
 #define GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS 8u
 
-static Api*
+static GPUApi*
 transferPassApi(const GPUTransferPassEncoder *pass) {
   return pass ? commandBufferApi(pass->_cmdb) : NULL;
 }
@@ -496,7 +496,7 @@ static bool
 validBufferTextureCopy(const GPUBufferTextureCopyRegion *region,
                        const GPUTexture                 *texture,
                        uint64_t                         *outBytes) {
-  FormatDataLayout    layout;
+  GPUFormatDataLayout layout;
 
   if (!region || !texture || !outBytes
       || !validTextureCopyRegion(&region->texture, texture)
@@ -519,7 +519,7 @@ validBufferTextureCopy(const GPUBufferTextureCopyRegion *region,
 }
 
 static void
-gpu_destroyRenderPass(Api    *api, RenderPassDesc    *pass) {
+gpu_destroyRenderPass(GPUApi *api, GPURenderPassDesc *pass) {
   if (!pass) {
     return;
   }
@@ -535,10 +535,10 @@ gpu_destroyRenderPass(Api    *api, RenderPassDesc    *pass) {
 GPU_EXPORT
 GPURenderPassEncoder*
 GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) {
-  RenderPassDesc       *desc;
+  GPURenderPassDesc    *desc;
   GPURenderPassEncoder *encoder;
   GPUDevice            *device;
-  Api                  *api;
+  GPUApi               *api;
   bool                  wroteBeginTimestamp;
 
   device = commandBufferDevice(cmdb);
@@ -606,7 +606,7 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
 GPU_EXPORT
 void
 GPUEndRenderPass(GPURenderPassEncoder *pass) {
-  Api    *api;
+  GPUApi *api;
 #if GPU_BUILD_WITH_VALIDATION
   GPUDevice *device;
 #endif
@@ -649,7 +649,7 @@ GPUTransferPassEncoder*
 GPUBeginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
   GPUTransferPassEncoder *pass;
   GPUDevice              *device;
-  Api                    *api;
+  GPUApi                 *api;
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return NULL;
@@ -677,7 +677,7 @@ GPUCopyBufferToBuffer(GPUTransferPassEncoder    *pass,
                       GPUBuffer                 *src,
                       GPUBuffer                 *dst,
                       const GPUBufferCopyRegion *region) {
-  Api    *api;
+  GPUApi *api;
 
   if (!pass || pass->_ended
       || !src || !dst || !region || region->sizeBytes == 0
@@ -701,7 +701,7 @@ GPUCopyBufferToTexture(GPUTransferPassEncoder           *pass,
                        GPUBuffer                        *src,
                        GPUTexture                       *dst,
                        const GPUBufferTextureCopyRegion *region) {
-  Api     *api;
+  GPUApi  *api;
   uint64_t copyBytes;
 
   if (!pass || pass->_ended
@@ -725,7 +725,7 @@ GPUCopyTextureToBuffer(GPUTransferPassEncoder           *pass,
                        GPUTexture                       *src,
                        GPUBuffer                        *dst,
                        const GPUBufferTextureCopyRegion *region) {
-  Api     *api;
+  GPUApi  *api;
   uint64_t copyBytes;
 
   if (!pass || pass->_ended
@@ -751,7 +751,7 @@ GPUCopyTextureToTexture(GPUTransferPassEncoder              *pass,
                         const GPUTextureToTextureCopyRegion *region) {
   GPUTextureSubresourceRegion srcRegion;
   GPUTextureSubresourceRegion dstRegion;
-  Api                        *api;
+  GPUApi                     *api;
   GPUTextureAspect            srcAspect;
   GPUTextureAspect            dstAspect;
 
@@ -806,7 +806,7 @@ void
 GPUCopyMemoryIndirectEXT(GPUTransferPassEncoder             *pass,
                          const GPUIndirectMemoryCopyInfoEXT *info) {
   GPUDevice *device;
-  Api       *api;
+  GPUApi    *api;
 
   device = pass && pass->_cmdb ? commandBufferDevice(pass->_cmdb) : NULL;
 
@@ -834,7 +834,7 @@ void
 GPUCopyMemoryToTextureIndirectEXT(GPUTransferPassEncoder                      *pass,
                                   const GPUIndirectMemoryToTextureCopyInfoEXT *info) {
   GPUDevice *device;
-  Api       *api;
+  GPUApi    *api;
   uint32_t   i;
 
   device = pass && pass->_cmdb ? commandBufferDevice(pass->_cmdb) : NULL;
@@ -871,7 +871,7 @@ GPUCopyMemoryToTextureIndirectEXT(GPUTransferPassEncoder                      *p
 GPU_EXPORT
 void
 GPUEndTransferPass(GPUTransferPassEncoder *pass) {
-  Api    *api;
+  GPUApi *api;
 
   if (!pass || pass->_ended) {
     return;

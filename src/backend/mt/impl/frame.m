@@ -18,12 +18,12 @@
 
 GPU_HIDE
 GPUFrame*
-mt_beginFrame(Api          *__restrict api,
+mt_beginFrame(GPUApi       *__restrict api,
               GPUSwapchain *__restrict swapchain) {
   GPUFrame           *frame;
   GPUTexture         *target;
   GPUTextureView     *targetView;
-  SwapchainMetal     *swapchainMtl;
+  GPUSwapchainMetal  *swapchainMtl;
   id<CAMetalDrawable> drawable;
 
   swapchainMtl = swapchain->_priv;
@@ -84,9 +84,9 @@ mt_beginFrame(Api          *__restrict api,
 
 GPU_HIDE
 void
-mt_endFrame(Api      *__restrict api,
+mt_endFrame(GPUApi   *__restrict api,
             GPUFrame *__restrict frame) {
-  SwapchainMetal    *swapchainMtl;
+  GPUSwapchainMetal *swapchainMtl;
 
   (void)api;
 
@@ -104,7 +104,7 @@ mt_endFrame(Api      *__restrict api,
 
 GPU_HIDE
 void
-mt_initFrame(ApiFrame    *api) {
+mt_initFrame(GPUFrameApi *api) {
   api->beginFrame = mt_beginFrame;
   api->endFrame   = mt_endFrame;
 }

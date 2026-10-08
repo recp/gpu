@@ -77,7 +77,7 @@
 #endif
 
 GPU_HIDE
-Api*
+GPUApi*
 apiForBackend(GPUBackend backend);
 
 #endif /* src_common_h */

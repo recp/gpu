@@ -22,7 +22,7 @@ extern "C" {
 
 #include <gpu/sampler-feedback.h>
 
-typedef struct ApiSamplerFeedback {
+typedef struct GPUSamplerFeedbackApi {
   void
   (*getProperties)(const GPUAdapter                *adapter,
                    GPUSamplerFeedbackPropertiesEXT *outProperties);
@@ -47,7 +47,7 @@ typedef struct ApiSamplerFeedback {
   (*encode)(GPUCommandBuffer         *cmdb,
             GPUTexture               *decodedTexture,
             GPUSamplerFeedbackMapEXT *map);
-} ApiSamplerFeedback;
+} GPUSamplerFeedbackApi;
 
 #ifdef __cplusplus
 }

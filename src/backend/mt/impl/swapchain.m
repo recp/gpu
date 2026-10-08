@@ -18,7 +18,7 @@
 
 @interface GPUSwapchainObjc: NSObject {
 @public
-  SwapchainMetal    *swapchainMtl;
+  GPUSwapchainMetal *swapchainMtl;
   float             backingScaleFactor;
   id                observedObject;
   NSString          *observedKeyPath;
@@ -78,11 +78,11 @@ mt_swapchainAttachToView(GPUSwapchain *__restrict swapchain,
                          void         *__restrict viewHandle,
                          bool                     autoResize,
                          bool                     replace) {
-  SwapchainMetal    *swapchainMtl;
-  ViewHandle        *_viewHandle;
+  GPUSwapchainMetal *swapchainMtl;
+  GPUViewHandle     *_viewHandle;
 
   swapchainMtl = swapchain->_priv;
-  _viewHandle  = (ViewHandle *)viewHandle;
+  _viewHandle  = (GPUViewHandle *)viewHandle;
 
 #if TARGET_OS_IOS
   GPU__UNUSED(replace);
@@ -113,14 +113,14 @@ mt_swapchainAttachToView(GPUSwapchain *__restrict swapchain,
 
 GPU_HIDE
 GPUSwapchain*
-mt_createSwapchain(Api                          *__restrict api,
+mt_createSwapchain(GPUApi                       *__restrict api,
                    GPUDevice                    *__restrict device,
                    GPUQueue                     *__restrict cmdQue,
                    const GPUSwapchainCreateInfo *__restrict info) {
   GPUExtent2D        size;
-  DeviceMT          *deviceMT;
+  GPUDeviceMT       *deviceMT;
   GPUSwapchain      *swapchain;
-  SwapchainMetal    *swapchainMtl;
+  GPUSwapchainMetal *swapchainMtl;
   GPUSwapchainObjc  *objc;
   GPUSurface        *surface;
   uint32_t           imageCount;
@@ -173,7 +173,7 @@ mt_resizeSwapchain(GPUSwapchain *__restrict swapchain,
                    GPUExtent2D              size) {
   CGRect             bounds;
   CGSize             drawableSize;
-  SwapchainMetal    *swapchainMtl;
+  GPUSwapchainMetal *swapchainMtl;
 
   if (!swapchain || !swapchain->_priv || size.width == 0 || size.height == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -198,7 +198,7 @@ mt_resizeSwapchain(GPUSwapchain *__restrict swapchain,
 GPU_HIDE
 void
 mt_destroySwapchain(GPUSwapchain *__restrict swapchain) {
-  SwapchainMetal    *swapchainMtl;
+  GPUSwapchainMetal *swapchainMtl;
 
   if (!swapchain) {
     return;
@@ -225,7 +225,7 @@ mt_destroySwapchain(GPUSwapchain *__restrict swapchain) {
 
 GPU_HIDE
 void
-mt_initSwapchain(ApiSwapchain    *api) {
+mt_initSwapchain(GPUSwapchainApi *api) {
   api->createSwapchain  = mt_createSwapchain;
   api->resizeSwapchain  = mt_resizeSwapchain;
   api->destroySwapchain = mt_destroySwapchain;

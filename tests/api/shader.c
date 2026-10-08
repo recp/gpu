@@ -155,7 +155,7 @@ static int
 reflection_group0_layout_is_canonical(GPUDevice          *device,
                                       GPUBindGroupLayout *layout) {
   const GPUBindGroupLayoutEntry *entries;
-  Api                           *api;
+  GPUApi                        *api;
   uint32_t                       count;
   int                            webgpu;
 
@@ -210,7 +210,7 @@ check_compute_pipeline_workgroup_size(GPUDevice         *device,
                                       GPUShaderLibrary  *library,
                                       GPUPipelineLayout *layout) {
   GPUComputePipelineCreateInfo info = {0};
-  ComputePipelineState        *state;
+  GPUComputePipelineState     *state;
   GPUComputePipeline          *pipeline;
   int                          ok;
 
@@ -654,10 +654,10 @@ check_shader_layout_after_library_destroy(GPUDevice       *device,
   GPUBindGroupEntry      group0Entries[2];
   GPUBindGroupEntry      group1Entries[2];
   GPUBindGroupCreateInfo groupInfo = {0};
-  ApiDescriptor          savedDescriptor;
+  GPUDescriptorApi       savedDescriptor;
   GPUBindGroup          *group0Group;
   GPUBindGroup          *group1Group;
-  Api                   *api;
+  GPUApi                *api;
   int                    ok;
 
   if (!shaderLayout
@@ -773,11 +773,11 @@ check_reflection_objects_after_library_destroy(GPUDevice           *device,
   GPUBindGroupEntry           group1Entries[2];
   GPUBindGroupCreateInfo      groupInfo    = {0};
   GPUPipelineLayoutCreateInfo pipelineInfo = {0};
-  ApiDescriptor               savedDescriptor;
+  GPUDescriptorApi            savedDescriptor;
   GPUPipelineLayout          *pipelineLayout = NULL;
   GPUBindGroup               *group0Group    = NULL;
   GPUBindGroup               *group1Group    = NULL;
-  Api                        *api;
+  GPUApi                     *api;
   int                         descriptorHookDisabled = 0;
   int                         ok                     = 0;
 

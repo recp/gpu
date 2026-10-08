@@ -19,13 +19,13 @@
 
 #include "../common.h"
 
-struct ComputePipelineState {
+struct GPUComputePipelineState {
   void    *_priv;
   uint32_t workgroupSize[3];
 };
 
 struct GPUComputePipeline {
-  Api                 *_api;
+  GPUApi              *_api;
   void                *_priv;
   void                *_state;
   GPUDevice           *_device;

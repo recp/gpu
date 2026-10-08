@@ -56,9 +56,9 @@ mt_getSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
 }
 
 GPUSurface*
-mt_createSurface(Api                        *__restrict api,
+mt_createSurface(GPUApi                     *__restrict api,
                  GPUInstance                *__restrict inst,
-                 const SurfaceNativeInfo    *__restrict info) {
+                 const GPUSurfaceNativeInfo *__restrict info) {
   GPUSurface *surface;
 
   GPU__UNUSED(api);
@@ -89,7 +89,7 @@ mt_destroySurface(GPUSurface *__restrict surface) {
 
 GPU_HIDE
 void
-mt_initSurface(ApiSurface    *apiDevice) {
+mt_initSurface(GPUSurfaceApi *apiDevice) {
   apiDevice->createSurface   = mt_createSurface;
   apiDevice->getCapabilities = mt_getSurfaceCapabilities;
   apiDevice->destroySurface  = mt_destroySurface;

@@ -147,8 +147,8 @@ blitInfoValid(GPUCommandBuffer         *cmdb,
               const GPUTextureBlitInfo *info,
               GPUFormatCapabilities    *outSrcCaps) {
   GPUDevice           *device;
-  FormatNumericType    srcType;
-  FormatNumericType    dstType;
+  GPUFormatNumericType srcType;
+  GPUFormatNumericType dstType;
 
   device = commandBufferDevice(cmdb);
 
@@ -190,8 +190,8 @@ blitInfoValid(GPUCommandBuffer         *cmdb,
   return true;
 }
 
-static const BlitShaderData*
-blitShaderData(const BlitShaderSet    *shaders, uint32_t variant) {
+static const GPUBlitShaderData*
+blitShaderData(const GPUBlitShaderSet *shaders, uint32_t variant) {
   if (!shaders) {
     return NULL;
   }
@@ -269,7 +269,7 @@ blitSampleType(uint32_t variant) {
 static bool
 blitEnsureVariant(GPUDevice              *device,
                   BlitContext            *context,
-                  const BlitShaderSet    *shaders,
+                  const GPUBlitShaderSet *shaders,
                   uint32_t                variantIndex) {
   GPUBindGroupLayoutCreateInfo bindGroupInfo = {0};
   GPUPipelineLayoutCreateInfo  pipelineInfo  = {0};
@@ -277,8 +277,8 @@ blitEnsureVariant(GPUDevice              *device,
   GPUBindGroupLayout          *layouts[1];
   BlitVariant                 *variant;
   GPUShaderLibrary            *library;
-  Api                         *api;
-  const BlitShaderData        *shader;
+  GPUApi                      *api;
+  const GPUBlitShaderData     *shader;
 
   variant = &context->variants[variantIndex];
 
@@ -615,7 +615,7 @@ GPU_HIDE
 void
 blitTextureRenderFallback(GPUCommandBuffer         *cmdb,
                           const GPUTextureBlitInfo *info,
-                          const BlitShaderSet      *shaders) {
+                          const GPUBlitShaderSet   *shaders) {
   GPURenderPassColorAttachment color      = {0};
   GPURenderPassCreateInfo      renderInfo = {0};
   GPUFormatCapabilities        srcCaps;
@@ -802,7 +802,7 @@ void
 GPUBlit(GPUCommandBuffer         *cmdb,
         const GPUTextureBlitInfo *info) {
   GPUFormatCapabilities   srcCaps;
-  Api                    *api;
+  GPUApi                 *api;
   GPUTransferPassEncoder *pass;
 
   if (!blitInfoValid(cmdb, info, &srcCaps)) {
@@ -838,7 +838,7 @@ GPUBlit(GPUCommandBuffer         *cmdb,
 GPU_EXPORT
 void
 GPUGenerateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
-  Api    *api;
+  GPUApi *api;
 
   if (!generateMipmapsValid(cmdb, texture)) {
     return;

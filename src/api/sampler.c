@@ -53,7 +53,7 @@ GPUCreateSampler(GPUDevice                  *__restrict device,
                  bool                                   staticIfSupported,
                  GPUSampler                **__restrict outSampler) {
   const GPUSamplerLODClamp *lod;
-  Api                     *api;
+  GPUApi                  *api;
   GPUResult                result;
 
   if (!outSampler) {
@@ -119,7 +119,7 @@ GPUCreateSampler(GPUDevice                  *__restrict device,
 GPU_EXPORT
 void
 GPUDestroySampler(GPUSampler *__restrict sampler) {
-  Api    *api;
+  GPUApi *api;
 
   if (!sampler) {
     return;

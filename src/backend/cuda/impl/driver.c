@@ -38,7 +38,7 @@
 #define CUDA_LOAD_OPTIONAL(field, name)                                     \
   cuda.field = (void *)cuda__symbol(library, name)
 
-static CUDA     cuda;
+static GPUCUDA  cuda;
 static uint32_t cudaState;
 
 static void*
@@ -170,7 +170,7 @@ fail:
   return false;
 }
 
-CUDA*
+GPUCUDA*
 cuda_driver(void) {
   uint32_t state;
 
@@ -218,7 +218,7 @@ cuda_driver(void) {
 }
 
 GPUResult
-cuda_push(CUDA    *driver, CUcontext context) {
+cuda_push(GPUCUDA *driver, CUcontext context) {
   if (!driver || !context
       || driver->ctxPushCurrent(context) != CUDA_SUCCESS) {
     return GPU_ERROR_BACKEND_FAILURE;
@@ -228,7 +228,7 @@ cuda_push(CUDA    *driver, CUcontext context) {
 }
 
 void
-cuda_pop(CUDA    *driver) {
+cuda_pop(GPUCUDA *driver) {
   CUcontext context;
 
   if (driver) {

@@ -95,7 +95,7 @@ dx12__nativeCache(GPUPipelineCache *cache) {
 
 #if GPU_BUILD_WITH_VALIDATION
 static void
-dx12__logPipelineMessages(DeviceDX12    *device) {
+dx12__logPipelineMessages(GPUDeviceDX12 *device) {
   ID3D12InfoQueue *infoQueue;
   D3D12_MESSAGE   *message;
   UINT64           messageCount;
@@ -511,7 +511,7 @@ dx12_createCache(GPUDevice                        *device,
                  const GPUPipelineCacheCreateInfo *info,
                  GPUPipelineCache                 *cache) {
   DX12PipelineCache *native;
-  DeviceDX12        *deviceDX12;
+  GPUDeviceDX12     *deviceDX12;
   const void        *libraryData;
 #if DX12_HAS_PIPELINE_LIBRARY
   void              *libraryBacking;
@@ -579,7 +579,7 @@ dx12_createCache(GPUDevice                        *device,
 
 static void
 dx12__storeCache(DX12PipelineCache *native) {
-  CacheFileGuard          guard;
+  GPUCacheFileGuard       guard;
   DX12PipelineCacheHeader header;
   DX12PipelineCacheRecord record;
   DX12PipelineCacheEntry *entry;
@@ -1020,7 +1020,7 @@ dx12_keyWrite(DX12PipelineKey *key, const void *data, size_t size) {
 GPU_HIDE
 GPUResult
 dx12_createGraphicsPSO(GPUPipelineCache                         *cache,
-                       DeviceDX12                               *device,
+                       GPUDeviceDX12                            *device,
                        const D3D12_GRAPHICS_PIPELINE_STATE_DESC *desc,
                        const GPURenderPipelineCreateInfo        *info,
                        const DX12PipelineKey                    *rootKey,
@@ -1118,7 +1118,7 @@ dx12_createGraphicsPSO(GPUPipelineCache                         *cache,
 GPU_HIDE
 GPUResult
 dx12_createComputePSO(GPUPipelineCache                        *cache,
-                      DeviceDX12                              *device,
+                      GPUDeviceDX12                           *device,
                       const D3D12_COMPUTE_PIPELINE_STATE_DESC *desc,
                       const DX12PipelineKey                   *rootKey,
                       ID3D12PipelineState                    **outState) {
@@ -1211,7 +1211,7 @@ dx12_createComputePSO(GPUPipelineCache                        *cache,
 GPU_HIDE
 GPUResult
 dx12_createMeshPSO(GPUPipelineCache                       *cache,
-                   DeviceDX12                             *device,
+                   GPUDeviceDX12                          *device,
                    const D3D12_PIPELINE_STATE_STREAM_DESC *desc,
                    D3D12_CACHED_PIPELINE_STATE            *cachedPSO,
                    const GPURenderPipelineCreateInfo      *info,
@@ -1313,7 +1313,7 @@ dx12_createMeshPSO(GPUPipelineCache                       *cache,
 
 GPU_HIDE
 void
-dx12_initPipelineCache(ApiPipelineCache    *api) {
+dx12_initPipelineCache(GPUPipelineCacheApi *api) {
   api->create  = dx12_createCache;
   api->destroy = dx12_destroyCache;
 }

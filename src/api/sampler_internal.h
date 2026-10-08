@@ -32,7 +32,7 @@ samplerLODClamp(const GPUSamplerCreateInfo *info) {
   return info ? (const GPUSamplerLODClamp *)info->chain.pNext : NULL;
 }
 
-static inline Api*
+static inline GPUApi*
 samplerApi(const GPUSampler *sampler) {
   return sampler ? deviceApi(sampler->device) : NULL;
 }

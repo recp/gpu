@@ -218,12 +218,12 @@ webgpu_createPipeline(GPUDevice                         *device,
   WGPUBlendState               blends[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   WGPUDepthStencilState        depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  WebGPUPipelineError          error;
+  GPUWebGPUPipelineError       error;
 #endif
   WGPUVertexBufferLayout      *vertexBuffers;
   WGPUVertexAttribute         *vertexAttributes;
-  DeviceWebGPU                *native;
-  RenderPipelineWebGPU        *state;
+  GPUDeviceWebGPU             *native;
+  GPURenderPipelineWebGPU     *state;
   WGPUShaderModule             module;
   const GPUVertexBufferLayout *vertexSource;
   WGPUVertexAttribute         *attribute;
@@ -451,7 +451,7 @@ webgpu_createPipeline(GPUDevice                         *device,
 
 static void
 webgpu_destroyPipeline(GPURenderPipeline *pipeline) {
-  RenderPipelineWebGPU    *state;
+  GPURenderPipelineWebGPU *state;
 
   state = pipeline ? pipeline->_state : NULL;
 
@@ -468,7 +468,7 @@ webgpu_destroyPipeline(GPURenderPipeline *pipeline) {
 }
 
 void
-webgpu_initPipeline(ApiRender    *api) {
+webgpu_initPipeline(GPURenderApi *api) {
   api->createPipeline        = webgpu_createPipeline;
   api->destroyRenderPipeline = webgpu_destroyPipeline;
 }

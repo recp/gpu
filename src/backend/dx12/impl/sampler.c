@@ -40,7 +40,7 @@ dx12__createSampler(GPUDevice                *device,
                     const D3D12_SAMPLER_DESC *desc,
                     GPUSampler              **outSampler) {
   GPUSampler     *sampler;
-  SamplerDX12    *native;
+  GPUSamplerDX12 *native;
 
   if (!device || !device->_priv || !desc || !outSampler) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -52,7 +52,7 @@ dx12__createSampler(GPUDevice                *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native         = (SamplerDX12 *)(sampler + 1);
+  native         = (GPUSamplerDX12 *)(sampler + 1);
   native->device = device->_priv;
   native->desc   = *desc;
   sampler->_priv = native;
@@ -74,7 +74,7 @@ dx12__compareFunction(GPUCompareOp op) {
 
 GPU_HIDE
 D3D12_FILTER
-dx12_staticSamplerFilter(const StaticSamplerDesc    *desc) {
+dx12_staticSamplerFilter(const GPUStaticSamplerDesc *desc) {
   bool minLinear;
   bool magLinear;
   bool mipLinear;
@@ -183,7 +183,7 @@ dx12_staticSamplerCompareFunc(uint32_t func) {
 
 GPU_HIDE
 int
-dx12_fillSourceSamplerDesc(const StaticSamplerDesc    *sourceDesc,
+dx12_fillSourceSamplerDesc(const GPUStaticSamplerDesc *sourceDesc,
                            uint32_t                    shaderRegister,
                            D3D12_SHADER_VISIBILITY     visibility,
                            D3D12_STATIC_SAMPLER_DESC  *outDesc) {
@@ -222,7 +222,7 @@ dx12_fillStaticSamplerDesc(const GPUSamplerDesc      *desc,
                            uint32_t                   registerSpace,
                            D3D12_SHADER_VISIBILITY    visibility,
                            D3D12_STATIC_SAMPLER_DESC *outDesc) {
-  StaticSamplerDesc    staticDesc = {0};
+  GPUStaticSamplerDesc staticDesc = {0};
 
   if (!desc || !outDesc) {
     return 0;
@@ -256,12 +256,12 @@ dx12_fillStaticSamplerDesc(const GPUSamplerDesc      *desc,
 
 GPU_HIDE
 GPUResult
-dx12_createSampler(Api             *__restrict api,
+dx12_createSampler(GPUApi          *__restrict api,
                    GPUDevice       *__restrict device,
                    const GPUSamplerCreateInfo *info,
                    bool                        staticIfSupported,
                    GPUSampler                **outSampler) {
-  StaticSamplerDesc         staticDesc = {0};
+  GPUStaticSamplerDesc      staticDesc = {0};
   D3D12_SAMPLER_DESC        desc       = {0};
   const GPUSamplerLODClamp *lod;
 
@@ -307,7 +307,7 @@ dx12_destroySampler(GPUSampler *__restrict sampler) {
 
 GPU_HIDE
 void
-dx12_initSampler(ApiSampler    *api) {
+dx12_initSampler(GPUSamplerApi *api) {
   api->createSampler  = dx12_createSampler;
   api->destroySampler = dx12_destroySampler;
 }

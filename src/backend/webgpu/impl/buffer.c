@@ -72,7 +72,7 @@ webgpu_createBuffer(GPUDevice                 *__restrict device,
                     const GPUBufferCreateInfo *__restrict info,
                     GPUBuffer                **__restrict outBuffer) {
   WGPUBufferDescriptor descriptor = WGPU_BUFFER_DESCRIPTOR_INIT;
-  DeviceWebGPU        *native;
+  GPUDeviceWebGPU     *native;
   GPUBuffer           *buffer;
   WGPUBufferUsage      usage;
   uint64_t             nativeSize;
@@ -144,7 +144,7 @@ webgpu_writeBuffer(GPUQueue   *__restrict queue,
                    uint64_t               dstOffset,
                    const void *__restrict data,
                    uint64_t               sizeBytes) {
-  DeviceWebGPU    *native;
+  GPUDeviceWebGPU *native;
   uint64_t         alignedSize;
   uint32_t         tail;
   uint32_t         tailSize;
@@ -204,12 +204,12 @@ webgpu_readBuffer(GPUQueue  *__restrict queue,
 #endif
   WebGPUBufferMapRequest       mapRequest = {0};
   GPUDevice                   *device;
-  DeviceWebGPU                *native;
+  GPUDeviceWebGPU             *native;
   WGPUCommandEncoder           encoder;
   WGPUCommandBuffer            command;
   WGPUBuffer                   staging;
 #if !GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  InstanceWebGPU              *instance;
+  GPUInstanceWebGPU           *instance;
 #endif
   const uint8_t               *mapped;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
@@ -350,7 +350,7 @@ webgpu_bufferContents(GPUBuffer *__restrict buffer) {
 }
 
 void
-webgpu_initBuffer(ApiBuffer    *api) {
+webgpu_initBuffer(GPUBufferApi *api) {
   api->create   = webgpu_createBuffer;
   api->destroy  = webgpu_destroyBuffer;
   api->write    = webgpu_writeBuffer;

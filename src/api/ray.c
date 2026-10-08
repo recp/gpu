@@ -587,7 +587,7 @@ resolveRayInterfaceLimits(const GPUShaderLibrary            *library,
 
 static void
 releaseRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
-  Api    *api;
+  GPUApi *api;
 
   if (!pipeline) {
     return;
@@ -635,8 +635,8 @@ attachComputeIntersectionFunctions(GPUDevice                                *dev
                                    GPUShaderLibrary                         *library,
                                    const GPUIntersectionFunctionPipelineEXT *info,
                                    GPUComputePipeline                       *pipeline) {
-  ShaderFunction    **functions;
-  Api                *api;
+  GPUShaderFunction **functions;
+  GPUApi             *api;
   GPUResult           result;
   uint32_t            created;
   uint32_t            i;
@@ -689,9 +689,9 @@ attachRenderIntersectionFunctions(GPUDevice                                *devi
                                   GPUShaderLibrary                         *library,
                                   const GPUIntersectionFunctionPipelineEXT *info,
                                   GPURenderPipeline                        *pipeline) {
-  ShaderFunction     **functions;
+  GPUShaderFunction  **functions;
   GPUShaderStageFlags *stages;
-  Api                 *api;
+  GPUApi              *api;
   GPUResult            result;
   uint32_t             created;
   uint32_t             i;
@@ -766,7 +766,7 @@ GPUResult
 GPUGetAccelerationStructureSizesEXT(GPUDevice                                  *device,
                                     const GPUAccelerationStructureBuildInfoEXT *info,
                                     GPUAccelerationStructureSizesEXT           *outSizes) {
-  Api      *api;
+  GPUApi   *api;
   GPUResult result;
 
   if (!outSizes) {
@@ -798,7 +798,7 @@ GPUCreateAccelerationStructureEXT(GPUDevice                                   *d
                                   const GPUAccelerationStructureCreateInfoEXT *info,
                                   GPUAccelerationStructureEXT                **outStructure) {
   GPUAccelerationStructureEXT *structure;
-  Api                         *api;
+  GPUApi                      *api;
   GPUResult                    result;
 
   if (!outStructure) {
@@ -845,7 +845,7 @@ GPUCreateAccelerationStructureEXT(GPUDevice                                   *d
 GPU_EXPORT
 void
 GPUDestroyAccelerationStructureEXT(GPUAccelerationStructureEXT *structure) {
-  Api    *api;
+  GPUApi *api;
 
   if (!structure) {
     return;
@@ -866,7 +866,7 @@ GPUBeginAccelerationStructurePassEXT(GPUCommandBuffer *cmdb,
                                      const char       *label) {
   GPUAccelerationStructurePassEncoderEXT *pass;
   GPUDevice                              *device;
-  Api                                    *api;
+  GPUApi                                 *api;
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return NULL;
@@ -957,7 +957,7 @@ GPUCreateIntersectionFunctionTableEXT(GPUDevice                                 
                                       GPUIntersectionFunctionTableEXT                **outTable) {
   GPUIntersectionFunctionTableEXT *table;
   GPUDevice                       *pipelineDevice;
-  Api                             *api;
+  GPUApi                          *api;
   GPUResult                        result;
   bool                             compute;
 
@@ -1119,9 +1119,9 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
   GPURayTracingShaderGroupTypeEXT   *groupTypes;
   GPUShaderStageFlags               *generalStages;
   const char                       **entries;
-  Api                               *api;
+  GPUApi                            *api;
   GPURayTracingPipelineCreateInfoEXT resolvedInfo;
-  PipelineCacheKey                   cacheKey;
+  GPUPipelineCacheKey                cacheKey;
   uint32_t                           entryCount;
   uint32_t                           entryIndex;
   uint32_t                           requiredBindGroupMask;
@@ -1326,7 +1326,7 @@ GPUCreateShaderTableEXT(GPUDevice                         *device,
                         const GPUShaderTableCreateInfoEXT *info,
                         GPUShaderTableEXT                **outTable) {
   GPUShaderTableEXT             *table;
-  Api                           *api;
+  GPUApi                        *api;
   const GPUShaderTableRecordEXT *record;
   GPUResult                      result;
   uint32_t                       i;
@@ -1412,7 +1412,7 @@ GPU_EXPORT
 void
 GPUDestroyShaderTableEXT(GPUShaderTableEXT *table) {
   GPURayTracingPipelineEXT *pipeline;
-  Api                      *api;
+  GPUApi                   *api;
 
   if (!table) {
     return;
@@ -1434,7 +1434,7 @@ GPURayTracingPassEncoderEXT*
 GPUBeginRayTracingPassEXT(GPUCommandBuffer *cmdb, const char *label) {
   GPURayTracingPassEncoderEXT *pass;
   GPUDevice                   *device;
-  Api                         *api;
+  GPUApi                      *api;
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return NULL;
@@ -1467,7 +1467,7 @@ GPU_EXPORT
 void
 GPUBindRayTracingPipelineEXT(GPURayTracingPassEncoderEXT *pass,
                              GPURayTracingPipelineEXT    *pipeline) {
-  Api    *api;
+  GPUApi *api;
 
   if (!pass || pass->ended || !pipeline
       || pipeline->device != pass->device || pipeline->_api != pass->_api
@@ -1505,7 +1505,7 @@ GPUBindRayTracingGroupEXT(GPURayTracingPassEncoderEXT *pass,
                           GPUBindGroup                *group,
                           uint32_t                     dynamicOffsetCount,
                           const uint32_t              *pDynamicOffsets) {
-  Api    *api;
+  GPUApi *api;
 
   if (!pass || pass->ended || !pass->hasPipeline || !group
       || groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS
@@ -1564,7 +1564,7 @@ GPUDispatchRaysEXT(GPURayTracingPassEncoderEXT *pass,
                    uint32_t                     width,
                    uint32_t                     height,
                    uint32_t                     depth) {
-  Api    *api;
+  GPUApi *api;
 
   if (!pass || pass->ended || !pass->hasPipeline || !table
       || table->device != pass->device || table->pipeline != pass->_pipeline

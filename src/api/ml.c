@@ -58,8 +58,8 @@ copyString(const char *text) {
 
 static int
 compareProfiles(const void *first, const void *second) {
-  const MLProfile *a;
-  const MLProfile *b;
+  const GPUMLProfile *a;
+  const GPUMLProfile *b;
 
   a = first;
   b = second;
@@ -67,7 +67,7 @@ compareProfiles(const void *first, const void *second) {
   return (a->desc.id > b->desc.id) - (a->desc.id < b->desc.id);
 }
 
-static MLProfile*
+static GPUMLProfile*
 findProfile(GPUMLModelEXT *model, uint32_t id) {
   uint32_t  low;
   uint32_t  high;
@@ -201,7 +201,7 @@ GPUCreateMLModelEXT(GPUDevice                     *device,
                     const GPUMLModelCreateInfoEXT *info,
                     GPUMLModelEXT                **outModel) {
   GPUMLModelEXT *model;
-  Api           *api;
+  GPUApi        *api;
   GPUResult      result;
 
   if (!outModel) {
@@ -251,7 +251,7 @@ GPUCreateMLModelEXT(GPUDevice                     *device,
 GPU_EXPORT
 void
 GPUDestroyMLModelEXT(GPUMLModelEXT *model) {
-  Api      *api;
+  GPUApi   *api;
   uint32_t  i;
 
   if (!model) {
@@ -280,8 +280,8 @@ GPUCreateMLPipelineEXT(GPUDevice                        *device,
                        const GPUMLPipelineCreateInfoEXT *info,
                        GPUMLPipelineEXT                **outPipeline) {
   GPUMLPipelineEXT *pipeline;
-  MLProfile        *profile;
-  Api              *api;
+  GPUMLProfile     *profile;
+  GPUApi           *api;
   GPUResult         result;
 
   if (!outPipeline) {
@@ -348,7 +348,7 @@ GPUCreateMLBindingsEXT(GPUDevice                        *device,
   const GPUMLBindingInfoEXT  *binding;
   GPUMLBindingsEXT           *bindings;
   GPUTensorEXT               *tensor;
-  Api                        *api;
+  GPUApi                     *api;
   GPUResult                   result;
   uint32_t                    i;
   uint32_t                    j;
@@ -469,7 +469,7 @@ GPUCreateMLBindingsEXT(GPUDevice                        *device,
 GPU_EXPORT
 void
 GPUDestroyMLBindingsEXT(GPUMLBindingsEXT *bindings) {
-  Api *api;
+  GPUApi *api;
 
   if (!bindings) {
     return;
@@ -488,7 +488,7 @@ GPU_EXPORT
 GPUResult
 GPUEncodeMLEXT(GPUCommandBuffer *cmdb, GPUMLBindingsEXT *bindings) {
   GPUDevice *device;
-  Api       *api;
+  GPUApi    *api;
 
   if (!cmdb || !bindings || cmdb->_submitted || cmdb->_activeEncoder
       || !(device = commandBufferDevice(cmdb)) || bindings->pipeline->model->device != device

@@ -22,7 +22,7 @@ enum {
 
 GPU_HIDE
 void
-vk_pipelineBarrier(DeviceVk                    *device,
+vk_pipelineBarrier(GPUDeviceVk                 *device,
                    VkCommandBuffer              command,
                    VkPipelineStageFlags         srcStages,
                    VkPipelineStageFlags         dstStages,

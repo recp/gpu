@@ -208,7 +208,7 @@ generate_scoped_mipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
 
 static int
 check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
-  Api                                   scopedApi;
+  GPUApi                                scopedApi;
   GPUDevice                             device              = {0};
   GPUQueue                              queue               = {0};
   GPUCommandBuffer                      cmdb                = {0};
@@ -220,7 +220,7 @@ check_copy_pass_device_dispatch(GPUDevice *activeDevice) {
   GPUIndirectTextureSubresourceEXT      subresource         = {0};
   GPUIndirectMemoryCopyInfoEXT          indirectInfo        = {0};
   GPUIndirectMemoryToTextureCopyInfoEXT indirectTextureInfo = {0};
-  Api                                  *api;
+  GPUApi                               *api;
   GPUTransferPassEncoder               *pass;
 
   if (!(api = deviceApi(activeDevice))) {

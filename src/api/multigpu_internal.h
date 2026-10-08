@@ -23,7 +23,7 @@ struct GPUDeviceInteropEXT {
   void      *_priv;
   GPUDevice *firstDevice;
   GPUDevice *secondDevice;
-  Api       *api;
+  GPUApi    *api;
 };
 
 #endif /* gpu_multigpu_internal_h */

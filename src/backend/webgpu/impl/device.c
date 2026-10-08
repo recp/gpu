@@ -26,7 +26,7 @@ typedef struct WebGPUAdapterRequest {
 typedef struct WebGPUDeviceRequest {
   GPUBackendDeviceRequestCallback  callback;
   GPUDevice                       *device;
-  DeviceWebGPU                    *native;
+  GPUDeviceWebGPU                 *native;
   void                            *userData;
   GPUQueueFlagBits                 queueBits;
   bool                             ready;
@@ -34,9 +34,9 @@ typedef struct WebGPUDeviceRequest {
 
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
 #  if defined(_MSC_VER)
-static __declspec(thread) WebGPUPipelineError    *webgpu_pipelineError;
+static __declspec(thread) GPUWebGPUPipelineError *webgpu_pipelineError;
 #  else
-static _Thread_local WebGPUPipelineError    *webgpu_pipelineError;
+static _Thread_local GPUWebGPUPipelineError *webgpu_pipelineError;
 #  endif
 #endif
 
@@ -197,7 +197,7 @@ webgpu_adapterReady(WGPURequestAdapterStatus status,
                     void                    *unused) {
   WGPUAdapterInfo       info = WGPU_ADAPTER_INFO_INIT;
   WebGPUAdapterRequest *request;
-  AdapterWebGPU        *native;
+  GPUAdapterWebGPU     *native;
   GPUAdapter           *adapter;
 
   GPU__UNUSED(message);
@@ -251,7 +251,7 @@ webgpu_requestAdapter(GPUInstance                     *instance,
                       void                            *userData) {
   WGPURequestAdapterCallbackInfo callbackInfo = WGPU_REQUEST_ADAPTER_CALLBACK_INFO_INIT;
   WGPURequestAdapterOptions      options      = WGPU_REQUEST_ADAPTER_OPTIONS_INIT;
-  InstanceWebGPU                *native;
+  GPUInstanceWebGPU             *native;
   WebGPUAdapterRequest          *request;
 
   native = webgpuInstance(instance);
@@ -293,7 +293,7 @@ webgpu_requestAdapter(GPUInstance                     *instance,
 
 static void
 webgpu_destroyAdapter(GPUAdapter *adapter) {
-  AdapterWebGPU    *native;
+  GPUAdapterWebGPU *native;
 
   native = webgpuAdapter(adapter);
 
@@ -312,7 +312,7 @@ static GPUResult
 webgpu_getAdapterProperties(const GPUAdapter     *adapter,
                             GPUAdapterProperties *properties) {
   WGPUAdapterInfo   info = WGPU_ADAPTER_INFO_INIT;
-  AdapterWebGPU    *native;
+  GPUAdapterWebGPU *native;
 
   native = webgpuAdapter(adapter);
 
@@ -483,7 +483,7 @@ webgpu_hasTier1Storage(GPUFormat format) {
 
 static bool
 webgpu_hasAdapterFeature(const GPUAdapter *adapter, WGPUFeatureName feature) {
-  AdapterWebGPU    *native;
+  GPUAdapterWebGPU *native;
 
   native = webgpuAdapter(adapter);
 
@@ -495,7 +495,7 @@ webgpu_hasAdapterFeature(const GPUAdapter *adapter, WGPUFeatureName feature) {
 static bool
 webgpu_hasWGSLLanguageFeature(const GPUAdapter           *adapter,
                               WGPUWGSLLanguageFeatureName feature) {
-  InstanceWebGPU    *native;
+  GPUInstanceWebGPU *native;
 
   native = adapter ? webgpuInstance(adapter->inst) : NULL;
 
@@ -647,7 +647,7 @@ webgpu_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
 
 static bool
 webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
-  AdapterWebGPU    *native;
+  GPUAdapterWebGPU *native;
 
   native = webgpuAdapter(adapter);
 
@@ -682,10 +682,10 @@ webgpu_supportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
 static bool
 webgpu_supportsSubgroupOperations(const GPUAdapter     *__restrict adapter,
                                   GPUShaderStageFlags              stage,
-                                  BackendSubgroupOperationFlags    operations) {
+                                  GPUBackendSubgroupOperationFlags operations) {
   const GPUShaderStageFlags              supportedStages     = GPU_SHADER_STAGE_FRAGMENT_BIT |
                                                                GPU_SHADER_STAGE_COMPUTE_BIT;
-  const BackendSubgroupOperationFlags    supportedOperations = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
+  const GPUBackendSubgroupOperationFlags supportedOperations = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
                                                                GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
                                                                GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
 
@@ -698,7 +698,7 @@ static void
 webgpu_getLimits(const GPUAdapter *adapter, GPULimits *limits) {
   WGPUAdapterInfo   info      = WGPU_ADAPTER_INFO_INIT;
   WGPULimits        webLimits = WGPU_LIMITS_INIT;
-  AdapterWebGPU    *native;
+  GPUAdapterWebGPU *native;
 
   native = webgpuAdapter(adapter);
 
@@ -735,7 +735,7 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
                    void                   *userData,
                    void                   *unused) {
   WebGPUDeviceRequest *request;
-  DeviceWebGPU        *native;
+  GPUDeviceWebGPU     *native;
   GPUDevice           *device;
   uint32_t             i;
   bool                 usable;
@@ -809,7 +809,7 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
 
 static GPUResult
 webgpu_requestDevice(GPUAdapter                     *adapter,
-                     const QueueCreateInfo           queueInfos[],
+                     const GPUQueueCreateInfo        queueInfos[],
                      uint32_t                        queueInfoCount,
                      uint64_t                        enabledFeatureMask,
                      GPUBackendDeviceRequestCallback callback,
@@ -818,7 +818,7 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   WGPUDeviceDescriptor          descriptor     = WGPU_DEVICE_DESCRIPTOR_INIT;
   WGPULimits                    requiredLimits = WGPU_LIMITS_INIT;
   WGPUFeatureName               requiredFeatures[22];
-  AdapterWebGPU                *native;
+  GPUAdapterWebGPU             *native;
   WebGPUDeviceRequest          *request;
   uint64_t                      supportedMask;
   GPUQueueFlagBits              queueBits;
@@ -972,7 +972,7 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
 
 static void
 webgpu_destroyDevice(GPUDevice *device) {
-  DeviceWebGPU        *native;
+  GPUDeviceWebGPU     *native;
   WebGPUDeviceRequest *request;
   uint32_t             i;
 
@@ -1017,7 +1017,7 @@ webgpu_destroyDevice(GPUDevice *device) {
 GPU_HIDE
 void
 webgpuBeginPipelineError(GPUDevice              *device,
-                            WebGPUPipelineError    *error) {
+                            GPUWebGPUPipelineError *error) {
   error->previous      = webgpu_pipelineError;
   error->device        = device;
   error->result        = GPU_OK;
@@ -1026,7 +1026,7 @@ webgpuBeginPipelineError(GPUDevice              *device,
 
 GPU_HIDE
 GPUResult
-webgpuEndPipelineError(WebGPUPipelineError    *error) {
+webgpuEndPipelineError(GPUWebGPUPipelineError *error) {
   webgpu_pipelineError = error->previous;
 
   /* report after the native call releases its error-sink lock; callbacks may reenter. */
@@ -1044,7 +1044,7 @@ webgpuEndPipelineError(WebGPUPipelineError    *error) {
 #endif
 
 void
-webgpu_initDevice(ApiDevice    *api) {
+webgpu_initDevice(GPUDeviceApi *api) {
   api->requestAdapter             = webgpu_requestAdapter;
   api->destroyAdapter             = webgpu_destroyAdapter;
   api->getAdapterProperties       = webgpu_getAdapterProperties;

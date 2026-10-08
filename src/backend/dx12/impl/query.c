@@ -72,7 +72,7 @@ dx12_createQuerySet(GPUDevice                   *device,
                     const GPUQuerySetCreateInfo *info,
                     GPUQuerySet                 *set) {
   D3D12_QUERY_HEAP_DESC desc = {0};
-  DeviceDX12           *deviceDX12;
+  GPUDeviceDX12        *deviceDX12;
   QuerySetDX12         *native;
   HRESULT               result;
 
@@ -129,7 +129,7 @@ dx12_writeTimestamp(GPUCommandBuffer *cmdb,
                     GPUQuerySet      *set,
                     uint32_t          queryIndex,
                     bool              beginningOfPass) {
-  CommandBufferDX12    *command;
+  GPUCommandBufferDX12 *command;
   QuerySetDX12         *native;
 
   GPU__UNUSED(beginningOfPass);
@@ -151,7 +151,7 @@ void
 dx12_beginOcclusionQuery(GPURenderPassEncoder *pass,
                          GPUQuerySet          *set,
                          uint32_t              queryIndex) {
-  RenderEncoderDX12    *encoder;
+  GPURenderEncoderDX12 *encoder;
   QuerySetDX12         *native;
 
   encoder = pass ? pass->_priv : NULL;
@@ -172,7 +172,7 @@ void
 dx12_endOcclusionQuery(GPURenderPassEncoder *pass,
                        GPUQuerySet          *set,
                        uint32_t              queryIndex) {
-  RenderEncoderDX12    *encoder;
+  GPURenderEncoderDX12 *encoder;
   QuerySetDX12         *native;
 
   encoder = pass ? pass->_priv : NULL;
@@ -212,7 +212,7 @@ void
 dx12_beginPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
                                   GPUQuerySet      *set,
                                   uint32_t          queryIndex) {
-  CommandBufferDX12    *command;
+  GPUCommandBufferDX12 *command;
   QuerySetDX12         *native;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -233,7 +233,7 @@ void
 dx12_endPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
                                 GPUQuerySet      *set,
                                 uint32_t          queryIndex) {
-  CommandBufferDX12    *command;
+  GPUCommandBufferDX12 *command;
   QuerySetDX12         *native;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -257,9 +257,9 @@ dx12_resolveQuerySet(GPUCommandBuffer *cmdb,
                      uint32_t          queryCount,
                      GPUBuffer        *dstBuffer,
                      uint64_t          dstOffset) {
-  CommandBufferDX12    *command;
+  GPUCommandBufferDX12 *command;
   QuerySetDX12         *native;
-  BufferDX12           *buffer;
+  GPUBufferDX12        *buffer;
   D3D12_QUERY_TYPE      queryType;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -302,7 +302,7 @@ dx12_resolveQuerySet(GPUCommandBuffer *cmdb,
 
 GPU_HIDE
 void
-dx12_initQuery(ApiCommandBuffer    *api) {
+dx12_initQuery(GPUCommandBufferApi *api) {
   api->createQuerySet               = dx12_createQuerySet;
   api->destroyQuerySet              = dx12_destroyQuerySet;
   api->writeTimestamp               = dx12_writeTimestamp;

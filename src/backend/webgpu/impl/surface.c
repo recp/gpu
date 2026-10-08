@@ -132,8 +132,8 @@ webgpu_getCapabilities(const GPUAdapter       *adapter,
                        GPUSurface             *surface,
                        GPUSurfaceCapabilities *outCaps) {
   WGPUSurfaceCapabilities capabilities = WGPU_SURFACE_CAPABILITIES_INIT;
-  AdapterWebGPU          *adapterNative;
-  SurfaceWebGPU          *surfaceNative;
+  GPUAdapterWebGPU       *adapterNative;
+  GPUSurfaceWebGPU       *surfaceNative;
   size_t                  formatIndex;
   size_t                  modeIndex;
   GPUFormat               format;
@@ -208,9 +208,9 @@ webgpu_getCapabilities(const GPUAdapter       *adapter,
 }
 
 static GPUSurface*
-webgpu_createSurface(Api                        *api,
+webgpu_createSurface(GPUApi                     *api,
                      GPUInstance                *instance,
-                     const SurfaceNativeInfo    *info) {
+                     const GPUSurfaceNativeInfo *info) {
   WGPUSurfaceDescriptor                         descriptor = WGPU_SURFACE_DESCRIPTOR_INIT;
 #if defined(__EMSCRIPTEN__)
   WGPUEmscriptenSurfaceSourceCanvasHTMLSelector canvas = WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
@@ -219,8 +219,8 @@ webgpu_createSurface(Api                        *api,
 #elif defined(_WIN32) || defined(WIN32)
   WGPUSurfaceSourceWindowsHWND                  window = WGPU_SURFACE_SOURCE_WINDOWS_HWND_INIT;
 #endif
-  InstanceWebGPU                               *instanceNative;
-  SurfaceWebGPU                                *native;
+  GPUInstanceWebGPU                            *instanceNative;
+  GPUSurfaceWebGPU                             *native;
   GPUSurface                                   *surface;
 
   GPU__UNUSED(api);
@@ -297,7 +297,7 @@ webgpu_createSurface(Api                        *api,
 
 static void
 webgpu_destroySurface(GPUSurface *surface) {
-  SurfaceWebGPU    *native;
+  GPUSurfaceWebGPU *native;
 
   native = webgpuSurface(surface);
 
@@ -354,7 +354,7 @@ webgpuPresentMode(GPUPresentMode mode) {
 }
 
 void
-webgpu_initSurface(ApiSurface    *api) {
+webgpu_initSurface(GPUSurfaceApi *api) {
   api->createSurface   = webgpu_createSurface;
   api->getCapabilities = webgpu_getCapabilities;
   api->destroySurface  = webgpu_destroySurface;

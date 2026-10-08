@@ -17,7 +17,7 @@
 #include "../common.h"
 
 static GPUInstance*
-cuda_createInstance(Api                         *api,
+cuda_createInstance(GPUApi                      *api,
                     const GPUInstanceCreateInfo *info) {
   GPUInstance *instance;
 
@@ -33,13 +33,13 @@ cuda_createInstance(Api                         *api,
 }
 
 static void
-cuda_destroyInstance(Api    *api, GPUInstance *instance) {
+cuda_destroyInstance(GPUApi *api, GPUInstance *instance) {
   GPU__UNUSED(api);
   free(instance);
 }
 
 void
-cuda_initInstance(ApiInstance    *api) {
+cuda_initInstance(GPUInstanceApi *api) {
   api->createInstance  = cuda_createInstance;
   api->destroyInstance = cuda_destroyInstance;
 }

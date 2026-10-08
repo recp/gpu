@@ -33,10 +33,10 @@ typedef struct DeviceInteropVk {
 } DeviceInteropVk;
 
 static void
-vk_destroySharedBufferState(BufferVk    *state);
+vk_destroySharedBufferState(GPUBufferVk *state);
 
 static void
-vk_destroySharedTextureState(TextureVk    *state);
+vk_destroySharedTextureState(GPUTextureVk *state);
 
 static bool
 vk_samePhysicalDevice(const GPUDevice *first, const GPUDevice *second) {
@@ -78,11 +78,11 @@ vk_externalHandleTypes(VkExternalMemoryHandleTypeFlagBits    *memory,
 
 static GPUResult
 vk_interopDevices(GPUDeviceInteropEXT *interop,
-                  DeviceVk           **outFirst,
-                  DeviceVk           **outSecond,
+                  GPUDeviceVk        **outFirst,
+                  GPUDeviceVk        **outSecond,
                   DeviceInteropVk    **outNative) {
-  DeviceVk           *first;
-  DeviceVk           *second;
+  GPUDeviceVk        *first;
+  GPUDeviceVk        *second;
   DeviceInteropVk    *native;
 
   if (!interop || !interop->firstDevice || !interop->secondDevice
@@ -115,8 +115,8 @@ static GPUResult
 vk_createDeviceInterop(GPUDevice           *firstDevice,
                        GPUDevice           *secondDevice,
                        GPUDeviceInteropEXT *interop) {
-  DeviceVk           *first;
-  DeviceVk           *second;
+  GPUDeviceVk        *first;
+  GPUDeviceVk        *second;
   DeviceInteropVk    *native;
 
   if (!firstDevice || !secondDevice || !interop
@@ -237,8 +237,8 @@ vk_externalBufferPlan(GPUDevice                          *device,
   VkPhysicalDeviceExternalBufferInfo    externalInfo       = {0};
   VkExternalBufferProperties            externalProperties = {0};
   VkExternalMemoryBufferCreateInfo      externalCreate     = {0};
-  DeviceVk                             *native;
-  AdapterVk                            *adapter;
+  GPUDeviceVk                          *native;
+  GPUAdapterVk                         *adapter;
   VkBuffer                              buffer;
   VkExternalSemaphoreHandleTypeFlagBits semaphoreHandleType;
   GPUResult                             result;
@@ -343,7 +343,7 @@ static GPUResult
 vk_createExternalBuffer(GPUDevice                 *device,
                         const GPUBufferCreateInfo *info,
                         GPUBuffer                **outBuffer,
-                        ExternalMemoryExport      *outExport) {
+                        GPUExternalMemoryExport   *outExport) {
   VkBufferCreateInfo                 createInfo     = {0};
   VkExternalMemoryBufferCreateInfo   externalCreate = {0};
   VkExportMemoryAllocateInfo         exportInfo     = {0};
@@ -351,8 +351,8 @@ vk_createExternalBuffer(GPUDevice                 *device,
   VkMemoryAllocateFlagsInfo          flagsInfo      = {0};
   VkMemoryAllocateInfo               allocationInfo = {0};
   VkMemoryRequirements               requirements;
-  BufferVk                           state          = {0};
-  DeviceVk                          *native;
+  GPUBufferVk                        state          = {0};
+  GPUDeviceVk                       *native;
   VkExternalMemoryHandleTypeFlagBits handleType;
   VkMemoryPropertyFlags              memoryFlags;
   uint32_t                           memoryTypeIndex;
@@ -516,8 +516,8 @@ vk_externalTexturePlan(GPUDevice                          *device,
   VkExternalImageFormatProperties         externalProperties = {0};
   VkImageFormatProperties2                properties         = {0};
   VkExternalMemoryImageCreateInfo         externalCreate     = {0};
-  DeviceVk                               *native;
-  AdapterVk                              *adapter;
+  GPUDeviceVk                            *native;
+  GPUAdapterVk                           *adapter;
   VkImage                                 image;
   VkExternalSemaphoreHandleTypeFlagBits   semaphoreHandleType;
   GPUResult                               result;
@@ -632,15 +632,15 @@ static GPUResult
 vk_createExternalTexture(GPUDevice                  *device,
                          const GPUTextureCreateInfo *info,
                          GPUTexture                **outTexture,
-                         ExternalMemoryExport       *outExport) {
+                         GPUExternalMemoryExport    *outExport) {
   VkImageCreateInfo                  createInfo     = {0};
   VkExternalMemoryImageCreateInfo    externalCreate = {0};
   VkExportMemoryAllocateInfo         exportInfo     = {0};
   VkMemoryDedicatedAllocateInfo      dedicatedInfo  = {0};
   VkMemoryAllocateInfo               allocationInfo = {0};
   VkMemoryRequirements               requirements;
-  TextureVk                          state          = {0};
-  DeviceVk                          *native;
+  GPUTextureVk                       state          = {0};
+  GPUDeviceVk                       *native;
   VkExternalMemoryHandleTypeFlagBits handleType;
   VkMemoryPropertyFlags              memoryFlags;
   uint32_t                           memoryTypeIndex;
@@ -804,10 +804,10 @@ vk_sharedBufferPlan(GPUDeviceInteropEXT       *interop,
   VkExternalBufferProperties         externalProperties = {0};
   VkExternalMemoryBufferCreateInfo   firstExternal      = {0};
   VkExternalMemoryBufferCreateInfo   secondExternal     = {0};
-  DeviceVk                          *first;
-  DeviceVk                          *second;
+  GPUDeviceVk                       *first;
+  GPUDeviceVk                       *second;
   DeviceInteropVk                   *native;
-  AdapterVk                         *adapter;
+  GPUAdapterVk                      *adapter;
   VkBuffer                           firstBuffer;
   VkBuffer                           secondBuffer;
   uint32_t                           memoryTypes;
@@ -950,7 +950,7 @@ vk_getSharedBufferRequirements(GPUDeviceInteropEXT       *interop,
 }
 
 static void
-vk_destroySharedBufferState(BufferVk    *state) {
+vk_destroySharedBufferState(GPUBufferVk *state) {
   if (!state || !state->device) {
     return;
   }
@@ -967,8 +967,8 @@ vk_destroySharedBufferState(BufferVk    *state) {
 }
 
 static GPUResult
-vk_allocateSharedMemory(DeviceVk                   *first,
-                        DeviceVk                   *second,
+vk_allocateSharedMemory(GPUDeviceVk                *first,
+                        GPUDeviceVk                *second,
                         DeviceInteropVk            *interop,
                         const VkMemoryRequirements *requirements,
                         uint32_t                    memoryTypeIndex,
@@ -1125,10 +1125,10 @@ vk_createSharedBuffer(GPUDeviceInteropEXT       *interop,
   VkExternalMemoryBufferCreateInfo secondExternal   = {0};
   VkMemoryRequirements             firstRequirements;
   VkMemoryRequirements             secondRequirements;
-  BufferVk                         firstState       = {0};
-  BufferVk                         secondState      = {0};
-  DeviceVk                        *first;
-  DeviceVk                        *second;
+  GPUBufferVk                      firstState       = {0};
+  GPUBufferVk                      secondState      = {0};
+  GPUDeviceVk                     *first;
+  GPUDeviceVk                     *second;
   DeviceInteropVk                 *native;
   VkMemoryPropertyFlags            memoryFlags;
   uint32_t                         memoryTypes;
@@ -1256,10 +1256,10 @@ vk_sharedTexturePlan(GPUDeviceInteropEXT        *interop,
   VkImageFormatProperties2                properties         = {0};
   VkExternalMemoryImageCreateInfo         firstExternal      = {0};
   VkExternalMemoryImageCreateInfo         secondExternal     = {0};
-  DeviceVk                               *first;
-  DeviceVk                               *second;
+  GPUDeviceVk                            *first;
+  GPUDeviceVk                            *second;
   DeviceInteropVk                        *native;
-  AdapterVk                              *adapter;
+  GPUAdapterVk                           *adapter;
   VkImage                                 firstImage;
   VkImage                                 secondImage;
   VkImageAspectFlags                      secondAspect;
@@ -1419,7 +1419,7 @@ vk_getSharedTextureRequirements(GPUDeviceInteropEXT        *interop,
 }
 
 static void
-vk_destroySharedTextureState(TextureVk    *state) {
+vk_destroySharedTextureState(GPUTextureVk *state) {
   if (!state || !state->device) {
     return;
   }
@@ -1447,10 +1447,10 @@ vk_createSharedTexture(GPUDeviceInteropEXT        *interop,
   VkExternalMemoryImageCreateInfo secondExternal   = {0};
   VkMemoryRequirements            firstRequirements;
   VkMemoryRequirements            secondRequirements;
-  TextureVk                       firstState       = {0};
-  TextureVk                       secondState      = {0};
-  DeviceVk                       *first;
-  DeviceVk                       *second;
+  GPUTextureVk                    firstState       = {0};
+  GPUTextureVk                    secondState      = {0};
+  GPUDeviceVk                    *first;
+  GPUDeviceVk                    *second;
   DeviceInteropVk                *native;
   VkMemoryPropertyFlags           memoryFlags;
   uint32_t                        memoryTypes;
@@ -1585,12 +1585,12 @@ vk_createSharedSemaphore(GPUDeviceInteropEXT          *interop,
   VkSemaphoreTypeCreateInfo             secondType         = {0};
   VkSemaphoreCreateInfo                 firstInfo          = {0};
   VkSemaphoreCreateInfo                 secondInfo         = {0};
-  DeviceVk                             *first;
-  DeviceVk                             *second;
+  GPUDeviceVk                          *first;
+  GPUDeviceVk                          *second;
   DeviceInteropVk                      *interopVk;
-  AdapterVk                            *adapter;
-  SemaphoreVk                          *firstState;
-  SemaphoreVk                          *secondState;
+  GPUAdapterVk                         *adapter;
+  GPUSemaphoreVk                       *firstState;
+  GPUSemaphoreVk                       *secondState;
   VkResult                              result;
   GPUResult                             interopResult;
 
@@ -1758,15 +1758,15 @@ static GPUResult
 vk_createExternalSemaphore(GPUDevice                    *device,
                            const GPUSemaphoreCreateInfo *info,
                            GPUSemaphore                 *semaphore,
-                           ExternalSemaphoreExport      *outExport) {
+                           GPUExternalSemaphoreExport   *outExport) {
   VkPhysicalDeviceExternalSemaphoreInfo externalInfo       = {0};
   VkExternalSemaphoreProperties         externalProperties = {0};
   VkSemaphoreTypeCreateInfo             typeInfo           = {0};
   VkExportSemaphoreCreateInfo           exportInfo         = {0};
   VkSemaphoreCreateInfo                 createInfo         = {0};
-  DeviceVk                             *native;
-  AdapterVk                            *adapter;
-  SemaphoreVk                          *state;
+  GPUDeviceVk                          *native;
+  GPUAdapterVk                         *adapter;
+  GPUSemaphoreVk                       *state;
   VkExternalMemoryHandleTypeFlagBits    memoryHandleType;
   VkExternalSemaphoreHandleTypeFlagBits handleType;
 
@@ -1881,12 +1881,12 @@ vk_encodeSharedBuffers(GPUCommandBuffer               *cmdb,
                        const GPUSharedBarrierBatchEXT *barriers,
                        bool                            acquire) {
   VkBufferMemoryBarrier            nativeBarriers[VK_SHARED_BARRIER_CHUNK_SIZE];
-  CommandBufferVk                 *command;
-  DeviceVk                        *device;
-  QueueVk                         *queue;
+  GPUCommandBufferVk              *command;
+  GPUDeviceVk                     *device;
+  GPUQueueVk                      *queue;
   const GPUSharedBufferBarrierEXT *shared;
   GPUBuffer                       *buffer;
-  BufferVk                        *bufferVk;
+  GPUBufferVk                     *bufferVk;
   VkBufferMemoryBarrier           *native;
   VkPipelineStageFlags             srcStages;
   VkPipelineStageFlags             dstStages;
@@ -1964,12 +1964,12 @@ static GPUResult
 vk_encodeSharedTextures(GPUCommandBuffer               *cmdb,
                         const GPUSharedBarrierBatchEXT *barriers,
                         bool                            acquire) {
-  CommandBufferVk                  *command;
-  DeviceVk                         *device;
-  QueueVk                          *queue;
+  GPUCommandBufferVk               *command;
+  GPUDeviceVk                      *device;
+  GPUQueueVk                       *queue;
   const GPUSharedTextureBarrierEXT *shared;
   GPUTexture                       *texture;
-  TextureVk                        *textureVk;
+  GPUTextureVk                     *textureVk;
   VkPipelineStageFlags              srcStages;
   VkPipelineStageFlags              dstStages;
   uint32_t                          i;
@@ -2078,8 +2078,8 @@ vk_encodeSharedBarriers(GPUDeviceInteropEXT            *interop,
                         GPUCommandBuffer               *cmdb,
                         const GPUSharedBarrierBatchEXT *barriers,
                         bool                            acquire) {
-  DeviceVk           *first;
-  DeviceVk           *second;
+  GPUDeviceVk        *first;
+  GPUDeviceVk        *second;
   DeviceInteropVk    *native;
   GPUResult           result;
 
@@ -2138,7 +2138,7 @@ vk_encodeExternalAcquire(GPUCommandBuffer               *cmdb,
 
 GPU_HIDE
 void
-vk_initMultiGPU(ApiMultiGPU    *api) {
+vk_initMultiGPU(GPUMultiGPUApi *api) {
   api->createInterop          = vk_createDeviceInterop;
   api->destroyInterop         = vk_destroyDeviceInterop;
   api->getBufferRequirements  = vk_getSharedBufferRequirements;

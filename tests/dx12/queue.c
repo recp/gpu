@@ -151,10 +151,10 @@ frame_time_roundtrip(GPUDevice *device,
   GPUBufferCreateInfo     bufferInfo;
   GPUBufferCopyRegion     copyRegion;
   GPUQueueSubmitInfo      submitInfo;
-  CommandBufferDX12      *cmdbDX12;
+  GPUCommandBufferDX12   *cmdbDX12;
   GPUTransferPassEncoder *copyPass;
-  DeviceDX12             *deviceDX12;
-  QueueDX12              *queueDX12;
+  GPUDeviceDX12          *deviceDX12;
+  GPUQueueDX12           *queueDX12;
   GPUCommandBuffer       *cmdb;
   GPUBuffer              *src;
   GPUBuffer              *dst;
@@ -270,7 +270,7 @@ submit_error_propagates(GPUQueue *queue) {
   GPUCommandBuffer     *buffers[1];
   GPUQueueSubmitInfo    submitInfo;
   GPUCommandBuffer     *cmdb;
-  CommandBufferDX12    *native;
+  GPUCommandBufferDX12 *native;
 
   memset(&probe, 0, sizeof(probe));
   cmdb = NULL;
@@ -301,13 +301,13 @@ buffer_transfers_reuse(GPUQueue  *queue,
                        GPUDevice *device,
                        GPUFence  *queueFence) {
   GPUBufferCreateInfo  bufferInfo;
-  TransferSlotDX12     slots[GPU_DX12_TRANSFER_SLOT_COUNT];
-  QueueDX12           *native;
+  GPUTransferSlotDX12  slots[GPU_DX12_TRANSFER_SLOT_COUNT];
+  GPUQueueDX12        *native;
   GPUBuffer           *buffer;
   ID3D12Fence         *fence;
   ID3D12Resource      *readback;
   HANDLE               event;
-  TransferSlotDX12    *slot;
+  GPUTransferSlotDX12 *slot;
   uint64_t             readbackCapacity;
   uint32_t             value;
   uint32_t             copied;
@@ -428,12 +428,12 @@ texture_transfers_reuse(GPUQueue  *queue,
                         GPUFence  *queueFence) {
   GPUTextureCreateInfo  textureInfo;
   GPUTextureWriteRegion writeRegion;
-  TransferSlotDX12      slots[GPU_DX12_TRANSFER_SLOT_COUNT];
-  QueueDX12            *native;
+  GPUTransferSlotDX12   slots[GPU_DX12_TRANSFER_SLOT_COUNT];
+  GPUQueueDX12         *native;
   GPUTexture           *texture;
   ID3D12Fence          *fence;
   HANDLE                event;
-  TransferSlotDX12     *slot;
+  GPUTransferSlotDX12  *slot;
   uint32_t              warmupWrites;
   uint32_t              uploadIndex;
   uint32_t              snapshotIndex;

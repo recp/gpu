@@ -77,7 +77,7 @@ frameClockElapsedMs(const GPUFrame *frame) {
 GPU_EXPORT
 GPUFrame*
 GPUBeginFrame(GPUSwapchain *swapchain) {
-  Api       *api;
+  GPUApi    *api;
   GPUDevice *device;
   GPUFrame  *frame;
   uint32_t   frameIndex;
@@ -140,7 +140,7 @@ GPUFrameGetTargetView(GPUFrame *frame) {
 GPU_EXPORT
 void
 GPUEndFrame(GPUFrame *frame) {
-  Api    *api;
+  GPUApi *api;
 
   if (!frame)
     return;

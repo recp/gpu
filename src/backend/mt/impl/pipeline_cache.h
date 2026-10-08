@@ -19,23 +19,23 @@
 
 GPU_HIDE
 GPUResult
-mt_initPipelineCompiler(DeviceMT    *device);
+mt_initPipelineCompiler(GPUDeviceMT *device);
 
 GPU_HIDE
 void
-mt_destroyPipelineCompiler(DeviceMT    *device);
+mt_destroyPipelineCompiler(GPUDeviceMT *device);
 
 GPU_HIDE
 id
 mt_compileRenderPipeline4(GPUPipelineCache *cache,
-                          DeviceMT         *device,
+                          GPUDeviceMT      *device,
                           id                descriptor,
                           NSError         **error);
 
 GPU_HIDE
 id
 mt_compileComputePipeline4(GPUPipelineCache *cache,
-                           DeviceMT         *device,
+                           GPUDeviceMT      *device,
                            id                descriptor,
                            NSError         **error);
 

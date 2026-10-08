@@ -19,25 +19,25 @@
 
 #include "../common.h"
 
-typedef struct MLProfile {
+typedef struct GPUMLProfile {
   void                 *_priv;
   GPUMLShapeProfileEXT  desc;
   GPUMLPipelineInfoEXT  info;
-} MLProfile;
+} GPUMLProfile;
 
 struct GPUMLModelEXT {
-  void      *_priv;
-  GPUDevice *device;
-  MLProfile *profiles;
-  char      *label;
-  char      *path;
-  char      *functionName;
-  uint32_t   profileCount;
+  void         *_priv;
+  GPUDevice    *device;
+  GPUMLProfile *profiles;
+  char         *label;
+  char         *path;
+  char         *functionName;
+  uint32_t      profileCount;
 };
 
 struct GPUMLPipelineEXT {
   GPUMLModelEXT *model;
-  MLProfile     *profile;
+  GPUMLProfile  *profile;
   char          *label;
 };
 

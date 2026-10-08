@@ -55,8 +55,8 @@ enum {
 /* the public handle, cache key, and binding list have one lifetime. */
 typedef struct BindGroupStorage {
   GPUBindGroup            group;
-  BindGroupPriv           priv;
-  BindGroupBindingPriv    bindings[];
+  GPUBindGroupPriv        priv;
+  GPUBindGroupBindingPriv bindings[];
 } BindGroupStorage;
 
 /* cache entries intern live groups without extending resource lifetimes. */
@@ -79,7 +79,7 @@ _Static_assert((GPU_BIND_GROUP_CACHE_CAPACITY &
 
 typedef struct BindRenderContext {
   GPURenderPassEncoder *pass;
-  ApiRCE               *api;
+  GPURCEApi            *api;
 } BindRenderContext;
 
 static const uint32_t gpu_metalBindingLimits[] = {
@@ -103,24 +103,24 @@ static const GPUShaderStageFlags gpu_pipelineStages[] = {
   GPU_SHADER_STAGE_CALLABLE_BIT
 };
 
-static const BindKind    gpu_pipelineKinds[] = {
+static const GPUBindKind gpu_pipelineKinds[] = {
   GPUBindKindBuffer,
   GPUBindKindTexture,
   GPUBindKindSampler
 };
 
-static BindKind
-metalSlotKind(BindKind    kind);
+static GPUBindKind
+metalSlotKind(GPUBindKind kind);
 
-static BindKind
+static GPUBindKind
 layoutEntryKind(const GPUBindGroupLayoutEntry *entry);
 
-static BindGroupLayoutPriv*
+static GPUBindGroupLayoutPriv*
 gpu_layoutPriv(const GPUBindGroupLayout *layout) {
   return layout ? layout->_priv : NULL;
 }
 
-static BindGroupPriv*
+static GPUBindGroupPriv*
 gpu_groupPriv(GPUBindGroup *group) {
   return group ? group->_priv : NULL;
 }
@@ -164,8 +164,8 @@ bindGroupHashBytes(uint64_t hash, const void *data, size_t size) {
 }
 
 static uint64_t
-bindGroupHash(const BindGroupPriv    *priv) {
-  const BindGroupBindingPriv    *binding;
+bindGroupHash(const GPUBindGroupPriv *priv) {
+  const GPUBindGroupBindingPriv *binding;
   uintptr_t                      layout;
   uint64_t                       hash;
   uintptr_t                      resource;
@@ -214,10 +214,10 @@ bindGroupHash(const BindGroupPriv    *priv) {
 }
 
 static bool
-bindGroupPrivsEqual(const BindGroupPriv    *a,
-                    const BindGroupPriv    *b) {
-  const BindGroupBindingPriv    *aBinding;
-  const BindGroupBindingPriv    *bBinding;
+bindGroupPrivsEqual(const GPUBindGroupPriv *a,
+                    const GPUBindGroupPriv *b) {
+  const GPUBindGroupBindingPriv *aBinding;
+  const GPUBindGroupBindingPriv *bBinding;
   uint32_t                       i;
 
   if (!a || !b || a->hash != b->hash
@@ -274,7 +274,7 @@ bindGroupPrivsEqual(const BindGroupPriv    *a,
 
 static GPUBindGroup*
 bindGroupCacheFind(GPUDevice              *device,
-                   const BindGroupPriv    *candidate) {
+                   const GPUBindGroupPriv *candidate) {
   BindGroupCache         *cache;
   BindGroupCacheEntry    *entry;
   GPUBindGroup           *result;
@@ -305,7 +305,7 @@ static GPUBindGroup*
 bindGroupCacheStore(GPUDevice *device, GPUBindGroup *candidate) {
   BindGroupCache         *cache;
   BindGroupCacheEntry    *entry;
-  BindGroupPriv          *priv;
+  GPUBindGroupPriv       *priv;
   GPUBindGroup           *result;
 
   cache  = bindGroupCache(device);
@@ -342,7 +342,7 @@ static bool
 releaseBindGroup(GPUBindGroup *group) {
   BindGroupCache         *cache;
   BindGroupCacheEntry    *entry;
-  BindGroupPriv          *priv;
+  GPUBindGroupPriv       *priv;
   bool                    destroy;
 
   if (!group) {
@@ -377,7 +377,7 @@ releaseBindGroup(GPUBindGroup *group) {
   return destroy;
 }
 
-static PipelineLayoutPriv*
+static GPUPipelineLayoutPriv*
 gpu_pipelineLayoutPriv(GPUPipelineLayout *layout) {
   return layout ? layout->_priv : NULL;
 }
@@ -398,8 +398,8 @@ static GPU_INLINE int
 gpu_pipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
                                    uint32_t           groupIndex,
                                    GPUBindGroup      *group) {
-  PipelineLayoutPriv    *pipelinePriv;
-  BindGroupPriv         *groupPriv;
+  GPUPipelineLayoutPriv *pipelinePriv;
+  GPUBindGroupPriv      *groupPriv;
 
   pipelinePriv = gpu_pipelineLayoutPriv(pipelineLayout);
   groupPriv    = gpu_groupPriv(group);
@@ -470,7 +470,7 @@ visibilityIsValid(GPUShaderStageFlags visibility) {
 }
 
 static int
-kindFromBindingType(GPUBindingType type, BindKind    *outKind) {
+kindFromBindingType(GPUBindingType type, GPUBindKind *outKind) {
   if (!outKind) {
     return 0;
   }
@@ -499,9 +499,9 @@ kindFromBindingType(GPUBindingType type, BindKind    *outKind) {
   }
 }
 
-static BindKind
+static GPUBindKind
 layoutEntryKind(const GPUBindGroupLayoutEntry *entry) {
-  BindKind    kind;
+  GPUBindKind kind;
 
   if (!entry || !kindFromBindingType(entry->bindingType, &kind)) {
     return GPUBindKindCount;
@@ -513,7 +513,7 @@ layoutEntryKind(const GPUBindGroupLayoutEntry *entry) {
 static int
 normalizeLayoutEntry(const GPUBindGroupLayoutEntry *src,
                      GPUBindGroupLayoutEntry       *dst) {
-  BindKind    kind;
+  GPUBindKind kind;
 
   if (!src || !dst) {
     return 0;
@@ -601,7 +601,7 @@ validateLayoutEntries(const GPUBindGroupLayoutEntry *entries,
                       uint32_t                       count,
                       bool                           bindless) {
   uint32_t    i;
-  BindKind    kind;
+  GPUBindKind kind;
   bool        hasResourceArray;
 
   if (!entries && count > 0) {
@@ -727,7 +727,7 @@ bindlessLayoutEnabled(GPUDevice                          *device,
 static int
 bindGroupEntryHasResource(const GPUBindGroupLayoutEntry *layoutEntry,
                           const GPUBindGroupEntry       *entry) {
-  BindKind    kind;
+  GPUBindKind kind;
 
   if (!layoutEntry) {
     return 0;
@@ -760,7 +760,7 @@ static int
 bindGroupEntryMatchesDevice(GPUDevice                     *device,
                             const GPUBindGroupLayoutEntry *layoutEntry,
                             const GPUBindGroupEntry       *entry) {
-  BindKind    kind;
+  GPUBindKind kind;
 
   if (!device || !layoutEntry || !entry) {
     return 0;
@@ -948,7 +948,7 @@ bindGroupTextureViewValid(const GPUBindGroupLayoutEntry *layoutEntry,
 static int
 bindGroupEntryMatchesLayout(const GPUBindGroupLayoutEntry *layoutEntry,
                             const GPUBindGroupEntry       *entry) {
-  BindKind    layoutKind;
+  GPUBindKind layoutKind;
 
   if (!layoutEntry || !entry
       || entry->binding != layoutEntry->binding
@@ -1013,7 +1013,7 @@ bindGroupLayoutEntryNeedsBinding(const GPUBindGroupLayoutEntry *entry) {
 }
 
 static int
-bindGroupRuntimeCount(const BindGroupLayoutPriv    *layout,
+bindGroupRuntimeCount(const GPUBindGroupLayoutPriv *layout,
                       uint32_t                     *outCount) {
   uint32_t count;
   uint32_t i;
@@ -1042,7 +1042,7 @@ bindGroupRuntimeCount(const BindGroupLayoutPriv    *layout,
 }
 
 static int
-bindGroupRuntimeBase(const BindGroupLayoutPriv    *layout,
+bindGroupRuntimeBase(const GPUBindGroupLayoutPriv *layout,
                      uint32_t                      layoutEntryIndex,
                      uint32_t                     *outBase) {
   uint32_t base;
@@ -1072,7 +1072,7 @@ bindGroupRuntimeBase(const BindGroupLayoutPriv    *layout,
 }
 
 static int
-bindGroupDynamicBase(const BindGroupLayoutPriv    *layout,
+bindGroupDynamicBase(const GPUBindGroupLayoutPriv *layout,
                      uint32_t                      binding,
                      uint32_t                     *outBase) {
   const GPUBindGroupLayoutEntry *entry;
@@ -1105,7 +1105,7 @@ bindGroupDynamicBase(const BindGroupLayoutPriv    *layout,
 }
 
 static GPUResult
-validateBindGroupEntries(const BindGroupLayoutPriv    *layoutPriv,
+validateBindGroupEntries(const GPUBindGroupLayoutPriv *layoutPriv,
                          const GPUBindGroupEntry      *entries,
                          uint32_t                      count,
                          bool                          allowPartial) {
@@ -1252,11 +1252,11 @@ gpu_createBindGroupLayout(GPUDevice                          *device,
                           const uint32_t                     *backendBindings,
                           GPUBindGroupLayout                **outLayout) {
   GPUBindGroupLayout            *layout;
-  BindGroupLayoutPriv           *priv;
-  const BindGroupLayoutPriv     *sourcePriv;
+  GPUBindGroupLayoutPriv        *priv;
+  const GPUBindGroupLayoutPriv  *sourcePriv;
   const GPUBindGroupLayout      *sourceLayout;
   const GPUBindGroupLayoutEntry *entries;
-  Api                           *api;
+  GPUApi                        *api;
   GPUResult                      result;
   uint32_t                       count;
   uint32_t                       i;
@@ -1420,7 +1420,7 @@ layoutEntryUsesStage(GPUShaderStageFlags visibility,
 }
 
 static void
-clearPipelineBindings(PipelineLayoutPriv    *priv) {
+clearPipelineBindings(GPUPipelineLayoutPriv *priv) {
   uint32_t i;
 
   if (!priv || !priv->backendBindings) {
@@ -1436,11 +1436,11 @@ clearPipelineBindings(PipelineLayoutPriv    *priv) {
 }
 
 static int
-pipelineSlotIsUsed(const PipelineLayoutPriv    *priv,
-                   BindKind                     kind,
+pipelineSlotIsUsed(const GPUPipelineLayoutPriv *priv,
+                   GPUBindKind                  kind,
                    uint32_t                     slot,
                    GPUShaderStageFlags          visibility) {
-  BindGroupLayoutPriv    *layout;
+  GPUBindGroupLayoutPriv *layout;
   uint32_t                groupIndex;
   uint32_t                entryIndex;
   uint32_t                base;
@@ -1477,8 +1477,8 @@ pipelineSlotIsUsed(const PipelineLayoutPriv    *priv,
 }
 
 static int
-pipelineRangeIsUsed(const PipelineLayoutPriv    *priv,
-                    BindKind                     kind,
+pipelineRangeIsUsed(const GPUPipelineLayoutPriv *priv,
+                    GPUBindKind                  kind,
                     uint32_t                     firstSlot,
                     uint32_t                     slotCount,
                     GPUShaderStageFlags          visibility) {
@@ -1501,7 +1501,7 @@ pipelineRangeIsUsed(const PipelineLayoutPriv    *priv,
 }
 
 static uint32_t
-metalBindingLimit(BindKind    kind) {
+metalBindingLimit(GPUBindKind kind) {
   if (kind < GPUBindKindBuffer
       || kind > GPUBindKindAccelerationStructure) {
     return 0u;
@@ -1510,18 +1510,18 @@ metalBindingLimit(BindKind    kind) {
   return gpu_metalBindingLimits[kind];
 }
 
-static BindKind
-metalSlotKind(BindKind    kind) {
+static GPUBindKind
+metalSlotKind(GPUBindKind kind) {
   return kind == GPUBindKindAccelerationStructure
            ? GPUBindKindBuffer
            : kind;
 }
 
 static int
-pipelineBindingsAreUnique(const PipelineLayoutPriv    *priv) {
-  BindGroupLayoutPriv           *layoutA;
+pipelineBindingsAreUnique(const GPUPipelineLayoutPriv *priv) {
+  GPUBindGroupLayoutPriv        *layoutA;
   const GPUBindGroupLayoutEntry *a;
-  BindGroupLayoutPriv           *layoutB;
+  GPUBindGroupLayoutPriv        *layoutB;
   const GPUBindGroupLayoutEntry *b;
   uint32_t                       groupA;
   uint32_t                       entryA;
@@ -1598,8 +1598,8 @@ pipelineBindingsAreUnique(const PipelineLayoutPriv    *priv) {
 }
 
 static GPUResult
-compileDX12PipelineBindings(PipelineLayoutPriv    *priv) {
-  BindGroupLayoutPriv           *layout;
+compileDX12PipelineBindings(GPUPipelineLayoutPriv *priv) {
+  GPUBindGroupLayoutPriv        *layout;
   const GPUBindGroupLayoutEntry *entry;
   uint32_t                       groupIndex;
   uint32_t                       registerClass;
@@ -1692,12 +1692,12 @@ compileDX12PipelineBindings(PipelineLayoutPriv    *priv) {
 }
 
 static GPUResult
-compilePipelineBindings(PipelineLayoutPriv    *priv,
+compilePipelineBindings(GPUPipelineLayoutPriv *priv,
                         GPUBackend             backend) {
-  BindGroupLayoutPriv           *layout;
+  GPUBindGroupLayoutPriv        *layout;
   const GPUBindGroupLayoutEntry *entry;
-  BindGroupLayoutPriv           *mappedLayout;
-  BindGroupLayoutPriv           *candidateLayout;
+  GPUBindGroupLayoutPriv        *mappedLayout;
+  GPUBindGroupLayoutPriv        *candidateLayout;
   const GPUBindGroupLayoutEntry *candidateEntry;
   uint32_t                       backendBinding;
   uint32_t                       selectedGroup;
@@ -1870,7 +1870,7 @@ compilePipelineBindings(PipelineLayoutPriv    *priv,
 
 static int
 libraryUsesWGSLStaticSamplers(const GPUShaderLibrary *library) {
-  Api    *api;
+  GPUApi *api;
 
   api = library ? deviceApi(library->_device) : NULL;
 
@@ -1880,7 +1880,7 @@ libraryUsesWGSLStaticSamplers(const GPUShaderLibrary *library) {
 static uint32_t
 reflectionStaticSamplerCountForGroup(const GPUShaderLibrary *library,
                                      uint32_t                groupIndex) {
-  const ShaderStaticSamplerInfo    *samplers;
+  const GPUShaderStaticSamplerInfo *samplers;
   uint32_t                          samplerCount;
   uint32_t                          count;
   uint32_t                          i;
@@ -1905,7 +1905,7 @@ reflectionStaticSamplerCountForGroup(const GPUShaderLibrary *library,
 static uint32_t
 gpu_reflectionLayoutCount(const GPUShaderReflection *reflection,
                           const GPUShaderLibrary    *library) {
-  const ShaderStaticSamplerInfo    *samplers;
+  const GPUShaderStaticSamplerInfo *samplers;
   uint32_t                          samplerCount;
   uint32_t                          maxGroup;
   int                               hasGroup;
@@ -2000,7 +2000,7 @@ createLayoutForReflectionGroup(GPUDevice                 *device,
                                GPUBindGroupLayout       **outLayout) {
   GPUBindGroupLayoutCreateInfo       info;
   GPUBindGroupLayoutEntry           *entries;
-  const ShaderStaticSamplerInfo     *samplers;
+  const GPUShaderStaticSamplerInfo  *samplers;
   uint32_t                          *backendBindings;
   const GPUShaderResourceReflection *resource;
   uint32_t                           entryCount;
@@ -2177,7 +2177,7 @@ layoutMatchesReflectionResource(const GPUBindGroupLayoutEntry     *entry,
 }
 
 static int
-layoutContainsStageReflectionResource(const BindGroupLayoutPriv         *priv,
+layoutContainsStageReflectionResource(const GPUBindGroupLayoutPriv      *priv,
                                       const GPUShaderResourceReflection *resource,
                                       GPUShaderStageFlags                stages,
                                       uint32_t                          *outEntryIndex) {
@@ -2239,8 +2239,8 @@ layoutMatchesReflectionGroup(GPUBindGroupLayout        *layout,
                              const GPUShaderLibrary    *library,
                              const GPUShaderReflection *reflection,
                              uint32_t                   groupIndex) {
-  BindGroupLayoutPriv               *priv;
-  const ShaderStaticSamplerInfo     *samplers;
+  GPUBindGroupLayoutPriv            *priv;
+  const GPUShaderStaticSamplerInfo  *samplers;
   const GPUShaderResourceReflection *resource;
   const GPUBindGroupLayoutEntry     *entry;
   uint64_t                           matchedMask;
@@ -2349,14 +2349,14 @@ pipelineLayoutMatchesShaderResources(GPUPipelineLayout         *pipelineLayout,
                                      uint64_t                   entryMask,
                                      uint32_t                  *outRequiredGroupMask) {
   uint32_t                           samplerOrdinals[GPU_ENCODER_MAX_BIND_GROUPS] = {0};
-  PipelineLayoutPriv                *pipelinePriv;
+  GPUPipelineLayoutPriv             *pipelinePriv;
   const GPUShaderReflection         *fullReflection;
-  const ShaderStaticSamplerInfo     *samplers;
+  const GPUShaderStaticSamplerInfo  *samplers;
   const GPUShaderResourceReflection *countResource;
   const GPUShaderResourceReflection *resource;
-  BindGroupLayoutPriv               *resourceLayout;
-  const ShaderStaticSamplerInfo     *sampler;
-  BindGroupLayoutPriv               *samplerLayout;
+  GPUBindGroupLayoutPriv            *resourceLayout;
+  const GPUShaderStaticSamplerInfo  *sampler;
+  GPUBindGroupLayoutPriv            *samplerLayout;
   const GPUBindGroupLayoutEntry     *entry;
   uint32_t                           requiredGroupMask;
   uint32_t                           requiredCount;
@@ -2509,13 +2509,13 @@ pipelineLayoutMatchesShaderResources(GPUPipelineLayout         *pipelineLayout,
   return 1;
 }
 
-static BindGroupBindingPriv*
+static GPUBindGroupBindingPriv*
 bindingForEntry(GPUBindGroup            *group,
                 const GPUBindGroupEntry *entry,
-                BindGroupLayoutPriv    **outLayout,
+                GPUBindGroupLayoutPriv **outLayout,
                 uint32_t                *outLayoutEntryIndex) {
-  BindGroupPriv          *priv;
-  BindGroupLayoutPriv    *layout;
+  GPUBindGroupPriv       *priv;
+  GPUBindGroupLayoutPriv *layout;
   uint32_t                i;
   uint32_t                index;
 
@@ -2559,8 +2559,8 @@ static void
 clearBindGroupUpdateScratch(GPUBindGroup            *group,
                             uint32_t                 entryCount,
                             const GPUBindGroupEntry *entries) {
-  BindGroupPriv           *priv;
-  BindGroupBindingPriv    *binding;
+  GPUBindGroupPriv        *priv;
+  GPUBindGroupBindingPriv *binding;
   size_t                   index;
   uint32_t                 i;
 
@@ -2586,8 +2586,8 @@ static GPUResult
 validateBindGroupUpdateEntries(GPUBindGroup            *group,
                                uint32_t                 entryCount,
                                const GPUBindGroupEntry *entries) {
-  BindGroupPriv           *priv;
-  BindGroupBindingPriv    *binding;
+  GPUBindGroupPriv        *priv;
+  GPUBindGroupBindingPriv *binding;
   uint64_t                 bit;
   size_t                   index;
   uint32_t                 markedCount;
@@ -2603,7 +2603,7 @@ validateBindGroupUpdateEntries(GPUBindGroup            *group,
   markedCount = 0u;
 
   for (i = 0u; i < entryCount; i++) {
-    BindGroupLayoutPriv    *layout;
+    GPUBindGroupLayoutPriv *layout;
     uint32_t                layoutEntryIndex;
 
     binding = bindingForEntry(group,
@@ -2638,9 +2638,9 @@ invalid:
 }
 
 static void
-bindRenderBinding(void *ctx, const BindGroupBindingView    *binding) {
+bindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   BindRenderContext    *bindCtx;
-  ApiRCE               *api;
+  GPURCEApi            *api;
   uint32_t              index;
 
   if (!ctx || !binding) {
@@ -2723,18 +2723,18 @@ bindRenderBinding(void *ctx, const BindGroupBindingView    *binding) {
 }
 
 static GPU_INLINE int
-bindGroupEachStatic(PipelineLayoutPriv     *pipeline,
+bindGroupEachStatic(GPUPipelineLayoutPriv  *pipeline,
                     uint32_t                groupIndex,
-                    BindGroupPriv          *priv,
-                    BindGroupLayoutPriv    *layout,
+                    GPUBindGroupPriv       *priv,
+                    GPUBindGroupLayoutPriv *layout,
                     GPUBindGroupBindingFn   fn,
                     void                   *ctx) {
   const GPUBindGroupLayoutEntry *layoutEntry;
-  const BindGroupBindingPriv    *binding;
+  const GPUBindGroupBindingPriv *binding;
   uint32_t                       i;
 
   for (i = 0u; i < priv->count; i++) {
-    BindGroupBindingView    view = {0};
+    GPUBindGroupBindingView view = {0};
 
     binding     = &priv->bindings[i];
     layoutEntry = &layout->entries[binding->layoutEntryIndex];
@@ -2811,7 +2811,7 @@ bindRenderGroupSlow(GPURenderPassEncoder *pass,
                     const uint32_t       *pDynamicOffsets) {
   BindRenderContext    ctx;
   GPUBindRenderGroupFn bindRenderGroup;
-  Api                 *api;
+  GPUApi              *api;
   bool                 bound;
 
 #if GPU_BUILD_WITH_VALIDATION
@@ -3022,11 +3022,11 @@ bindGroupEachDynamic(GPUPipelineLayout    *pipelineLayout,
                      const uint32_t       *pDynamicOffsets,
                      GPUBindGroupBindingFn fn,
                      void                 *ctx) {
-  BindGroupPriv                 *priv;
-  BindGroupLayoutPriv           *layout;
-  PipelineLayoutPriv            *pipeline;
+  GPUBindGroupPriv              *priv;
+  GPUBindGroupLayoutPriv        *layout;
+  GPUPipelineLayoutPriv         *pipeline;
   const GPUBindGroupLayoutEntry *layoutEntry;
-  const BindGroupBindingPriv    *binding;
+  const GPUBindGroupBindingPriv *binding;
   uint32_t                       dynamicIndex;
   uint32_t                       i;
   uint32_t                       stride;
@@ -3061,7 +3061,7 @@ bindGroupEachDynamic(GPUPipelineLayout    *pipelineLayout,
   dynamicIndex = 0u;
 
   for (i = 0u; i < priv->count; i++) {
-    BindGroupBindingView    view;
+    GPUBindGroupBindingView view;
     uint64_t                effectiveOffset;
 
     binding = &priv->bindings[i];
@@ -3195,7 +3195,7 @@ void
 getPipelineLayoutPushConstants(GPUPipelineLayout   *layout,
                                uint32_t            *outSizeBytes,
                                GPUShaderStageFlags *outStages) {
-  PipelineLayoutPriv    *priv;
+  GPUPipelineLayoutPriv *priv;
 
   priv = gpu_pipelineLayoutPriv(layout);
 
@@ -3211,7 +3211,7 @@ getPipelineLayoutPushConstants(GPUPipelineLayout   *layout,
 GPU_HIDE
 GPUBindGroupLayout *const *
 getPipelineLayoutGroups(GPUPipelineLayout *layout, uint32_t *outCount) {
-  PipelineLayoutPriv    *priv;
+  GPUPipelineLayoutPriv *priv;
 
   priv = gpu_pipelineLayoutPriv(layout);
 
@@ -3225,11 +3225,11 @@ getPipelineLayoutGroups(GPUPipelineLayout *layout, uint32_t *outCount) {
 GPU_HIDE
 uint32_t
 pipelineLayoutBackendSlotMask(GPUPipelineLayout  *layout,
-                              BindKind            kind,
+                              GPUBindKind         kind,
                               GPUShaderStageFlags stages) {
-  PipelineLayoutPriv            *priv;
-  Api                           *api;
-  BindGroupLayoutPriv           *group;
+  GPUPipelineLayoutPriv         *priv;
+  GPUApi                        *api;
+  GPUBindGroupLayoutPriv        *group;
   const GPUBindGroupLayoutEntry *entry;
   uint32_t                       mask;
   uint32_t                       groupIndex;
@@ -3288,7 +3288,7 @@ GPU_HIDE
 const uint32_t*
 getBindGroupLayoutBackendBindings(GPUBindGroupLayout *layout,
                                   uint32_t           *outCount) {
-  BindGroupLayoutPriv    *priv;
+  GPUBindGroupLayoutPriv *priv;
 
   priv = gpu_layoutPriv(layout);
 
@@ -3304,8 +3304,8 @@ const uint32_t*
 getPipelineLayoutBackendBindings(GPUPipelineLayout *layout,
                                  uint32_t           groupIndex,
                                  uint32_t          *outCount) {
-  PipelineLayoutPriv     *priv;
-  BindGroupLayoutPriv    *group;
+  GPUPipelineLayoutPriv  *priv;
+  GPUBindGroupLayoutPriv *group;
 
   priv  = gpu_pipelineLayoutPriv(layout);
   group = priv && groupIndex < priv->bindGroupLayoutCount
@@ -3327,7 +3327,7 @@ getPipelineLayoutBackendBindings(GPUPipelineLayout *layout,
 GPU_HIDE
 GPUBindGroupLayout*
 bindGroupGetLayout(GPUBindGroup *group) {
-  BindGroupPriv    *priv;
+  GPUBindGroupPriv *priv;
 
   priv = gpu_groupPriv(group);
 
@@ -3343,7 +3343,7 @@ bindGroupGetDevice(GPUBindGroup *group) {
 GPU_HIDE
 bool
 bindGroupLayoutIsBindless(GPUBindGroupLayout *layout) {
-  BindGroupLayoutPriv    *priv;
+  GPUBindGroupLayoutPriv *priv;
 
   priv = gpu_layoutPriv(layout);
 
@@ -3367,7 +3367,7 @@ pipelineLayoutMaskIsBound(GPUPipelineLayout         *pipelineLayout,
                           GPUBindGroupLayout *const *boundLayouts,
                           uint32_t                   boundLayoutCount,
                           uint32_t                   requiredGroupMask) {
-  PipelineLayoutPriv    *priv;
+  GPUPipelineLayoutPriv *priv;
   uint32_t               i;
   uint32_t               groupBit;
 
@@ -3403,7 +3403,7 @@ pipelineLayoutMatchesShaderEntries(GPUPipelineLayout      *pipelineLayout,
                                    uint32_t                entryPointCount,
                                    GPUShaderStageFlags     fallbackStages,
                                    uint32_t               *outRequiredGroupMask) {
-  PipelineLayoutPriv        *pipelinePriv;
+  GPUPipelineLayoutPriv     *pipelinePriv;
   const GPUShaderReflection *reflection;
   uint64_t                   entryMask;
   uint32_t                   combinedGroupMask;
@@ -3515,10 +3515,10 @@ int
 forEachBindGroupBinding(GPUBindGroup         *group,
                         GPUBindGroupBindingFn fn,
                         void                 *ctx) {
-  BindGroupPriv                 *priv;
-  BindGroupLayoutPriv           *layout;
+  GPUBindGroupPriv              *priv;
+  GPUBindGroupLayoutPriv        *layout;
   const GPUBindGroupLayoutEntry *layoutEntry;
-  const BindGroupBindingPriv    *binding;
+  const GPUBindGroupBindingPriv *binding;
   uint32_t                       i;
 
   if (!group || !fn) {
@@ -3534,7 +3534,7 @@ forEachBindGroupBinding(GPUBindGroup         *group,
   }
 
   for (i = 0u; i < priv->count; i++) {
-    BindGroupBindingView    view;
+    GPUBindGroupBindingView view;
 
     if (priv->bindings[i].layoutEntryIndex >= layout->count) {
       return 0;
@@ -3597,7 +3597,7 @@ forEachBindGroupEntry(GPUBindGroup            *group,
                       const GPUBindGroupEntry *entries,
                       GPUBindGroupBindingFn    fn,
                       void                    *ctx) {
-  BindGroupBindingPriv    *binding;
+  GPUBindGroupBindingPriv *binding;
   uint32_t                 i;
 
   if (!group || !fn || (entryCount > 0u && !entries)) {
@@ -3605,8 +3605,8 @@ forEachBindGroupEntry(GPUBindGroup            *group,
   }
 
   for (i = 0u; i < entryCount; i++) {
-    BindGroupBindingView    view;
-    BindGroupLayoutPriv    *layout;
+    GPUBindGroupBindingView view;
+    GPUBindGroupLayoutPriv *layout;
     uint32_t                layoutEntryIndex;
 
     binding = bindingForEntry(group,
@@ -3673,10 +3673,10 @@ validateBindGroupDynamicOffsets(GPUPipelineLayout *pipelineLayout,
                                 GPUBindGroup      *group,
                                 uint32_t           dynamicOffsetCount,
                                 const uint32_t    *dynamicOffsets) {
-  BindGroupPriv                 *priv;
-  BindGroupLayoutPriv           *layout;
-  PipelineLayoutPriv            *pipeline;
-  const BindGroupBindingPriv    *binding;
+  GPUBindGroupPriv              *priv;
+  GPUBindGroupLayoutPriv        *layout;
+  GPUPipelineLayoutPriv         *pipeline;
+  const GPUBindGroupBindingPriv *binding;
   uint32_t                       dynamicIndex;
   uint32_t                       i;
   uint32_t                       stride;
@@ -3767,7 +3767,7 @@ GPU_EXPORT
 const GPUBindGroupLayoutEntry*
 GPUGetBindGroupLayoutEntries(const GPUBindGroupLayout *layout,
                              uint32_t                 *outCount) {
-  BindGroupLayoutPriv    *priv;
+  GPUBindGroupLayoutPriv *priv;
 
   priv = gpu_layoutPriv(layout);
 
@@ -3781,8 +3781,8 @@ GPUGetBindGroupLayoutEntries(const GPUBindGroupLayout *layout,
 GPU_EXPORT
 void
 GPUDestroyBindGroupLayout(GPUBindGroupLayout *layout) {
-  BindGroupLayoutPriv    *priv;
-  Api                    *api;
+  GPUBindGroupLayoutPriv *priv;
+  GPUApi                 *api;
 
   if (!layout) {
     return;
@@ -3812,8 +3812,8 @@ GPUCreatePipelineLayout(GPUDevice                         *device,
                         GPUPipelineLayout                **outLayout) {
   GPUDeviceCapabilities  capabilities;
   GPUPipelineLayout     *layout;
-  PipelineLayoutPriv    *priv;
-  Api                   *api;
+  GPUPipelineLayoutPriv *priv;
+  GPUApi                *api;
   GPUResult              result;
   uint32_t               i;
 
@@ -3926,8 +3926,8 @@ GPUCreatePipelineLayout(GPUDevice                         *device,
 GPU_EXPORT
 void
 GPUDestroyPipelineLayout(GPUPipelineLayout *layout) {
-  PipelineLayoutPriv    *priv;
-  Api                   *api;
+  GPUPipelineLayoutPriv *priv;
+  GPUApi                *api;
 
   if (!layout) {
     return;
@@ -4165,18 +4165,18 @@ GPUResult
 GPUCreateBindGroup(GPUDevice                    *device,
                    const GPUBindGroupCreateInfo *info,
                    GPUBindGroup                **outGroup) {
-  BindGroupBindingPriv           stackBindings[GPU_BIND_GROUP_CANDIDATE_STACK_SIZE] = {0};
-  BindGroupPriv                  candidate = {0};
+  GPUBindGroupBindingPriv        stackBindings[GPU_BIND_GROUP_CANDIDATE_STACK_SIZE] = {0};
+  GPUBindGroupPriv               candidate = {0};
   uint32_t                       kindCounts[GPUBindKindCount] = {0};
   GPUBindGroup                  *cached;
   GPUBindGroup                  *group;
-  BindGroupPriv                 *priv;
-  BindGroupBindingPriv          *candidateBindings;
-  BindGroupLayoutPriv           *layoutPriv;
+  GPUBindGroupPriv              *priv;
+  GPUBindGroupBindingPriv       *candidateBindings;
+  GPUBindGroupLayoutPriv        *layoutPriv;
   GPUBindGroupLayout            *layout;
   BindGroupStorage              *storage;
   const GPUBindGroupEntry       *entries;
-  Api                           *api;
+  GPUApi                        *api;
   const GPUBindGroupLayoutEntry *layoutEntry;
   size_t                         storageSize;
   size_t                         scratchWordCount;
@@ -4276,7 +4276,7 @@ GPUCreateBindGroup(GPUDevice                    *device,
          arrayIndex < layoutEntry->arrayCount;
          arrayIndex++) {
       const GPUBindGroupEntry *entry;
-      BindGroupBindingPriv    *binding;
+      GPUBindGroupBindingPriv *binding;
 
       entry = findBindGroupEntry(entries,
                                  count,
@@ -4468,10 +4468,10 @@ GPUResult
 GPUUpdateBindGroupEXT(GPUBindGroup            *group,
                       uint32_t                 entryCount,
                       const GPUBindGroupEntry *pEntries) {
-  BindGroupPriv           *priv;
-  BindGroupLayoutPriv     *layout;
-  Api                     *api;
-  BindGroupBindingPriv    *binding;
+  GPUBindGroupPriv        *priv;
+  GPUBindGroupLayoutPriv  *layout;
+  GPUApi                  *api;
+  GPUBindGroupBindingPriv *binding;
   GPUResult                result;
   uint32_t                 i;
 
@@ -4538,7 +4538,7 @@ GPUUpdateBindGroupEXT(GPUBindGroup            *group,
 GPU_EXPORT
 void
 GPUDestroyBindGroup(GPUBindGroup *group) {
-  Api    *api;
+  GPUApi *api;
 
   if (!group) {
     return;

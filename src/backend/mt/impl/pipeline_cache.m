@@ -189,7 +189,7 @@ mt_nativeCache(GPUPipelineCache *cache) {
 #if MT_HAS_METAL4
 
 static GPUResult
-mt_createCache4(DeviceMT                         *device,
+mt_createCache4(GPUDeviceMT                      *device,
                 const GPUPipelineCacheCreateInfo *info,
                 NSString                         *path,
                 MTPipelineCache                  *native) {
@@ -283,12 +283,12 @@ static GPUResult
 mt_createCache(GPUDevice                        *device,
                const GPUPipelineCacheCreateInfo *info,
                GPUPipelineCache                 *cache) {
-  CacheFileGuard              guard;
+  GPUCacheFileGuard           guard;
   MTLBinaryArchiveDescriptor *descriptor;
   id<MTLBinaryArchive>        archive;
   NSFileManager              *fileManager;
   MTPipelineCache            *native;
-  DeviceMT                   *deviceMT;
+  GPUDeviceMT                *deviceMT;
   NSString                   *path;
   NSURL                      *directoryURL;
   NSURL                      *url;
@@ -427,7 +427,7 @@ mt_createCache(GPUDevice                        *device,
 
 static void
 mt_storeCache(MTPipelineCache *native) {
-  CacheFileGuard    guard;
+  GPUCacheFileGuard guard;
   char             *metadataTemporaryBytes;
   char             *temporaryBytes;
   NSFileManager    *fileManager;
@@ -545,7 +545,7 @@ mt_destroyCache(GPUPipelineCache *cache) {
 
 GPU_HIDE
 GPUResult
-mt_initPipelineCompiler(DeviceMT    *device) {
+mt_initPipelineCompiler(GPUDeviceMT *device) {
   if (!device || device->commandMode != MTCommandMode4) {
     return GPU_OK;
   }
@@ -576,7 +576,7 @@ mt_initPipelineCompiler(DeviceMT    *device) {
 
 GPU_HIDE
 void
-mt_destroyPipelineCompiler(DeviceMT    *device) {
+mt_destroyPipelineCompiler(GPUDeviceMT *device) {
   if (!device) {
     return;
   }
@@ -696,7 +696,7 @@ mt_addComputeCache(GPUPipelineCache             *cache,
 GPU_HIDE
 id
 mt_compileRenderPipeline4(GPUPipelineCache *cache,
-                          DeviceMT         *device,
+                          GPUDeviceMT      *device,
                           id                descriptor,
                           NSError         **error) {
 #if MT_HAS_METAL4
@@ -763,7 +763,7 @@ mt_compileRenderPipeline4(GPUPipelineCache *cache,
 GPU_HIDE
 id
 mt_compileComputePipeline4(GPUPipelineCache *cache,
-                           DeviceMT         *device,
+                           GPUDeviceMT      *device,
                            id                descriptor,
                            NSError         **error) {
 #if MT_HAS_METAL4
@@ -829,7 +829,7 @@ mt_compileComputePipeline4(GPUPipelineCache *cache,
 
 GPU_HIDE
 void
-mt_initPipelineCache(ApiPipelineCache    *api) {
+mt_initPipelineCache(GPUPipelineCacheApi *api) {
   api->create  = mt_createCache;
   api->destroy = mt_destroyCache;
 }

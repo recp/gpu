@@ -248,7 +248,7 @@ GPUResult
 GPUGetBufferMemoryRequirements(GPUDevice                 *__restrict device,
                                const GPUBufferCreateInfo *__restrict info,
                                GPUMemoryRequirements     *__restrict outRequirements) {
-  Api      *api;
+  GPUApi   *api;
   GPUResult result;
 
   if (!outRequirements) {
@@ -293,7 +293,7 @@ GPUResult
 GPUGetTextureMemoryRequirements(GPUDevice                  *__restrict device,
                                 const GPUTextureCreateInfo *__restrict info,
                                 GPUMemoryRequirements      *__restrict outRequirements) {
-  Api      *api;
+  GPUApi   *api;
   GPUResult result;
 
   if (!outRequirements) {
@@ -338,7 +338,7 @@ GPUResult
 GPUGetSparseBufferRequirements(GPUDevice                   *__restrict device,
                                const GPUBufferCreateInfo   *__restrict info,
                                GPUSparseBufferRequirements *__restrict outRequirements) {
-  Api      *api;
+  GPUApi   *api;
   GPUResult result;
 
   if (!outRequirements) {
@@ -385,7 +385,7 @@ GPUResult
 GPUGetSparseTextureRequirements(GPUDevice                    *__restrict device,
                                 const GPUTextureCreateInfo   *__restrict info,
                                 GPUSparseTextureRequirements *__restrict outRequirements) {
-  Api      *api;
+  GPUApi   *api;
   GPUResult result;
 
   if (!outRequirements) {
@@ -430,7 +430,7 @@ GPUResult
 GPUCreateHeap(GPUDevice               *__restrict device,
               const GPUHeapCreateInfo *__restrict info,
               GPUHeap                **__restrict outHeap) {
-  Api      *api;
+  GPUApi   *api;
   GPUResult result;
 
   if (!outHeap) {
@@ -500,7 +500,7 @@ GPUCreateHeap(GPUDevice               *__restrict device,
 GPU_EXPORT
 void
 GPUDestroyHeap(GPUHeap *__restrict heap) {
-  Api    *api;
+  GPUApi *api;
 
   if (!heap || !(api = deviceApi(heap->device))) {
     return;
@@ -519,7 +519,7 @@ GPUCreatePlacedBuffer(GPUDevice                 *__restrict device,
                       uint64_t                              heapOffset,
                       GPUBuffer                **__restrict outBuffer) {
   GPUMemoryRequirements requirements;
-  Api                  *api;
+  GPUApi               *api;
   GPUResult             result;
 
   if (!outBuffer) {
@@ -581,7 +581,7 @@ GPUCreatePlacedTexture(GPUDevice                  *__restrict device,
                        uint64_t                               heapOffset,
                        GPUTexture                **__restrict outTexture) {
   GPUMemoryRequirements requirements;
-  Api                  *api;
+  GPUApi               *api;
   GPUResult             result;
 
   if (!outTexture) {
@@ -649,7 +649,7 @@ GPUCreateSparseBuffer(GPUDevice                 *__restrict device,
                       GPUHeap                   *__restrict heap,
                       GPUBuffer                **__restrict outBuffer) {
   GPUSparseBufferRequirements requirements;
-  Api                        *api;
+  GPUApi                     *api;
   GPUResult                   result;
 
   if (!outBuffer) {
@@ -705,7 +705,7 @@ GPUCreateSparseTexture(GPUDevice                  *__restrict device,
                        GPUHeap                    *__restrict heap,
                        GPUTexture                **__restrict outTexture) {
   GPUSparseTextureRequirements requirements;
-  Api                         *api;
+  GPUApi                      *api;
   GPUResult                    result;
 
   if (!outTexture) {
@@ -766,7 +766,7 @@ GPUResult
 GPUQueueSubmitSparse(GPUQueue                       *__restrict queue,
                      const GPUQueueSparseSubmitInfo *__restrict info) {
   GPUQueueSparseSubmitInfo backendInfo;
-  Api                     *api;
+  GPUApi                  *api;
   GPUPipelineStageMask     validStages;
   GPUResult                result;
   uint32_t                 bufferIndex;

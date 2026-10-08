@@ -77,7 +77,7 @@ static void
 ptx_init_device(GPUDevice   *device,
                 GPUAdapter  *adapter,
                 GPUInstance *instance,
-                Api         *api,
+                GPUApi      *api,
                 uint64_t     featureMask,
                 uint32_t     architecture) {
   memset(device, 0, sizeof(*device));
@@ -138,7 +138,7 @@ ptx_validate_buffer_resource(const GPUShaderReflection *reflection,
 }
 
 static inline int
-ptx_validate_buffer_param(const ShaderPTXParamInfo    *param,
+ptx_validate_buffer_param(const GPUShaderPTXParamInfo *param,
                           uint32_t                     group,
                           uint32_t                     binding,
                           GPUBindingType               bindingType,

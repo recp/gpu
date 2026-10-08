@@ -89,7 +89,7 @@ GPUResult
 GPUCreateBuffer(GPUDevice                 *__restrict device,
                 const GPUBufferCreateInfo *__restrict info,
                 GPUBuffer                **__restrict outBuffer) {
-  Api      *api;
+  GPUApi   *api;
   GPUResult result;
 
   if (!outBuffer) {
@@ -132,7 +132,7 @@ GPUCreateBuffer(GPUDevice                 *__restrict device,
 GPU_EXPORT
 void
 GPUDestroyBuffer(GPUBuffer *__restrict buff) {
-  Api    *api;
+  GPUApi *api;
 
   if (!buff) {
     return;
@@ -172,7 +172,7 @@ GPUQueueWriteBuffer(GPUQueue   *__restrict queue,
                     uint64_t               dstOffset,
                     const void *__restrict data,
                     uint64_t               sizeBytes) {
-  Api    *api;
+  GPUApi *api;
 
   if (!queue || !buff || !data || sizeBytes == 0
       || commandQueueDevice(queue) != buff->device
@@ -199,7 +199,7 @@ GPUQueueReadBuffer(GPUQueue  *__restrict queue,
                    uint64_t              srcOffset,
                    void      *__restrict outData,
                    uint64_t              sizeBytes) {
-  Api    *api;
+  GPUApi *api;
 
   if (!queue || !buff || !outData || sizeBytes == 0
       || commandQueueDevice(queue) != buff->device

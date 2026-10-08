@@ -63,7 +63,7 @@ vk_createQuerySet(GPUDevice                   *device,
                   const GPUQuerySetCreateInfo *info,
                   GPUQuerySet                 *set) {
   VkQueryPoolCreateInfo queryInfo = {0};
-  DeviceVk             *deviceVk;
+  GPUDeviceVk          *deviceVk;
   QuerySetVk           *native;
 
   deviceVk = device ? device->_priv : NULL;
@@ -108,7 +108,7 @@ vk_createQuerySet(GPUDevice                   *device,
 GPU_HIDE
 void
 vk_resetQuerySet(GPUCommandBuffer *cmdb, GPUQuerySet *set) {
-  CommandBufferVk    *command;
+  GPUCommandBufferVk *command;
   QuerySetVk         *native;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -126,7 +126,7 @@ void
 vk_beginOcclusionQuery(GPURenderPassEncoder *pass,
                        GPUQuerySet          *set,
                        uint32_t              queryIndex) {
-  RenderEncoderVk    *encoder;
+  GPURenderEncoderVk *encoder;
   QuerySetVk         *native;
 
   encoder = pass ? pass->_priv : NULL;
@@ -144,7 +144,7 @@ void
 vk_endOcclusionQuery(GPURenderPassEncoder *pass,
                      GPUQuerySet          *set,
                      uint32_t              queryIndex) {
-  RenderEncoderVk    *encoder;
+  GPURenderEncoderVk *encoder;
   QuerySetVk         *native;
 
   encoder = pass ? pass->_priv : NULL;
@@ -162,7 +162,7 @@ void
 vk_beginPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
                                 GPUQuerySet      *set,
                                 uint32_t          queryIndex) {
-  CommandBufferVk    *command;
+  GPUCommandBufferVk *command;
   QuerySetVk         *native;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -181,7 +181,7 @@ void
 vk_endPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
                               GPUQuerySet      *set,
                               uint32_t          queryIndex) {
-  CommandBufferVk    *command;
+  GPUCommandBufferVk *command;
   QuerySetVk         *native;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -219,7 +219,7 @@ vk_writeTimestamp(GPUCommandBuffer *cmdb,
                   GPUQuerySet      *set,
                   uint32_t          queryIndex,
                   bool              beginningOfPass) {
-  CommandBufferVk        *command;
+  GPUCommandBufferVk     *command;
   QuerySetVk             *native;
   VkPipelineStageFlagBits stage;
 
@@ -248,9 +248,9 @@ vk_resolveQuerySet(GPUCommandBuffer *cmdb,
                    uint32_t          queryCount,
                    GPUBuffer        *dstBuffer,
                    uint64_t          dstOffset) {
-  CommandBufferVk    *command;
+  GPUCommandBufferVk *command;
   QuerySetVk         *native;
-  BufferVk           *buffer;
+  GPUBufferVk        *buffer;
   VkDeviceSize        resultStride;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -289,7 +289,7 @@ vk_resolveQuerySet(GPUCommandBuffer *cmdb,
 
 GPU_HIDE
 void
-vk_initQuery(ApiCommandBuffer    *api) {
+vk_initQuery(GPUCommandBufferApi *api) {
   api->createQuerySet               = vk_createQuerySet;
   api->destroyQuerySet              = vk_destroyQuerySet;
   api->writeTimestamp               = vk_writeTimestamp;

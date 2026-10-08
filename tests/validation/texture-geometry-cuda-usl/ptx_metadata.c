@@ -129,8 +129,8 @@ validate_reflection(const GPUShaderReflection *reflection) {
 }
 
 static int
-validate_params(const ShaderPTXInfo    *info) {
-  const ShaderPTXParamInfo    *param;
+validate_params(const GPUShaderPTXInfo *info) {
+  const GPUShaderPTXParamInfo *param;
   uint32_t                     bindingMask;
   uint32_t                     outputCount;
   uint32_t                     i;
@@ -195,7 +195,7 @@ validate_source(const GPUShaderLibrary *library) {
 int
 validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
   GPUDevice         device;
-  Api               api;
+  GPUApi            api;
   GPUShaderLibrary *library;
   GPUResult         result;
   int               valid;

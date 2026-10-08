@@ -136,7 +136,7 @@ static const char gpu_blitSintMSL[] =
   "  return source.read(coord);\n"
   "}\n";
 
-static const BlitShaderSet    mt_blitTextureShaders = {
+static const GPUBlitShaderSet mt_blitTextureShaders = {
   .filteringFloat = {
     .data = gpu_blitFloatMSL,
     .size = sizeof(gpu_blitFloatMSL) - 1u

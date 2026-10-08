@@ -59,10 +59,10 @@ dx12_enableDebugLayer(ID3D12DeviceFactory *factory) {
 
 GPU_HIDE
 GPUInstance*
-dx12_createInstance(struct Api                  *__restrict api,
+dx12_createInstance(struct GPUApi               *__restrict api,
                     const GPUInstanceCreateInfo *__restrict info) {
   GPUInstance     *inst;
-  InstanceDX12    *instDX12;
+  GPUInstanceDX12 *instDX12;
   IDXGIFactory5   *factory5;
   BOOL             allowTearing;
   HRESULT          hr;
@@ -165,9 +165,9 @@ err:
 
 GPU_HIDE
 void
-dx12_destroyInstance(struct Api    *__restrict api,
+dx12_destroyInstance(struct GPUApi *__restrict api,
                      GPUInstance   *__restrict inst) {
-  InstanceDX12    *instDX12;
+  GPUInstanceDX12 *instDX12;
 
   GPU__UNUSED(api);
 
@@ -198,7 +198,7 @@ dx12_destroyInstance(struct Api    *__restrict api,
 
 GPU_HIDE
 void
-dx12_initInstance(ApiInstance    *apiInstance) {
+dx12_initInstance(GPUInstanceApi *apiInstance) {
   apiInstance->createInstance  = dx12_createInstance;
   apiInstance->destroyInstance = dx12_destroyInstance;
 }

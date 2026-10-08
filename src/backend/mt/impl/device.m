@@ -79,14 +79,14 @@ GPU_HIDE
 bool
 mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature);
 
-static AdapterMT*
+static GPUAdapterMT*
 mt_adapter(const GPUAdapter *adapter) {
   return adapter ? adapter->_priv : NULL;
 }
 
 static id<MTLDevice>
 mt_adapterDevice(const GPUAdapter *adapter) {
-  AdapterMT    *adapterMT;
+  GPUAdapterMT *adapterMT;
 
   adapterMT = mt_adapter(adapter);
 
@@ -94,7 +94,7 @@ mt_adapterDevice(const GPUAdapter *adapter) {
 }
 
 static void
-mt_initFormatSupport(AdapterMT    *adapterMT) {
+mt_initFormatSupport(GPUAdapterMT *adapterMT) {
   id<MTLDevice> device;
   bool          macFamily2 = false;
 
@@ -213,7 +213,7 @@ mt_supportsSubgroupFamily(id<MTLDevice> device) {
 }
 
 static void
-mt_probeSubgroups(AdapterMT    *adapterMT) {
+mt_probeSubgroups(GPUAdapterMT *adapterMT) {
   id<MTLComputePipelineState> basicPipeline;
   id<MTLComputePipelineState> reductionPipeline;
   id<MTLFunction>             basicFunction;
@@ -293,14 +293,14 @@ mt_probeSubgroups(AdapterMT    *adapterMT) {
 static bool
 mt_supportsSubgroupOperations(const GPUAdapter     *__restrict adapter,
                               GPUShaderStageFlags              stage,
-                              BackendSubgroupOperationFlags    operations) {
-  AdapterMT                       *adapterMT;
+                              GPUBackendSubgroupOperationFlags operations) {
+  GPUAdapterMT                    *adapterMT;
   const GPUShaderStageFlags        supportedStages     = GPU_SHADER_STAGE_VERTEX_BIT |
                                                          GPU_SHADER_STAGE_FRAGMENT_BIT |
                                                          GPU_SHADER_STAGE_COMPUTE_BIT |
                                                          GPU_SHADER_STAGE_TASK_BIT |
                                                          GPU_SHADER_STAGE_MESH_BIT;
-  BackendSubgroupOperationFlags    supportedOperations = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
+  GPUBackendSubgroupOperationFlags supportedOperations = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
                                                          GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT;
 
   adapterMT = mt_adapter(adapter);
@@ -369,7 +369,7 @@ mt_probeSubgroupMatrixProfile(id<MTLDevice> device,
 }
 
 static void
-mt_probeSubgroupMatrices(AdapterMT    *adapterMT) {
+mt_probeSubgroupMatrices(GPUAdapterMT *adapterMT) {
   id<MTLDevice> device;
 
   if (!adapterMT) {
@@ -421,7 +421,7 @@ mt_getSubgroupMatrixProperties(const GPUAdapter               *__restrict adapte
                                uint32_t                       *__restrict inoutPropertyCount,
                                GPUSubgroupMatrixPropertiesEXT *__restrict outProperties) {
   GPUSubgroupMatrixPropertiesEXT property;
-  AdapterMT                     *adapterMT;
+  GPUAdapterMT                  *adapterMT;
   uint32_t                       capacity;
   uint32_t                       count;
   uint32_t                       written;
@@ -473,7 +473,7 @@ static void
 mt_getLimits(const GPUAdapter *__restrict adapter,
              GPULimits        *__restrict outLimits) {
   MTLSize       threads;
-  AdapterMT    *adapterMT;
+  GPUAdapterMT *adapterMT;
   id<MTLDevice> device;
 
   adapterMT = mt_adapter(adapter);
@@ -565,7 +565,7 @@ static void
 mt_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
                          GPUFormat                         format,
                          GPUFormatCapabilities *__restrict outCaps) {
-  AdapterMT    *adapterMT;
+  GPUAdapterMT *adapterMT;
 
   adapterMT = mt_adapter(adapter);
 
@@ -764,7 +764,7 @@ mt_selectCommandMode(id<MTLDevice>  device,
 
 static GPUResult
 mt_waitDeviceIdle(GPUDevice *__restrict device) {
-  DeviceMT    *deviceMT;
+  GPUDeviceMT *deviceMT;
   GPUQueue    *commandQueue;
   uint32_t     i;
 
@@ -788,7 +788,7 @@ GPUAdapter*
 mt_getAvailableAdapters(GPUInstance *__restrict inst,
                         uint32_t                maxNumberOfItems) {
   NSArray<id<MTLDevice>> *devices;
-  AdapterMT              *adapterMT;
+  GPUAdapterMT           *adapterMT;
   GPUAdapter             *firstAdapter;
   GPUAdapter             *lastAdapter;
   GPUAdapter             *adapter;
@@ -904,7 +904,7 @@ mt_selectAdapter(GPUInstance *__restrict inst,
 GPU_HIDE
 void
 mt_destroyAdapter(GPUAdapter *__restrict adapter) {
-  AdapterMT    *adapterMT;
+  GPUAdapterMT *adapterMT;
 
   if (!adapter) {
     return;
@@ -969,7 +969,7 @@ mt_getAdapterIdentity(const GPUAdapter   *__restrict adapter,
 GPU_HIDE
 bool
 mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
-  AdapterMT    *adapterMT;
+  GPUAdapterMT *adapterMT;
   id<MTLDevice> device;
   const char   *mode;
 
@@ -1131,13 +1131,13 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
 GPU_HIDE
 GPUDevice*
 mt_createDevice(GPUAdapter   *__restrict adapter,
-                const QueueCreateInfo    queCI[],
+                const GPUQueueCreateInfo queCI[],
                 uint32_t                 nQueCI,
                 uint64_t                 enabledFeatureMask) {
   MTLSize       workgroupSize;
-  AdapterMT    *adapterMT;
+  GPUAdapterMT *adapterMT;
   GPUDevice    *device;
-  DeviceMT     *deviceMT;
+  GPUDeviceMT  *deviceMT;
   MTCommandMode commandMode;
   uint32_t      i;
   uint32_t      j;
@@ -1270,7 +1270,7 @@ mt_createDevice(GPUAdapter   *__restrict adapter,
 GPU_HIDE
 void
 mt_destroyDevice(GPUDevice *__restrict device) {
-  DeviceMT    *deviceMT;
+  GPUDeviceMT *deviceMT;
   uint32_t     i;
 
   if (!device) {
@@ -1298,7 +1298,7 @@ mt_destroyDevice(GPUDevice *__restrict device) {
 
 GPU_HIDE
 void
-mt_initDevice(ApiDevice    *apiDevice) {
+mt_initDevice(GPUDeviceApi *apiDevice) {
   apiDevice->getAvailableAdapters        = mt_getAvailableAdapters;
   apiDevice->selectAdapter               = mt_selectAdapter;
   apiDevice->destroyAdapter              = mt_destroyAdapter;

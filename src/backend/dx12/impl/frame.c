@@ -19,10 +19,10 @@
 
 GPU_HIDE
 GPUFrame*
-dx12_beginFrame(Api          *__restrict api,
+dx12_beginFrame(GPUApi       *__restrict api,
                 GPUSwapchain *__restrict swapchain) {
-  SwapchainDX12    *native;
-  FrameDX12        *frame;
+  GPUSwapchainDX12 *native;
+  GPUFrameDX12     *frame;
   UINT              frameIndex;
 
   GPU__UNUSED(api);
@@ -70,9 +70,9 @@ dx12_beginFrame(Api          *__restrict api,
 
 GPU_HIDE
 void
-dx12_endFrame(Api      *__restrict api,
+dx12_endFrame(GPUApi   *__restrict api,
               GPUFrame *__restrict frame) {
-  SwapchainDX12    *native;
+  GPUSwapchainDX12 *native;
 
   GPU__UNUSED(api);
 
@@ -90,8 +90,8 @@ dx12_endFrame(Api      *__restrict api,
 GPU_HIDE
 bool
 dx12_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  CommandBufferDX12    *command;
-  SwapchainDX12        *swapchain;
+  GPUCommandBufferDX12 *command;
+  GPUSwapchainDX12     *swapchain;
 
   command   = cmdb ? cmdb->_priv : NULL;
   swapchain = frame ? frame->_priv : NULL;
@@ -110,13 +110,13 @@ dx12_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
 
 GPU_HIDE
 void
-dx12_initFrame(ApiFrame    *api) {
+dx12_initFrame(GPUFrameApi *api) {
   api->beginFrame = dx12_beginFrame;
   api->endFrame   = dx12_endFrame;
 }
 
 GPU_HIDE
 void
-dx12_initCmdbuf(ApiCommandBuffer    *api) {
+dx12_initCmdbuf(GPUCommandBufferApi *api) {
   api->presentDrawable = dx12_schedulePresent;
 }

@@ -24,7 +24,7 @@ webgpu_newLibraryWithSource(GPUDevice  *device,
                             uint32_t    compileFlags) {
   WGPUShaderSourceWGSL       sourceInfo = WGPU_SHADER_SOURCE_WGSL_INIT;
   WGPUShaderModuleDescriptor descriptor = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
-  DeviceWebGPU              *native;
+  GPUDeviceWebGPU           *native;
   GPUShaderLibrary          *library;
 
   (void)compileFlags;
@@ -64,7 +64,7 @@ webgpu_destroyLibrary(GPUShaderLibrary *library) {
 }
 
 void
-webgpu_initLibrary(ApiLibrary    *api) {
+webgpu_initLibrary(GPULibraryApi *api) {
   api->newLibraryWithSource = webgpu_newLibraryWithSource;
   api->destroyLibrary       = webgpu_destroyLibrary;
 }

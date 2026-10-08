@@ -106,7 +106,7 @@ GPUResult
 GPUGetTensorBufferRequirementsEXT(GPUDevice                      *device,
                                   const GPUTensorDescEXT         *desc,
                                   GPUTensorBufferRequirementsEXT *outRequirements) {
-  Api      *api;
+  GPUApi   *api;
   uint64_t  spanBytes;
   GPUResult result;
 
@@ -141,7 +141,7 @@ GPUCreateTensorViewEXT(GPUDevice                        *device,
                        const GPUTensorViewCreateInfoEXT *info,
                        GPUTensorEXT                    **outTensor) {
   GPUTensorEXT *tensor;
-  Api          *api;
+  GPUApi       *api;
   uint64_t      spanBytes;
   size_t        labelSize;
   GPUResult     result;
@@ -242,7 +242,7 @@ GPUGetTensorBufferEXT(const GPUTensorEXT *tensor, uint64_t *outOffsetBytes) {
 GPU_EXPORT
 void
 GPUDestroyTensorEXT(GPUTensorEXT *tensor) {
-  Api    *api;
+  GPUApi *api;
 
   if (!tensor) {
     return;

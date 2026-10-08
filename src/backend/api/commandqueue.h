@@ -23,7 +23,7 @@ extern "C" {
 #include <gpu/common.h>
 #include <gpu/gpu.h>
 
-typedef struct ApiCommandQueue {
+typedef struct GPUCommandQueueApi {
   GPUQueue * (*newCommandQueue)(GPUDevice *__restrict device);
 
   GPUQueue * (*getCommandQueue)(struct GPUDevice *__restrict device, GPUQueueFlagBits bits, uint32_t index);
@@ -53,7 +53,7 @@ typedef struct ApiCommandQueue {
   void (*destroySemaphore)(GPUSemaphore *semaphore);
 
   GPUResult (*submitEx)(GPUQueue *queue, const GPUQueueSubmitExInfo *info);
-} ApiCommandQueue;
+} GPUCommandQueueApi;
 
 #ifdef __cplusplus
 }

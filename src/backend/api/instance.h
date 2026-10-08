@@ -23,13 +23,13 @@ extern "C" {
 #include <gpu/common.h>
 #include <gpu/gpu.h>
 
-struct Api;
+struct GPUApi;
 
-typedef struct ApiInstance {
-  GPUInstance * (*createInstance)(struct Api    *__restrict api, const GPUInstanceCreateInfo *__restrict info);
+typedef struct GPUInstanceApi {
+  GPUInstance * (*createInstance)(struct GPUApi *__restrict api, const GPUInstanceCreateInfo *__restrict info);
 
-  void (*destroyInstance)(struct Api    *__restrict api, GPUInstance *__restrict instance);
-} ApiInstance;
+  void (*destroyInstance)(struct GPUApi *__restrict api, GPUInstance *__restrict instance);
+} GPUInstanceApi;
 
 #ifdef __cplusplus
 }

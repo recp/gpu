@@ -19,71 +19,71 @@
 
 GPU_HIDE
 void
-vk_initInstance(ApiInstance    *api);
+vk_initInstance(GPUInstanceApi *api);
 
 GPU_HIDE
 void
-vk_initDevice(ApiDevice    *api);
+vk_initDevice(GPUDeviceApi *api);
 
 GPU_HIDE
 void
-vk_initBuff(ApiBuffer    *api);
+vk_initBuff(GPUBufferApi *api);
 
 GPU_HIDE
 void
-vk_initMemory(ApiMemory    *api);
+vk_initMemory(GPUMemoryApi *api);
 
 GPU_HIDE
 void
-vk_initMultiGPU(ApiMultiGPU    *api);
+vk_initMultiGPU(GPUMultiGPUApi *api);
 
 GPU_HIDE
 void
-vk_initTexture(ApiTexture    *api);
+vk_initTexture(GPUTextureApi *api);
 
 GPU_HIDE
 void
-vk_initSampler(ApiSampler    *api);
+vk_initSampler(GPUSamplerApi *api);
 
 GPU_HIDE
 void
-vk_initCmdQue(ApiCommandQueue    *api);
+vk_initCmdQue(GPUCommandQueueApi *api);
 
 GPU_HIDE
 void
-vk_initCmdbuf(ApiCommandBuffer    *api);
+vk_initCmdbuf(GPUCommandBufferApi *api);
 
 GPU_HIDE
 void
-vk_initQuery(ApiCommandBuffer    *api);
+vk_initQuery(GPUCommandBufferApi *api);
 
 GPU_HIDE
 void
-vk_initSwapchain(ApiSwapchain    *api);
+vk_initSwapchain(GPUSwapchainApi *api);
 
 GPU_HIDE
 void
-vk_initFrame(ApiFrame    *api);
+vk_initFrame(GPUFrameApi *api);
 
 GPU_HIDE
 void
-vk_initDescriptor(ApiDescriptor    *api);
+vk_initDescriptor(GPUDescriptorApi *api);
 
 GPU_HIDE
 void
-vk_initSurface(ApiSurface    *api);
+vk_initSurface(GPUSurfaceApi *api);
 
 GPU_HIDE
 void
-vk_initLibrary(ApiLibrary    *api);
+vk_initLibrary(GPULibraryApi *api);
 
 GPU_HIDE
 void
-vk_initRenderPipeline(ApiRender    *api);
+vk_initRenderPipeline(GPURenderApi *api);
 
 GPU_HIDE
 void
-vk_initRenderPass(ApiRenderPass    *api);
+vk_initRenderPass(GPURenderPassApi *api);
 
 GPU_HIDE
 void
@@ -97,43 +97,43 @@ vk_blitTextureRenderFallback(GPUCommandBuffer         *cmdb,
 
 GPU_HIDE
 void
-vk_initRCE(ApiRCE    *api);
+vk_initRCE(GPURCEApi *api);
 
 GPU_HIDE
 void
-vk_initCompute(ApiCompute    *api);
+vk_initCompute(GPUComputeApi *api);
 
 GPU_HIDE
 void
-vk_initPipelineCache(ApiPipelineCache    *api);
+vk_initPipelineCache(GPUPipelineCacheApi *api);
 
 GPU_HIDE
 void
-vk_initVRS(ApiVRS    *api);
+vk_initVRS(GPUVRSApi *api);
 
 GPU_HIDE
 void
-vk_initRayQuery(ApiRayQuery    *api);
+vk_initRayQuery(GPURayQueryApi *api);
 
 GPU_HIDE
 void
-vk_initRayTracing(ApiRayTracing    *api);
+vk_initRayTracing(GPURayTracingApi *api);
 
 GPU_HIDE
 void
-vk_initExecutionGraph(ApiExecutionGraph    *api);
+vk_initExecutionGraph(GPUExecutionGraphApi *api);
 
 GPU_HIDE
 void
-vk_resetGraphInitializations(CommandBufferVk    *command);
+vk_resetGraphInitializations(GPUCommandBufferVk *command);
 
 GPU_HIDE
 void
-vk_submitGraphInitializations(CommandBufferVk    *command);
+vk_submitGraphInitializations(GPUCommandBufferVk *command);
 
 GPU_HIDE
 void
-vk_destroyGraphInputScratch(CommandBufferVk    *command);
+vk_destroyGraphInputScratch(GPUCommandBufferVk *command);
 
 GPU_HIDE
 bool
@@ -180,7 +180,7 @@ GPUResult
 vk_wrapBuffer(GPUDevice                 *device,
               const GPUBufferCreateInfo *info,
               const VkBufferCreateInfo  *bufferInfo,
-              BufferVk                  *state,
+              GPUBufferVk               *state,
               GPUBuffer                **outBuffer);
 
 GPU_HIDE
@@ -234,7 +234,7 @@ GPUResult
 vk_finishTexture(GPUDevice                  *device,
                  const GPUTextureCreateInfo *info,
                  const VkImageCreateInfo    *imageInfo,
-                 TextureVk                  *state,
+                 GPUTextureVk               *state,
                  GPUTexture                **outTexture);
 
 GPU_HIDE

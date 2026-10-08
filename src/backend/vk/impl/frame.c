@@ -17,9 +17,9 @@
 #include "../common.h"
 
 static bool
-vk__presentAcquiredFrame(SwapchainVk    *swapchain) {
+vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
   VkSubmitInfo         submitInfo = {0};
-  FrameSyncVk         *sync;
+  GPUFrameSyncVk      *sync;
   VkSemaphore          renderFinished;
   VkPipelineStageFlags waitStage;
   VkResult             result;
@@ -61,7 +61,7 @@ vk__presentAcquiredFrame(SwapchainVk    *swapchain) {
 
 GPU_HIDE
 bool
-vk_restoreFrameFence(SwapchainVk    *swapchain, FrameSyncVk    *sync) {
+vk_restoreFrameFence(GPUSwapchainVk *swapchain, GPUFrameSyncVk *sync) {
   VkFenceCreateInfo info = {0};
   VkFence           replacement;
 
@@ -95,9 +95,9 @@ vk_restoreFrameFence(SwapchainVk    *swapchain, FrameSyncVk    *sync) {
 
 GPU_HIDE
 GPUFrame*
-vk_beginFrame(Api    *api, GPUSwapchain *swapchainObj) {
-  SwapchainVk    *swapchain;
-  FrameSyncVk    *sync;
+vk_beginFrame(GPUApi *api, GPUSwapchain *swapchainObj) {
+  GPUSwapchainVk *swapchain;
+  GPUFrameSyncVk *sync;
   GPUFrame       *frame;
   VkResult        result;
   uint32_t        imageIndex;
@@ -168,8 +168,8 @@ vk_beginFrame(Api    *api, GPUSwapchain *swapchainObj) {
 
 GPU_HIDE
 void
-vk_endFrame(Api    *api, GPUFrame *frame) {
-  SwapchainVk    *swapchain;
+vk_endFrame(GPUApi *api, GPUFrame *frame) {
+  GPUSwapchainVk *swapchain;
 
   GPU__UNUSED(api);
 
@@ -193,8 +193,8 @@ vk_endFrame(Api    *api, GPUFrame *frame) {
 GPU_HIDE
 bool
 vk_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  CommandBufferVk    *command;
-  SwapchainVk        *swapchain;
+  GPUCommandBufferVk *command;
+  GPUSwapchainVk     *swapchain;
 
   command   = cmdb ? cmdb->_priv : NULL;
   swapchain = frame ? frame->_priv : NULL;
@@ -215,13 +215,13 @@ vk_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
 
 GPU_HIDE
 void
-vk_initFrame(ApiFrame    *api) {
+vk_initFrame(GPUFrameApi *api) {
   api->beginFrame = vk_beginFrame;
   api->endFrame   = vk_endFrame;
 }
 
 GPU_HIDE
 void
-vk_initCmdbuf(ApiCommandBuffer    *api) {
+vk_initCmdbuf(GPUCommandBufferApi *api) {
   api->presentDrawable = vk_schedulePresent;
 }

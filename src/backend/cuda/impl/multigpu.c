@@ -25,8 +25,8 @@
 typedef struct DeviceInteropCuda {
   GPUDevice     *graphicsDevice;
   GPUDevice     *cudaDevice;
-  Api           *graphicsApi;
-  DeviceCuda    *cuda;
+  GPUApi        *graphicsApi;
+  GPUDeviceCuda *cuda;
   bool           cudaFirst;
 } DeviceInteropCuda;
 
@@ -98,8 +98,8 @@ cuda_createDeviceInterop(GPUDevice           *firstDevice,
                          GPUDeviceInteropEXT *interop) {
   DeviceInteropCuda    *native;
   GPUDevice            *cudaDevice, *graphicsDevice;
-  Api                  *firstApi, *secondApi, *graphicsApi;
-  DeviceCuda           *cuda;
+  GPUApi               *firstApi, *secondApi, *graphicsApi;
+  GPUDeviceCuda        *cuda;
   GPUResult             result;
   bool                  cudaFirst, sameDevice;
 
@@ -217,7 +217,7 @@ cuda_getSharedBufferRequirements(GPUDeviceInteropEXT       *interop,
 }
 
 static bool
-cuda__memoryDesc(const ExternalMemoryExport    *memory,
+cuda__memoryDesc(const GPUExternalMemoryExport *memory,
                  CUDAExternalMemoryHandleDesc  *outDesc) {
   if (!memory || !outDesc || memory->sizeBytes == 0u) {
     return false;
@@ -246,7 +246,7 @@ cuda__memoryDesc(const ExternalMemoryExport    *memory,
 }
 
 static void
-cuda__closeMemoryExport(const ExternalMemoryExport    *memory,
+cuda__closeMemoryExport(const GPUExternalMemoryExport *memory,
                         bool                           imported) {
   if (!memory) {
     return;
@@ -270,12 +270,12 @@ cuda__closeMemoryExport(const ExternalMemoryExport    *memory,
 static GPUResult
 cuda__importBuffer(GPUDevice                     *device,
                    const GPUBufferCreateInfo     *info,
-                   const ExternalMemoryExport    *memory,
+                   const GPUExternalMemoryExport *memory,
                    GPUBuffer                    **outBuffer) {
   CUDAExternalMemoryHandleDesc  handleDesc;
   CUDAExternalMemoryBufferDesc  bufferDesc = {0};
-  DeviceCuda                   *deviceNative;
-  BufferCuda                   *native;
+  GPUDeviceCuda                *deviceNative;
+  GPUBufferCuda                *native;
   GPUBuffer                    *buffer;
   CUresult                      result;
   GPUResult                     pushResult;
@@ -356,7 +356,7 @@ cuda_createSharedBuffer(GPUDeviceInteropEXT       *interop,
                         GPUBuffer                **outFirstBuffer,
                         GPUBuffer                **outSecondBuffer) {
   GPUBufferCreateInfo        sharedInfo;
-  ExternalMemoryExport       memory = {0};
+  GPUExternalMemoryExport    memory = {0};
   DeviceInteropCuda         *native;
   const GPUBufferCreateInfo *graphicsInfo, *cudaInfo;
   GPUBuffer                 *graphicsBuffer, *cudaBuffer;
@@ -436,8 +436,8 @@ cuda_getSharedTextureRequirements(GPUDeviceInteropEXT        *interop,
                                   const GPUTextureCreateInfo *secondInfo,
                                   GPUMemoryRequirements      *outRequirements) {
   GPUTextureCreateInfo        sharedInfo;
-  CudaTexturePlan             plan;
-  CudaFormatInfo              format;
+  GPUCudaTexturePlan          plan;
+  GPUCudaFormatInfo           format;
   DeviceInteropCuda          *native;
   const GPUTextureCreateInfo *graphicsInfo, *cudaInfo;
   GPUResult                   result;
@@ -475,14 +475,14 @@ static GPUResult
 cuda__importTexture(GPUDevice                     *device,
                     const GPUTextureCreateInfo    *info,
                     GPUTextureUsageFlags           graphicsUsage,
-                    const ExternalMemoryExport    *memory,
+                    const GPUExternalMemoryExport *memory,
                     GPUTexture                   **outTexture) {
-  CudaTexturePlan                       plan;
-  CudaFormatInfo                        format;
+  GPUCudaTexturePlan                    plan;
+  GPUCudaFormatInfo                     format;
   CUDAExternalMemoryHandleDesc          handleDesc;
   CUDAExternalMemoryMipmappedArrayDesc  mipmapDesc = {0};
-  DeviceCuda                           *deviceNative;
-  TextureCuda                          *native;
+  GPUDeviceCuda                        *deviceNative;
+  GPUTextureCuda                       *native;
   GPUTexture                           *texture;
   const char                           *operation;
   CUresult                              result;
@@ -586,7 +586,7 @@ cuda_createSharedTexture(GPUDeviceInteropEXT        *interop,
                          GPUTexture                **outFirstTexture,
                          GPUTexture                **outSecondTexture) {
   GPUTextureCreateInfo        sharedInfo;
-  ExternalMemoryExport        memory = {0};
+  GPUExternalMemoryExport     memory = {0};
   DeviceInteropCuda          *native;
   const GPUTextureCreateInfo *graphicsInfo, *cudaInfo;
   GPUTexture                 *graphicsTexture, *cudaTexture;
@@ -651,7 +651,7 @@ cuda_createSharedTexture(GPUDeviceInteropEXT        *interop,
 }
 
 static bool
-cuda__semaphoreDesc(const ExternalSemaphoreExport    *semaphore,
+cuda__semaphoreDesc(const GPUExternalSemaphoreExport *semaphore,
                     CUDAExternalSemaphoreHandleDesc  *outDesc) {
   if (!semaphore || !outDesc) {
     return false;
@@ -686,7 +686,7 @@ cuda__semaphoreDesc(const ExternalSemaphoreExport    *semaphore,
 }
 
 static void
-cuda__closeSemaphoreExport(const ExternalSemaphoreExport    *semaphore,
+cuda__closeSemaphoreExport(const GPUExternalSemaphoreExport *semaphore,
                            bool                              imported) {
   if (!semaphore) {
     return;
@@ -715,10 +715,10 @@ cuda_createSharedSemaphore(GPUDeviceInteropEXT          *interop,
                            GPUSemaphore                 *firstSemaphore,
                            GPUSemaphore                 *secondSemaphore) {
   CUDAExternalSemaphoreHandleDesc  desc;
-  ExternalSemaphoreExport          semaphoreExport = {0};
+  GPUExternalSemaphoreExport       semaphoreExport = {0};
   DeviceInteropCuda               *native;
   GPUSemaphore                    *graphicsSemaphore, *cudaSemaphore;
-  SemaphoreCuda                   *cudaState;
+  GPUSemaphoreCuda                *cudaState;
   CUresult                         cudaResult;
   GPUResult                        result;
   GPUResult                        pushResult;
@@ -821,7 +821,7 @@ cuda_encodeSharedAcquire(GPUDeviceInteropEXT            *interop,
 }
 
 void
-cuda_initMultiGPU(ApiMultiGPU    *api) {
+cuda_initMultiGPU(GPUMultiGPUApi *api) {
   api->createInterop          = cuda_createDeviceInterop;
   api->destroyInterop         = cuda_destroyDeviceInterop;
   api->getBufferRequirements  = cuda_getSharedBufferRequirements;

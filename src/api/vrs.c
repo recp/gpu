@@ -87,7 +87,7 @@ GPU_EXPORT
 GPUResult
 GPUGetVRSCapabilitiesEXT(const GPUAdapter      *adapter,
                          GPUVRSCapabilitiesEXT *outCaps) {
-  Api    *api;
+  GPUApi *api;
 
   if (!adapter || !outCaps) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -109,7 +109,7 @@ GPUResult
 GPUCreateRasterizationRateMapEXT(GPUDevice                                  *device,
                                  const GPURasterizationRateMapCreateInfoEXT *info,
                                  GPURasterizationRateMapEXT                **outMap) {
-  Api      *api;
+  GPUApi   *api;
   GPUResult result;
 
   if (!outMap) {
@@ -147,7 +147,7 @@ GPUCreateRasterizationRateMapEXT(GPUDevice                                  *dev
 GPU_EXPORT
 void
 GPUDestroyRasterizationRateMapEXT(GPURasterizationRateMapEXT *map) {
-  Api    *api;
+  GPUApi *api;
 
   if (!map || !map->device) {
     return;
@@ -165,7 +165,7 @@ GPUResult
 GPUGetRasterizationRateMapPhysicalSizeEXT(const GPURasterizationRateMapEXT *map,
                                           uint32_t                          layer,
                                           GPUExtent2D                      *outSize) {
-  Api    *api;
+  GPUApi *api;
 
   if (!map || !map->device || !outSize || layer >= map->layerCount) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -184,7 +184,7 @@ GPUMapRasterizationRateScreenToPhysicalEXT(const GPURasterizationRateMapEXT *map
                                            uint32_t                          layer,
                                            GPUCoordinate2D                   screen,
                                            GPUCoordinate2D                  *outPhysical) {
-  Api    *api;
+  GPUApi *api;
 
   if (!map || !map->device || !outPhysical
       || layer >= map->layerCount || !validRateMapCoordinate(screen)
@@ -210,7 +210,7 @@ GPUMapRasterizationRatePhysicalToScreenEXT(const GPURasterizationRateMapEXT *map
                                            GPUCoordinate2D                   physical,
                                            GPUCoordinate2D                  *outScreen) {
   GPUExtent2D physicalSize;
-  Api        *api;
+  GPUApi     *api;
   GPUResult   result;
 
   if (!map || !map->device || !outScreen
@@ -244,7 +244,7 @@ GPU_EXPORT
 GPUResult
 GPUGetRasterizationRateMapParameterInfoEXT(const GPURasterizationRateMapEXT        *map,
                                            GPURasterizationRateMapParameterInfoEXT *outInfo) {
-  Api      *api;
+  GPUApi   *api;
   GPUResult result;
 
   if (!map || !map->device || !outInfo) {
@@ -275,7 +275,7 @@ GPUCopyRasterizationRateMapParametersEXT(const GPURasterizationRateMapEXT *map,
                                          GPUBuffer                        *buffer,
                                          uint64_t                          offset) {
   GPURasterizationRateMapParameterInfoEXT info;
-  Api                                    *api;
+  GPUApi                                 *api;
   GPUResult                               result;
 
   if (!map || !map->device || !buffer || buffer->device != map->device
@@ -308,7 +308,7 @@ GPUSetFragmentShadingRateEXT(GPURenderPassEncoder     *pass,
                              GPUShadingRateCombinerEXT primitiveCombiner,
                              GPUShadingRateCombinerEXT attachmentCombiner) {
   GPUDevice                     *device;
-  Api                           *api;
+  GPUApi                        *api;
   GPUShadingRateFlagsEXT         rateBit;
   GPUShadingRateCombinerFlagsEXT primitiveBit;
   GPUShadingRateCombinerFlagsEXT attachmentBit;

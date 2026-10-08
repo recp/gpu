@@ -28,7 +28,7 @@
 GPU_HIDE
 bool
 cacheFileBegin(const char        *path,
-               CacheFileGuard    *guard) {
+               GPUCacheFileGuard *guard) {
   char   *lockPath;
   size_t  pathLength;
 #if !defined(_WIN32) && !defined(WIN32)
@@ -108,7 +108,7 @@ cacheFileBegin(const char        *path,
 
 GPU_HIDE
 void
-cacheFileEnd(CacheFileGuard    *guard) {
+cacheFileEnd(GPUCacheFileGuard *guard) {
 #if !defined(_WIN32) && !defined(WIN32)
   int descriptor;
 #endif

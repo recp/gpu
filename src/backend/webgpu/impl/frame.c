@@ -18,9 +18,9 @@
 #include "../impl.h"
 
 static GPUFrame*
-webgpu_beginFrame(Api    *api, GPUSwapchain *swapchain) {
+webgpu_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
   WGPUSurfaceTexture  surfaceTexture = WGPU_SURFACE_TEXTURE_INIT;
-  SwapchainWebGPU    *native;
+  GPUSwapchainWebGPU *native;
 
   GPU__UNUSED(api);
   native = webgpuSwapchain(swapchain);
@@ -95,8 +95,8 @@ webgpu_beginFrame(Api    *api, GPUSwapchain *swapchain) {
 }
 
 static void
-webgpu_endFrame(Api    *api, GPUFrame *frame) {
-  SwapchainWebGPU    *native;
+webgpu_endFrame(GPUApi *api, GPUFrame *frame) {
+  GPUSwapchainWebGPU *native;
 
   GPU__UNUSED(api);
   native = frame ? frame->_priv : NULL;
@@ -119,7 +119,7 @@ webgpu_endFrame(Api    *api, GPUFrame *frame) {
 }
 
 void
-webgpu_initFrame(ApiFrame    *api) {
+webgpu_initFrame(GPUFrameApi *api) {
   api->beginFrame = webgpu_beginFrame;
   api->endFrame   = webgpu_endFrame;
 }

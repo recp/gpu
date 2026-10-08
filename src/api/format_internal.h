@@ -21,28 +21,28 @@
 #include "../../include/gpu/format.h"
 #include "../../include/gpu/texture.h"
 
-typedef struct FormatLayout {
+typedef struct GPUFormatLayout {
   uint32_t bytesPerBlock;
   uint32_t blockWidth;
   uint32_t blockHeight;
-} FormatLayout;
+} GPUFormatLayout;
 
-typedef struct FormatDataLayout {
+typedef struct GPUFormatDataLayout {
   uint64_t bytesPerImage;
   uint64_t requiredBytes;
   uint32_t bytesInLastRow;
   uint32_t blockRows;
-} FormatDataLayout;
+} GPUFormatDataLayout;
 
-typedef enum FormatNumericType {
+typedef enum GPUFormatNumericType {
   GPU_FORMAT_NUMERIC_FLOAT = 0,
   GPU_FORMAT_NUMERIC_UINT,
   GPU_FORMAT_NUMERIC_SINT
-} FormatNumericType;
+} GPUFormatNumericType;
 
 GPU_HIDE
 bool
-gpuFormatLayout(GPUFormat format, FormatLayout    *outLayout);
+gpuFormatLayout(GPUFormat format, GPUFormatLayout *outLayout);
 
 GPU_HIDE
 bool
@@ -54,7 +54,7 @@ GPU_HIDE
 bool
 formatAspectLayout(GPUFormat        format,
                    GPUTextureAspect aspect,
-                   FormatLayout    *outLayout);
+                   GPUFormatLayout *outLayout);
 
 GPU_HIDE
 uint32_t
@@ -69,7 +69,7 @@ formatDataLayout(GPUFormat            format,
                  uint32_t             layerCount,
                  uint32_t             bytesPerRow,
                  uint32_t             rowsPerImage,
-                 FormatDataLayout    *outLayout);
+                 GPUFormatDataLayout *outLayout);
 
 GPU_HIDE
 bool
@@ -81,7 +81,7 @@ formatAspectDataLayout(GPUFormat            format,
                        uint32_t             layerCount,
                        uint32_t             bytesPerRow,
                        uint32_t             rowsPerImage,
-                       FormatDataLayout    *outLayout);
+                       GPUFormatDataLayout *outLayout);
 
 GPU_HIDE
 bool
@@ -93,7 +93,7 @@ formatCopyAligned(GPUFormat format,
                   uint32_t  mipWidth,
                   uint32_t  mipHeight);
 
-static GPU_INLINE FormatNumericType
+static GPU_INLINE GPUFormatNumericType
 formatNumericType(GPUFormat format) {
   switch (format) {
     case GPU_FORMAT_R8_UINT:

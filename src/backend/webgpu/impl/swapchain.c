@@ -21,8 +21,8 @@ static bool
 webgpu_configureSwapchain(GPUSwapchain                 *swapchain,
                           const GPUSwapchainCreateInfo *info) {
   WGPUSurfaceConfiguration configuration = WGPU_SURFACE_CONFIGURATION_INIT;
-  SwapchainWebGPU         *native;
-  SurfaceWebGPU           *surface;
+  GPUSwapchainWebGPU      *native;
+  GPUSurfaceWebGPU        *surface;
 
   native  = webgpuSwapchain(swapchain);
   surface = webgpuSurface(info->surface);
@@ -53,12 +53,12 @@ webgpu_configureSwapchain(GPUSwapchain                 *swapchain,
 }
 
 static GPUSwapchain*
-webgpu_createSwapchain(Api                          *api,
+webgpu_createSwapchain(GPUApi                       *api,
                        GPUDevice                    *device,
                        GPUQueue                     *queue,
                        const GPUSwapchainCreateInfo *info) {
-  DeviceWebGPU       *deviceNative;
-  SwapchainWebGPU    *native;
+  GPUDeviceWebGPU    *deviceNative;
+  GPUSwapchainWebGPU *native;
   GPUSwapchain       *swapchain;
 
   GPU__UNUSED(api);
@@ -93,7 +93,7 @@ webgpu_createSwapchain(Api                          *api,
 static GPUResult
 webgpu_resizeSwapchain(GPUSwapchain *swapchain, GPUExtent2D size) {
   WGPUSurfaceConfiguration configuration = WGPU_SURFACE_CONFIGURATION_INIT;
-  SwapchainWebGPU         *native;
+  GPUSwapchainWebGPU      *native;
 
   native = webgpuSwapchain(swapchain);
 
@@ -115,7 +115,7 @@ webgpu_resizeSwapchain(GPUSwapchain *swapchain, GPUExtent2D size) {
 
 static void
 webgpu_destroySwapchain(GPUSwapchain *swapchain) {
-  SwapchainWebGPU    *native;
+  GPUSwapchainWebGPU *native;
 
   native = webgpuSwapchain(swapchain);
 
@@ -139,7 +139,7 @@ webgpu_destroySwapchain(GPUSwapchain *swapchain) {
 }
 
 void
-webgpu_initSwapchain(ApiSwapchain    *api) {
+webgpu_initSwapchain(GPUSwapchainApi *api) {
   api->createSwapchain  = webgpu_createSwapchain;
   api->resizeSwapchain  = webgpu_resizeSwapchain;
   api->destroySwapchain = webgpu_destroySwapchain;

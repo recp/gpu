@@ -203,7 +203,7 @@ check_compute_disk_cache(GPUDevice                    *device,
   char                       lockPath[168];
   GPUComputePipeline        *pipeline;
   GPUPipelineCache          *cache;
-  Api                       *api;
+  GPUApi                    *api;
   FILE                      *file;
   long                       fileSize;
   int                        ok;
@@ -383,7 +383,7 @@ check_compute_push_constant_shadowing_calls(GPUDevice *activeDevice) {
   GPUQueue              queue  = {0};
   GPUCommandBuffer      cmdb   = {0};
   GPUComputePassEncoder pass   = {0};
-  Api                  *api;
+  GPUApi               *api;
   void ( *oldPushConstants)(GPUComputePassEncoder *, const void *, uint32_t);
   uint32_t              value;
   int                   ok;
@@ -639,7 +639,7 @@ check_compute_dispatch_validation_calls(GPUDevice *device) {
   GPUComputePassEncoder        pass             = {0};
   GPUBuffer                    indirectBuffer   = {0};
   GPUBuffer                    wrongUsageBuffer = {0};
-  Api                         *api;
+  GPUApi                      *api;
   void ( *oldDispatch)(GPUComputePassEncoder *, uint32_t, uint32_t, uint32_t);
   void ( *oldDispatchIndirect)(GPUComputePassEncoder *, GPUBuffer *, uint64_t);
   bool ( *oldMultiDispatchIndirect)(GPUComputePassEncoder *, GPUBuffer *, uint64_t, uint32_t, uint32_t);

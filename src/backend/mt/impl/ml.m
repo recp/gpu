@@ -37,7 +37,7 @@ static GPUResult
 modelInputs(GPUMLModelEXT *model) API_AVAILABLE(macos(26.0), ios(26.0));
 
 static GPUResult
-pipelineInfo(MLProfile *profile, id<MTL4MachineLearningPipelineState> pipeline)
+pipelineInfo(GPUMLProfile *profile, id<MTL4MachineLearningPipelineState> pipeline)
   API_AVAILABLE(macos(26.0), ios(26.0));
 
 static GPUResult
@@ -121,7 +121,7 @@ modelInputs(GPUMLModelEXT *model) {
 }
 
 static GPUResult
-pipelineInfo(MLProfile *profile, id<MTL4MachineLearningPipelineState> pipeline) {
+pipelineInfo(GPUMLProfile *profile, id<MTL4MachineLearningPipelineState> pipeline) {
   GPUMLBindingInfoEXT  *bindings;
   id<MTLBinding>        binding;
   id<MTLTensorBinding>  tensor;
@@ -249,7 +249,7 @@ static GPUResult
 preparePipeline(GPUMLPipelineEXT *pipeline) {
   NSInteger                              dimensions[2];
   MLModelMT                             *native;
-  DeviceMT                              *device;
+  GPUDeviceMT                           *device;
   MTL4MachineLearningPipelineDescriptor *descriptor;
   MTL4LibraryFunctionDescriptor         *function;
   MTL4PipelineOptions                   *options;
@@ -335,11 +335,11 @@ preparePipeline(GPUMLPipelineEXT *pipeline) {
 static GPUResult
 createModel(GPUMLModelEXT *model) {
 #if MT_HAS_METAL4
-  MLModelMT *native;
-  DeviceMT  *device;
-  NSString  *path;
-  NSString  *name;
-  NSError   *error;
+  MLModelMT   *native;
+  GPUDeviceMT *device;
+  NSString    *path;
+  NSString    *name;
+  NSError     *error;
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
     @autoreleasepool {
@@ -442,8 +442,8 @@ createBindings(GPUMLBindingsEXT *bindings) {
   const GPUMLPipelineInfoEXT *info;
   MLBindingsMT               *native;
   GPUTensorEXT               *tensor;
-  DeviceMT                   *device;
-  HeapMT                     *heap;
+  GPUDeviceMT                *device;
+  GPUHeapMT                  *heap;
   NSError                    *error;
   id                          descriptor;
   id<MTLTensor>               nativeTensor;
@@ -542,7 +542,7 @@ encode(GPUCommandBuffer *cmdb, GPUMLBindingsEXT *bindings) {
 #if MT_HAS_METAL4
   MTCommandBuffer                       *command;
   MLBindingsMT                          *native;
-  HeapMT                                *heap;
+  GPUHeapMT                             *heap;
   id<MTL4MachineLearningCommandEncoder>  encoder;
   uint32_t                               i;
 
@@ -580,7 +580,7 @@ encode(GPUCommandBuffer *cmdb, GPUMLBindingsEXT *bindings) {
 
 GPU_HIDE
 void
-mt_initML(ApiML *api) {
+mt_initML(GPUMLApi *api) {
   api->createModel     = createModel;
   api->destroyModel    = destroyModel;
   api->createPipeline  = createPipeline;

@@ -19,7 +19,7 @@
 
 GPU_HIDE
 GPUResult
-mt_acquireTextureView(DeviceMT          *device,
+mt_acquireTextureView(GPUDeviceMT       *device,
                       id<MTLTexture>     texture,
                       id                 descriptor,
                       MTTextureViewSlot *slot,
@@ -27,10 +27,10 @@ mt_acquireTextureView(DeviceMT          *device,
 
 GPU_HIDE
 void
-mt_releaseTextureView(DeviceMT    *device, MTTextureViewSlot *slot);
+mt_releaseTextureView(GPUDeviceMT *device, MTTextureViewSlot *slot);
 
 GPU_HIDE
 void
-mt_destroyTextureViewPools(DeviceMT    *device);
+mt_destroyTextureViewPools(GPUDeviceMT *device);
 
 #endif /* mt_texture_view_pool_h */

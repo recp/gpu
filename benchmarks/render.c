@@ -644,7 +644,7 @@ bench_renderFreeMetrics(BenchSceneMetrics *metrics) {
 
 void
 bench_renderCleanup(BenchRender *bench) {
-  Api    *api;
+  GPUApi *api;
 
   if (!bench) {
     return;

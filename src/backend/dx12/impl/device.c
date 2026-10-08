@@ -102,7 +102,7 @@ dx12_uslTargetProfile(D3D_SHADER_MODEL shaderModel,
 }
 
 static void
-dx12_fillAdapterName(AdapterDX12    *adapterDX12) {
+dx12_fillAdapterName(GPUAdapterDX12 *adapterDX12) {
   if (!adapterDX12) {
     return;
   }
@@ -119,12 +119,12 @@ dx12_fillAdapterName(AdapterDX12    *adapterDX12) {
 }
 
 static bool
-dx12_isParallels(const AdapterDX12    *adapterDX12) {
+dx12_isParallels(const GPUAdapterDX12 *adapterDX12) {
   return adapterDX12 && strstr(adapterDX12->name, "Parallels Display Adapter") != NULL;
 }
 
 static bool
-dx12_queryResultsReliable(const AdapterDX12    *adapterDX12) {
+dx12_queryResultsReliable(const GPUAdapterDX12 *adapterDX12) {
   return adapterDX12 && !dx12_isParallels(adapterDX12);
 }
 
@@ -441,7 +441,7 @@ dx12_supportsMatrixConstruction(ID3D12Device                 *device,
 }
 
 static void
-dx12_appendSubgroupMatrixProfile(AdapterDX12                     *adapter,
+dx12_appendSubgroupMatrixProfile(GPUAdapterDX12                  *adapter,
                                  ID3D12Device                    *device,
                                  const DX12SubgroupMatrixProfile *profile) {
   D3D12_FEATURE_DATA_LINEAR_ALGEBRA_MATRIX_OPERATION_SUPPORT query = {0};
@@ -545,7 +545,7 @@ dx12_appendSubgroupMatrixProfile(AdapterDX12                     *adapter,
 }
 
 static void
-dx12_querySubgroupMatrices(AdapterDX12    *adapter, ID3D12Device *device) {
+dx12_querySubgroupMatrices(GPUAdapterDX12 *adapter, ID3D12Device *device) {
   D3D12_FEATURE_DATA_LINEAR_ALGEBRA_SUPPORT support = {0};
   uint32_t                                  i;
 
@@ -564,7 +564,7 @@ dx12_querySubgroupMatrices(AdapterDX12    *adapter, ID3D12Device *device) {
 }
 #else
 static void
-dx12_querySubgroupMatrices(AdapterDX12    *adapter, ID3D12Device *device) {
+dx12_querySubgroupMatrices(GPUAdapterDX12 *adapter, ID3D12Device *device) {
   GPU__UNUSED(adapter);
   GPU__UNUSED(device);
 }
@@ -585,8 +585,8 @@ dx12_loadDXCompiler(void) {
 }
 
 static bool
-dx12_queryAdapterCapabilities(const InstanceDX12    *instance,
-                              AdapterDX12           *adapter) {
+dx12_queryAdapterCapabilities(const GPUInstanceDX12 *instance,
+                              GPUAdapterDX12        *adapter) {
   D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
   HMODULE                          dxcModule;
   ID3D12Device                    *device;
@@ -686,8 +686,8 @@ dx12_queryAdapterCapabilities(const InstanceDX12    *instance,
 
 static bool
 dx12_ensureAdapterCapabilities(const GPUAdapter *adapter) {
-  AdapterDX12     *adapterDX12;
-  InstanceDX12    *instanceDX12;
+  GPUAdapterDX12  *adapterDX12;
+  GPUInstanceDX12 *instanceDX12;
   LONG             state;
   bool             ready;
 
@@ -721,8 +721,8 @@ dx12_ensureAdapterCapabilities(const GPUAdapter *adapter) {
 static bool
 dx12_ensureSubgroupMatrices(const GPUAdapter *adapter) {
   HMODULE          dxcModule;
-  AdapterDX12     *adapterDX12;
-  InstanceDX12    *instanceDX12;
+  GPUAdapterDX12  *adapterDX12;
+  GPUInstanceDX12 *instanceDX12;
   ID3D12Device    *device;
   LONG             state;
 
@@ -775,7 +775,7 @@ dx12_ensureSubgroupMatrices(const GPUAdapter *adapter) {
 }
 
 static GPUAdapterType
-dx12_adapterType(const AdapterDX12    *adapterDX12) {
+dx12_adapterType(const GPUAdapterDX12 *adapterDX12) {
   const DXGI_ADAPTER_DESC1 *desc;
 
   if (!adapterDX12) {
@@ -800,7 +800,7 @@ dx12_adapterType(const AdapterDX12    *adapterDX12) {
 }
 
 static void
-dx12_queryDeviceCapabilities(DeviceDX12    *device) {
+dx12_queryDeviceCapabilities(GPUDeviceDX12 *device) {
   D3D12_FEATURE_DATA_D3D12_OPTIONS   options = {0};
   D3D12_FEATURE_DATA_ROOT_SIGNATURE  rootSignature = {0};
   D3D12_FEATURE_DATA_D3D12_OPTIONS12 options12 = {0};
@@ -909,7 +909,7 @@ dx12_queryDeviceCapabilities(DeviceDX12    *device) {
 }
 
 static bool
-dx12__newSignature(DeviceDX12                  *device,
+dx12__newSignature(GPUDeviceDX12               *device,
                    D3D12_INDIRECT_ARGUMENT_TYPE type,
                    UINT                         stride,
                    ID3D12CommandSignature     **outSignature) {
@@ -933,7 +933,7 @@ dx12__newSignature(DeviceDX12                  *device,
 }
 
 static bool
-dx12__newSignatures(DeviceDX12    *device) {
+dx12__newSignatures(GPUDeviceDX12 *device) {
   return dx12__newSignature(device,
                             D3D12_INDIRECT_ARGUMENT_TYPE_DRAW,
                             sizeof(D3D12_DRAW_ARGUMENTS),
@@ -949,7 +949,7 @@ dx12__newSignatures(DeviceDX12    *device) {
 }
 
 static void
-dx12__freeSignatures(DeviceDX12    *device) {
+dx12__freeSignatures(GPUDeviceDX12 *device) {
   if (!device) {
     return;
   }
@@ -973,14 +973,14 @@ dx12__freeSignatures(DeviceDX12    *device) {
 static bool
 dx12_supportsSubgroupOperations(const GPUAdapter     *__restrict adapter,
                                 GPUShaderStageFlags              stage,
-                                BackendSubgroupOperationFlags    operations) {
-  AdapterDX12    *adapterDX12;
+                                GPUBackendSubgroupOperationFlags operations) {
+  GPUAdapterDX12 *adapterDX12;
   const GPUShaderStageFlags              supportedStages = GPU_SHADER_STAGE_VERTEX_BIT
                                                           | GPU_SHADER_STAGE_FRAGMENT_BIT
                                                           | GPU_SHADER_STAGE_COMPUTE_BIT
                                                           | GPU_SHADER_STAGE_TASK_BIT
                                                           | GPU_SHADER_STAGE_MESH_BIT;
-  const BackendSubgroupOperationFlags    supportedOperations = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT
+  const GPUBackendSubgroupOperationFlags supportedOperations = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT
                                                               | GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT
                                                               | GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
 
@@ -996,7 +996,7 @@ static GPUResult
 dx12_getSubgroupMatrixProperties(const GPUAdapter               *__restrict adapter,
                                  uint32_t                       *__restrict inoutPropertyCount,
                                  GPUSubgroupMatrixPropertiesEXT *__restrict outProperties) {
-  AdapterDX12    *adapterDX12;
+  GPUAdapterDX12 *adapterDX12;
   uint32_t        capacity;
   uint32_t        count;
   uint32_t        copyCount;
@@ -1031,7 +1031,7 @@ dx12_getSubgroupMatrixProperties(const GPUAdapter               *__restrict adap
 static void
 dx12_getLimits(const GPUAdapter *__restrict adapter,
                GPULimits        *__restrict outLimits) {
-  AdapterDX12    *adapterDX12;
+  GPUAdapterDX12 *adapterDX12;
 
   adapterDX12 = adapter ? adapter->_priv : NULL;
 
@@ -1055,8 +1055,8 @@ GPU_HIDE
 GPUAdapter*
 dx12_getAvailableAdapters(GPUInstance *__restrict inst,
                           uint32_t                maxNumberOfItems) {
-  AdapterDX12     *adapterDX12;
-  InstanceDX12    *instDX12;
+  GPUAdapterDX12  *adapterDX12;
+  GPUInstanceDX12 *instDX12;
   IDXGIFactory4   *dxgiFactory;
   GPUAdapter      *firstAdapter;
   GPUAdapter      *lastAdapter;
@@ -1184,12 +1184,12 @@ dx12_selectAdapter(GPUInstance *__restrict inst,
                    GPUAdapter  *__restrict adapters,
                    GPUPowerPreference      powerPreference) {
   DXGI_ADAPTER_DESC1  desc;
-  InstanceDX12       *instDX12;
+  GPUInstanceDX12    *instDX12;
   IDXGIFactory6      *factory6;
   IDXGIAdapter1      *preferred;
   GPUAdapter         *adapter;
   GPUAdapter         *item;
-  AdapterDX12        *itemDX12;
+  GPUAdapterDX12     *itemDX12;
   DXGI_GPU_PREFERENCE nativePreference;
   HRESULT             hr;
   UINT                index;
@@ -1258,7 +1258,7 @@ dx12_selectAdapter(GPUInstance *__restrict inst,
 GPU_HIDE
 void
 dx12_destroyAdapter(GPUAdapter *__restrict adapter) {
-  AdapterDX12    *adapterDX12;
+  GPUAdapterDX12 *adapterDX12;
 
   if (!adapter) {
     return;
@@ -1286,7 +1286,7 @@ GPU_HIDE
 GPUResult
 dx12_getAdapterProperties(const GPUAdapter     *__restrict adapter,
                           GPUAdapterProperties *__restrict outProps) {
-  AdapterDX12    *adapterDX12;
+  GPUAdapterDX12 *adapterDX12;
 
   if (!adapter || !outProps || !adapter->_priv) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -1309,7 +1309,7 @@ GPU_HIDE
 GPUResult
 dx12_getAdapterIdentity(const GPUAdapter   *__restrict adapter,
                         GPUAdapterIdentity *__restrict outIdentity) {
-  AdapterDX12    *adapterDX12;
+  GPUAdapterDX12 *adapterDX12;
 
   if (!adapter || !outIdentity || !adapter->_priv) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -1329,7 +1329,7 @@ GPU_HIDE
 bool
 dx12_supportsFeature(const GPUAdapter *__restrict adapter,
                      GPUFeature                   feature) {
-  AdapterDX12    *adapterDX12;
+  GPUAdapterDX12 *adapterDX12;
 
   if (!adapter || !adapter->_priv) {
     return false;
@@ -1396,14 +1396,14 @@ dx12_supportsFeature(const GPUAdapter *__restrict adapter,
 GPU_HIDE
 GPUDevice*
 dx12_createDevice(GPUAdapter   *__restrict adapter,
-                  const QueueCreateInfo    queCI[],
+                  const GPUQueueCreateInfo queCI[],
                   uint32_t                 nQueCI,
                   uint64_t                 enabledFeatureMask) {
   GPUInstance         *inst;
-  InstanceDX12        *instDX12;
-  AdapterDX12         *adapterDX12;
+  GPUInstanceDX12     *instDX12;
+  GPUAdapterDX12      *adapterDX12;
   GPUDevice           *device;
-  DeviceDX12          *deviceDX12;
+  GPUDeviceDX12       *deviceDX12;
   ID3D12DeviceFactory *deviceFactory;
   GPUQueue            *queue;
   HRESULT              hr;
@@ -1722,7 +1722,7 @@ err:
 GPU_HIDE
 void
 dx12_destroyDevice(GPUDevice *__restrict device) {
-  DeviceDX12    *deviceDX12;
+  GPUDeviceDX12 *deviceDX12;
   uint32_t       i;
 
   if (!device) {
@@ -1775,7 +1775,7 @@ dx12_destroyDevice(GPUDevice *__restrict device) {
 
 GPU_HIDE
 void
-dx12_initDevice(ApiDevice    *apiDevice) {
+dx12_initDevice(GPUDeviceApi *apiDevice) {
   apiDevice->getAvailableAdapters        = dx12_getAvailableAdapters;
   apiDevice->selectAdapter               = dx12_selectAdapter;
   apiDevice->destroyAdapter              = dx12_destroyAdapter;

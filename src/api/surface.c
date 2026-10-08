@@ -31,7 +31,7 @@ isSingleHandleSurfaceType(GPUSurfaceType type) {
 static bool
 parseSurfaceCreateInfo(GPUInstance                *inst,
                        const GPUSurfaceCreateInfo *info,
-                       SurfaceNativeInfo          *out) {
+                       GPUSurfaceNativeInfo       *out) {
   const GPUChainedStruct            *chain;
   const GPUNativeSurfaceCreateInfo  *nativeInfo;
   const GPUSurfaceXlibCreateInfo    *xlibInfo;
@@ -122,8 +122,8 @@ GPUResult
 GPUCreateSurface(GPUInstance                *__restrict inst,
                  const GPUSurfaceCreateInfo *__restrict info,
                  GPUSurface                **__restrict outSurface) {
-  SurfaceNativeInfo    nativeInfo;
-  Api                 *api;
+  GPUSurfaceNativeInfo nativeInfo;
+  GPUApi              *api;
 
   if (!outSurface) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -201,7 +201,7 @@ GPUCreateSurfaceFromNative(GPUInstance *__restrict inst,
 GPU_EXPORT
 void
 GPUDestroySurface(GPUSurface *__restrict surface) {
-  Api    *api;
+  GPUApi *api;
 
   if (!surface) {
     return;
@@ -221,7 +221,7 @@ GPUResult
 GPUGetSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
                           const GPUSurface       *__restrict surface,
                           GPUSurfaceCapabilities *__restrict outCaps) {
-  Api      *api;
+  GPUApi   *api;
   GPUResult result;
   bool      fifoSupported;
 

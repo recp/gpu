@@ -189,7 +189,7 @@ check_native_errors(void) {
 
 static int
 check_surface_status(GPUDevice *device) {
-  SwapchainMetal       native    = {0};
+  GPUSwapchainMetal    native    = {0};
   GPUSwapchain         swapchain = {0};
   GPUUnavailableLayer *layer = nil;
   uint64_t             offset;

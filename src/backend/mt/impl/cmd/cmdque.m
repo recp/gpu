@@ -111,7 +111,7 @@ static bool
 mt_ensureTransferStaging(GPUQueue       *queue,
                          MTTransferSlot *slot,
                          uint64_t        sizeBytes) {
-  DeviceMT     *device;
+  GPUDeviceMT  *device;
   id<MTLBuffer> staging;
   uint64_t      capacity;
 
@@ -167,7 +167,7 @@ mt_createCommandBufferState(GPUQueue *cmdb, MTCommandQueue *queue) {
   GPUCommandBuffer          *cb;
   MTCommandBuffer           *native;
 #if MT_HAS_METAL4
-  DeviceMT                  *deviceMT;
+  GPUDeviceMT               *deviceMT;
   MTLResidencySetDescriptor *residencyDesc;
   NSError                   *error;
 #endif
@@ -262,7 +262,7 @@ static GPUResult
 mt_createSemaphore(GPUDevice                    *device,
                    const GPUSemaphoreCreateInfo *info,
                    GPUSemaphore                 *semaphore) {
-  DeviceMT          *deviceMT;
+  GPUDeviceMT       *deviceMT;
   id<MTLSharedEvent> event;
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   const char        *label;
@@ -780,7 +780,7 @@ mt_waitCommandQueueIdle(GPUQueue *queue) {
 GPU_HIDE
 GPUQueue*
 mt_newCommandQueue(GPUDevice *__restrict device) {
-  DeviceMT       *deviceMT;
+  GPUDeviceMT    *deviceMT;
   GPUQueue       *que;
   MTCommandQueue *native;
 
@@ -885,7 +885,7 @@ mt_getCommandQueue(GPUDevice *__restrict device,
                    GPUQueueFlagBits      bits,
                    uint32_t              index) {
   GPUQueue    *que;
-  DeviceMT    *deviceMT;
+  GPUDeviceMT *deviceMT;
   uint32_t     matchIndex;
   uint32_t     i;
 
@@ -912,7 +912,7 @@ GPUResult
 mt_getTimestampPeriod(GPUQueue *queue,
                       double   *outNanosecondsPerTick) {
 #if MT_HAS_METAL4
-  DeviceMT       *deviceMT;
+  GPUDeviceMT    *deviceMT;
   MTCommandQueue *native;
   uint64_t        frequency;
 
@@ -1247,7 +1247,7 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
 
 GPU_HIDE
 void
-mt_initCmdQue(ApiCommandQueue    *api) {
+mt_initCmdQue(GPUCommandQueueApi *api) {
   api->newCommandQueue         = mt_newCommandQueue;
   api->getCommandQueue         = mt_getCommandQueue;
   api->getTimestampPeriod      = mt_getTimestampPeriod;

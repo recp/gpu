@@ -74,7 +74,7 @@ gpu_backendName(GPUBackend backend) {
 }
 
 static bool
-validQueueCreateInfos(const QueueCreateInfo    queCI[],
+validQueueCreateInfos(const GPUQueueCreateInfo queCI[],
                       uint32_t                 nQueCI) {
   uint32_t i;
 
@@ -213,7 +213,7 @@ adapterRequestMask(const GPUAdapterRequestOptions *options,
 }
 
 static bool
-builtinSupportedFeature(const Api    *api, GPUFeature feature) {
+builtinSupportedFeature(const GPUApi *api, GPUFeature feature) {
   bool hasComputePipeline;
 
   if (!api) {
@@ -244,7 +244,7 @@ builtinSupportedFeature(const Api    *api, GPUFeature feature) {
 
 static bool
 adapterSupportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
-  Api    *api;
+  GPUApi *api;
 
   if (!knownFeature(feature)) {
     return false;
@@ -299,7 +299,7 @@ collectEnabledFeatures(const GPUAdapter *adapter, const GPUFeatureSet *set) {
 
 static uint64_t
 defaultEnabledFeatureMask(const GPUAdapter *adapter) {
-  Api     *api;
+  GPUApi  *api;
   uint64_t mask;
   uint32_t i;
   bool     supported;
@@ -481,7 +481,7 @@ fillDefaultLimits(GPULimits *limits) {
 
 static void
 fillAdapterLimits(const GPUAdapter *adapter, GPULimits *limits) {
-  Api    *api;
+  GPUApi *api;
 
   fillDefaultLimits(limits);
   if ((api = adapterApi(adapter)) && api->device.getLimits) {
@@ -558,7 +558,7 @@ transientUploadUsageMask(void) {
 
 static void*
 bufferContents(GPUBuffer *buffer) {
-  Api    *api;
+  GPUApi *api;
 
   if (!buffer) {
     return NULL;
@@ -573,8 +573,8 @@ bufferContents(GPUBuffer *buffer) {
 
 static void
 destroyTransientChunks(GPUDevice *device) {
-  TransientChunk    *chunk;
-  TransientChunk    *next;
+  GPUTransientChunk *chunk;
+  GPUTransientChunk *next;
 
   if (!device) {
     return;
@@ -699,7 +699,7 @@ createTransientBuffer(GPUDevice          *device,
                       bool               *outCpuPtrOwned) {
   GPUBufferCreateInfo info = {0};
   GPUBuffer          *buffer;
-  Api                *api;
+  GPUApi             *api;
   void               *cpuPtr;
   GPUResult           result;
 
@@ -805,7 +805,7 @@ allocateTransientChunk(GPUDevice               *device,
                        uint64_t                 sizeBytes,
                        uint64_t                 alignment,
                        GPUTransientBufferSlice *outSlice) {
-  TransientChunk    *chunk;
+  GPUTransientChunk *chunk;
   GPUBuffer         *buffer;
   void              *cpuPtr;
   uint64_t           alignedOffset;
@@ -930,12 +930,12 @@ formatIsKnownColor(GPUFormat format) {
 
 static GPUResult
 buildQueueCreateInfos(const GPUDeviceCreateInfo *info,
-                      QueueCreateInfo           *stackInfos,
+                      GPUQueueCreateInfo        *stackInfos,
                       uint32_t                   stackInfoCount,
-                      QueueCreateInfo          **outInfos,
+                      GPUQueueCreateInfo       **outInfos,
                       uint32_t                  *outInfoCount) {
   const GPUDeviceQueueCreateInfo *queueInfo;
-  QueueCreateInfo                *infos;
+  GPUQueueCreateInfo             *infos;
   uint32_t                        requestCount;
   uint32_t                        i;
 
@@ -998,7 +998,7 @@ static GPUAdapter*
 getInstanceAdapters(GPUInstance *inst) {
   GPUAdapter *adapters;
   GPUAdapter *item;
-  Api        *api;
+  GPUApi     *api;
   uint32_t    count;
 
   if (inst->_adaptersEnumerated) {
@@ -1095,7 +1095,7 @@ selectRequestedAdapter(GPUInstance       *inst,
   GPUAdapter *adapters;
   GPUAdapter *preferred;
   GPUAdapter *best;
-  Api        *api;
+  GPUApi     *api;
   GPUAdapter *adapter;
   uint32_t    bestRank;
   uint32_t    rank;
@@ -1148,7 +1148,7 @@ completeAdapterRequest(GPUResult   result,
                        void       *userData) {
   AdapterRequestContext    *request;
   GPUInstance              *instance;
-  Api                      *api;
+  GPUApi                   *api;
 
   request  = userData;
   instance = request->instance;
@@ -1191,7 +1191,7 @@ static GPUResult
 finalizeDevice(GPUAdapter *adapter,
                GPUDevice  *device,
                uint64_t    enabledFeatureMask) {
-  Api      *api;
+  GPUApi   *api;
   GPUResult result;
 
   if (!(api = adapterApi(adapter)) || !device) {
@@ -1268,7 +1268,7 @@ completeDeviceRequest(GPUResult  result,
 GPU_HIDE
 GPUResult
 deviceFlushTransientUploads(GPUQueue *queue, uint32_t frameIndex) {
-  TransientChunk    *chunk;
+  GPUTransientChunk *chunk;
   GPUDevice         *device;
   uint64_t           baseOffset;
   uint64_t           flushBytes;
@@ -1506,7 +1506,7 @@ GPURequestAdapter(GPUInstance                    *inst,
                   void                           *userData) {
   AdapterRequestContext    *request;
   GPUAdapter               *adapter;
-  Api                      *api;
+  GPUApi                   *api;
   uint64_t                  requiredFeatureMask;
   GPUResult                 result;
   GPUPowerPreference        preference;
@@ -1571,7 +1571,7 @@ GPU_EXPORT
 GPUResult
 GPUGetAdapterProperties(const GPUAdapter     *adapter,
                         GPUAdapterProperties *outProps) {
-  Api       *api;
+  GPUApi    *api;
   GPUBackend backend;
 
   if (!adapter || !outProps) {
@@ -1605,7 +1605,7 @@ GPU_EXPORT
 GPUResult
 GPUGetAdapterIdentity(const GPUAdapter   *adapter,
                       GPUAdapterIdentity *outIdentity) {
-  Api                    *api;
+  GPUApi                 *api;
   GPUAdapterIdentityFlags knownFlags;
   GPUResult               result;
 
@@ -1742,7 +1742,7 @@ GPUResult
 GPUGetFormatCapabilities(const GPUAdapter      *adapter,
                          GPUFormat              format,
                          GPUFormatCapabilities *outCaps) {
-  Api                      *api;
+  GPUApi                   *api;
   const GPUSampleCountFlags knownSampleCounts = GPU_SAMPLE_COUNT_1_BIT |
                                                 GPU_SAMPLE_COUNT_2_BIT |
                                                 GPU_SAMPLE_COUNT_4_BIT |
@@ -2049,7 +2049,7 @@ GPUIsFeatureEnabled(const GPUDevice *device, GPUFeature feature) {
 GPU_EXPORT
 GPUProc
 GPUGetProcAddr(GPUDevice *device, const char *name) {
-  Api    *api;
+  GPUApi *api;
 
   if (!(api = deviceApi(device)) || !name || name[0] == '\0') {
     return NULL;
@@ -2396,9 +2396,9 @@ GPUResult
 GPUCreateDevice(GPUAdapter                *adapter,
                 const GPUDeviceCreateInfo *info,
                 GPUDevice                **outDevice) {
-  QueueCreateInfo     stackQueueInfos[8];
-  QueueCreateInfo    *queueInfos;
-  Api                *api;
+  GPUQueueCreateInfo  stackQueueInfos[8];
+  GPUQueueCreateInfo *queueInfos;
+  GPUApi             *api;
   uint64_t            enabledFeatureMask;
   uint32_t            queueInfoCount;
   GPUResult           result;
@@ -2492,11 +2492,11 @@ GPURequestDevice(GPUAdapter                *adapter,
                  const GPUDeviceCreateInfo *info,
                  GPUDeviceRequestCallback   callback,
                  void                      *userData) {
-  QueueCreateInfo          stackQueueInfos[8];
-  QueueCreateInfo         *queueInfos;
+  GPUQueueCreateInfo       stackQueueInfos[8];
+  GPUQueueCreateInfo      *queueInfos;
   DeviceRequestContext    *request;
   GPUDevice               *device;
-  Api                     *api;
+  GPUApi                  *api;
   uint64_t                 enabledFeatureMask;
   GPUResult                result;
   uint32_t                 queueInfoCount;
@@ -2608,7 +2608,7 @@ GPUGetAvailableQueueBits(GPUDevice *__restrict device) {
 GPU_EXPORT
 void
 GPUDestroyDevice(GPUDevice *__restrict device) {
-  Api    *api;
+  GPUApi *api;
 
   if (!device) {
     return;

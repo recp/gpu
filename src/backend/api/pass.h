@@ -25,10 +25,10 @@ extern "C" {
 
 typedef struct GPUBarrierBatch GPUBarrierBatch;
 
-typedef struct RenderPassDesc {
+typedef struct GPURenderPassDesc {
   void       *_priv;
   const char *label;
-} RenderPassDesc;
+} GPURenderPassDesc;
 
 struct GPUTransferPassEncoder {
   void             *_priv;
@@ -36,10 +36,10 @@ struct GPUTransferPassEncoder {
   bool              _ended;
 };
 
-typedef struct ApiRenderPass {
-  RenderPassDesc    * (*beginRenderPass)(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info);
+typedef struct GPURenderPassApi {
+  GPURenderPassDesc * (*beginRenderPass)(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info);
 
-  void (*destroyRenderPass)(RenderPassDesc    *pass);
+  void (*destroyRenderPass)(GPURenderPassDesc *pass);
 
   GPUTransferPassEncoder * (*beginTransferPass)(GPUCommandBuffer *cmdb, const char *label);
 
@@ -78,7 +78,7 @@ typedef struct ApiRenderPass {
   void (*generateMipmaps)(GPUCommandBuffer *cmdb, GPUTexture *texture);
 
   void (*encodeBarriers)(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers);
-} ApiRenderPass;
+} GPURenderPassApi;
 
 #ifdef __cplusplus
 }

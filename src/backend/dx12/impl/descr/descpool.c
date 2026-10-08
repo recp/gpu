@@ -38,14 +38,14 @@ typedef struct DX12LayoutPlan {
 } DX12LayoutPlan;
 
 typedef struct DX12BindGroupWriteContext {
-  BindGroupDX12    *group;
+  GPUBindGroupDX12 *group;
   bool              valid;
 } DX12BindGroupWriteContext;
 
 typedef struct DX12BindContext {
   ID3D12GraphicsCommandList *commandList;
-  PipelineLayoutDX12        *layout;
-  BindGroupDX12             *group;
+  GPUPipelineLayoutDX12     *layout;
+  GPUBindGroupDX12          *group;
   GPUDevice                 *device;
   uint32_t                   resourceOffset;
   uint32_t                   groupIndex;
@@ -69,15 +69,15 @@ dx12__storageTextureReadOnly(GPUStorageTextureAccess access) {
 }
 
 static bool
-dx12__sourceSamplerSelected(const ShaderStaticSamplerInfo    *sampler,
+dx12__sourceSamplerSelected(const GPUShaderStaticSamplerInfo *sampler,
                             uint64_t                          entryMask) {
   return sampler
          && sampler->hlslIndex != UINT32_MAX
          && (sampler->entryMask & entryMask) != 0u;
 }
 
-static DescriptorHeapDX12*
-dx12__descriptorHeap(DeviceDX12                *device,
+static GPUDescriptorHeapDX12*
+dx12__descriptorHeap(GPUDeviceDX12             *device,
                      D3D12_DESCRIPTOR_HEAP_TYPE type) {
   if (!device) {
     return NULL;
@@ -103,9 +103,9 @@ dx12__descriptorHeap(DeviceDX12                *device,
 }
 
 static GPUResult
-dx12__ensureDescriptorHeap(DeviceDX12                *device,
+dx12__ensureDescriptorHeap(GPUDeviceDX12             *device,
                            D3D12_DESCRIPTOR_HEAP_TYPE type,
-                           DescriptorHeapDX12        *heap) {
+                           GPUDescriptorHeapDX12     *heap) {
   D3D12_DESCRIPTOR_HEAP_DESC desc = {0};
   size_t                     wordCount;
   uint32_t                   capacity;
@@ -152,7 +152,7 @@ dx12__ensureDescriptorHeap(DeviceDX12                *device,
 }
 
 static bool
-dx12__descriptorRangeFree(const DescriptorHeapDX12    *heap,
+dx12__descriptorRangeFree(const GPUDescriptorHeapDX12 *heap,
                           uint32_t                     offset,
                           uint32_t                     count) {
   uint32_t i;
@@ -170,7 +170,7 @@ dx12__descriptorRangeFree(const DescriptorHeapDX12    *heap,
 }
 
 static void
-dx12__markDescriptorRange(DescriptorHeapDX12    *heap,
+dx12__markDescriptorRange(GPUDescriptorHeapDX12 *heap,
                           uint32_t               offset,
                           uint32_t               count,
                           bool                   used) {
@@ -191,13 +191,13 @@ dx12__markDescriptorRange(DescriptorHeapDX12    *heap,
 }
 
 static bool
-dx12__recordCommandDescriptorAllocation(CommandBufferDX12    *command,
+dx12__recordCommandDescriptorAllocation(GPUCommandBufferDX12 *command,
                                         uint32_t              offset,
                                         uint32_t              count) {
-  DescriptorAllocationChunkDX12    *chunk;
+  GPUDescriptorAllocationChunkDX12 *chunk;
   GPUDevice                        *device;
-  DescriptorAllocationDX12         *allocation;
-  DescriptorAllocationChunkDX12    *tail;
+  GPUDescriptorAllocationDX12      *allocation;
+  GPUDescriptorAllocationChunkDX12 *tail;
 
   if (!command || count == 0u) {
     return false;
@@ -247,14 +247,14 @@ dx12__recordCommandDescriptorAllocation(CommandBufferDX12    *command,
   return true;
 }
 
-static CommandSamplerHeapDX12*
-dx12__takeCommandSamplerHeap(CommandBufferDX12    *command,
+static GPUCommandSamplerHeapDX12*
+dx12__takeCommandSamplerHeap(GPUCommandBufferDX12 *command,
                              uint32_t              requiredCount) {
   D3D12_DESCRIPTOR_HEAP_DESC  desc = {0};
-  CommandSamplerHeapDX12    **link;
-  CommandSamplerHeapDX12     *node;
+  GPUCommandSamplerHeapDX12 **link;
+  GPUCommandSamplerHeapDX12  *node;
   GPUDevice                  *device;
-  DeviceDX12                 *deviceDX12;
+  GPUDeviceDX12              *deviceDX12;
   uint32_t                    capacity;
   uint32_t                    slot;
   HRESULT                     result;
@@ -354,7 +354,7 @@ dx12__bufferBindingType(GPUBindingType type) {
 }
 
 static bool
-dx12__resourceTableBindingType(const DeviceDX12    *device,
+dx12__resourceTableBindingType(const GPUDeviceDX12 *device,
                                GPUBindingType       type,
                                uint32_t             arrayCount) {
   if (type == GPU_BINDING_UNIFORM_BUFFER
@@ -373,7 +373,7 @@ dx12__resourceTableBindingType(const DeviceDX12    *device,
 }
 
 static bool
-dx12__resourceTableBinding(const DeviceDX12              *device,
+dx12__resourceTableBinding(const GPUDeviceDX12           *device,
                            const GPUBindGroupLayoutEntry *entry) {
   if (!entry) {
     return false;
@@ -405,7 +405,7 @@ dx12__resourceRangeType(const GPUBindGroupLayoutEntry *entry) {
 }
 
 static GPUResult
-dx12__makeLayoutPlan(DeviceDX12                *device,
+dx12__makeLayoutPlan(GPUDeviceDX12             *device,
                      GPUPipelineLayout         *layout,
                      GPUBindGroupLayout *const *groups,
                      uint32_t                   groupCount,
@@ -536,11 +536,11 @@ dx12__makeLayoutPlan(DeviceDX12                *device,
 }
 
 static void
-dx12__fillLayoutPlan(DeviceDX12                *device,
+dx12__fillLayoutPlan(GPUDeviceDX12             *device,
                      GPUPipelineLayout         *layout,
                      GPUBindGroupLayout *const *groups,
                      uint32_t                   groupCount,
-                     PipelineLayoutDX12        *native) {
+                     GPUPipelineLayoutDX12     *native) {
   uint32_t bindingCursor;
   uint32_t rangeCursor;
   uint32_t rootCursor;
@@ -554,8 +554,8 @@ dx12__fillLayoutPlan(DeviceDX12                *device,
   for (uint32_t groupIndex = 0u; groupIndex < groupCount; groupIndex++) {
     const GPUBindGroupLayoutEntry *entries;
     const uint32_t                *backendBindings;
-    DescriptorTableDX12           *resourceTable;
-    DescriptorTableDX12           *samplerTable;
+    GPUDescriptorTableDX12        *resourceTable;
+    GPUDescriptorTableDX12        *samplerTable;
     uint32_t                       entryCount;
 
     entries         = GPUGetBindGroupLayoutEntries(groups[groupIndex], &entryCount);
@@ -739,7 +739,7 @@ dx12__fillNullUavTexture(D3D12_UNORDERED_ACCESS_VIEW_DESC *desc,
 }
 
 static bool
-dx12__writeNullResourceDescriptor(DeviceDX12                    *device,
+dx12__writeNullResourceDescriptor(GPUDeviceDX12                 *device,
                                   const GPUBindGroupLayoutEntry *entry,
                                   D3D12_CPU_DESCRIPTOR_HANDLE    handle) {
   bool readRaw;
@@ -877,7 +877,7 @@ dx12__writeNullResourceDescriptor(DeviceDX12                    *device,
 }
 
 static void
-dx12__writeNullSamplerDescriptor(DeviceDX12                    *device,
+dx12__writeNullSamplerDescriptor(GPUDeviceDX12                 *device,
                                  const GPUBindGroupLayoutEntry *entry,
                                  D3D12_CPU_DESCRIPTOR_HANDLE    handle) {
   D3D12_SAMPLER_DESC desc = {0};
@@ -899,10 +899,10 @@ dx12__writeNullSamplerDescriptor(DeviceDX12                    *device,
 }
 
 static void
-dx12__destroyNullTables(DeviceDX12            *device,
-                        PipelineLayoutDX12    *native) {
-  DescriptorTableDX12    *resourceTable;
-  DescriptorTableDX12    *samplerTable;
+dx12__destroyNullTables(GPUDeviceDX12         *device,
+                        GPUPipelineLayoutDX12 *native) {
+  GPUDescriptorTableDX12 *resourceTable;
+  GPUDescriptorTableDX12 *samplerTable;
   uint32_t                i;
 
   if (!device || !native) {
@@ -936,13 +936,13 @@ dx12__createNullTables(GPUDevice                 *device,
                        GPUPipelineLayout         *layout,
                        GPUBindGroupLayout *const *groups,
                        uint32_t                   groupCount,
-                       PipelineLayoutDX12        *native) {
+                       GPUPipelineLayoutDX12     *native) {
   D3D12_CPU_DESCRIPTOR_HANDLE    resourceHandle;
   D3D12_CPU_DESCRIPTOR_HANDLE    samplerHandle;
-  DeviceDX12                    *deviceDX12;
+  GPUDeviceDX12                 *deviceDX12;
   const GPUBindGroupLayoutEntry *entries;
-  DescriptorTableDX12           *resourceTable;
-  DescriptorTableDX12           *samplerTable;
+  GPUDescriptorTableDX12        *resourceTable;
+  GPUDescriptorTableDX12        *samplerTable;
   GPUResult                      result;
   uint32_t                       groupIndex;
   uint32_t                       resourceCursor;
@@ -1034,8 +1034,8 @@ fail:
   return result;
 }
 
-static const RootBindingDX12*
-dx12__findRootBinding(const PipelineLayoutDX12    *layout,
+static const GPURootBindingDX12*
+dx12__findRootBinding(const GPUPipelineLayoutDX12 *layout,
                       uint32_t                     groupIndex,
                       uint32_t                     binding,
                       GPUBindingType               bindingType) {
@@ -1064,7 +1064,7 @@ static bool
 dx12__fillStaticSamplers(GPUPipelineLayout                *layout,
                          GPUBindGroupLayout        *const *groups,
                          uint32_t                          groupCount,
-                         const ShaderStaticSamplerInfo    *sourceSamplers,
+                         const GPUShaderStaticSamplerInfo *sourceSamplers,
                          uint32_t                          sourceSamplerCount,
                          uint64_t                          entryMask,
                          D3D12_STATIC_SAMPLER_DESC        *samplers,
@@ -1127,10 +1127,10 @@ dx12__fillStaticSamplers(GPUPipelineLayout                *layout,
 }
 
 static void
-dx12__fillRanges11(const DeviceDX12            *device,
+dx12__fillRanges11(const GPUDeviceDX12         *device,
                    GPUPipelineLayout           *layout,
                    GPUBindGroupLayout   *const *groups,
-                   const PipelineLayoutDX12    *native,
+                   const GPUPipelineLayoutDX12 *native,
                    D3D12_ROOT_PARAMETER1       *parameters,
                    D3D12_DESCRIPTOR_RANGE1     *ranges) {
   for (uint32_t rootIndex = 0u; rootIndex < native->bindingCount; rootIndex++) {
@@ -1148,8 +1148,8 @@ dx12__fillRanges11(const DeviceDX12            *device,
        groupIndex++) {
     const GPUBindGroupLayoutEntry *entries;
     const uint32_t                *backendBindings;
-    const DescriptorTableDX12     *resourceTable;
-    const DescriptorTableDX12     *samplerTable;
+    const GPUDescriptorTableDX12  *resourceTable;
+    const GPUDescriptorTableDX12  *samplerTable;
     uint32_t                       entryCount;
     uint32_t                       resourceOffset;
     uint32_t                       resourceRange;
@@ -1214,10 +1214,10 @@ dx12__fillRanges11(const DeviceDX12            *device,
 }
 
 static void
-dx12__fillRanges10(const DeviceDX12            *device,
+dx12__fillRanges10(const GPUDeviceDX12         *device,
                    GPUPipelineLayout           *layout,
                    GPUBindGroupLayout   *const *groups,
-                   const PipelineLayoutDX12    *native,
+                   const GPUPipelineLayoutDX12 *native,
                    D3D12_ROOT_PARAMETER        *parameters,
                    D3D12_DESCRIPTOR_RANGE      *ranges) {
   for (uint32_t rootIndex = 0u; rootIndex < native->bindingCount; rootIndex++) {
@@ -1234,8 +1234,8 @@ dx12__fillRanges10(const DeviceDX12            *device,
        groupIndex++) {
     const GPUBindGroupLayoutEntry *entries;
     const uint32_t                *backendBindings;
-    const DescriptorTableDX12     *resourceTable;
-    const DescriptorTableDX12     *samplerTable;
+    const GPUDescriptorTableDX12  *resourceTable;
+    const GPUDescriptorTableDX12  *samplerTable;
     uint32_t                       entryCount;
     uint32_t                       resourceOffset;
     uint32_t                       resourceRange;
@@ -1297,13 +1297,13 @@ dx12__fillRanges10(const DeviceDX12            *device,
 static GPUResult
 dx12__createPipelineLayout(GPUDevice                        *device,
                            GPUPipelineLayout                *layout,
-                           const ShaderStaticSamplerInfo    *sourceSamplers,
+                           const GPUShaderStaticSamplerInfo *sourceSamplers,
                            uint32_t                          sourceSamplerCount,
                            uint64_t                          entryMask,
-                           PipelineLayoutDX12              **outNative) {
-  PipelineLayoutDX12        *native;
+                           GPUPipelineLayoutDX12           **outNative) {
+  GPUPipelineLayoutDX12     *native;
   GPUBindGroupLayout *const *groups;
-  DeviceDX12                *deviceDX12;
+  GPUDeviceDX12             *deviceDX12;
   ID3DBlob                  *serialized;
   ID3DBlob                  *errors;
   DX12LayoutPlan             plan;
@@ -1372,7 +1372,7 @@ dx12__createPipelineLayout(GPUDevice                        *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native->bindings                  = plan.bindingCount > 0u ? (RootBindingDX12 *)(native + 1) : NULL;
+  native->bindings                  = plan.bindingCount > 0u ? (GPURootBindingDX12 *)(native + 1) : NULL;
   native->bindingCount              = plan.bindingCount;
   native->rangeCount                = plan.rangeCount;
   native->rootParameterCount        = plan.rootParameterCount;
@@ -1558,8 +1558,8 @@ dx12__createPipelineLayout(GPUDevice                        *device,
 }
 
 static bool
-dx12__bindGroupDescriptorOffset(const BindGroupDX12           *group,
-                                const BindGroupBindingView    *binding,
+dx12__bindGroupDescriptorOffset(const GPUBindGroupDX12        *group,
+                                const GPUBindGroupBindingView *binding,
                                 bool                           sampler,
                                 uint32_t                      *outOffset) {
   uint32_t base;
@@ -1601,8 +1601,8 @@ dx12__bufferAlignments(GPUBindingType                type,
 }
 
 static bool
-dx12__bufferBindingSize(const BindGroupBindingView    *binding,
-                        const BufferDX12              *buffer,
+dx12__bufferBindingSize(const GPUBindGroupBindingView *binding,
+                        const GPUBufferDX12           *buffer,
                         bool                           table,
                         uint64_t                      *outSize) {
   uint32_t addressAlignment;
@@ -1627,13 +1627,13 @@ dx12__bufferBindingSize(const BindGroupBindingView    *binding,
 }
 
 static bool
-dx12__writeBufferDescriptor(DeviceDX12                    *device,
+dx12__writeBufferDescriptor(GPUDeviceDX12                 *device,
                             uint32_t                       resourceOffset,
                             uint32_t                       resourceCount,
-                            const BindGroupBindingView    *binding,
+                            const GPUBindGroupBindingView *binding,
                             uint32_t                       descriptorOffset) {
   D3D12_CPU_DESCRIPTOR_HANDLE handle;
-  BufferDX12                 *buffer;
+  GPUBufferDX12              *buffer;
   uint64_t                    stride;
   uint64_t                    size;
   bool                        raw;
@@ -1723,19 +1723,19 @@ dx12__writeBufferDescriptor(DeviceDX12                    *device,
 
 static void
 dx12__writeBindGroup(void                          *context,
-                     const BindGroupBindingView    *binding) {
+                     const GPUBindGroupBindingView *binding) {
   D3D12_CPU_DESCRIPTOR_HANDLE   handle;
   DX12BindGroupWriteContext    *writeContext;
-  TextureViewDX12              *sampledView;
-  TextureViewDX12              *storageView;
-  SamplerDX12                  *sampler;
+  GPUTextureViewDX12           *sampledView;
+  GPUTextureViewDX12           *storageView;
+  GPUSamplerDX12               *sampler;
 #if GPU_DX12_HAS_SAMPLER_FEEDBACK
-  SamplerFeedbackMapDX12       *map;
+  GPUSamplerFeedbackMapDX12    *map;
 #endif
 #if GPU_DX12_HAS_SAMPLER_FEEDBACK
-  TextureDX12                  *target;
+  GPUTextureDX12               *target;
 #endif
-  AccelerationStructureDX12    *structure;
+  GPUAccelerationStructureDX12 *structure;
   bool                          readOnly;
 
   writeContext = context;
@@ -1987,18 +1987,18 @@ dx12__writeBindGroup(void                          *context,
 }
 
 static DX12DynamicBufferRange*
-dx12__dynamicRanges(BindGroupDX12    *group) {
+dx12__dynamicRanges(GPUBindGroupDX12 *group) {
   return (DX12DynamicBufferRange *)(group->descriptorOffsets + group->entryCount);
 }
 
 static bool
-dx12__initDynamicRanges(BindGroupDX12                 *native,
-                        const BindGroupPriv           *group,
+dx12__initDynamicRanges(GPUBindGroupDX12              *native,
+                        const GPUBindGroupPriv        *group,
                         const GPUBindGroupLayoutEntry *entries) {
   DX12DynamicBufferRange        *ranges;
-  const BindGroupBindingPriv    *binding;
+  const GPUBindGroupBindingPriv *binding;
   const GPUBindGroupLayoutEntry *entry;
-  const BufferDX12              *buffer;
+  const GPUBufferDX12           *buffer;
   uint32_t                       count = 0u;
   uint32_t                       i;
 
@@ -2073,9 +2073,9 @@ dx12__runtimeBindingCount(GPUBindGroupLayout *layout) {
 }
 
 static bool
-dx12__prepareResourceTable(CommandBufferDX12    *command,
+dx12__prepareResourceTable(GPUCommandBufferDX12 *command,
                            GPUBindGroupLayout   *layout,
-                           BindGroupDX12        *group,
+                           GPUBindGroupDX12     *group,
                            uint32_t             *outResourceOffset) {
   D3D12_CPU_DESCRIPTOR_HANDLE    dst;
   D3D12_CPU_DESCRIPTOR_HANDLE    src;
@@ -2139,7 +2139,7 @@ static bool
 dx12__bindDescriptorHeaps(ID3D12GraphicsCommandList *commandList,
                           ID3D12DescriptorHeap     **boundResourceHeap,
                           ID3D12DescriptorHeap     **boundSamplerHeap,
-                          DeviceDX12                *device,
+                          GPUDeviceDX12             *device,
                           ID3D12DescriptorHeap      *samplerHeap,
                           bool                       needsResources,
                           bool                       needsSamplers) {
@@ -2183,12 +2183,12 @@ dx12__bindDescriptorHeaps(ID3D12GraphicsCommandList *commandList,
 }
 
 static bool
-dx12__bindSamplerSnapshot(CommandBufferDX12           *command,
+dx12__bindSamplerSnapshot(GPUCommandBufferDX12        *command,
                           ID3D12GraphicsCommandList   *commandList,
                           ID3D12DescriptorHeap       **boundResourceHeap,
                           ID3D12DescriptorHeap       **boundSamplerHeap,
-                          DeviceDX12                  *device,
-                          const PipelineLayoutDX12    *layout,
+                          GPUDeviceDX12               *device,
+                          const GPUPipelineLayoutDX12 *layout,
                           GPUBindGroup         *const *boundGroups,
                           uint32_t                     overrideIndex,
                           GPUBindGroup                *overrideGroup,
@@ -2197,7 +2197,7 @@ dx12__bindSamplerSnapshot(CommandBufferDX12           *command,
                           bool                         compute) {
   D3D12_CPU_DESCRIPTOR_HANDLE dstBase = {0};
   D3D12_GPU_DESCRIPTOR_HANDLE samplerBase = {0};
-  CommandSamplerHeapDX12     *snapshot;
+  GPUCommandSamplerHeapDX12  *snapshot;
   bool                        needsResources;
 
   if (!command || !commandList || !boundResourceHeap
@@ -2220,10 +2220,10 @@ dx12__bindSamplerSnapshot(CommandBufferDX12           *command,
   needsResources = false;
 
   for (uint32_t copyIndex = 0u; copyIndex < layout->groupCount; copyIndex++) {
-    const DescriptorTableDX12    *resourceTable;
-    const DescriptorTableDX12    *samplerTable;
+    const GPUDescriptorTableDX12 *resourceTable;
+    const GPUDescriptorTableDX12 *samplerTable;
     GPUBindGroup                 *group;
-    BindGroupDX12                *nativeGroup;
+    GPUBindGroupDX12             *nativeGroup;
     D3D12_CPU_DESCRIPTOR_HANDLE   dst;
     D3D12_CPU_DESCRIPTOR_HANDLE   src;
     uint32_t                      sourceOffset;
@@ -2270,8 +2270,8 @@ dx12__bindSamplerSnapshot(CommandBufferDX12           *command,
   }
 
   for (uint32_t bindIndex = 0u; bindIndex < layout->groupCount; bindIndex++) {
-    const DescriptorTableDX12    *boundResourceTable;
-    const DescriptorTableDX12    *boundSamplerTable;
+    const GPUDescriptorTableDX12 *boundResourceTable;
+    const GPUDescriptorTableDX12 *boundSamplerTable;
     D3D12_GPU_DESCRIPTOR_HANDLE   handle;
     uint32_t                      resourceOffset;
 
@@ -2319,12 +2319,12 @@ dx12__bindSamplerSnapshot(CommandBufferDX12           *command,
 }
 
 static bool
-dx12__bindNullTables(CommandBufferDX12           *command,
+dx12__bindNullTables(GPUCommandBufferDX12        *command,
                      ID3D12GraphicsCommandList   *commandList,
                      ID3D12DescriptorHeap       **boundResourceHeap,
                      ID3D12DescriptorHeap       **boundSamplerHeap,
-                     DeviceDX12                  *device,
-                     const PipelineLayoutDX12    *layout,
+                     GPUDeviceDX12               *device,
+                     const GPUPipelineLayoutDX12 *layout,
                      uint32_t                    *resourceOffsets,
                      uint32_t                    *resourceOffsetMask,
                      bool                         compute) {
@@ -2380,8 +2380,8 @@ dx12__bindNullTables(CommandBufferDX12           *command,
   }
 
   for (uint32_t bindIndex = 0u; bindIndex < layout->groupCount; bindIndex++) {
-    const DescriptorTableDX12    *resourceTable;
-    const DescriptorTableDX12    *samplerTable;
+    const GPUDescriptorTableDX12 *resourceTable;
+    const GPUDescriptorTableDX12 *samplerTable;
     D3D12_GPU_DESCRIPTOR_HANDLE   handle;
 
     resourceTable = &layout->resourceTables[bindIndex];
@@ -2430,7 +2430,7 @@ dx12__bindNullTables(CommandBufferDX12           *command,
 
 static bool
 dx12__transitionSampledTexture(ID3D12GraphicsCommandList *commandList,
-                               TextureViewDX12           *view) {
+                               GPUTextureViewDX12        *view) {
   D3D12_RESOURCE_BARRIER barrier = {0};
   const D3D12_RESOURCE_STATES requiredState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
@@ -2465,7 +2465,7 @@ dx12__transitionSampledTexture(ID3D12GraphicsCommandList *commandList,
 
 static bool
 dx12__transitionReadOnlyStorageBuffer(ID3D12GraphicsCommandList *commandList,
-                                      BufferDX12                *buffer) {
+                                      GPUBufferDX12             *buffer) {
   const D3D12_RESOURCE_STATES requiredState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
@@ -2474,7 +2474,7 @@ dx12__transitionReadOnlyStorageBuffer(ID3D12GraphicsCommandList *commandList,
 
 static bool
 dx12__transitionStorageBuffer(ID3D12GraphicsCommandList *commandList,
-                              BufferDX12                *buffer) {
+                              GPUBufferDX12             *buffer) {
   return dx12_transitionBuffer(commandList,
                                buffer,
                                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -2482,7 +2482,7 @@ dx12__transitionStorageBuffer(ID3D12GraphicsCommandList *commandList,
 
 static bool
 dx12__transitionStorageTexture(ID3D12GraphicsCommandList *commandList,
-                               TextureViewDX12           *view) {
+                               GPUTextureViewDX12        *view) {
   if (!commandList || !view || !view->resource || !view->texture) {
     return false;
   }
@@ -2497,19 +2497,19 @@ dx12__transitionStorageTexture(ID3D12GraphicsCommandList *commandList,
 }
 
 static void
-dx12__bindRoot(void *context, const BindGroupBindingView    *binding) {
+dx12__bindRoot(void *context, const GPUBindGroupBindingView *binding) {
   DX12BindContext              *bindContext;
-  const RootBindingDX12        *uniformRoot;
-  BufferDX12                   *uniformBuffer;
-  const RootBindingDX12        *readRoot;
-  BufferDX12                   *readBuffer;
-  const RootBindingDX12        *writeRoot;
-  BufferDX12                   *writeBuffer;
-  TextureViewDX12              *sampledView;
-  TextureViewDX12              *storageView;
-  SamplerDX12                  *sampler;
-  SamplerFeedbackMapDX12       *map;
-  AccelerationStructureDX12    *structure;
+  const GPURootBindingDX12     *uniformRoot;
+  GPUBufferDX12                *uniformBuffer;
+  const GPURootBindingDX12     *readRoot;
+  GPUBufferDX12                *readBuffer;
+  const GPURootBindingDX12     *writeRoot;
+  GPUBufferDX12                *writeBuffer;
+  GPUTextureViewDX12           *sampledView;
+  GPUTextureViewDX12           *storageView;
+  GPUSamplerDX12               *sampler;
+  GPUSamplerFeedbackMapDX12    *map;
+  GPUAccelerationStructureDX12 *structure;
   D3D12_GPU_VIRTUAL_ADDRESS     uniformAddress;
   D3D12_GPU_VIRTUAL_ADDRESS     readAddress;
   D3D12_GPU_VIRTUAL_ADDRESS     writeAddress;
@@ -2846,7 +2846,7 @@ dx12__bindRoot(void *context, const BindGroupBindingView    *binding) {
 }
 
 static bool
-dx12__bindComputeLikeGroup(CommandBufferDX12         *command,
+dx12__bindComputeLikeGroup(GPUCommandBufferDX12      *command,
                            ID3D12GraphicsCommandList *commandList,
                            ID3D12RootSignature       *rootSignature,
                            ID3D12DescriptorHeap     **resourceHeap,
@@ -2860,9 +2860,9 @@ dx12__bindComputeLikeGroup(CommandBufferDX12         *command,
                            uint32_t                   dynamicOffsetCount,
                            const uint32_t            *dynamicOffsets) {
   DX12BindContext        context;
-  PipelineLayoutDX12    *layout;
-  BindGroupDX12         *nativeGroup;
-  DeviceDX12            *device;
+  GPUPipelineLayoutDX12 *layout;
+  GPUBindGroupDX12      *nativeGroup;
+  GPUDeviceDX12         *device;
   GPUBindGroupLayout    *groupLayout;
   ID3D12DescriptorHeap  *desiredSamplerHeap;
   uint32_t               resourceOffset;
@@ -2983,11 +2983,11 @@ dx12__bindComputeLikeGroup(CommandBufferDX12         *command,
 
 GPU_HIDE
 GPUResult
-dx12_allocateDescriptors(DeviceDX12                *device,
+dx12_allocateDescriptors(GPUDeviceDX12             *device,
                          D3D12_DESCRIPTOR_HEAP_TYPE type,
                          uint32_t                   count,
                          uint32_t                  *outOffset) {
-  DescriptorHeapDX12    *heap;
+  GPUDescriptorHeapDX12 *heap;
   GPUResult              result;
 
   if (!device || !outOffset) {
@@ -3052,11 +3052,11 @@ dx12_allocateDescriptors(DeviceDX12                *device,
 
 GPU_HIDE
 void
-dx12_freeDescriptors(DeviceDX12                *device,
+dx12_freeDescriptors(GPUDeviceDX12             *device,
                      D3D12_DESCRIPTOR_HEAP_TYPE type,
                      uint32_t                   offset,
                      uint32_t                   count) {
-  DescriptorHeapDX12    *heap;
+  GPUDescriptorHeapDX12 *heap;
 
   if (!device || count == 0u) {
     return;
@@ -3079,10 +3079,10 @@ dx12_freeDescriptors(DeviceDX12                *device,
 
 GPU_HIDE
 GPUResult
-dx12_allocateCommandDescriptors(CommandBufferDX12    *command,
+dx12_allocateCommandDescriptors(GPUCommandBufferDX12 *command,
                                 uint32_t              count,
                                 uint32_t             *outOffset) {
-  DeviceDX12    *device;
+  GPUDeviceDX12 *device;
   GPUResult      result;
 
   device = command && command->owner && command->owner->queue
@@ -3114,9 +3114,9 @@ dx12_allocateCommandDescriptors(CommandBufferDX12    *command,
 
 GPU_HIDE
 void
-dx12_resetCommandDescriptors(CommandBufferDX12    *command) {
-  DescriptorAllocationChunkDX12    *chunk;
-  DeviceDX12                       *device;
+dx12_resetCommandDescriptors(GPUCommandBufferDX12 *command) {
+  GPUDescriptorAllocationChunkDX12 *chunk;
+  GPUDeviceDX12                    *device;
   uint32_t                          inlineIndex;
   uint32_t                          chunkIndex;
 
@@ -3150,10 +3150,10 @@ dx12_resetCommandDescriptors(CommandBufferDX12    *command) {
 
 GPU_HIDE
 void
-dx12_destroyCommandDescriptors(CommandBufferDX12    *command) {
-  DescriptorAllocationChunkDX12    *chunk;
+dx12_destroyCommandDescriptors(GPUCommandBufferDX12 *command) {
+  GPUDescriptorAllocationChunkDX12 *chunk;
   GPUDevice                        *device;
-  DescriptorAllocationChunkDX12    *next;
+  GPUDescriptorAllocationChunkDX12 *next;
 
   if (!command) {
     return;
@@ -3175,7 +3175,7 @@ dx12_destroyCommandDescriptors(CommandBufferDX12    *command) {
 
 GPU_HIDE
 void
-dx12_resetCommandSamplerHeaps(CommandBufferDX12    *command) {
+dx12_resetCommandSamplerHeaps(GPUCommandBufferDX12 *command) {
   if (command) {
     command->samplerHeapUseCount = 0u;
   }
@@ -3183,10 +3183,10 @@ dx12_resetCommandSamplerHeaps(CommandBufferDX12    *command) {
 
 GPU_HIDE
 void
-dx12_destroyCommandSamplerHeaps(CommandBufferDX12    *command) {
-  CommandSamplerHeapDX12    *node;
+dx12_destroyCommandSamplerHeaps(GPUCommandBufferDX12 *command) {
+  GPUCommandSamplerHeapDX12 *node;
   GPUDevice                 *device;
-  CommandSamplerHeapDX12    *next;
+  GPUCommandSamplerHeapDX12 *next;
 
   if (!command) {
     return;
@@ -3212,7 +3212,7 @@ dx12_destroyCommandSamplerHeaps(CommandBufferDX12    *command) {
 
 GPU_HIDE
 D3D12_CPU_DESCRIPTOR_HANDLE
-dx12_cpuDescriptor(const DescriptorHeapDX12    *heap, uint32_t offset) {
+dx12_cpuDescriptor(const GPUDescriptorHeapDX12 *heap, uint32_t offset) {
   D3D12_CPU_DESCRIPTOR_HANDLE handle = {0};
 
   if (heap && heap->heap && offset < heap->capacity) {
@@ -3226,7 +3226,7 @@ dx12_cpuDescriptor(const DescriptorHeapDX12    *heap, uint32_t offset) {
 
 GPU_HIDE
 D3D12_GPU_DESCRIPTOR_HANDLE
-dx12_gpuDescriptor(const DescriptorHeapDX12    *heap, uint32_t offset) {
+dx12_gpuDescriptor(const GPUDescriptorHeapDX12 *heap, uint32_t offset) {
   D3D12_GPU_DESCRIPTOR_HANDLE handle = {0};
 
   if (heap && heap->heap && offset < heap->capacity) {
@@ -3240,8 +3240,8 @@ dx12_gpuDescriptor(const DescriptorHeapDX12    *heap, uint32_t offset) {
 
 GPU_HIDE
 void
-dx12_destroyDescriptorHeaps(DeviceDX12    *device) {
-  DescriptorHeapDX12    *heaps[4];
+dx12_destroyDescriptorHeaps(GPUDeviceDX12 *device) {
+  GPUDescriptorHeapDX12 *heaps[4];
   uint32_t               i;
 
   if (!device) {
@@ -3267,7 +3267,7 @@ GPU_HIDE
 GPUResult
 dx12_createPipelineLayout(GPUDevice         *device,
                           GPUPipelineLayout *layout) {
-  PipelineLayoutDX12        *native;
+  GPUPipelineLayoutDX12     *native;
   GPUBindGroupLayout *const *groups;
   GPUResult                  result;
 
@@ -3308,9 +3308,9 @@ dx12_createShaderRootSignature(GPUDevice              *device,
                                uint64_t                entryMask,
                                ID3D12RootSignature   **outRootSignature,
                                uint64_t                outKey[2]) {
-  const ShaderStaticSamplerInfo    *sourceSamplers;
-  PipelineLayoutDX12               *base;
-  PipelineLayoutDX12               *derived;
+  const GPUShaderStaticSamplerInfo *sourceSamplers;
+  GPUPipelineLayoutDX12            *base;
+  GPUPipelineLayoutDX12            *derived;
   uint32_t                          sourceSamplerCount;
   GPUResult                         result;
 
@@ -3381,8 +3381,8 @@ dx12_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   DX12BindGroupWriteContext      writeContext;
   GPUBindGroupLayout            *layout;
   const GPUBindGroupLayoutEntry *entries;
-  BindGroupDX12                 *native;
-  const BindGroupPriv           *priv;
+  GPUBindGroupDX12              *native;
+  const GPUBindGroupPriv        *priv;
   size_t                         allocationSize;
   GPUResult                      result;
   uint32_t                       entryCount;
@@ -3534,7 +3534,7 @@ dx12_updateBindGroup(GPUBindGroup            *group,
 GPU_HIDE
 void
 dx12_destroyBindGroup(GPUBindGroup *group) {
-  BindGroupDX12    *native;
+  GPUBindGroupDX12 *native;
 
   native = group ? group->_native : NULL;
 
@@ -3557,7 +3557,7 @@ dx12_destroyBindGroup(GPUBindGroup *group) {
 GPU_HIDE
 bool
 dx12_transitionSamplerFeedback(ID3D12GraphicsCommandList *commandList,
-                               SamplerFeedbackMapDX12    *map,
+                               GPUSamplerFeedbackMapDX12 *map,
                                D3D12_RESOURCE_STATES      state) {
   D3D12_RESOURCE_BARRIER barrier = {0};
 
@@ -3589,11 +3589,11 @@ dx12_bindRenderGroup(GPURenderPassEncoder *pass,
                      uint32_t              dynamicOffsetCount,
                      const uint32_t       *dynamicOffsets) {
   DX12BindContext        context;
-  RenderEncoderDX12     *encoder;
-  PipelineLayoutDX12    *layout;
-  BindGroupDX12         *nativeGroup;
-  CommandBufferDX12     *command;
-  DeviceDX12            *device;
+  GPURenderEncoderDX12  *encoder;
+  GPUPipelineLayoutDX12 *layout;
+  GPUBindGroupDX12      *nativeGroup;
+  GPUCommandBufferDX12  *command;
+  GPUDeviceDX12         *device;
   GPUBindGroupLayout    *groupLayout;
   ID3D12DescriptorHeap  *samplerHeap;
   uint32_t               resourceOffset;
@@ -3722,8 +3722,8 @@ dx12_bindComputeGroup(GPUComputePassEncoder *pass,
                       GPUBindGroup          *group,
                       uint32_t               dynamicOffsetCount,
                       const uint32_t        *dynamicOffsets) {
-  ComputeEncoderDX12    *encoder;
-  CommandBufferDX12     *command;
+  GPUComputeEncoderDX12 *encoder;
+  GPUCommandBufferDX12  *command;
 
   encoder = pass ? pass->_priv : NULL;
   command = pass && pass->_cmdb ? pass->_cmdb->_priv : NULL;
@@ -3752,8 +3752,8 @@ dx12_bindRayTracingGroup(GPURayTracingPassEncoderEXT *pass,
                          GPUBindGroup                *group,
                          uint32_t                     dynamicOffsetCount,
                          const uint32_t              *dynamicOffsets) {
-  RayTracingEncoderDX12    *encoder;
-  CommandBufferDX12        *command;
+  GPURayTracingEncoderDX12 *encoder;
+  GPUCommandBufferDX12     *command;
 
   encoder = pass ? pass->_priv : NULL;
   command = pass && pass->cmdb ? pass->cmdb->_priv : NULL;
@@ -3777,10 +3777,10 @@ dx12_bindRayTracingGroup(GPURayTracingPassEncoderEXT *pass,
 GPU_HIDE
 void
 dx12_rebindRenderGroups(GPURenderPassEncoder *pass) {
-  RenderEncoderDX12     *encoder;
-  PipelineLayoutDX12    *layout;
-  CommandBufferDX12     *command;
-  DeviceDX12            *device;
+  GPURenderEncoderDX12  *encoder;
+  GPUPipelineLayoutDX12 *layout;
+  GPUCommandBufferDX12  *command;
+  GPUDeviceDX12         *device;
   GPUBindGroup          *group;
   uint32_t               i;
 
@@ -3832,10 +3832,10 @@ dx12_rebindRenderGroups(GPURenderPassEncoder *pass) {
 GPU_HIDE
 void
 dx12_rebindComputeGroups(GPUComputePassEncoder *pass) {
-  ComputeEncoderDX12    *encoder;
-  CommandBufferDX12     *command;
-  PipelineLayoutDX12    *layout;
-  DeviceDX12            *device;
+  GPUComputeEncoderDX12 *encoder;
+  GPUCommandBufferDX12  *command;
+  GPUPipelineLayoutDX12 *layout;
+  GPUDeviceDX12         *device;
   GPUBindGroup          *group;
   uint32_t               i;
 
@@ -3887,10 +3887,10 @@ dx12_rebindComputeGroups(GPUComputePassEncoder *pass) {
 GPU_HIDE
 void
 dx12_rebindRayGroups(GPURayTracingPassEncoderEXT *pass) {
-  RayTracingEncoderDX12    *encoder;
-  CommandBufferDX12        *command;
-  PipelineLayoutDX12       *layout;
-  DeviceDX12               *device;
+  GPURayTracingEncoderDX12 *encoder;
+  GPUCommandBufferDX12     *command;
+  GPUPipelineLayoutDX12    *layout;
+  GPUDeviceDX12            *device;
   GPUBindGroup             *group;
   uint32_t                  i;
 
@@ -3941,8 +3941,8 @@ dx12_rebindRayGroups(GPURayTracingPassEncoderEXT *pass) {
 GPU_HIDE
 void
 dx12_destroyPipelineLayout(GPUPipelineLayout *layout) {
-  PipelineLayoutDX12    *native;
-  DeviceDX12            *device;
+  GPUPipelineLayoutDX12 *native;
+  GPUDeviceDX12         *device;
 
   native = layout ? layout->_native : NULL;
 
@@ -3962,7 +3962,7 @@ dx12_destroyPipelineLayout(GPUPipelineLayout *layout) {
 
 GPU_HIDE
 void
-dx12_initDescriptor(ApiDescriptor    *api) {
+dx12_initDescriptor(GPUDescriptorApi *api) {
   memset(api, 0, sizeof(*api));
   api->createPipelineLayout  = dx12_createPipelineLayout;
   api->destroyPipelineLayout = dx12_destroyPipelineLayout;

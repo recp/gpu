@@ -28,7 +28,7 @@ struct GPUAccelerationStructureEXT {
 
 struct GPUAccelerationStructurePassEncoderEXT {
   void             *_priv;
-  Api              *_api;
+  GPUApi           *_api;
   GPUDevice        *device;
   GPUCommandBuffer *cmdb;
   bool              ended;
@@ -36,7 +36,7 @@ struct GPUAccelerationStructurePassEncoderEXT {
 
 struct GPUIntersectionFunctionTableEXT {
   void               *_priv;
-  Api                *_api;
+  GPUApi             *_api;
   GPUDevice          *device;
   GPUComputePipeline *computePipeline;
   GPURenderPipeline  *renderPipeline;
@@ -45,7 +45,7 @@ struct GPUIntersectionFunctionTableEXT {
 
 struct GPURayTracingPipelineEXT {
   void                            *_priv;
-  Api                             *_api;
+  GPUApi                          *_api;
   GPUDevice                       *device;
   GPUPipelineLayout               *layout;
   GPURayTracingShaderGroupTypeEXT *groupTypes;
@@ -59,7 +59,7 @@ struct GPURayTracingPipelineEXT {
 
 struct GPUShaderTableEXT {
   void                     *_priv;
-  Api                      *_api;
+  GPUApi                   *_api;
   GPUDevice                *device;
   GPURayTracingPipelineEXT *pipeline;
 };
@@ -67,14 +67,14 @@ struct GPUShaderTableEXT {
 struct GPURayTracingPassEncoderEXT {
   void                  *_priv;
   void                  *_pipeline;
-  Api                   *_api;
+  GPUApi                *_api;
   GPUDevice             *device;
   GPUCommandBuffer      *cmdb;
   GPUFrameStats         *stats;
   GPUPipelineLayout     *pipelineLayout;
   GPUBindGroup          *boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout    *boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
-  DynamicOffsetShadow    boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUDynamicOffsetShadow boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t               boundDynamicOffsetCounts[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t               requiredBindGroupMask;
   bool                   hasPipeline;

@@ -37,7 +37,7 @@ mt_setSafeMathFallback(MTLCompileOptions *options) {
 }
 
 static void
-mt_destroyFunction(ShaderFunction    *function) {
+mt_destroyFunction(GPUShaderFunction *function) {
   MTShaderFunction *native;
 
   if (!function) {
@@ -68,7 +68,7 @@ mt_newLibraryWithSource(GPUDevice  *device,
                         const char *source,
                         uint64_t    sourceSize,
                         uint32_t    compileFlags) {
-  DeviceMT              *deviceMT;
+  GPUDeviceMT           *deviceMT;
   GPUShaderLibrary      *library;
   id<MTLLibrary>         mtLibrary;
   NSError               *error;
@@ -154,11 +154,11 @@ mt_newLibraryWithSource(GPUDevice  *device,
   return library;
 }
 
-static ShaderFunction*
+static GPUShaderFunction*
 mt_newVariant(GPUShaderLibrary           *lib,
               const char                 *name,
               const GPUPipelineConstants *constants) {
-  ShaderFunction              *func;
+  GPUShaderFunction           *func;
   MTShaderFunction            *native;
   const USLRuntimeSpecConstant *source;
   const GPUConstant           *value;
@@ -295,7 +295,7 @@ mt_newVariant(GPUShaderLibrary           *lib,
 }
 
 GPU_HIDE
-ShaderFunction*
+GPUShaderFunction*
 mt_newFunction(GPUShaderLibrary *lib, const char *name) {
   return mt_newVariant(lib, name, NULL);
 }
@@ -328,12 +328,12 @@ mt_samplerAddressMode(GPUAddressMode mode) {
 
 GPU_HIDE
 GPUResult
-mt_createSampler(Api             *__restrict api,
+mt_createSampler(GPUApi          *__restrict api,
                  GPUDevice       *__restrict device,
                  const GPUSamplerCreateInfo *info,
                  bool                        staticIfSupported,
                  GPUSampler                **outSampler) {
-  DeviceMT                 *deviceMT;
+  GPUDeviceMT              *deviceMT;
   MTLSamplerDescriptor     *desc;
   const GPUSamplerLODClamp *lod;
   GPUSampler               *sampler;
@@ -421,7 +421,7 @@ mt_destroyLibrary(GPUShaderLibrary *lib) {
 
 GPU_HIDE
 void
-mt_initLibrary(ApiLibrary    *api) {
+mt_initLibrary(GPULibraryApi *api) {
   api->newLibraryWithSource = mt_newLibraryWithSource;
   api->newFunction          = mt_newFunction;
   api->newVariant           = mt_newVariant;
@@ -431,7 +431,7 @@ mt_initLibrary(ApiLibrary    *api) {
 
 GPU_HIDE
 void
-mt_initSampler(ApiSampler    *api) {
+mt_initSampler(GPUSamplerApi *api) {
   api->createSampler  = mt_createSampler;
   api->destroySampler = mt_destroySampler;
 }

@@ -19,7 +19,7 @@
 #define GPU_TEXEL(BYTES)       {BYTES, 1u, 1u}
 #define GPU_BLOCK(BYTES, W, H) {BYTES, W, H}
 
-static const FormatLayout    gpu_formatLayouts[GPU_FORMAT_COUNT] = {
+static const GPUFormatLayout gpu_formatLayouts[GPU_FORMAT_COUNT] = {
   [GPU_FORMAT_R8_UNORM]               = GPU_TEXEL(1u),
   [GPU_FORMAT_R8_SNORM]               = GPU_TEXEL(1u),
   [GPU_FORMAT_R8_UINT]                = GPU_TEXEL(1u),
@@ -126,14 +126,14 @@ _Static_assert(GPU_ARRAY_LEN(gpu_formatLayouts) == GPU_FORMAT_COUNT,
                "format layout table must cover GPUFormat");
 
 static bool
-formatDataLayoutForLayout(const FormatLayout    *formatLayout,
+formatDataLayoutForLayout(const GPUFormatLayout *formatLayout,
                           uint32_t               width,
                           uint32_t               height,
                           uint32_t               depth,
                           uint32_t               layerCount,
                           uint32_t               bytesPerRow,
                           uint32_t               rowsPerImage,
-                          FormatDataLayout      *outLayout) {
+                          GPUFormatDataLayout   *outLayout) {
   uint64_t bytesPerImage;
   uint64_t imageCount;
   uint64_t imageRows;
@@ -223,8 +223,8 @@ formatDataLayoutForLayout(const FormatLayout    *formatLayout,
 
 GPU_HIDE
 bool
-gpuFormatLayout(GPUFormat format, FormatLayout    *outLayout) {
-  FormatLayout    layout;
+gpuFormatLayout(GPUFormat format, GPUFormatLayout *outLayout) {
+  GPUFormatLayout layout;
 
   if (!outLayout || format <= GPU_FORMAT_UNDEFINED || format >= GPU_FORMAT_COUNT) {
     return false;
@@ -301,7 +301,7 @@ GPU_HIDE
 bool
 formatAspectLayout(GPUFormat        format,
                    GPUTextureAspect aspect,
-                   FormatLayout    *outLayout) {
+                   GPUFormatLayout *outLayout) {
   GPUTextureAspect resolved;
 
   if (!outLayout || !formatResolveCopyAspect(format, aspect, &resolved)) {
@@ -309,20 +309,20 @@ formatAspectLayout(GPUFormat        format,
   }
 
   if (resolved == GPU_TEXTURE_ASPECT_STENCIL_ONLY) {
-    *outLayout = (FormatLayout)GPU_TEXEL(1u);
+    *outLayout = (GPUFormatLayout)GPU_TEXEL(1u);
     return true;
   }
 
   if (resolved == GPU_TEXTURE_ASPECT_DEPTH_ONLY) {
     switch (format) {
       case GPU_FORMAT_DEPTH16_UNORM:
-        *outLayout = (FormatLayout)GPU_TEXEL(2u);
+        *outLayout = (GPUFormatLayout)GPU_TEXEL(2u);
         return true;
 
       case GPU_FORMAT_DEPTH24_UNORM_STENCIL8:
       case GPU_FORMAT_DEPTH32_FLOAT:
       case GPU_FORMAT_DEPTH32_FLOAT_STENCIL8:
-        *outLayout = (FormatLayout)GPU_TEXEL(4u);
+        *outLayout = (GPUFormatLayout)GPU_TEXEL(4u);
         return true;
 
       default:
@@ -352,8 +352,8 @@ formatDataLayout(GPUFormat            format,
                  uint32_t             layerCount,
                  uint32_t             bytesPerRow,
                  uint32_t             rowsPerImage,
-                 FormatDataLayout    *outLayout) {
-  FormatLayout    layout;
+                 GPUFormatDataLayout *outLayout) {
+  GPUFormatLayout layout;
 
   return gpuFormatLayout(format, &layout)
          && formatDataLayoutForLayout(&layout,
@@ -376,8 +376,8 @@ formatAspectDataLayout(GPUFormat            format,
                        uint32_t             layerCount,
                        uint32_t             bytesPerRow,
                        uint32_t             rowsPerImage,
-                       FormatDataLayout    *outLayout) {
-  FormatLayout    layout;
+                       GPUFormatDataLayout *outLayout) {
+  GPUFormatLayout layout;
 
   return formatAspectLayout(format, aspect, &layout)
          && formatDataLayoutForLayout(&layout,
@@ -399,7 +399,7 @@ formatCopyAligned(GPUFormat format,
                   uint32_t  height,
                   uint32_t  mipWidth,
                   uint32_t  mipHeight) {
-  FormatLayout    layout;
+  GPUFormatLayout layout;
 
   if (!gpuFormatLayout(format, &layout)
       || x > mipWidth || width > mipWidth - x

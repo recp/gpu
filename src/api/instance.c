@@ -22,7 +22,7 @@ static void
 destroyInstanceAdapters(GPUInstance *instance) {
   GPUAdapter *adapter;
   GPUAdapter *next;
-  Api        *api;
+  GPUApi     *api;
 
   api                     = instanceApi(instance);
   adapter                 = instance->_adapters;
@@ -48,7 +48,7 @@ GPUResult
 GPUCreateInstance(const GPUInstanceCreateInfo *__restrict info,
                   GPUInstance                **__restrict outInstance) {
   GPUInstanceCreateInfo defaultInfo;
-  Api                  *api;
+  GPUApi               *api;
 
   if (!outInstance) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -90,7 +90,7 @@ GPUCreateInstance(const GPUInstanceCreateInfo *__restrict info,
 GPU_EXPORT
 void
 GPUDestroyInstance(GPUInstance *instance) {
-  Api    *api;
+  GPUApi *api;
 
   if (!instance) {
     return;

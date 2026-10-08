@@ -224,7 +224,7 @@ static bool
 textureWriteLayoutValid(const GPUTexture            *texture,
                         const GPUTextureWriteRegion *region,
                         uint64_t                     sizeBytes) {
-  FormatDataLayout    layout;
+  GPUFormatDataLayout layout;
   GPUTextureAspect    aspect;
   uint32_t            mipHeight;
   uint32_t            mipWidth;
@@ -336,7 +336,7 @@ GPUResult
 GPUCreateTexture(GPUDevice                  *__restrict device,
                  const GPUTextureCreateInfo *__restrict info,
                  GPUTexture                **__restrict outTexture) {
-  Api      *api;
+  GPUApi   *api;
   GPUResult result;
 
   if (!outTexture) {
@@ -373,7 +373,7 @@ GPUCreateTexture(GPUDevice                  *__restrict device,
 GPU_EXPORT
 void
 GPUDestroyTexture(GPUTexture *__restrict texture) {
-  Api    *api;
+  GPUApi *api;
 
   if (!texture) {
     return;
@@ -425,7 +425,7 @@ GPUCreateTextureView(GPUTexture                     *__restrict texture,
                      const GPUTextureViewCreateInfo *__restrict info,
                      GPUTextureView                **__restrict outView) {
   const GPUTextureViewMinLODEXT *lod;
-  Api                          *api;
+  GPUApi                       *api;
   GPUTextureView               *view;
   GPUResult                     result;
 
@@ -509,7 +509,7 @@ GPUCreateTextureView(GPUTexture                     *__restrict texture,
 GPU_EXPORT
 void
 GPUDestroyTextureView(GPUTextureView *__restrict view) {
-  Api    *api;
+  GPUApi *api;
 
   if (!view) {
     return;
@@ -531,7 +531,7 @@ GPUQueueWriteTexture(GPUQueue                    *__restrict queue,
                      const GPUTextureWriteRegion *__restrict region,
                      const void                  *__restrict data,
                      uint64_t                                sizeBytes) {
-  Api    *api;
+  GPUApi *api;
 
   if (!queue || !texture || texture->sampleCount > 1u
       || queue->_device != texture->device

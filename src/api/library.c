@@ -241,7 +241,7 @@ compileShaderLibraryEntries(const GPUShaderLibrary     *library,
                             const char *const          *entryPoints,
                             uint32_t                    entryPointCount,
                             const GPUPipelineConstants *constants,
-                            ShaderSourceBlob           *outSource) {
+                            GPUShaderSourceBlob        *outSource) {
   USCompileOutput           output = {0};
   USCompileInput            input  = {0};
   USLTargetSpec             target;
@@ -387,11 +387,11 @@ uslRuntimeInfoIsUsable(const USRuntimeInfo *runtimeInfo) {
 
 static int
 subgroupOperationsFromUSL(uint32_t                          uslOperations,
-                          BackendSubgroupOperationFlags    *outOperations) {
+                          GPUBackendSubgroupOperationFlags *outOperations) {
   const uint32_t                   knownOperations = USL_RUNTIME_SUBGROUP_OPERATION_BASIC
                                                      | USL_RUNTIME_SUBGROUP_OPERATION_SHUFFLE
                                                      | USL_RUNTIME_SUBGROUP_OPERATION_SHUFFLE_RELATIVE;
-  BackendSubgroupOperationFlags    operations;
+  GPUBackendSubgroupOperationFlags operations;
 
   if (!outOperations || (uslOperations & ~knownOperations) != 0u) {
     return 0;
@@ -601,10 +601,10 @@ subgroupMatrixRequirementsEnabled(const GPUDevice     *device,
 static int
 subgroupRequirementsEnabled(const GPUDevice     *device,
                             const USRuntimeInfo *runtimeInfo) {
-  Api                        *api;
+  GPUApi                     *api;
   const USLRuntimeEntryPoint *entry;
 
-  BackendSubgroupOperationFlags    operations;
+  GPUBackendSubgroupOperationFlags operations;
   GPUShaderStageFlags              stage;
 
   if (!device || !runtimeInfo || !(api = deviceApi(device))) {
@@ -805,7 +805,7 @@ findShaderEntry(const GPUShaderLibrary *library, const char *entryPoint) {
 
 static int
 executionGraphEntryInfo(const ShaderEntryInfo            *entry,
-                        ShaderExecutionGraphEntryInfo    *outEntry) {
+                        GPUShaderExecutionGraphEntryInfo *outEntry) {
   if (!entry || !outEntry || entry->runtimeStage != USL_RUNTIME_STAGE_NODE) {
     return 0;
   }
@@ -1133,8 +1133,8 @@ shaderBackendBindingFromUSLResource(GPUBackend                backend,
 }
 
 static int
-staticSamplerDescEqual(const StaticSamplerDesc    *a,
-                       const StaticSamplerDesc    *b) {
+staticSamplerDescEqual(const GPUStaticSamplerDesc *a,
+                       const GPUStaticSamplerDesc *b) {
   return a && b
          && a->minFilter == b->minFilter
          && a->magFilter == b->magFilter
@@ -1150,7 +1150,7 @@ static void
 staticSamplerInfoFromUSL(const USLRuntimeStaticSampler *source,
                          GPUShaderStageFlags            visibility,
                          uint64_t                       entryMask,
-                         ShaderStaticSamplerInfo       *out) {
+                         GPUShaderStaticSamplerInfo    *out) {
   memset(out, 0, sizeof(*out));
   out->desc.logicalIndex  = source->id;
   out->desc.minFilter     = source->min_filter;
@@ -1179,8 +1179,8 @@ staticSamplerInfoFromUSL(const USLRuntimeStaticSampler *source,
 }
 
 static int
-staticSamplerInfoEqual(const ShaderStaticSamplerInfo    *a,
-                       const ShaderStaticSamplerInfo    *b) {
+staticSamplerInfoEqual(const GPUShaderStaticSamplerInfo *a,
+                       const GPUShaderStaticSamplerInfo *b) {
   return a && b
          && a->hlslIndex == b->hlslIndex
          && a->spirvGroup == b->spirvGroup
@@ -1192,11 +1192,11 @@ staticSamplerInfoEqual(const ShaderStaticSamplerInfo    *a,
 
 static int
 resolvePTXStaticSamplers(const USRuntimeInfo                  *runtime,
-                         const ShaderStaticSamplerInfoList    *samplers,
-                         ShaderPTXInfo                        *ptx) {
-  ShaderStaticSamplerInfo        item;
+                         const GPUShaderStaticSamplerInfoList *samplers,
+                         GPUShaderPTXInfo                     *ptx) {
+  GPUShaderStaticSamplerInfo     item;
   const USLRuntimeStaticSampler *source;
-  ShaderPTXParamInfo            *param;
+  GPUShaderPTXParamInfo         *param;
   uint32_t                       i;
   uint32_t                       samplerIndex;
   uint32_t                       sourceIndex;
@@ -1551,7 +1551,7 @@ ptxEntryParamCount(const USRuntimeInfo *runtimeInfo,
 }
 
 static void
-initPTXParam(ShaderPTXParamInfo    *param) {
+initPTXParam(GPUShaderPTXParamInfo *param) {
   memset(param, 0, sizeof(*param));
   param->groupIndex        = UINT32_MAX;
   param->binding           = UINT32_MAX;
@@ -1563,10 +1563,10 @@ initPTXParam(ShaderPTXParamInfo    *param) {
 }
 
 static int
-storePTXParam(ShaderPTXParamInfo          *params,
+storePTXParam(GPUShaderPTXParamInfo       *params,
               uint32_t                     paramCount,
               uint32_t                     index,
-              const ShaderPTXParamInfo    *source) {
+              const GPUShaderPTXParamInfo *source) {
   if (!params || !source || index >= paramCount
       || params[index].kind != GPUShaderPTXParamInvalid
       || source->kind == GPUShaderPTXParamInvalid) {
@@ -1582,8 +1582,8 @@ static int
 fillShaderPTXEntry(const GPUShaderLibrary *library,
                    const USRuntimeInfo    *runtimeInfo,
                    uint32_t                entryIndex,
-                   ShaderPTXEntryInfo     *entry,
-                   ShaderPTXParamInfo     *params) {
+                   GPUShaderPTXEntryInfo  *entry,
+                   GPUShaderPTXParamInfo  *params) {
   const USLRuntimeSampledTexturePair *pair;
   const USLRuntimeResource           *resource;
   uint32_t                            dataOffset;
@@ -1600,7 +1600,7 @@ fillShaderPTXEntry(const GPUShaderLibrary *library,
   }
 
   for (uint32_t pairIndex = 0u; pairIndex < runtimeInfo->sampled_texture_pair_count; pairIndex++) {
-    ShaderPTXParamInfo        pairParam;
+    GPUShaderPTXParamInfo     pairParam;
     const USLRuntimeResource *sampler;
     const USLRuntimeResource *texture;
     uint32_t                  samplerCount;
@@ -1661,7 +1661,7 @@ fillShaderPTXEntry(const GPUShaderLibrary *library,
   }
 
   for (uint32_t resourceIndex = 0u; resourceIndex < runtimeInfo->resource_count; resourceIndex++) {
-    ShaderPTXParamInfo    resourceParam;
+    GPUShaderPTXParamInfo resourceParam;
     GPUBindingType        bindingType;
 
     resource = &runtimeInfo->resources[resourceIndex];
@@ -1752,10 +1752,10 @@ setShaderLibraryMetadata(GPUShaderLibrary   *library,
   const USRuntimeInfo              *runtimeInfo;
   GPUShaderResourceReflection      *entryResources;
   ShaderResourceBindingInfoList    *resourceBindings;
-  ShaderStaticSamplerInfoList      *staticSamplers;
-  ShaderPTXParamInfo               *ptxParams;
-  ShaderPTXEntryInfo               *ptxEntries;
-  ShaderPTXInfo                    *ptxInfo;
+  GPUShaderStaticSamplerInfoList   *staticSamplers;
+  GPUShaderPTXParamInfo            *ptxParams;
+  GPUShaderPTXEntryInfo            *ptxEntries;
+  GPUShaderPTXInfo                 *ptxInfo;
   GPUShaderResourceReflection      *resources;
   ShaderEntryInfoList              *entryInfo;
   uint8_t                          *metadata;
@@ -1911,25 +1911,25 @@ setShaderLibraryMetadata(GPUShaderLibrary   *library,
                           sizeof(resources[0]),
                           &resourceOffset)
       || !reserveMetadata(&totalSize,
-                          _Alignof(ShaderStaticSamplerInfoList),
+                          _Alignof(GPUShaderStaticSamplerInfoList),
                           sizeof(*staticSamplers),
                           runtimeInfo->static_sampler_count,
                           sizeof(staticSamplers->items[0]),
                           &staticSamplerOffset)
       || !reserveMetadata(&totalSize,
-                          _Alignof(ShaderPTXInfo),
+                          _Alignof(GPUShaderPTXInfo),
                           0u,
                           backend == GPU_BACKEND_CUDA ? 1u : 0u,
                           sizeof(*ptxInfo),
                           &ptxInfoOffset)
       || !reserveMetadata(&totalSize,
-                          _Alignof(ShaderPTXEntryInfo),
+                          _Alignof(GPUShaderPTXEntryInfo),
                           0u,
                           backend == GPU_BACKEND_CUDA ? runtimeInfo->entry_point_count : 0u,
                           sizeof(ptxEntries[0]),
                           &ptxEntryOffset)
       || !reserveMetadata(&totalSize,
-                          _Alignof(ShaderPTXParamInfo),
+                          _Alignof(GPUShaderPTXParamInfo),
                           0u,
                           ptxParamCount,
                           sizeof(ptxParams[0]),
@@ -1962,17 +1962,17 @@ setShaderLibraryMetadata(GPUShaderLibrary   *library,
                 ? (GPUShaderResourceReflection *)(metadata + resourceOffset)
                 : NULL;
   staticSamplers        = staticSamplerOffset != SIZE_MAX
-                     ? (ShaderStaticSamplerInfoList *)(metadata +
+                     ? (GPUShaderStaticSamplerInfoList *)(metadata +
                                                        staticSamplerOffset)
                      : NULL;
   ptxInfo               = ptxInfoOffset != SIZE_MAX
-              ? (ShaderPTXInfo *)(metadata + ptxInfoOffset)
+              ? (GPUShaderPTXInfo *)(metadata + ptxInfoOffset)
               : NULL;
   ptxEntries            = ptxEntryOffset != SIZE_MAX
-                 ? (ShaderPTXEntryInfo *)(metadata + ptxEntryOffset)
+                 ? (GPUShaderPTXEntryInfo *)(metadata + ptxEntryOffset)
                  : NULL;
   ptxParams             = ptxParamOffset != SIZE_MAX
-                ? (ShaderPTXParamInfo *)(metadata + ptxParamOffset)
+                ? (GPUShaderPTXParamInfo *)(metadata + ptxParamOffset)
                 : NULL;
   textCursor            = textOffset != SIZE_MAX ? (char *)(metadata + textOffset) : NULL;
   entryResourceCount    = 0u;
@@ -1990,7 +1990,7 @@ setShaderLibraryMetadata(GPUShaderLibrary   *library,
     paramStart          = 0u;
 
     for (uint32_t ptxEntryIndex = 0u; ptxEntryIndex < ptxInfo->entryCount; ptxEntryIndex++) {
-      ShaderPTXEntryInfo    *ptxEntry;
+      GPUShaderPTXEntryInfo *ptxEntry;
 
       ptxEntry             = &ptxInfo->entries[ptxEntryIndex];
       ptxEntry->paramStart = paramStart;
@@ -2269,7 +2269,7 @@ setShaderLibraryMetadata(GPUShaderLibrary   *library,
   }
 
   for (uint32_t samplerIndex = 0u; samplerIndex < runtimeInfo->static_sampler_count; samplerIndex++) {
-    ShaderStaticSamplerInfo        samplerItem;
+    GPUShaderStaticSamplerInfo     samplerItem;
     const USLRuntimeStaticSampler *sourceSampler;
     uint64_t                       entryMask;
     GPUShaderStageFlags            samplerVisibility;
@@ -2437,7 +2437,7 @@ createShaderLibraryFromBackendText(GPUDevice         *device,
                                    uint32_t           defineCount,
                                    uint32_t           compileFlags,
                                    GPUShaderLibrary **outLibrary) {
-  Api    *api;
+  GPUApi *api;
 
   if (!(api = deviceApi(device))) {
     return GPU_ERROR_BACKEND_FAILURE;
@@ -2469,7 +2469,7 @@ static GPUResult
 createShaderLibraryFromMSLText(GPUDevice                        *device,
                                const GPUShaderLibraryCreateInfo *info,
                                GPUShaderLibrary                **outLibrary) {
-  Api    *api;
+  GPUApi *api;
 
   api = deviceApi(device);
 
@@ -2489,7 +2489,7 @@ static GPUResult
 createShaderLibraryFromWGSLText(GPUDevice                        *device,
                                 const GPUShaderLibraryCreateInfo *info,
                                 GPUShaderLibrary                **outLibrary) {
-  Api    *api;
+  GPUApi *api;
 
   api = deviceApi(device);
 
@@ -2511,7 +2511,7 @@ createShaderLibraryFromBackendBinary(GPUDevice         *device,
                                      uint64_t           sourceSize,
                                      uint32_t           defineCount,
                                      GPUShaderLibrary **outLibrary) {
-  Api    *api;
+  GPUApi *api;
 
   if (!(api = deviceApi(device))) {
     return GPU_ERROR_BACKEND_FAILURE;
@@ -2538,7 +2538,7 @@ static GPUResult
 createShaderLibraryFromBinary(GPUDevice                        *device,
                               const GPUShaderLibraryCreateInfo *info,
                               GPUShaderLibrary                **outLibrary) {
-  Api    *api;
+  GPUApi *api;
 
   api = deviceApi(device);
 
@@ -2566,7 +2566,7 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
   USLTargetSpec               target;
   USLCapabilityAtomDesc       targetAtoms[USL_RUNTIME_TARGET_MAX_ATOMS];
   USCompileInput              compileInput;
-  Api                        *api;
+  GPUApi                     *api;
   const char                 *payloadBackend;
   const char                 *bootstrapEntry = NULL;
   const char                 *payloadEncoding;
@@ -3237,7 +3237,7 @@ GPUResult
 compileShaderLibraryEntry(const GPUShaderLibrary     *library,
                           const char                 *entryPoint,
                           const GPUPipelineConstants *constants,
-                          ShaderSourceBlob           *outSource) {
+                          GPUShaderSourceBlob        *outSource) {
   if (!entryPoint || entryPoint[0] == '\0') {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -3253,7 +3253,7 @@ GPU_HIDE
 GPUResult
 compileShaderLibraryEntryMask(const GPUShaderLibrary *library,
                               uint64_t                entryMask,
-                              ShaderSourceBlob       *outSource) {
+                              GPUShaderSourceBlob    *outSource) {
   const char                   *entryPoints[USL_RUNTIME_MAX_ENTRY_POINTS];
   const ShaderEntryInfoList    *entries;
   uint32_t                      entryPointCount;
@@ -3291,7 +3291,7 @@ compileShaderLibraryEntryMask(const GPUShaderLibrary *library,
 
 GPU_HIDE
 void
-freeShaderSourceBlob(ShaderSourceBlob    *source) {
+freeShaderSourceBlob(GPUShaderSourceBlob *source) {
   if (!source) {
     return;
   }
@@ -3328,7 +3328,7 @@ GPU_HIDE
 uint32_t
 shaderWGSLStaticGroups(const GPUShaderLibrary *library,
                        uint64_t                entryMask) {
-  const ShaderStaticSamplerInfo    *samplers;
+  const GPUShaderStaticSamplerInfo *samplers;
   uint32_t                          samplerCount;
   uint32_t                          groupMask;
 
@@ -3403,10 +3403,10 @@ GPU_HIDE
 int
 getShaderLibraryPTXEntry(const GPUShaderLibrary *library,
                          const char             *entryPoint,
-                         ShaderPTXEntryView     *outEntry) {
+                         GPUShaderPTXEntryView  *outEntry) {
   const ShaderEntryInfoList    *entries;
   const ShaderEntryInfo        *entry;
-  const ShaderPTXEntryInfo     *ptxEntry;
+  const GPUShaderPTXEntryInfo  *ptxEntry;
   ptrdiff_t                     entryIndex;
 
   if (outEntry) {
@@ -3512,7 +3512,7 @@ GPU_HIDE
 int
 getShaderLibraryExecutionGraphEntry(const GPUShaderLibrary           *library,
                                     const char                       *entryPoint,
-                                    ShaderExecutionGraphEntryInfo    *outEntry) {
+                                    GPUShaderExecutionGraphEntryInfo *outEntry) {
   if (outEntry) {
     memset(outEntry, 0, sizeof(*outEntry));
   }
@@ -3547,7 +3547,7 @@ GPU_HIDE
 int
 getShaderLibraryExecutionGraphEntryAt(const GPUShaderLibrary           *library,
                                       uint32_t                          index,
-                                      ShaderExecutionGraphEntryInfo    *outEntry) {
+                                      GPUShaderExecutionGraphEntryInfo *outEntry) {
   const ShaderEntryInfoList    *list;
 
   if (outEntry) {
@@ -3735,7 +3735,7 @@ getShaderResourceBackendBinding(const GPUShaderLibrary            *library,
 }
 
 GPU_HIDE
-const ShaderStaticSamplerInfo*
+const GPUShaderStaticSamplerInfo*
 getShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
                                uint32_t               *outCount) {
   if (outCount) {
@@ -3751,7 +3751,7 @@ getShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
 
 GPU_HIDE
 int
-staticSamplerDescIsValid(const StaticSamplerDesc    *desc) {
+staticSamplerDescIsValid(const GPUStaticSamplerDesc *desc) {
   if (!desc) {
     return 0;
   }
@@ -3775,7 +3775,7 @@ staticSamplerDescIsValid(const StaticSamplerDesc    *desc) {
 
 GPU_HIDE
 int
-staticSamplerToSamplerDesc(const StaticSamplerDesc    *source,
+staticSamplerToSamplerDesc(const GPUStaticSamplerDesc *source,
                            GPUSamplerDesc             *outDesc) {
   GPUAddressMode addressMode;
 
@@ -3820,9 +3820,9 @@ staticSamplerToSamplerDesc(const StaticSamplerDesc    *source,
 }
 
 GPU_HIDE
-ShaderFunction*
+GPUShaderFunction*
 shaderFunction(GPUShaderLibrary *lib, const char *name) {
-  Api    *api;
+  GPUApi *api;
 
   if (!lib || !name || !(api = lib->_api) || !api->library.newFunction)
     return NULL;
@@ -3833,8 +3833,8 @@ shaderFunction(GPUShaderLibrary *lib, const char *name) {
 GPU_HIDE
 void
 destroyShaderFunction(GPUShaderLibrary  *library,
-                      ShaderFunction    *function) {
-  Api    *api;
+                      GPUShaderFunction *function) {
+  GPUApi *api;
 
   if (!library || !function || !(api = library->_api)
       || !api->library.destroyFunction) {
@@ -3932,7 +3932,7 @@ GPUFreeShaderReflection(GPUShaderReflection *reflection) {
 GPU_EXPORT
 void
 GPUDestroyShaderLibrary(GPUShaderLibrary *library) {
-  Api    *api;
+  GPUApi *api;
 
   if (!library)
     return;

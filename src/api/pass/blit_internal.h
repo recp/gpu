@@ -19,19 +19,19 @@
 
 #include "../../common.h"
 
-typedef struct BlitShaderData {
+typedef struct GPUBlitShaderData {
   const void *data;
   uint64_t    size;
   bool        binary;
-} BlitShaderData;
+} GPUBlitShaderData;
 
-typedef struct BlitShaderSet {
-  BlitShaderData    filteringFloat;
-  BlitShaderData    filteringFloatArray;
-  BlitShaderData    unfilterableFloat;
-  BlitShaderData    unsignedInteger;
-  BlitShaderData    signedInteger;
-} BlitShaderSet;
+typedef struct GPUBlitShaderSet {
+  GPUBlitShaderData filteringFloat;
+  GPUBlitShaderData filteringFloatArray;
+  GPUBlitShaderData unfilterableFloat;
+  GPUBlitShaderData unsignedInteger;
+  GPUBlitShaderData signedInteger;
+} GPUBlitShaderSet;
 
 GPU_HIDE
 GPUResult
@@ -49,7 +49,7 @@ GPU_HIDE
 void
 blitTextureRenderFallback(GPUCommandBuffer         *cmdb,
                           const GPUTextureBlitInfo *info,
-                          const BlitShaderSet      *shaders);
+                          const GPUBlitShaderSet   *shaders);
 
 GPU_HIDE
 void

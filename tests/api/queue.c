@@ -55,7 +55,7 @@ static GPUAdapterIdentity   gOwnershipIdentity;
 static GPUAdapterIdentity   gOwnershipPeerIdentity;
 static GPUDevice            gOwnershipDevice;
 static GPUSurface           gOwnershipSurface;
-static SurfaceNativeInfo    gOwnershipSurfaceInfo;
+static GPUSurfaceNativeInfo gOwnershipSurfaceInfo;
 static uint32_t             gOwnershipAdapterCalls;
 static uint32_t             gOwnershipAdapterDestroyCalls;
 static uint32_t             gOwnershipAdapterSelectCalls;
@@ -116,7 +116,7 @@ get_validation_surface_capabilities(const GPUAdapter       *__restrict adapter,
 }
 
 static GPUSwapchain*
-create_validation_swapchain(Api                          *__restrict api,
+create_validation_swapchain(GPUApi                       *__restrict api,
                             GPUDevice                    *__restrict device,
                             GPUQueue                     *__restrict queue,
                             const GPUSwapchainCreateInfo *__restrict info) {
@@ -226,7 +226,7 @@ get_ownership_format_capabilities(const GPUAdapter      *__restrict adapter,
 
 static GPUDevice*
 create_ownership_device(GPUAdapter    *__restrict adapter,
-                        const QueueCreateInfo    *queueInfos,
+                        const GPUQueueCreateInfo *queueInfos,
                         uint32_t                  queueInfoCount,
                         uint64_t                  enabledFeatureMask) {
   (void)queueInfos;
@@ -260,9 +260,9 @@ wait_ownership_device(GPUDevice *__restrict device) {
 }
 
 static GPUSurface*
-create_ownership_surface(Api                        *__restrict api,
+create_ownership_surface(GPUApi                     *__restrict api,
                          GPUInstance                *__restrict instance,
-                         const SurfaceNativeInfo    *__restrict info) {
+                         const GPUSurfaceNativeInfo *__restrict info) {
   (void)api;
   (void)instance;
 
@@ -302,7 +302,7 @@ get_ownership_surface_capabilities(const GPUAdapter       *__restrict adapter,
 }
 
 static void
-destroy_ownership_instance(Api         *__restrict api,
+destroy_ownership_instance(GPUApi      *__restrict api,
                            GPUInstance *__restrict instance) {
   (void)api;
   (void)instance;
@@ -321,10 +321,10 @@ check_instance_ownership_dispatch(GPUInstance *activeInstance) {
   GPUFormatCapabilities       formatCaps;
   GPUAdapterIdentity          identity;
   GPUSurfaceCapabilities      surfaceCaps;
-  Api                         scopedApi;
+  GPUApi                      scopedApi;
   GPUInstance                 instance      = {0};
   GPUInstance                 otherInstance = {0};
-  Api                        *activeApi;
+  GPUApi                     *activeApi;
   GPUAdapter                 *adapter;
   GPUDevice                  *device;
   GPUSurface                 *surface;
@@ -710,7 +710,7 @@ submit_scoped_cmdbs(GPUQueue                *__restrict queue,
 }
 
 static GPUFrame*
-begin_scoped_frame(Api          *__restrict api,
+begin_scoped_frame(GPUApi       *__restrict api,
                    GPUSwapchain *__restrict swapchain) {
   (void)api;
   (void)swapchain;
@@ -731,7 +731,7 @@ begin_scoped_frame(Api          *__restrict api,
 }
 
 static void
-end_scoped_frame(Api      *__restrict api,
+end_scoped_frame(GPUApi   *__restrict api,
                  GPUFrame *__restrict frame) {
   (void)api;
   (void)frame;
@@ -744,11 +744,11 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   GPUCommandBuffer   aliasCmdb      = {0};
   GPUCommandBuffer   batch[2]       = {0};
   GPUQueueSubmitInfo submitInfo     = {0};
-  TransientChunk     transientChunk = {0};
-  Api                scopedApi;
+  GPUTransientChunk  transientChunk = {0};
+  GPUApi             scopedApi;
   GPUDevice          device    = {0};
   GPUSwapchain       swapchain = {0};
-  Api               *api;
+  GPUApi            *api;
   GPUQueue          *queue;
   GPUCommandBuffer  *cmdb;
   GPUFrame          *frame;
@@ -1494,7 +1494,7 @@ check_swapchain_create_validation(GPUDevice *device) {
   GPUSurface             scopedSurface   = {0};
   GPUSurface             surface         = {0};
   GPUSwapchainCreateInfo info            = {0};
-  Api                    scopedApi;
+  GPUApi                 scopedApi;
   GPUSwapchain          *swapchain;
 
   if (!device) {
@@ -2190,7 +2190,7 @@ check_device_destroy_waits_for_submission(GPUAdapter *adapter) {
 
 static int
 check_queue_submit_ex_semaphore(GPUDevice *device) {
-  Api                    *api;
+  GPUApi                 *api;
   GPUQueue               *queue;
   GPUCommandBuffer       *cmdb;
   GPUCommandBuffer       *buffers[1];

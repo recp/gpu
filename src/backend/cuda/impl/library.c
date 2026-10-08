@@ -21,7 +21,7 @@ cuda_newLibraryWithSource(GPUDevice  *device,
                           const char *source,
                           uint64_t    sourceSize,
                           uint32_t    compileFlags) {
-  ShaderLibraryCuda    *native;
+  GPUShaderLibraryCuda *native;
   GPUShaderLibrary     *library;
 
   (void)compileFlags;
@@ -52,7 +52,7 @@ cuda_newLibraryWithSource(GPUDevice  *device,
 
 static void
 cuda_destroyLibrary(GPUShaderLibrary *library) {
-  ShaderLibraryCuda    *native;
+  GPUShaderLibraryCuda *native;
 
   native = library ? library->_priv : NULL;
 
@@ -65,7 +65,7 @@ cuda_destroyLibrary(GPUShaderLibrary *library) {
 }
 
 void
-cuda_initLibrary(ApiLibrary    *api) {
+cuda_initLibrary(GPULibraryApi *api) {
   api->newLibraryWithSource = cuda_newLibraryWithSource;
   api->destroyLibrary       = cuda_destroyLibrary;
 }

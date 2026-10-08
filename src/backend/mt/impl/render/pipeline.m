@@ -291,7 +291,7 @@ mt_fillStencilDescriptor(MTLStencilDescriptor      *desc,
 
 static GPUResult
 mt_setIntersectionFunctions(GPURenderPipeline         *pipeline,
-                            ShaderFunction     *const *functions,
+                            GPUShaderFunction  *const *functions,
                             const GPUShaderStageFlags *stages,
                             uint32_t                   functionCount) {
   MTRenderPipelineDesc        *native;
@@ -449,11 +449,11 @@ mt_newRenderPipeline(GPUFormat pixelFormat, bool mesh) {
 }
 
 GPU_HIDE
-RenderPipelineState*
+GPURenderPipelineState*
 mt_newRenderState(GPUDevice         *__restrict device,
                   GPURenderPipeline *__restrict pipeline) {
-  DeviceMT                        *deviceMT;
-  RenderPipelineState             *renderPipeline;
+  GPUDeviceMT                     *deviceMT;
+  GPURenderPipelineState          *renderPipeline;
   MTRenderPipelineState           *native;
   MTRenderPipelineDesc            *pipelineDesc;
   MTLRenderPipelineDescriptor     *renderDesc;
@@ -641,8 +641,8 @@ mt_destroyRenderPipeline(GPURenderPipeline *pipeline) {
 GPU_HIDE
 void
 mt_setFunction(GPURenderPipeline *__restrict pipline,
-               ShaderFunction    *__restrict func,
-               FunctionType                  functype) {
+               GPUShaderFunction *__restrict func,
+               GPUFunctionType               functype) {
   MTRenderPipelineDesc            *native;
   MTShaderFunction                *function;
   MTLRenderPipelineDescriptor     *desc;
@@ -758,7 +758,7 @@ mt_sampleCount(GPURenderPipeline *__restrict pipline,
 
 GPU_HIDE
 void
-mt_initRenderPipeline(ApiRender    *api) {
+mt_initRenderPipeline(GPURenderApi *api) {
   api->newRenderPipeline     = mt_newRenderPipeline;
   api->newRenderState        = mt_newRenderState;
   api->destroyRenderPipeline = mt_destroyRenderPipeline;

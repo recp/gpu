@@ -77,7 +77,7 @@ GPUResult
 prepareConstants(const GPUShaderLibrary *library,
                  const GPUChainedStruct *chain,
                  bool                    compute,
-                 PreparedConstants      *out) {
+                 GPUPreparedConstants   *out) {
   const GPUPipelineConstants *constants;
   const GPUConstant          *value;
   GPUBackend                  backend;
@@ -234,7 +234,7 @@ prepareConstants(const GPUShaderLibrary *library,
 }
 
 GPU_HIDE
-ShaderFunction*
+GPUShaderFunction*
 shaderVariant(GPUShaderLibrary           *library,
               const char                 *name,
               const GPUPipelineConstants *constants) {

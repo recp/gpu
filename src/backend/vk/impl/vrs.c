@@ -20,7 +20,7 @@
 static void
 vk_getVRSCapabilities(const GPUAdapter      *adapter,
                      GPUVRSCapabilitiesEXT *outCaps) {
-  AdapterVk    *native;
+  GPUAdapterVk *native;
 
   native = adapter ? adapter->_priv : NULL;
 
@@ -48,6 +48,6 @@ vk_getVRSCapabilities(const GPUAdapter      *adapter,
 
 GPU_HIDE
 void
-vk_initVRS(ApiVRS    *api) {
+vk_initVRS(GPUVRSApi *api) {
   api->getCapabilities = vk_getVRSCapabilities;
 }

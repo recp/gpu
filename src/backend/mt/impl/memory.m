@@ -43,9 +43,9 @@ mt_newSparseTexture(GPUDevice                  *device,
                     GPUHeap                    *heap,
                     id<MTLTexture>             *outTexture,
                     MTLPixelFormat             *outStencilCopyFormat) {
-  DeviceMT             *deviceMT;
-  AdapterMT            *adapterMT;
-  HeapMT               *heapMT;
+  GPUDeviceMT          *deviceMT;
+  GPUAdapterMT         *adapterMT;
+  GPUHeapMT            *heapMT;
   MTLTextureDescriptor *textureDesc;
   MTLHeapDescriptor    *heapDesc;
   id<MTLHeap>           temporaryHeap;
@@ -134,7 +134,7 @@ mt_getBufferMemoryRequirements(GPUDevice                 *device,
                                const GPUBufferCreateInfo *info,
                                GPUMemoryRequirements     *outRequirements) {
   MTLSizeAndAlign sizeAndAlign;
-  DeviceMT       *deviceMT;
+  GPUDeviceMT    *deviceMT;
 
   if (!device || !(deviceMT = device->_priv) || !info || !outRequirements
       || info->sizeBytes > NSUIntegerMax) {
@@ -164,7 +164,7 @@ mt_getTextureMemoryRequirements(GPUDevice                  *device,
                                 const GPUTextureCreateInfo *info,
                                 GPUMemoryRequirements      *outRequirements) {
   MTLSizeAndAlign       sizeAndAlign;
-  DeviceMT             *deviceMT;
+  GPUDeviceMT          *deviceMT;
   MTLTextureDescriptor *desc;
   MTLPixelFormat        stencilCopyFormat;
   GPUResult             result;
@@ -202,7 +202,7 @@ static GPUResult
 mt_getSparseBufferRequirements(GPUDevice                   *device,
                                const GPUBufferCreateInfo   *info,
                                GPUSparseBufferRequirements *outRequirements) {
-  DeviceMT         *deviceMT;
+  GPUDeviceMT      *deviceMT;
   MTLSparsePageSize pageSize;
   uint64_t          pageSizeBytes;
 
@@ -237,7 +237,7 @@ mt_getSparseTextureRequirements(GPUDevice                    *device,
                                 const GPUTextureCreateInfo   *info,
                                 GPUSparseTextureRequirements *outRequirements) {
   MTLSize           tileSize;
-  DeviceMT         *deviceMT;
+  GPUDeviceMT      *deviceMT;
   id<MTLTexture>    texture;
   MTLPixelFormat    stencilCopyFormat;
   MTLSparsePageSize pageSize;
@@ -312,12 +312,12 @@ static GPUResult
 mt_createHeap(GPUDevice               *device,
               const GPUHeapCreateInfo *info,
               GPUHeap                **outHeap) {
-  DeviceMT          *deviceMT;
-  AdapterMT         *adapterMT;
+  GPUDeviceMT       *deviceMT;
+  GPUAdapterMT      *adapterMT;
   MTLHeapDescriptor *desc;
   id<MTLHeap>        nativeHeap;
   GPUHeap           *heap;
-  HeapMT            *native;
+  GPUHeapMT         *native;
   uint64_t           compatibility;
   MTLSparsePageSize  sparsePageSize;
 
@@ -402,7 +402,7 @@ mt_createHeap(GPUDevice               *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native                  = (HeapMT *)(heap + 1);
+  native                  = (GPUHeapMT *)(heap + 1);
   native->heap            = nativeHeap;
   heap->_priv             = native;
   heap->device            = device;
@@ -414,7 +414,7 @@ mt_createHeap(GPUDevice               *device,
 
 static void
 mt_destroyHeap(GPUHeap *heap) {
-  HeapMT    *native;
+  GPUHeapMT *native;
 
   if (!heap) {
     return;
@@ -431,7 +431,7 @@ mt_createPlacedBuffer(GPUDevice                 *device,
                       GPUHeap                   *heap,
                       uint64_t                   heapOffset,
                       GPUBuffer                **outBuffer) {
-  HeapMT       *nativeHeap;
+  GPUHeapMT    *nativeHeap;
   id<MTLBuffer> nativeBuffer;
   GPUResult     result;
 
@@ -462,7 +462,7 @@ mt_createPlacedTexture(GPUDevice                  *device,
                        GPUHeap                    *heap,
                        uint64_t                    heapOffset,
                        GPUTexture                **outTexture) {
-  HeapMT               *nativeHeap;
+  GPUHeapMT            *nativeHeap;
   MTLTextureDescriptor *desc;
   id<MTLTexture>        nativeTexture;
   MTLPixelFormat        stencilCopyFormat;
@@ -509,7 +509,7 @@ mt_createSparseBuffer(GPUDevice                 *device,
                       const GPUBufferCreateInfo *info,
                       GPUHeap                   *heap,
                       GPUBuffer                **outBuffer) {
-  DeviceMT         *deviceMT;
+  GPUDeviceMT      *deviceMT;
   id<MTLBuffer>     nativeBuffer;
   MTLSparsePageSize pageSize;
   GPUResult         result;
@@ -674,9 +674,9 @@ mt_submitSparse(GPUQueue                       *queueHandle,
 #if MT_HAS_METAL4
   id<MTLEvent>                   waitEvent;
   const GPUSparseBufferMapping  *bufferMapping;
-  HeapMT                        *bufferHeap;
+  GPUHeapMT                     *bufferHeap;
   const GPUSparseTextureMapping *textureMapping;
-  HeapMT                        *textureHeap;
+  GPUHeapMT                     *textureHeap;
   id<MTLEvent>                   signalEvent;
   uint32_t                       waitIndex;
   uint32_t                       bufferIndex;
@@ -792,7 +792,7 @@ mt_submitSparse(GPUQueue                       *queueHandle,
 
 GPU_HIDE
 void
-mt_initMemory(ApiMemory    *api) {
+mt_initMemory(GPUMemoryApi *api) {
   api->getBufferRequirements        = mt_getBufferMemoryRequirements;
   api->getTextureRequirements       = mt_getTextureMemoryRequirements;
   api->getSparseBufferRequirements  = mt_getSparseBufferRequirements;

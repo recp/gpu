@@ -19,12 +19,12 @@
 
 #include "../../common.h"
 
-struct RenderPipelineState {
+struct GPURenderPipelineState {
   void *_priv;
 };
 
 struct GPURenderPipeline {
-  Api                 *_api;
+  GPUApi              *_api;
   void                *_priv;
   void                *_state;
   GPUPipelineLayout   *_layout;
@@ -58,18 +58,18 @@ createRenderPipeline(GPUDevice                         *device,
 
 GPU_HIDE
 GPURenderPipeline*
-createRenderPipelineDesc(Api    *api, GPUFormat pixelFormat, bool mesh);
+createRenderPipelineDesc(GPUApi *api, GPUFormat pixelFormat, bool mesh);
 
 GPU_HIDE
-RenderPipelineState*
+GPURenderPipelineState*
 compileRenderPipelineState(GPUDevice         *__restrict device,
                            GPURenderPipeline *__restrict pipeline);
 
 GPU_HIDE
 void
 pipelineSetFunction(GPURenderPipeline *__restrict pipeline,
-                    ShaderFunction    *__restrict func,
-                    FunctionType                  functionType);
+                    GPUShaderFunction *__restrict func,
+                    GPUFunctionType               functionType);
 
 GPU_HIDE
 void

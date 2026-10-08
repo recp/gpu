@@ -24,10 +24,10 @@ enum {
 
 static bool
 mt_interopDevices(GPUDeviceInteropEXT *interop,
-                  DeviceMT           **outFirst,
-                  DeviceMT           **outSecond) {
-  DeviceMT    *first;
-  DeviceMT    *second;
+                  GPUDeviceMT        **outFirst,
+                  GPUDeviceMT        **outSecond) {
+  GPUDeviceMT *first;
+  GPUDeviceMT *second;
 
   if (!interop || !interop->firstDevice || !interop->secondDevice
       || deviceApi(interop->firstDevice) !=
@@ -54,8 +54,8 @@ static GPUResult
 mt_createDeviceInterop(GPUDevice           *firstDevice,
                        GPUDevice           *secondDevice,
                        GPUDeviceInteropEXT *interop) {
-  DeviceMT    *first;
-  DeviceMT    *second;
+  GPUDeviceMT *first;
+  GPUDeviceMT *second;
 
   if (!firstDevice || !secondDevice || !interop) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -96,8 +96,8 @@ mt_getSharedBufferRequirements(GPUDeviceInteropEXT       *interop,
                                const GPUBufferCreateInfo *secondInfo,
                                GPUMemoryRequirements     *outRequirements) {
   MTLSizeAndAlign sizeAndAlign;
-  DeviceMT       *first;
-  DeviceMT       *second;
+  GPUDeviceMT    *first;
+  GPUDeviceMT    *second;
 
   if (!mt_interopDevices(interop, &first, &second)
       || !firstInfo || !secondInfo || !outRequirements
@@ -133,8 +133,8 @@ mt_createSharedBuffer(GPUDeviceInteropEXT       *interop,
                       GPUBuffer                **outSecondBuffer) {
   GPUBufferCreateInfo firstWrapInfo;
   GPUBufferCreateInfo secondWrapInfo;
-  DeviceMT           *first;
-  DeviceMT           *second;
+  GPUDeviceMT        *first;
+  GPUDeviceMT        *second;
   id<MTLBuffer>       nativeBuffer;
   GPUResult           result;
 
@@ -189,8 +189,8 @@ mt_getSharedTextureRequirements(GPUDeviceInteropEXT        *interop,
                                 GPUMemoryRequirements      *outRequirements) {
   GPUTextureCreateInfo  mergedInfo;
   MTLSizeAndAlign       sizeAndAlign;
-  DeviceMT             *first;
-  DeviceMT             *second;
+  GPUDeviceMT          *first;
+  GPUDeviceMT          *second;
   MTLTextureDescriptor *desc;
   MTLPixelFormat        stencilCopyFormat;
   GPUResult             result;
@@ -238,9 +238,9 @@ mt_createSharedTexture(GPUDeviceInteropEXT        *interop,
                        GPUTexture                **outSecondTexture) {
   GPUTextureCreateInfo mergedInfo;
   GPUTextureCreateInfo secondWrapInfo;
-  DeviceMT            *first;
-  DeviceMT            *second;
-  TextureMT           *native;
+  GPUDeviceMT         *first;
+  GPUDeviceMT         *second;
+  GPUTextureMT        *native;
   MTLPixelFormat       stencilCopyFormat;
   GPUResult            result;
 
@@ -298,8 +298,8 @@ mt_createSharedSemaphore(GPUDeviceInteropEXT          *interop,
                          const GPUSemaphoreCreateInfo *info,
                          GPUSemaphore                 *firstSemaphore,
                          GPUSemaphore                 *secondSemaphore) {
-  DeviceMT          *first;
-  DeviceMT          *second;
+  GPUDeviceMT       *first;
+  GPUDeviceMT       *second;
   id<MTLSharedEvent> event;
 
   if (!mt_interopDevices(interop, &first, &second)
@@ -338,8 +338,8 @@ mt_encodeSharedBarriers(GPUDeviceInteropEXT            *interop,
   GPUBufferBarrier                  bufferBarriers[MT_SHARED_BARRIER_CHUNK_SIZE];
   GPUTextureBarrier                 textureBarriers[MT_SHARED_BARRIER_CHUNK_SIZE];
   GPUBarrierBatch                   batch;
-  DeviceMT                         *first;
-  DeviceMT                         *second;
+  GPUDeviceMT                      *first;
+  GPUDeviceMT                      *second;
   const GPUSharedBufferBarrierEXT  *sharedBuffer;
   GPUBufferBarrier                 *bufferBarrier;
   const GPUSharedTextureBarrierEXT *sharedTexture;
@@ -430,7 +430,7 @@ mt_encodeSharedAcquire(GPUDeviceInteropEXT            *interop,
 
 GPU_HIDE
 void
-mt_initMultiGPU(ApiMultiGPU    *api) {
+mt_initMultiGPU(GPUMultiGPUApi *api) {
   api->createInterop          = mt_createDeviceInterop;
   api->destroyInterop         = mt_destroyDeviceInterop;
   api->getBufferRequirements  = mt_getSharedBufferRequirements;

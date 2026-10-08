@@ -23,7 +23,7 @@ extern "C" {
 #include <gpu/common.h>
 #include <gpu/gpu.h>
 
-typedef struct ApiBuffer {
+typedef struct GPUBufferApi {
   GPUResult
   (*create)(GPUDevice                 *__restrict device,
             const GPUBufferCreateInfo *__restrict info,
@@ -46,7 +46,7 @@ typedef struct ApiBuffer {
           uint64_t              sizeBytes);
 
   void * (*contents)(GPUBuffer *__restrict buff);
-} ApiBuffer;
+} GPUBufferApi;
 
 #ifdef __cplusplus
 }

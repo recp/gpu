@@ -82,13 +82,13 @@ find_resource(const GPUShaderReflection *reflection,
 }
 
 static int
-validate_entry(const ShaderPTXInfo    *info,
+validate_entry(const GPUShaderPTXInfo *info,
                uint32_t                entryIndex,
                uint32_t                textureBinding,
                uint32_t                outputBinding) {
-  const ShaderPTXEntryInfo    *entry;
-  const ShaderPTXParamInfo    *output;
-  const ShaderPTXParamInfo    *texture;
+  const GPUShaderPTXEntryInfo *entry;
+  const GPUShaderPTXParamInfo *output;
+  const GPUShaderPTXParamInfo *texture;
 
   if (!info || entryIndex >= info->entryCount) {
     return 0;
@@ -158,7 +158,7 @@ validate_reflection(const GPUShaderReflection *reflection) {
 int
 validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
   GPUDevice         device;
-  Api               api;
+  GPUApi            api;
   GPUShaderLibrary *library;
   GPUResult         result;
   int               valid;

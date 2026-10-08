@@ -19,18 +19,18 @@
 
 #include "../common.h"
 
-typedef struct CacheFileGuard {
+typedef struct GPUCacheFileGuard {
   intptr_t native;
   bool     locked;
-} CacheFileGuard;
+} GPUCacheFileGuard;
 
 GPU_HIDE
 bool
-cacheFileBegin(const char *path, CacheFileGuard    *guard);
+cacheFileBegin(const char *path, GPUCacheFileGuard *guard);
 
 GPU_HIDE
 void
-cacheFileEnd(CacheFileGuard    *guard);
+cacheFileEnd(GPUCacheFileGuard *guard);
 
 GPU_HIDE
 char*

@@ -19,7 +19,7 @@
 
 static const uint8_t webgpu_zeroPushConstants[GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT];
 
-static CommandWebGPU*
+static GPUCommandWebGPU*
 webgpu_renderCommand(GPURenderPassEncoder *encoder) {
   return encoder ? encoder->_priv : NULL;
 }
@@ -29,7 +29,7 @@ webgpu_renderPushConstants(GPURenderPassEncoder *encoder,
                            GPUShaderStageFlags   stages,
                            const void           *data,
                            uint32_t              sizeBytes) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
   uint32_t          dynamicOffset;
 
   GPU__UNUSED(stages);
@@ -51,8 +51,8 @@ webgpu_renderPushConstants(GPURenderPassEncoder *encoder,
 }
 
 static GPURenderPassEncoder*
-webgpu_renderCommandEncoder(GPUCommandBuffer *cmdb, RenderPassDesc    *pass) {
-  CommandWebGPU    *command;
+webgpu_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
+  GPUCommandWebGPU *command;
 
   command = webgpuCommand(cmdb);
 
@@ -78,11 +78,11 @@ webgpu_renderCommandEncoder(GPUCommandBuffer *cmdb, RenderPassDesc    *pass) {
 
 static void
 webgpu_setPipeline(GPURenderPassEncoder   *encoder,
-                   RenderPipelineState    *pipeline,
+                   GPURenderPipelineState *pipeline,
                    GPUCullMode             cullMode,
                    GPUFrontFace            frontFace) {
-  RenderPipelineWebGPU    *state;
-  CommandWebGPU           *command;
+  GPURenderPipelineWebGPU *state;
+  GPUCommandWebGPU        *command;
 
   GPU__UNUSED(cullMode);
   GPU__UNUSED(frontFace);
@@ -104,7 +104,7 @@ webgpu_setPipeline(GPURenderPassEncoder   *encoder,
 
 static void
 webgpu_viewport(GPURenderPassEncoder *encoder, const GPUViewport *viewport) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
 
@@ -148,7 +148,7 @@ webgpu_scissorAxis(int32_t   origin,
 
 static void
 webgpu_scissor(GPURenderPassEncoder *encoder, const GPUScissorRect *scissor) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
   uint32_t          x;
   uint32_t          y;
   uint32_t          width;
@@ -178,7 +178,7 @@ webgpu_scissor(GPURenderPassEncoder *encoder, const GPUScissorRect *scissor) {
 static void
 webgpu_blendConstant(GPURenderPassEncoder *encoder, const float rgba[4]) {
   WGPUColor         color;
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
 
@@ -193,7 +193,7 @@ webgpu_blendConstant(GPURenderPassEncoder *encoder, const float rgba[4]) {
 
 static void
 webgpu_stencilReference(GPURenderPassEncoder *encoder, uint32_t reference) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
 
@@ -208,7 +208,7 @@ webgpu_vertexInputBuffer(GPURenderPassEncoder *encoder,
                          GPUBuffer            *buffer,
                          uint64_t              offset,
                          uint32_t              index) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
 
@@ -226,12 +226,12 @@ webgpu_vertexInputBuffer(GPURenderPassEncoder *encoder,
 
 static void
 webgpu_draw(GPURenderPassEncoder *encoder,
-            PrimitiveType         primitive,
+            GPUPrimitiveType      primitive,
             size_t                firstVertex,
             size_t                vertexCount,
             uint32_t              instanceCount,
             uint32_t              firstInstance) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
 
   GPU__UNUSED(primitive);
   command = webgpu_renderCommand(encoder);
@@ -250,7 +250,7 @@ webgpu_draw(GPURenderPassEncoder *encoder,
 
 static bool
 webgpu_bindIndexBuffer(GPURenderPassEncoder *encoder,
-                       CommandWebGPU        *command) {
+                       GPUCommandWebGPU     *command) {
   GPUBuffer      *buffer;
   WGPUIndexFormat format;
 
@@ -287,7 +287,7 @@ webgpu_drawIndexed(GPURenderPassEncoder *encoder,
                    uint32_t              firstIndex,
                    int32_t               vertexOffset,
                    uint32_t              firstInstance) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
 
@@ -316,10 +316,10 @@ webgpu_indirectEnabled(const GPURenderPassEncoder *encoder) {
 
 static void
 webgpu_drawIndirect(GPURenderPassEncoder *encoder,
-                    PrimitiveType         primitive,
+                    GPUPrimitiveType      primitive,
                     GPUBuffer            *argsBuffer,
                     uint64_t              argsOffset) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
 
   GPU__UNUSED(primitive);
   command = webgpu_renderCommand(encoder);
@@ -339,7 +339,7 @@ static void
 webgpu_drawIndexedIndirect(GPURenderPassEncoder *encoder,
                            GPUBuffer            *argsBuffer,
                            uint64_t              argsOffset) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
 
@@ -356,12 +356,12 @@ webgpu_drawIndexedIndirect(GPURenderPassEncoder *encoder,
 
 static bool
 webgpu_multiDrawIndirect(GPURenderPassEncoder *encoder,
-                         PrimitiveType         primitive,
+                         GPUPrimitiveType      primitive,
                          GPUBuffer            *argsBuffer,
                          uint64_t              argsOffset,
                          uint32_t              drawCount,
                          uint32_t              strideBytes) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
   GPUDevice        *device;
 
   GPU__UNUSED(primitive);
@@ -390,7 +390,7 @@ webgpu_multiDrawIndexedIndirect(GPURenderPassEncoder *encoder,
                                 uint64_t              argsOffset,
                                 uint32_t              drawCount,
                                 uint32_t              strideBytes) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
   GPUDevice        *device;
 
   command = webgpu_renderCommand(encoder);
@@ -414,7 +414,7 @@ webgpu_multiDrawIndexedIndirect(GPURenderPassEncoder *encoder,
 
 static void
 webgpu_endEncoding(GPURenderPassEncoder *encoder) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
 
   command = webgpu_renderCommand(encoder);
 
@@ -428,7 +428,7 @@ webgpu_endEncoding(GPURenderPassEncoder *encoder) {
 }
 
 void
-webgpu_initRenderEncoder(ApiRCE    *api) {
+webgpu_initRenderEncoder(GPURCEApi *api) {
   api->renderCommandEncoder          = webgpu_renderCommandEncoder;
   api->setRenderPipelineState        = webgpu_setPipeline;
   api->viewport                      = webgpu_viewport;

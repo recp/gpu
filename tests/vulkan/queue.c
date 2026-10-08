@@ -149,7 +149,7 @@ descriptor_probe_offsets(VkCommandBuffer     command,
 }
 
 static bool
-descriptor_probe_group(Api                   *api,
+descriptor_probe_group(GPUApi                *api,
                        GPUComputePassEncoder *pass,
                        GPUPipelineLayout     *pipeline,
                        uint32_t               groupIndex,
@@ -164,17 +164,17 @@ descriptor_probe_group(Api                   *api,
 
 static int
 descriptor_buffer_state_shadow(GPUDevice *gpuDevice) {
-  DeviceVk                   device      = {0};
-  BindGroupLayoutVk          layout      = {0};
-  PipelineLayoutVk           pipelineVk  = {0};
+  GPUDeviceVk                device      = {0};
+  GPUBindGroupLayoutVk       layout      = {0};
+  GPUPipelineLayoutVk        pipelineVk  = {0};
   GPUPipelineLayout          pipeline    = {0};
-  DescriptorBufferChunkVk    chunks[3]   = {0};
-  BindGroupVk                groupsVk[3] = {0};
+  GPUDescriptorBufferChunkVk chunks[3]   = {0};
+  GPUBindGroupVk             groupsVk[3] = {0};
   GPUBindGroup               groups[3]   = {0};
-  ComputeEncoderVk           encoder     = {0};
+  GPUComputeEncoderVk        encoder     = {0};
   GPUComputePassEncoder      pass        = {0};
   DescriptorBufferProbe      probe       = {0};
-  Api                       *api;
+  GPUApi                    *api;
   VkDevice                   deviceHandle;
   VkPipelineLayout           layoutHandle;
   uint32_t                   i;
@@ -273,23 +273,23 @@ descriptor_binding_path(GPUDevice *device,
 #ifdef VK_EXT_descriptor_buffer
   VkDescriptorGetInfoEXT        samplerGetInfo = {0};
 #endif
-  DeviceVk                     *deviceVk;
+  GPUDeviceVk                  *deviceVk;
   GPUBindGroupLayout           *layout;
   GPUBindGroupLayout           *dynamicLayout;
-  BindGroupLayoutVk            *layoutVk;
-  BindGroupLayoutVk            *dynamicLayoutVk;
+  GPUBindGroupLayoutVk         *layoutVk;
+  GPUBindGroupLayoutVk         *dynamicLayoutVk;
   GPUPipelineLayout            *pipelineLayout;
   GPUPipelineLayout            *mixedPipelineLayout;
-  PipelineLayoutVk             *pipelineLayoutVk;
-  PipelineLayoutVk             *mixedPipelineLayoutVk;
+  GPUPipelineLayoutVk          *pipelineLayoutVk;
+  GPUPipelineLayoutVk          *mixedPipelineLayoutVk;
   GPUBindGroup                 *group;
-  BindGroupVk                  *groupVk;
+  GPUBindGroupVk               *groupVk;
   GPUBuffer                    *buffer;
   GPUCommandBuffer             *cmdb;
   GPUComputePassEncoder        *pass;
-  ComputeEncoderVk             *passVk;
+  GPUComputeEncoderVk          *passVk;
 #ifdef VK_EXT_descriptor_buffer
-  const DescriptorBindingVk    *samplerBinding;
+  const GPUDescriptorBindingVk *samplerBinding;
   VkSampler                     sampler;
   uint8_t                      *expectedSampler;
   const uint8_t                *actualSampler;
@@ -611,13 +611,13 @@ static int
 buffer_transfers_reuse(GPUDevice *device,
                        GPUQueue  *queue,
                        GPUFence  *fence) {
-  QueueVk            *native;
+  GPUQueueVk         *native;
   GPUBufferCreateInfo bufferInfo = {0};
-  TransferSlotVk      slots[GPU_VK_TRANSFER_SLOT_COUNT];
+  GPUTransferSlotVk   slots[GPU_VK_TRANSFER_SLOT_COUNT];
   GPUBuffer          *buffer;
-  BufferVk           *bufferNative;
+  GPUBufferVk        *bufferNative;
   GPUBuffer          *readback;
-  BufferVk           *readbackNative;
+  GPUBufferVk        *readbackNative;
   VkBuffer            readbackBuffer;
   VkDeviceMemory      readbackMemory;
   void               *readbackMapped;
@@ -675,7 +675,7 @@ buffer_transfers_reuse(GPUDevice *device,
   }
 
   for (uint32_t i = 0u; i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
-    BufferVk    *upload;
+    GPUBufferVk *upload;
 
     slots[i] = native->transferSlots[i];
     upload   = slots[i].uploadStaging ? slots[i].uploadStaging->_priv : NULL;
@@ -731,7 +731,7 @@ buffer_transfers_reuse(GPUDevice *device,
   }
 
   for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
-    TransferSlotVk    *slot;
+    GPUTransferSlotVk *slot;
 
     slot = &native->transferSlots[i];
     ok   = slot->command == slots[i].command
@@ -751,8 +751,8 @@ texture_uploads_reuse(GPUDevice *device,
                       GPUFence  *fence) {
   GPUTextureCreateInfo  textureInfo = {0};
   GPUTextureWriteRegion writeRegion = {0};
-  TransferSlotVk        slots[GPU_VK_TRANSFER_SLOT_COUNT];
-  QueueVk              *native;
+  GPUTransferSlotVk     slots[GPU_VK_TRANSFER_SLOT_COUNT];
+  GPUQueueVk           *native;
   GPUTexture           *texture;
   int                   ok;
 
@@ -805,7 +805,7 @@ texture_uploads_reuse(GPUDevice *device,
   ok = ok && wait_queue(queue, fence);
 
   for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
-    BufferVk    *upload;
+    GPUBufferVk *upload;
 
     slots[i] = native->transferSlots[i];
     upload   = slots[i].uploadStaging ? slots[i].uploadStaging->_priv : NULL;
@@ -831,7 +831,7 @@ texture_uploads_reuse(GPUDevice *device,
   }
 
   for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
-    TransferSlotVk    *slot;
+    GPUTransferSlotVk *slot;
 
     slot = &native->transferSlots[i];
     ok   = slot->command == slots[i].command

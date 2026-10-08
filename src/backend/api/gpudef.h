@@ -50,39 +50,39 @@ extern "C" {
 #include "tensor.h"
 #include "ml.h"
 
-typedef struct Api {
+typedef struct GPUApi {
   GPUBackend            backend;
   bool                  initialized;
-  ApiDevice             device;
-  ApiRender             render;
-  ApiRCE                rce;
-  ApiCompute            compute;
-  ApiBuffer             buf;
-  ApiMemory             memory;
-  ApiMultiGPU           multigpu;
-  ApiTexture            texture;
-  ApiCommandBuffer      cmdbuf;
-  ApiCommandQueue       cmdque;
-  ApiRenderPass         renderPass;
-  ApiDepthStencil       depthStencil;
-  ApiVertex             vertex;
-  ApiLibrary            library;
-  ApiSwapchain          swapchain;
-  ApiFrame              frame;
-  ApiDescriptor         descriptor;
-  ApiSampler            sampler;
-  ApiInstance           instance;
-  ApiSurface            surface;
-  ApiPipelineCache      pipelineCache;
-  ApiVRS                vrs;
-  ApiRayQuery           rayQuery;
-  ApiRayTracing         rayTracing;
-  ApiExecutionGraph     executionGraph;
-  ApiSamplerFeedback    samplerFeedback;
-  ApiTensor             tensor;
-  ApiML                 ml;
+  GPUDeviceApi          device;
+  GPURenderApi          render;
+  GPURCEApi             rce;
+  GPUComputeApi         compute;
+  GPUBufferApi          buf;
+  GPUMemoryApi          memory;
+  GPUMultiGPUApi        multigpu;
+  GPUTextureApi         texture;
+  GPUCommandBufferApi   cmdbuf;
+  GPUCommandQueueApi    cmdque;
+  GPURenderPassApi      renderPass;
+  GPUDepthStencilApi    depthStencil;
+  GPUVertexApi          vertex;
+  GPULibraryApi         library;
+  GPUSwapchainApi       swapchain;
+  GPUFrameApi           frame;
+  GPUDescriptorApi      descriptor;
+  GPUSamplerApi         sampler;
+  GPUInstanceApi        instance;
+  GPUSurfaceApi         surface;
+  GPUPipelineCacheApi   pipelineCache;
+  GPUVRSApi             vrs;
+  GPURayQueryApi        rayQuery;
+  GPURayTracingApi      rayTracing;
+  GPUExecutionGraphApi  executionGraph;
+  GPUSamplerFeedbackApi samplerFeedback;
+  GPUTensorApi          tensor;
+  GPUMLApi              ml;
   void                 *reserved;
-} Api;
+} GPUApi;
 
 #ifdef __cplusplus
 }

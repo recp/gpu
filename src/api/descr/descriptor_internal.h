@@ -38,24 +38,24 @@ struct GPUPipelineLayout {
   void      *_priv;
 };
 
-typedef enum BindKind {
+typedef enum GPUBindKind {
   GPUBindKindBuffer                = 0,
   GPUBindKindTexture               = 1,
   GPUBindKindSampler               = 2,
   GPUBindKindSamplerFeedback       = 3,
   GPUBindKindAccelerationStructure = 4,
   GPUBindKindCount
-} BindKind;
+} GPUBindKind;
 
-typedef struct BindGroupLayoutPriv {
+typedef struct GPUBindGroupLayoutPriv {
   GPUBindGroupLayoutEntry *entries;
   uint32_t                *backendBindings;
   uint32_t                 count;
   bool                     hasBackendBindings;
   bool                     bindless;
-} BindGroupLayoutPriv;
+} GPUBindGroupLayoutPriv;
 
-typedef struct BindGroupBindingPriv {
+typedef struct GPUBindGroupBindingPriv {
   union {
     struct {
       GPUBuffer *buffer;
@@ -73,30 +73,30 @@ typedef struct BindGroupBindingPriv {
   uint32_t    layoutEntryIndex;
   uint32_t    dynamicOffsetIndex;
   uint32_t    kindIndex;
-  BindKind    kind;
-} BindGroupBindingPriv;
+  GPUBindKind kind;
+} GPUBindGroupBindingPriv;
 
-typedef struct BindGroupPriv {
+typedef struct GPUBindGroupPriv {
   GPUBindGroupLayout      *layout;
-  BindGroupBindingPriv    *bindings;
-  BindGroupBindingPriv    *singleBuffer;
+  GPUBindGroupBindingPriv *bindings;
+  GPUBindGroupBindingPriv *singleBuffer;
   uint64_t                *updateScratch;
   uint64_t                 hash;
   uint32_t                 count;
   uint32_t                 dynamicOffsetCount;
   GPUShaderStageFlags      singleBufferStages;
   bool                     bindless;
-} BindGroupPriv;
+} GPUBindGroupPriv;
 
-typedef struct PipelineLayoutPriv {
+typedef struct GPUPipelineLayoutPriv {
   GPUBindGroupLayout **bindGroupLayouts;
   uint32_t           **backendBindings;
   uint32_t             bindGroupLayoutCount;
   uint32_t             pushConstantSizeBytes;
   GPUShaderStageFlags  pushConstantStages;
-} PipelineLayoutPriv;
+} GPUPipelineLayoutPriv;
 
-typedef struct BindGroupBindingView {
+typedef struct GPUBindGroupBindingView {
   union {
     GPUBuffer                   *buffer;
     GPUTextureView              *textureView;
@@ -115,12 +115,12 @@ typedef struct BindGroupBindingView {
   uint32_t                arrayCount;
   uint32_t                layoutEntryIndex;
   uint32_t                kindIndex;
-  BindKind                kind;
+  GPUBindKind             kind;
   bool                    hasDynamicOffset;
-} BindGroupBindingView;
+} GPUBindGroupBindingView;
 
 typedef void (*GPUBindGroupBindingFn)(void                          *ctx,
-                                    const BindGroupBindingView    *binding);
+                                    const GPUBindGroupBindingView *binding);
 
 GPU_HIDE
 GPUResult
@@ -167,7 +167,7 @@ getPipelineLayoutGroups(GPUPipelineLayout *layout, uint32_t *outCount);
 GPU_HIDE
 uint32_t
 pipelineLayoutBackendSlotMask(GPUPipelineLayout  *layout,
-                              BindKind            kind,
+                              GPUBindKind         kind,
                               GPUShaderStageFlags stages);
 
 GPU_HIDE

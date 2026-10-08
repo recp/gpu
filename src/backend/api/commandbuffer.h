@@ -26,7 +26,7 @@ extern "C" {
 typedef struct GPUQuerySet           GPUQuerySet;
 typedef struct GPUQuerySetCreateInfo GPUQuerySetCreateInfo;
 
-typedef struct ApiCommandBuffer {
+typedef struct GPUCommandBufferApi {
   bool (*presentDrawable)(GPUCommandBuffer *cmdb, GPUFrame *frame);
 
   GPUResult (*createQuerySet)(GPUDevice *device, const GPUQuerySetCreateInfo *info, GPUQuerySet *set);
@@ -50,7 +50,7 @@ typedef struct ApiCommandBuffer {
                      uint32_t          queryCount,
                      GPUBuffer        *dstBuffer,
                      uint64_t          dstOffset);
-} ApiCommandBuffer;
+} GPUCommandBufferApi;
 
 #ifdef __cplusplus
 }

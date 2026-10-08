@@ -23,28 +23,28 @@ extern "C" {
 #include <gpu/common.h>
 #include <gpu/gpu.h>
 
-typedef struct VertexDescriptor    VertexDescriptor;
+typedef struct GPUVertexDescriptor GPUVertexDescriptor;
 
-typedef struct ApiVertex {
-  VertexDescriptor* (*newVertexDesc)(void);
+typedef struct GPUVertexApi {
+  GPUVertexDescriptor* (*newVertexDesc)(void);
 
-  void (*destroyVertexDesc)(VertexDescriptor    *vert);
+  void (*destroyVertexDesc)(GPUVertexDescriptor *vert);
 
   void
-  (*attrib)(VertexDescriptor    *__restrict vert,
+  (*attrib)(GPUVertexDescriptor *__restrict vert,
             uint32_t                        attribIndex,
             GPUVertexFormat                 format,
             uint32_t                        offset,
             uint32_t                        bufferIndex);
 
   void
-  (*layout)(VertexDescriptor    *__restrict vert,
+  (*layout)(GPUVertexDescriptor *__restrict vert,
             uint32_t                        layoutIndex,
             uint32_t                        stride,
             GPUVertexStepMode               stepMode);
 
-  void (*vertexDesc)(GPURenderPipeline *__restrict pipeline, VertexDescriptor    *__restrict vert);
-} ApiVertex;
+  void (*vertexDesc)(GPURenderPipeline *__restrict pipeline, GPUVertexDescriptor *__restrict vert);
+} GPUVertexApi;
 
 #ifdef __cplusplus
 }

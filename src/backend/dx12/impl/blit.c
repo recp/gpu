@@ -218,7 +218,7 @@ static const char gpu_blitSintHLSL[] =
   "  return gpu_blit_source.Load(int3(coord, 0));\n"
   "}\n";
 
-static const BlitShaderSet    dx12_blitTextureShaders = {
+static const GPUBlitShaderSet dx12_blitTextureShaders = {
   .filteringFloat = {
     .data = gpu_blitFloatHLSL,
     .size = sizeof(gpu_blitFloatHLSL) - 1u
@@ -241,7 +241,7 @@ static const BlitShaderSet    dx12_blitTextureShaders = {
   }
 };
 
-static const BlitShaderSet    dx12_blitTextureManualShaders = {
+static const GPUBlitShaderSet dx12_blitTextureManualShaders = {
   .filteringFloat = {
     .data = gpu_blitFloatManualHLSL,
     .size = sizeof(gpu_blitFloatManualHLSL) - 1u
@@ -269,7 +269,7 @@ void
 dx12_blitTexture(GPUCommandBuffer         *cmdb,
                  const GPUTextureBlitInfo *info) {
   GPUDevice     *gpuDevice;
-  DeviceDX12    *device;
+  GPUDeviceDX12 *device;
 
   gpuDevice = commandBufferDevice(cmdb);
   device    = gpuDevice ? gpuDevice->_priv : NULL;

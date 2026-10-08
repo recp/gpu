@@ -22,7 +22,7 @@
 #include "pipeline_cache.h"
 #include "constants.h"
 
-static ComputeEncoderVk*
+static GPUComputeEncoderVk*
 vk__computeEncoder(GPUComputePassEncoder *encoder) {
   return encoder ? encoder->_priv : NULL;
 }
@@ -37,11 +37,11 @@ vk_createComputePipeline(GPUDevice                          *device,
   VkSpecializationInfo           constants = {0};
   VkPipelineShaderStageCreateInfo stage        = {0};
   VkComputePipelineCreateInfo     pipelineInfo = {0};
-  DeviceVk                       *deviceVk;
-  ShaderLibraryVk                *library;
-  PipelineLayoutVk               *layout;
-  ComputePipelineState           *state;
-  ComputePipelineVk              *native;
+  GPUDeviceVk                    *deviceVk;
+  GPUShaderLibraryVk             *library;
+  GPUPipelineLayoutVk            *layout;
+  GPUComputePipelineState        *state;
+  GPUComputePipelineVk           *native;
   uint64_t                        entryMask;
   VkResult                        result;
 
@@ -60,7 +60,7 @@ vk_createComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native         = (ComputePipelineVk *)(state + 1);
+  native         = (GPUComputePipelineVk *)(state + 1);
   native->device = deviceVk->device;
   entryMask      = UINT64_MAX;
 
@@ -121,8 +121,8 @@ vk_createComputePipeline(GPUDevice                          *device,
 GPU_HIDE
 void
 vk_destroyComputePipeline(GPUComputePipeline *pipeline) {
-  ComputePipelineState    *state;
-  ComputePipelineVk       *native;
+  GPUComputePipelineState *state;
+  GPUComputePipelineVk    *native;
 
   if (!pipeline) {
     return;
@@ -147,9 +147,9 @@ GPU_HIDE
 GPUComputePassEncoder*
 vk_computeCommandEncoder(GPUCommandBuffer               *cmdb,
                          const GPUComputePassCreateInfo *info) {
-  CommandBufferVk       *command;
+  GPUCommandBufferVk    *command;
   GPUComputePassEncoder *encoder;
-  ComputeEncoderVk      *native;
+  GPUComputeEncoderVk   *native;
 
   command = cmdb ? cmdb->_priv : NULL;
 
@@ -177,9 +177,9 @@ vk_computeCommandEncoder(GPUCommandBuffer               *cmdb,
 GPU_HIDE
 void
 vk_setComputePipelineState(GPUComputePassEncoder   *encoder,
-                           ComputePipelineState    *pipelineState) {
-  ComputeEncoderVk     *native;
-  ComputePipelineVk    *pipeline;
+                           GPUComputePipelineState *pipelineState) {
+  GPUComputeEncoderVk  *native;
+  GPUComputePipelineVk *pipeline;
 
   native   = vk__computeEncoder(encoder);
   pipeline = pipelineState ? pipelineState->_priv : NULL;
@@ -214,7 +214,7 @@ void
 vk_computePushConstants(GPUComputePassEncoder *encoder,
                         const void            *data,
                         uint32_t               sizeBytes) {
-  ComputeEncoderVk    *native;
+  GPUComputeEncoderVk *native;
 
   native = vk__computeEncoder(encoder);
 
@@ -237,7 +237,7 @@ vk_dispatch(GPUComputePassEncoder *encoder,
             uint32_t               x,
             uint32_t               y,
             uint32_t               z) {
-  ComputeEncoderVk    *native;
+  GPUComputeEncoderVk *native;
 
   native = vk__computeEncoder(encoder);
 
@@ -253,8 +253,8 @@ void
 vk_dispatchIndirect(GPUComputePassEncoder *encoder,
                     GPUBuffer             *argsBuffer,
                     uint64_t               argsOffset) {
-  ComputeEncoderVk    *native;
-  BufferVk            *buffer;
+  GPUComputeEncoderVk *native;
+  GPUBufferVk         *buffer;
 
   native = vk__computeEncoder(encoder);
   buffer = argsBuffer ? argsBuffer->_priv : NULL;
@@ -269,7 +269,7 @@ vk_dispatchIndirect(GPUComputePassEncoder *encoder,
 GPU_HIDE
 void
 vk_endComputeEncoding(GPUComputePassEncoder *encoder) {
-  ComputeEncoderVk    *native;
+  GPUComputeEncoderVk *native;
 
   native = vk__computeEncoder(encoder);
 
@@ -291,7 +291,7 @@ vk_endComputeEncoding(GPUComputePassEncoder *encoder) {
 
 GPU_HIDE
 void
-vk_initCompute(ApiCompute    *api) {
+vk_initCompute(GPUComputeApi *api) {
   api->createPipeline          = vk_createComputePipeline;
   api->destroyComputePipeline  = vk_destroyComputePipeline;
   api->computeCommandEncoder   = vk_computeCommandEncoder;

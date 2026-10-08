@@ -317,7 +317,7 @@ check_buffer_device_dispatch(GPUDevice *activeDevice) {
   GPUQueue            foreignQueue = {0};
   GPUDevice           device       = {0};
   GPUChainedStruct    extensions[3] = {0};
-  Api                 scopedApi;
+  GPUApi              scopedApi;
   uint32_t            source[4] = { 2u, 4u, 6u, 8u };
   uint32_t            result[4] = {0};
   GPUBuffer          *buffer;
@@ -420,7 +420,7 @@ check_texture_transfer_layout(GPUDevice *activeDevice) {
   GPUQueue              queue   = {0};
   GPUTexture            texture = {0};
   GPUDevice             device  = {0};
-  Api                   scopedApi;
+  GPUApi                scopedApi;
   uint8_t               blocks[64] = {0};
 
   if (!activeDevice || !deviceApi(activeDevice)) {
@@ -518,7 +518,7 @@ check_texture_write_aspects(GPUDevice *activeDevice) {
   GPUQueue              queue   = {0};
   GPUTexture            texture = {0};
   GPUDevice             device  = {0};
-  Api                   scopedApi;
+  GPUApi                scopedApi;
   uint8_t               pixels[64] = {0};
 
   if (!activeDevice || !deviceApi(activeDevice)) {
@@ -631,7 +631,7 @@ check_texture_view_format_validation(GPUDevice *activeDevice) {
   GPUTextureViewCreateInfo viewInfo = {0};
   GPUTexture               texture  = {0};
   GPUDevice                device   = {0};
-  Api                      scopedApi;
+  GPUApi                   scopedApi;
   GPUTextureView          *view;
   GPUResult                result;
   uint32_t                 validCount;

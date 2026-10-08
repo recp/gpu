@@ -181,8 +181,8 @@ test_bindComputeGroup(GPUComputePassEncoder *pass,
 
 static int
 check_backend_descriptor_hooks(GPUDevice *device) {
-  ApiDescriptor                hooks = {0};
-  ApiDescriptor                saved;
+  GPUDescriptorApi             hooks = {0};
+  GPUDescriptorApi             saved;
   GPUBindGroupLayoutCreateInfo layoutInfo   = {0};
   GPUPipelineLayoutCreateInfo  pipelineInfo = {0};
   GPUBindGroupCreateInfo       groupInfo    = {0};
@@ -192,7 +192,7 @@ check_backend_descriptor_hooks(GPUDevice *device) {
   GPUBindGroupLayout          *layout         = NULL;
   GPUPipelineLayout           *pipelineLayout = NULL;
   GPUBindGroup                *group          = NULL;
-  Api                         *api;
+  GPUApi                      *api;
   int                          ok;
 
   api = deviceApi(device);
@@ -312,7 +312,7 @@ check_pipeline_layout_bind_validation(GPUDevice                          *device
                                       const GPUBindGroupLayoutCreateInfo *layoutInfo,
                                       GPUBindGroupLayout                 *layout,
                                       GPUPipelineLayout                  *pipelineLayout) {
-  ApiDescriptor                saved;
+  GPUDescriptorApi             saved;
   GPUBindGroupCreateInfo       groupInfo            = {0};
   GPUBindGroupLayoutCreateInfo secondLayoutInfo     = {0};
   GPUPipelineLayoutCreateInfo  otherPipelineInfo    = {0};
@@ -322,7 +322,7 @@ check_pipeline_layout_bind_validation(GPUDevice                          *device
   GPUBindGroupLayout          *twoGroupLayouts[2];
   GPURenderPassEncoder         renderPass  = {0};
   GPUComputePassEncoder        computePass = {0};
-  Api                         *api;
+  GPUApi                      *api;
   GPUBindGroupLayout          *otherLayout            = NULL;
   GPUPipelineLayout           *otherPipelineLayout    = NULL;
   GPUPipelineLayout           *twoGroupPipelineLayout = NULL;
@@ -1274,9 +1274,9 @@ count_binding_error(GPUDevice                *device,
 
 static int
 check_dynamic_offset_bind_validation(GPUDevice *device, GPUBindingType type) {
-  ApiDescriptor                saved;
-  Api                         *api;
-  Api                          fallback     = {0};
+  GPUDescriptorApi             saved;
+  GPUApi                      *api;
+  GPUApi                       fallback     = {0};
   GPUFrameStats                warmStats    = {0};
   GPUBindGroupLayoutEntry      entry        = {0};
   GPUBindGroupLayoutCreateInfo layoutInfo   = {0};
@@ -1648,7 +1648,7 @@ check_binding_arrays(GPUDevice *device) {
   GPUBindGroupEntry            groupEntries[4] = {0};
   GPUBindGroupCreateInfo       groupInfo       = {0};
   GPURenderPassEncoder         renderPass      = {0};
-  ApiDescriptor                savedDescriptor;
+  GPUDescriptorApi             savedDescriptor;
   uint32_t                     validOffsets[2]   = {0u, 256u};
   uint32_t                     invalidOffsets[2] = {0u, 1024u};
   GPUBindGroupLayout          *layout            = NULL;
@@ -1656,7 +1656,7 @@ check_binding_arrays(GPUDevice *device) {
   GPUBuffer                   *buffer            = NULL;
   GPUBindGroup                *group             = NULL;
   GPUBindGroup                *invalidGroup      = NULL;
-  Api                         *api;
+  GPUApi                      *api;
   int                          ok = 0;
   uint32_t                     samplerIndex;
   uint32_t                     entryIndex;
@@ -1839,7 +1839,7 @@ check_metal_pipeline_binding_limits(GPUDevice *device) {
   GPUPipelineLayoutCreateInfo  pipelineInfo = {0};
   GPUBindGroupLayout          *layouts[3]   = {0};
   GPUPipelineLayout           *pipelineLayout;
-  Api                         *api;
+  GPUApi                      *api;
   int                          ok;
   uint32_t                     bufferIndex;
   uint32_t                     samplerIndex;
@@ -2025,7 +2025,7 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
   GPUBindGroupLayout          *pipelineGroups[1]   = {NULL};
   GPUPipelineLayoutCreateInfo  pipelineInfo        = {0};
   GPURenderPassEncoder         renderPass          = {0};
-  ApiDescriptor                savedDescriptor;
+  GPUDescriptorApi             savedDescriptor;
   GPUDevice                   *disabled       = NULL;
   GPUDevice                   *device         = NULL;
   GPUBindGroupLayout          *layout         = NULL;
@@ -2036,7 +2036,7 @@ gpu_test_bindless(GPUAdapter *adapter, const char *bytecodePath) {
   GPUBindGroup                *regularGroup   = NULL;
   GPUTexture                  *texture        = NULL;
   GPUTextureView              *view           = NULL;
-  Api                         *api;
+  GPUApi                      *api;
   int                          ok = 0;
   uint32_t                     i;
 

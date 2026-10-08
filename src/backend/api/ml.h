@@ -19,13 +19,13 @@
 
 #include <gpu/ml.h>
 
-typedef struct ApiML {
+typedef struct GPUMLApi {
   GPUResult (*createModel)(GPUMLModelEXT *model);
   void      (*destroyModel)(GPUMLModelEXT *model);
   GPUResult (*createPipeline)(GPUMLPipelineEXT *pipeline);
   GPUResult (*createBindings)(GPUMLBindingsEXT *bindings);
   void      (*destroyBindings)(GPUMLBindingsEXT *bindings);
   GPUResult (*encode)(GPUCommandBuffer *cmdb, GPUMLBindingsEXT *bindings);
-} ApiML;
+} GPUMLApi;
 
 #endif /* gpu_api_ml_h */

@@ -121,7 +121,7 @@ GPU_EXPORT
 GPUResult
 GPUGetSamplerFeedbackPropertiesEXT(const GPUAdapter                *adapter,
                                    GPUSamplerFeedbackPropertiesEXT *outProperties) {
-  Api    *api;
+  GPUApi *api;
 
   if (!adapter || !outProperties) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -146,7 +146,7 @@ GPUCreateSamplerFeedbackMapEXT(GPUDevice                                *device,
                                const GPUSamplerFeedbackMapCreateInfoEXT *info,
                                GPUSamplerFeedbackMapEXT                **outMap) {
   GPUSamplerFeedbackMapEXT *map;
-  Api                      *api;
+  GPUApi                   *api;
   GPUResult                 result;
 
   if (!outMap) {
@@ -206,7 +206,7 @@ GPUCreateSamplerFeedbackMapEXT(GPUDevice                                *device,
 GPU_EXPORT
 void
 GPUDestroySamplerFeedbackMapEXT(GPUSamplerFeedbackMapEXT *map) {
-  Api    *api;
+  GPUApi *api;
 
   if (!map) {
     return;
@@ -236,7 +236,7 @@ GPU_EXPORT
 GPUResult
 GPUClearSamplerFeedbackEXT(GPUCommandBuffer         *cmdb,
                            GPUSamplerFeedbackMapEXT *map) {
-  Api    *api;
+  GPUApi *api;
 
   if (!samplerFeedbackCommandValid(cmdb, map)) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -254,7 +254,7 @@ GPUResult
 GPUDecodeSamplerFeedbackEXT(GPUCommandBuffer         *cmdb,
                             GPUSamplerFeedbackMapEXT *map,
                             GPUTexture               *decodedTexture) {
-  Api    *api;
+  GPUApi *api;
 
   if (!samplerFeedbackCommandValid(cmdb, map)
       || !samplerFeedbackTextureValid(map,
@@ -275,7 +275,7 @@ GPUResult
 GPUEncodeSamplerFeedbackEXT(GPUCommandBuffer         *cmdb,
                             GPUTexture               *decodedTexture,
                             GPUSamplerFeedbackMapEXT *map) {
-  Api    *api;
+  GPUApi *api;
 
   if (!samplerFeedbackCommandValid(cmdb, map)
       || !samplerFeedbackTextureValid(map,

@@ -17,14 +17,14 @@
 #include "common.h"
 #include "impl.h"
 
-Api    dx12 = {
+GPUApi dx12 = {
   .initialized = false,
   .backend     = GPU_BACKEND_DX12,
   .reserved    = &(GPU__DX12){0}
 };
 
 GPU_HIDE
-Api*
+GPUApi*
 backend_dx12(void) {
   /* todo: init */
 

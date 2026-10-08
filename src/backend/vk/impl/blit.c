@@ -22,7 +22,7 @@
 #include "shaders/blit_sint_spirv.inc"
 #include "shaders/blit_uint_spirv.inc"
 
-static const BlitShaderSet    vk_blitTextureShaders = {
+static const GPUBlitShaderSet vk_blitTextureShaders = {
   .filteringFloat = {
     .data   = gpu_blitFloatSPIRV,
     .size   = sizeof(gpu_blitFloatSPIRV),
@@ -54,8 +54,8 @@ GPU_HIDE
 void
 vk_blitTextureRenderFallback(GPUCommandBuffer         *cmdb,
                              const GPUTextureBlitInfo *info) {
-  CommandBufferVk    *command;
-  TextureVk          *texture;
+  GPUCommandBufferVk *command;
+  GPUTextureVk       *texture;
 
   command = cmdb ? cmdb->_priv : NULL;
   texture = info && info->src ? info->src->_priv : NULL;

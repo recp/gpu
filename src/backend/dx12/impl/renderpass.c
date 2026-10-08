@@ -155,11 +155,11 @@ dx12__textureBarrierState(GPUAccessMask        access,
 /* legacy states remain canonical until enhanced layouts are tracked end-to-end. */
 
 static void
-dx12__encodeBufferBarrier(CommandBufferDX12      *command,
+dx12__encodeBufferBarrier(GPUCommandBufferDX12   *command,
                           const GPUBufferBarrier *barrier,
                           GPUPipelineStageMask    dstStages) {
   D3D12_RESOURCE_BARRIER nativeBarrier = {0};
-  BufferDX12            *buffer;
+  GPUBufferDX12         *buffer;
   D3D12_RESOURCE_STATES  nextState;
 
   buffer = barrier && barrier->buffer ? barrier->buffer->_priv : NULL;
@@ -195,12 +195,12 @@ dx12__encodeBufferBarrier(CommandBufferDX12      *command,
 }
 
 static void
-dx12__encodeTextureBarrier(CommandBufferDX12       *command,
+dx12__encodeTextureBarrier(GPUCommandBufferDX12    *command,
                            GPUDevice               *device,
                            const GPUTextureBarrier *barrier,
                            GPUPipelineStageMask     dstStages) {
   D3D12_RESOURCE_BARRIER nativeBarrier;
-  TextureDX12           *texture;
+  GPUTextureDX12        *texture;
   D3D12_RESOURCE_STATES  nextState;
 
   if (!command || !command->commandList || !barrier || !barrier->texture) {
@@ -250,18 +250,18 @@ dx12__encodeTextureBarrier(CommandBufferDX12       *command,
 static ID3D12Resource*
 dx12__aliasResource(GPUBuffer *buffer, GPUTexture *texture) {
   if (buffer && buffer->_priv) {
-    return ((BufferDX12 *)buffer->_priv)->resource;
+    return ((GPUBufferDX12 *)buffer->_priv)->resource;
   }
 
   if (texture && texture->_priv) {
-    return ((TextureDX12 *)texture->_priv)->resource;
+    return ((GPUTextureDX12 *)texture->_priv)->resource;
   }
 
   return NULL;
 }
 
 static void
-dx12__encodeAliasingBarrier(CommandBufferDX12        *command,
+dx12__encodeAliasingBarrier(GPUCommandBufferDX12     *command,
                             const GPUAliasingBarrier *barrier) {
   D3D12_RESOURCE_BARRIER native = {0};
 
@@ -284,7 +284,7 @@ dx12__encodeAliasingBarrier(CommandBufferDX12        *command,
                                                 &native);
 }
 
-static CommandBufferDX12*
+static GPUCommandBufferDX12*
 dx12__copyCommand(GPUTransferPassEncoder *pass) {
   return pass ? pass->_priv : NULL;
 }
@@ -299,8 +299,8 @@ dx12__copyError(GPUTransferPassEncoder *pass, const char *message) {
 }
 
 static bool
-dx12__transitionCopyBuffer(CommandBufferDX12    *command,
-                           BufferDX12           *buffer,
+dx12__transitionCopyBuffer(GPUCommandBufferDX12 *command,
+                           GPUBufferDX12        *buffer,
                            D3D12_RESOURCE_STATES state) {
   return command && dx12_transitionBuffer(command->commandList, buffer, state);
 }
@@ -332,7 +332,7 @@ dx12__copyWholeSubresource(GPUFormat format) {
 }
 
 static uint32_t
-dx12__copySubresource(const TextureDX12    *texture,
+dx12__copySubresource(const GPUTextureDX12 *texture,
                       uint32_t              mip,
                       uint32_t              layer,
                       uint32_t              plane) {
@@ -354,15 +354,15 @@ dx12__alignCopyBytes(uint64_t value, uint64_t alignment, uint64_t *outValue) {
 }
 
 static bool
-dx12__reserveCopyScratch(CommandBufferDX12    *command,
+dx12__reserveCopyScratch(GPUCommandBufferDX12 *command,
                          uint64_t              sizeBytes,
-                         CopyScratchDX12     **outScratch,
+                         GPUCopyScratchDX12  **outScratch,
                          uint64_t             *outOffset) {
   D3D12_HEAP_PROPERTIES heap = {0};
   D3D12_RESOURCE_DESC   desc = {0};
-  CopyScratchDX12      *scratch;
+  GPUCopyScratchDX12   *scratch;
   GPUDevice            *device;
-  DeviceDX12           *deviceDX12;
+  GPUDeviceDX12        *deviceDX12;
   uint64_t              alignedOffset;
   uint64_t              capacity;
   HRESULT               result;
@@ -438,8 +438,8 @@ dx12__reserveCopyScratch(CommandBufferDX12    *command,
 }
 
 static bool
-dx12__transitionCopyScratch(CommandBufferDX12    *command,
-                            CopyScratchDX12      *scratch,
+dx12__transitionCopyScratch(GPUCommandBufferDX12 *command,
+                            GPUCopyScratchDX12   *scratch,
                             D3D12_RESOURCE_STATES state) {
   D3D12_RESOURCE_BARRIER barrier = {0};
 
@@ -471,12 +471,12 @@ dx12__copyFootprintBase(const GPUTexture                   *texture,
                         const GPUBufferTextureCopyRegion   *region,
                         uint32_t                            layer,
                         D3D12_PLACED_SUBRESOURCE_FOOTPRINT *outFootprint,
-                        FormatDataLayout                   *outDataLayout) {
-  FormatDataLayout                   dataLayout;
+                        GPUFormatDataLayout                *outDataLayout) {
+  GPUFormatDataLayout                dataLayout;
   D3D12_RESOURCE_DESC                desc;
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT nativeFootprint;
-  DeviceDX12                        *device;
-  TextureDX12                       *native;
+  GPUDeviceDX12                     *device;
+  GPUTextureDX12                    *native;
   uint64_t                           footprintBytes;
   uint64_t                           rowSize;
   uint32_t                           rowCount;
@@ -536,7 +536,7 @@ dx12__copyFootprint(const GPUTexture                   *texture,
                     const GPUBufferTextureCopyRegion   *region,
                     uint32_t                            layer,
                     D3D12_PLACED_SUBRESOURCE_FOOTPRINT *outFootprint) {
-  FormatDataLayout    dataLayout;
+  GPUFormatDataLayout dataLayout;
   uint64_t            offset;
 
   if (!dx12__copyFootprintBase(texture,
@@ -572,11 +572,11 @@ static bool
 dx12__copyScratchLayout(const GPUTexture                   *texture,
                         const GPUBufferTextureCopyRegion   *region,
                         D3D12_PLACED_SUBRESOURCE_FOOTPRINT *outFootprint,
-                        FormatDataLayout                   *outDataLayout,
+                        GPUFormatDataLayout                *outDataLayout,
                         uint64_t                           *outImageStride,
                         uint64_t                           *outLayerStride,
                         uint64_t                           *outTotalBytes) {
-  FormatDataLayout    dataLayout;
+  GPUFormatDataLayout dataLayout;
   uint64_t            imageStride;
   uint64_t            layerBytes;
   uint64_t            layerStride;
@@ -632,15 +632,15 @@ dx12__copyScratchLayout(const GPUTexture                   *texture,
 }
 
 static bool
-dx12__copyBufferToTextureScratch(CommandBufferDX12                *command,
-                                 BufferDX12                       *srcBuffer,
+dx12__copyBufferToTextureScratch(GPUCommandBufferDX12             *command,
+                                 GPUBufferDX12                    *srcBuffer,
                                  GPUTexture                       *dst,
-                                 TextureDX12                      *dstTexture,
+                                 GPUTextureDX12                   *dstTexture,
                                  const GPUBufferTextureCopyRegion *region,
                                  uint32_t                          plane) {
-  FormatDataLayout                   dataLayout;
+  GPUFormatDataLayout                dataLayout;
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
-  CopyScratchDX12                   *scratch;
+  GPUCopyScratchDX12                *scratch;
   uint64_t                           scratchOffset;
   uint64_t                           imageStride;
   uint64_t                           layerStride;
@@ -741,15 +741,15 @@ dx12__copyBufferToTextureScratch(CommandBufferDX12                *command,
 }
 
 static bool
-dx12__copyTextureToBufferScratch(CommandBufferDX12                *command,
+dx12__copyTextureToBufferScratch(GPUCommandBufferDX12             *command,
                                  GPUTexture                       *src,
-                                 TextureDX12                      *srcTexture,
-                                 BufferDX12                       *dstBuffer,
+                                 GPUTextureDX12                   *srcTexture,
+                                 GPUBufferDX12                    *dstBuffer,
                                  const GPUBufferTextureCopyRegion *region,
                                  uint32_t                          plane) {
-  FormatDataLayout                   dataLayout;
+  GPUFormatDataLayout                dataLayout;
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
-  CopyScratchDX12                   *scratch;
+  GPUCopyScratchDX12                *scratch;
   uint64_t                           scratchOffset;
   uint64_t                           imageStride;
   uint64_t                           layerStride;
@@ -858,7 +858,7 @@ dx12__copyTextureToBufferScratch(CommandBufferDX12                *command,
 
 static GPUTransferPassEncoder*
 dx12_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
-  CommandBufferDX12      *command;
+  GPUCommandBufferDX12   *command;
   GPUTransferPassEncoder *pass;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -885,9 +885,9 @@ dx12_copyBufferToBuffer(GPUTransferPassEncoder    *pass,
                         GPUBuffer                 *src,
                         GPUBuffer                 *dst,
                         const GPUBufferCopyRegion *region) {
-  CommandBufferDX12    *command;
-  BufferDX12           *srcBuffer;
-  BufferDX12           *dstBuffer;
+  GPUCommandBufferDX12 *command;
+  GPUBufferDX12        *srcBuffer;
+  GPUBufferDX12        *dstBuffer;
 
   command   = dx12__copyCommand(pass);
   srcBuffer = src ? src->_priv : NULL;
@@ -918,9 +918,9 @@ dx12_copyBufferToTexture(GPUTransferPassEncoder           *pass,
                          GPUTexture                       *dst,
                          const GPUBufferTextureCopyRegion *region) {
   D3D12_BOX             sourceBox = {0};
-  CommandBufferDX12    *command;
-  BufferDX12           *srcBuffer;
-  TextureDX12          *dstTexture;
+  GPUCommandBufferDX12 *command;
+  GPUBufferDX12        *srcBuffer;
+  GPUTextureDX12       *dstTexture;
   uint32_t              plane;
   uint32_t              copyCount;
   uint32_t              checkLayer;
@@ -1027,9 +1027,9 @@ dx12_copyTextureToBuffer(GPUTransferPassEncoder           *pass,
                          GPUTexture                       *src,
                          GPUBuffer                        *dst,
                          const GPUBufferTextureCopyRegion *region) {
-  CommandBufferDX12    *command;
-  TextureDX12          *srcTexture;
-  BufferDX12           *dstBuffer;
+  GPUCommandBufferDX12 *command;
+  GPUTextureDX12       *srcTexture;
+  GPUBufferDX12        *dstBuffer;
   uint32_t              plane;
   uint32_t              copyCount;
   uint32_t              checkLayer;
@@ -1145,9 +1145,9 @@ dx12_copyTextureToTexture(GPUTransferPassEncoder              *pass,
                           GPUTexture                          *dst,
                           const GPUTextureToTextureCopyRegion *region) {
   D3D12_BOX             sourceBox = {0};
-  CommandBufferDX12    *command;
-  TextureDX12          *srcTexture;
-  TextureDX12          *dstTexture;
+  GPUCommandBufferDX12 *command;
+  GPUTextureDX12       *srcTexture;
+  GPUTextureDX12       *dstTexture;
   uint32_t              srcPlane;
   uint32_t              dstPlane;
   uint32_t              copyCount;
@@ -1232,7 +1232,7 @@ dx12_copyTextureToTexture(GPUTransferPassEncoder              *pass,
 
 static void
 dx12_endTransferPass(GPUTransferPassEncoder *pass) {
-  CommandBufferDX12    *command;
+  GPUCommandBufferDX12 *command;
 
   command = dx12__copyCommand(pass);
 
@@ -1246,7 +1246,7 @@ dx12_endTransferPass(GPUTransferPassEncoder *pass) {
 GPU_HIDE
 void
 dx12_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
-  CommandBufferDX12    *command;
+  GPUCommandBufferDX12 *command;
   GPUDevice            *device;
   uint32_t              aliasIndex;
   uint32_t              bufferIndex;
@@ -1279,21 +1279,21 @@ dx12_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
 }
 
 GPU_HIDE
-RenderPassDesc*
+GPURenderPassDesc*
 dx12_beginRenderPass(GPUCommandBuffer              *cmdb,
                      const GPURenderPassCreateInfo *info) {
-  CommandBufferDX12                          *command;
-  RenderPassDX12                             *renderPass;
-  RenderPassDesc                             *desc;
-  DeviceDX12                                 *device;
+  GPUCommandBufferDX12                       *command;
+  GPURenderPassDX12                          *renderPass;
+  GPURenderPassDesc                          *desc;
+  GPUDeviceDX12                              *device;
   const GPUShadingRateAttachmentEXT          *shadingRate;
   const GPURasterizationRateMapRenderPassEXT *rateMap;
   const GPURenderPassColorAttachment         *colorAttachment;
-  TextureViewDX12                            *colorView;
-  TextureViewDX12                            *resolveView;
+  GPUTextureViewDX12                         *colorView;
+  GPUTextureViewDX12                         *resolveView;
   const GPURenderPassDepthStencilAttachment  *depthAttachment;
-  TextureViewDX12                            *depthView;
-  TextureViewDX12                            *rateView;
+  GPUTextureViewDX12                         *depthView;
+  GPUTextureViewDX12                         *rateView;
   uint32_t                                    i;
   uint32_t                                    minWidth;
   uint32_t                                    minHeight;
@@ -1416,14 +1416,14 @@ dx12_beginRenderPass(GPUCommandBuffer              *cmdb,
 
 GPU_HIDE
 void
-dx12_destroyRenderPass(RenderPassDesc    *pass) {
+dx12_destroyRenderPass(GPURenderPassDesc *pass) {
   GPU__UNUSED(pass);
 }
 
 GPU_HIDE
 void
-dx12_resetCopyScratch(CommandBufferDX12    *command) {
-  CopyScratchDX12    *scratch;
+dx12_resetCopyScratch(GPUCommandBufferDX12 *command) {
+  GPUCopyScratchDX12 *scratch;
 
   for (scratch = command ? command->copyScratch : NULL;
        scratch;
@@ -1434,9 +1434,9 @@ dx12_resetCopyScratch(CommandBufferDX12    *command) {
 
 GPU_HIDE
 void
-dx12_destroyCopyScratch(CommandBufferDX12    *command) {
-  CopyScratchDX12    *scratch;
-  CopyScratchDX12    *next;
+dx12_destroyCopyScratch(GPUCommandBufferDX12 *command) {
+  GPUCopyScratchDX12 *scratch;
+  GPUCopyScratchDX12 *next;
 
   scratch = command ? command->copyScratch : NULL;
 
@@ -1458,7 +1458,7 @@ dx12_destroyCopyScratch(CommandBufferDX12    *command) {
 
 GPU_HIDE
 void
-dx12_initRenderPass(ApiRenderPass    *api) {
+dx12_initRenderPass(GPURenderPassApi *api) {
   api->beginRenderPass      = dx12_beginRenderPass;
   api->destroyRenderPass    = dx12_destroyRenderPass;
   api->beginTransferPass    = dx12_beginTransferPass;

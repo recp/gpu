@@ -53,7 +53,7 @@ typedef enum RayDispatchPath {
 #  define RAY_DISPATCH_BACKEND_MODE "multi"
 #endif
 
-static Api    *volatile  rayDispatchApi;
+static GPUApi *volatile  rayDispatchApi;
 static volatile uint64_t rayDispatchSink;
 
 static BENCH_NOINLINE void
@@ -134,7 +134,7 @@ main(int argc, char *argv[]) {
   GPURayTracingPipelineEXT    pipeline;
   GPUShaderTableEXT           table;
   GPUDevice                   device;
-  Api                         api;
+  GPUApi                      api;
   double                      samples[RAY_DISPATCH_PATH_COUNT][RAY_DISPATCH_REPEATS];
   double                      median[RAY_DISPATCH_PATH_COUNT];
   uint64_t                    iterations;

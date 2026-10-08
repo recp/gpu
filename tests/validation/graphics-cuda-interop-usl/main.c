@@ -455,7 +455,7 @@ static int
 validate_cuda_texture_cache_capacity(GPUTextureView *view) {
   CUDA_TEXTURE_DESC   desc       = {0};
   CUDA_TEXTURE_DESC   cachedDesc = {0};
-  TextureViewCuda    *native;
+  GPUTextureViewCuda *native;
   CUtexObject         texture;
   CUtexObject         cachedTexture;
   CUtexObject         repeatedTexture;
@@ -553,7 +553,7 @@ validate_cuda_texture_cache_capacity(GPUTextureView *view) {
 
 static int
 validate_cuda_texture_cache_empty(GPUTextureView *view) {
-  TextureViewCuda    *native;
+  GPUTextureViewCuda *native;
 
   native = view ? view->_priv : NULL;
 

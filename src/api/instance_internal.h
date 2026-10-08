@@ -21,7 +21,7 @@
 
 struct GPUInstance {
   GPUAdapter           *_adapters;
-  Api                  *_api;
+  GPUApi               *_api;
   void                 *_priv;
   GPUInstanceCreateInfo createInfo;
   uint32_t              _adapterCount;
@@ -29,7 +29,7 @@ struct GPUInstance {
   bool                  _adaptersEnumerated;
 };
 
-static inline Api*
+static inline GPUApi*
 instanceApi(const GPUInstance *instance) {
   return instance ? instance->_api : NULL;
 }

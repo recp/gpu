@@ -36,7 +36,7 @@ graphChainValid(const GPUChainedStruct *chain,
 
 static void
 releaseExecutionGraph(GPUExecutionGraphEXT *graph) {
-  Api    *api;
+  GPUApi *api;
 
   if (!graph) {
     return;
@@ -156,7 +156,7 @@ graphPassDevice(const GPUComputePassEncoder *pass) {
   return pass ? pass->_device : NULL;
 }
 
-static Api*
+static GPUApi*
 graphPassApi(const GPUComputePassEncoder *pass) {
   return pass && pass->_api ? pass->_api : deviceApi(graphPassDevice(pass));
 }
@@ -243,11 +243,11 @@ GPUResult
 GPUCreateExecutionGraphEXT(GPUDevice                            *device,
                            const GPUExecutionGraphCreateInfoEXT *info,
                            GPUExecutionGraphEXT                **outGraph) {
-  PipelineCacheKey      cacheKey;
+  GPUPipelineCacheKey   cacheKey;
   const char           *entryPoints[USL_RUNTIME_MAX_ENTRY_POINTS];
   GPUExecutionGraphEXT *graph;
   GPUExecutionGraphEXT *cachedGraph;
-  Api                  *api;
+  GPUApi               *api;
   uint32_t              entryCount;
   uint32_t              i;
   GPUResult             result;
@@ -281,7 +281,7 @@ GPUCreateExecutionGraphEXT(GPUDevice                            *device,
   }
 
   for (i = 0u; i < entryCount; i++) {
-    ShaderExecutionGraphEntryInfo    entry;
+    GPUShaderExecutionGraphEntryInfo entry;
 
     if (!getShaderLibraryExecutionGraphEntryAt(info->library, i, &entry)) {
       return GPU_ERROR_INVALID_ARGUMENT;
@@ -384,7 +384,7 @@ GPUCreateExecutionGraphInstanceEXT(GPUDevice                                    
                                    GPUExecutionGraphInstanceEXT                **outInstance) {
   GPUExecutionGraphInstanceCreateInfoEXT resolvedInfo;
   GPUExecutionGraphInstanceEXT          *instance;
-  Api                                   *api;
+  GPUApi                                *api;
   uint64_t                               memorySizeBytes;
   GPUResult                              result;
 
@@ -449,7 +449,7 @@ GPU_EXPORT
 void
 GPUDestroyExecutionGraphInstanceEXT(GPUExecutionGraphInstanceEXT *instance) {
   GPUExecutionGraphEXT *graph;
-  Api                  *api;
+  GPUApi               *api;
 
   if (!instance) {
     return;
@@ -502,7 +502,7 @@ GPU_EXPORT
 void
 GPUBindExecutionGraphEXT(GPUComputePassEncoder *pass,
                          GPUExecutionGraphEXT  *graph) {
-  Api    *api;
+  GPUApi *api;
 
   if (!pass || pass->_ended || !graph) {
     return;
@@ -560,7 +560,7 @@ GPUDispatchExecutionGraphEXT(GPUComputePassEncoder           *pass,
                              uint32_t                         inputCount,
                              const GPUExecutionGraphInputEXT *pInputs) {
   const GPUExecutionGraphInputEXT *input;
-  Api                             *api;
+  GPUApi                          *api;
   uint64_t                         sizeBytes;
   uint32_t                         i;
 
@@ -606,7 +606,7 @@ GPUDispatchExecutionGraphBufferEXT(GPUComputePassEncoder                 *pass,
                                    uint32_t                               inputCount,
                                    const GPUExecutionGraphBufferInputEXT *pInputs) {
   const GPUExecutionGraphBufferInputEXT *input;
-  Api                                   *api;
+  GPUApi                                *api;
   uint64_t                               sizeBytes;
   uint32_t                               i;
 

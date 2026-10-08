@@ -30,7 +30,7 @@ static GPUResult
 vk__flushTransfers(GPUQueue *queue, bool wait);
 
 static void
-vk__queueLock(QueueVk    *queue) {
+vk__queueLock(GPUQueueVk *queue) {
 #if defined(_WIN32) || defined(WIN32)
   EnterCriticalSection(&queue->poolLock);
 #else
@@ -39,7 +39,7 @@ vk__queueLock(QueueVk    *queue) {
 }
 
 static void
-vk__queueUnlock(QueueVk    *queue) {
+vk__queueUnlock(GPUQueueVk *queue) {
 #if defined(_WIN32) || defined(WIN32)
   LeaveCriticalSection(&queue->poolLock);
 #else
@@ -48,7 +48,7 @@ vk__queueUnlock(QueueVk    *queue) {
 }
 
 static void
-vk__queueSignal(QueueVk    *queue) {
+vk__queueSignal(GPUQueueVk *queue) {
 #if defined(_WIN32) || defined(WIN32)
   WakeConditionVariable(&queue->pendingCondition);
 #else
@@ -57,7 +57,7 @@ vk__queueSignal(QueueVk    *queue) {
 }
 
 static void
-vk__queueBroadcast(QueueVk    *queue) {
+vk__queueBroadcast(GPUQueueVk *queue) {
 #if defined(_WIN32) || defined(WIN32)
   WakeAllConditionVariable(&queue->pendingCondition);
 #else
@@ -66,7 +66,7 @@ vk__queueBroadcast(QueueVk    *queue) {
 }
 
 static void
-vk__queueWait(QueueVk    *queue) {
+vk__queueWait(GPUQueueVk *queue) {
 #if defined(_WIN32) || defined(WIN32)
   SleepConditionVariableCS(&queue->pendingCondition,
                            &queue->poolLock,
@@ -77,7 +77,7 @@ vk__queueWait(QueueVk    *queue) {
 }
 
 static void
-vk__waitQueueIdle(QueueVk    *queue) {
+vk__waitQueueIdle(GPUQueueVk *queue) {
   vk__queueLock(queue);
 
   while (queue->inFlightCount > 0u) {
@@ -126,11 +126,11 @@ vk__reportQueueError(GPUCommandBuffer *cmdb,
 }
 
 static bool
-vk__beginFrameTime(CommandBufferVk    *native) {
+vk__beginFrameTime(GPUCommandBufferVk *native) {
   VkQueryPoolCreateInfo queryInfo = {0};
-  QueueVk              *queue;
+  GPUQueueVk           *queue;
   GPUDevice            *device;
-  DeviceVk             *deviceVk;
+  GPUDeviceVk          *deviceVk;
 
   queue    = native ? native->owner : NULL;
   device   = queue && queue->queue ? queue->queue->_device : NULL;
@@ -167,7 +167,7 @@ vk__beginFrameTime(CommandBufferVk    *native) {
 }
 
 static void
-vk__endFrameTime(CommandBufferVk    *native) {
+vk__endFrameTime(GPUCommandBufferVk *native) {
   if (!native || !native->frameTimeActive
       || !native->commandBuffer._recordsGPUFrameTime) {
     return;
@@ -180,9 +180,9 @@ vk__endFrameTime(CommandBufferVk    *native) {
 }
 
 static void
-vk__recordFrameTime(CommandBufferVk    *native) {
+vk__recordFrameTime(GPUCommandBufferVk *native) {
   uint64_t    timestamps[2];
-  QueueVk    *queue;
+  GPUQueueVk *queue;
   GPUDevice  *device;
   uint64_t    elapsed;
   uint64_t    mask;
@@ -198,7 +198,7 @@ vk__recordFrameTime(CommandBufferVk    *native) {
     return;
   }
 
-  result = vkGetQueryPoolResults(((DeviceVk *)device->_priv)->device,
+  result = vkGetQueryPoolResults(((GPUDeviceVk *)device->_priv)->device,
                                  native->frameTimeQueries,
                                  0u,
                                  2u,
@@ -230,10 +230,10 @@ vk__recordFrameTime(CommandBufferVk    *native) {
 
 static void
 vk__recycleCommandBuffer(GPUCommandBuffer *cmdb) {
-  CommandBufferVk    *native;
-  QueueVk            *queue;
+  GPUCommandBufferVk *native;
+  GPUQueueVk         *queue;
 #ifdef __APPLE__
-  TransferChunkVk    *chunk;
+  GPUTransferChunkVk *chunk;
 #endif
 
 #ifdef __APPLE__
@@ -257,9 +257,9 @@ vk__recycleCommandBuffer(GPUCommandBuffer *cmdb) {
   vk__queueUnlock(queue);
 }
 
-static CommandBufferVk*
-vk__takePendingCommand(QueueVk    *queue) {
-  CommandBufferVk    *native;
+static GPUCommandBufferVk*
+vk__takePendingCommand(GPUQueueVk *queue) {
+  GPUCommandBufferVk *native;
 
   vk__queueLock(queue);
 
@@ -285,11 +285,11 @@ vk__takePendingCommand(QueueVk    *queue) {
 }
 
 static void
-vk__completionLoop(QueueVk    *queue) {
-  CommandBufferVk    *native;
+vk__completionLoop(GPUQueueVk *queue) {
+  GPUCommandBufferVk *native;
   GPUCommandBuffer   *cmdb;
-  DeviceVk           *deviceVk;
-  FrameSyncVk        *completionSync;
+  GPUDeviceVk        *deviceVk;
+  GPUFrameSyncVk     *completionSync;
   VkFence             waitFence;
   VkResult            result;
 
@@ -362,7 +362,7 @@ vk__completionMain(void *context) {
 #endif
 
 static bool
-vk__startWorker(QueueVk    *queue) {
+vk__startWorker(GPUQueueVk *queue) {
 #if defined(_WIN32) || defined(WIN32)
   InitializeCriticalSection(&queue->poolLock);
   InitializeConditionVariable(&queue->pendingCondition);
@@ -402,7 +402,7 @@ vk__startWorker(QueueVk    *queue) {
 }
 
 static void
-vk__stopWorker(QueueVk    *queue) {
+vk__stopWorker(GPUQueueVk *queue) {
   if (!queue || !queue->workerStarted) {
     return;
   }
@@ -444,9 +444,9 @@ vk__transferCapacity(uint64_t sizeBytes, uint64_t minimumCapacity) {
 }
 
 static bool
-vk__ensureTransferContext(QueueVk           *queue,
-                          DeviceVk          *device,
-                          TransferSlotVk    *slot) {
+vk__ensureTransferContext(GPUQueueVk        *queue,
+                          GPUDeviceVk       *device,
+                          GPUTransferSlotVk *slot) {
   VkCommandBufferAllocateInfo allocationInfo = {0};
   VkFenceCreateInfo           fenceInfo      = {0};
   VkCommandBuffer             command;
@@ -494,8 +494,8 @@ vk__ensureTransferContext(QueueVk           *queue,
 }
 
 static bool
-vk__ensureTransferBuffer(QueueVk           *queue,
-                         TransferSlotVk    *transfer,
+vk__ensureTransferBuffer(GPUQueueVk        *queue,
+                         GPUTransferSlotVk *transfer,
                          bool               upload,
                          uint64_t           sizeBytes,
                          uint64_t           minimumCapacity) {
@@ -544,10 +544,10 @@ vk__ensureTransferBuffer(QueueVk           *queue,
 
 static GPUResult
 vk__waitTransfer(GPUQueue          *queue,
-                 TransferSlotVk    *slot,
+                 GPUTransferSlotVk *slot,
                  bool               countStall) {
-  QueueVk     *native;
-  DeviceVk    *device;
+  GPUQueueVk  *native;
+  GPUDeviceVk *device;
   VkResult     result;
 
   native = queue ? queue->_priv : NULL;
@@ -592,9 +592,9 @@ vk__waitTransfer(GPUQueue          *queue,
 static GPUResult
 vk__flushTransfers(GPUQueue *queue, bool wait) {
   VkSubmitInfo       submitInfo = {0};
-  QueueVk           *native;
-  DeviceVk          *device;
-  TransferSlotVk    *slot;
+  GPUQueueVk        *native;
+  GPUDeviceVk       *device;
+  GPUTransferSlotVk *slot;
   VkResult           result;
   uint32_t           i;
   GPUResult          waitResult;
@@ -655,14 +655,14 @@ vk__flushTransfers(GPUQueue *queue, bool wait) {
   return GPU_OK;
 }
 
-static CommandBufferVk*
+static GPUCommandBufferVk*
 vk__createCommandBufferState(GPUQueue *queue) {
   VkCommandBufferAllocateInfo allocInfo = {0};
   VkFenceCreateInfo           fenceInfo = {0};
-  QueueVk                    *queueVk;
-  CommandBufferVk            *native;
+  GPUQueueVk                 *queueVk;
+  GPUCommandBufferVk         *native;
   GPUCommandBuffer           *cmdb;
-  DeviceVk                   *deviceVk;
+  GPUDeviceVk                *deviceVk;
 
   queueVk  = queue->_priv;
   deviceVk = queue->_device->_priv;
@@ -716,10 +716,10 @@ vk__createCommandBufferState(GPUQueue *queue) {
   return native;
 }
 
-static CommandBufferVk*
+static GPUCommandBufferVk*
 vk__takeCommandBufferState(GPUQueue *queue) {
-  QueueVk            *queueVk;
-  CommandBufferVk    *native;
+  GPUQueueVk         *queueVk;
+  GPUCommandBufferVk *native;
 
   queueVk = queue->_priv;
   vk__queueLock(queueVk);
@@ -768,7 +768,7 @@ vk__finishCommandBuffers(uint32_t                 count,
 }
 
 static VkPipelineStageFlags
-vk_submitWaitStages(const DeviceVk    *device, GPUPipelineStageMask stages) {
+vk_submitWaitStages(const GPUDeviceVk *device, GPUPipelineStageMask stages) {
   VkPipelineStageFlags native;
 
   native = 0u;
@@ -810,8 +810,8 @@ vk_createSemaphore(GPUDevice                    *device,
                    GPUSemaphore                 *semaphore) {
   VkSemaphoreTypeCreateInfo typeInfo   = {0};
   VkSemaphoreCreateInfo     createInfo = {0};
-  DeviceVk                 *deviceVk;
-  SemaphoreVk              *native;
+  GPUDeviceVk              *deviceVk;
+  GPUSemaphoreVk           *native;
 
   deviceVk = device ? device->_priv : NULL;
 
@@ -853,7 +853,7 @@ vk_createSemaphore(GPUDevice                    *device,
 
 static void
 vk_destroySemaphore(GPUSemaphore *semaphore) {
-  SemaphoreVk    *native;
+  GPUSemaphoreVk *native;
 
   native = semaphore ? semaphore->_priv : NULL;
 
@@ -872,7 +872,7 @@ vk_destroySemaphore(GPUSemaphore *semaphore) {
 static GPUResult
 vk_submitEx(GPUQueue                   *queueHandle,
             const GPUQueueSubmitExInfo *info) {
-  CommandBufferVk              *natives[VK_SUBMIT_STACK_COUNT];
+  GPUCommandBufferVk           *natives[VK_SUBMIT_STACK_COUNT];
   VkCommandBuffer               commands[VK_SUBMIT_STACK_COUNT];
   VkSemaphore                   waits[VK_SUBMIT_STACK_COUNT + 1u];
   VkSemaphore                   signals[VK_SUBMIT_STACK_COUNT + 1u];
@@ -881,15 +881,15 @@ vk_submitEx(GPUQueue                   *queueHandle,
   uint64_t                      signalValues[VK_SUBMIT_STACK_COUNT + 1u];
   VkTimelineSemaphoreSubmitInfo timelineInfo = {0};
   VkSubmitInfo                  submitInfo   = {0};
-  QueueVk                      *queue;
-  DeviceVk                     *device;
-  SwapchainVk                  *swapchain;
-  CommandBufferVk              *presentNative;
-  FrameSyncVk                  *frameSync;
+  GPUQueueVk                   *queue;
+  GPUDeviceVk                  *device;
+  GPUSwapchainVk               *swapchain;
+  GPUCommandBufferVk           *presentNative;
+  GPUFrameSyncVk               *frameSync;
   VkSemaphore                   renderFinished;
   VkFence                       submitFence;
-  SemaphoreVk                  *waitSemaphore;
-  SemaphoreVk                  *signalSemaphore;
+  GPUSemaphoreVk               *waitSemaphore;
+  GPUSemaphoreVk               *signalSemaphore;
   GPUResult                     flushResult;
   VkResult                      result;
   VkResult                      presentResult;
@@ -1125,8 +1125,8 @@ vk_submitEx(GPUQueue                   *queueHandle,
 
 GPU_HIDE
 bool
-vk_waitFrameCompletion(FrameSyncVk    *sync) {
-  QueueVk    *queue;
+vk_waitFrameCompletion(GPUFrameSyncVk *sync) {
+  GPUQueueVk *queue;
   bool        completed;
 
   queue = sync && sync->swapchain ? sync->swapchain->queue : NULL;
@@ -1149,8 +1149,8 @@ vk_waitFrameCompletion(FrameSyncVk    *sync) {
 
 GPU_HIDE
 void
-vk_waitSwapchainIdle(SwapchainVk    *swapchain) {
-  QueueVk    *queue;
+vk_waitSwapchainIdle(GPUSwapchainVk *swapchain) {
+  GPUQueueVk *queue;
 
   queue = swapchain ? swapchain->queue : NULL;
 
@@ -1170,9 +1170,9 @@ vk_waitSwapchainIdle(SwapchainVk    *swapchain) {
 GPU_HIDE
 GPUResult
 vk_waitDeviceIdle(GPUDevice *__restrict device) {
-  DeviceVk    *deviceVk;
+  GPUDeviceVk *deviceVk;
   GPUQueue    *queue;
-  QueueVk     *nativeQueue;
+  GPUQueueVk  *nativeQueue;
   GPUResult    flushResult;
   VkResult     result;
   uint32_t     i;
@@ -1245,9 +1245,9 @@ vk_beginTransfer(GPUQueue        *queue,
                  GPUBuffer      **outStaging,
                  uint64_t        *outOffset) {
   VkCommandBufferBeginInfo beginInfo = {0};
-  QueueVk                 *native;
-  DeviceVk                *device;
-  TransferSlotVk          *slot;
+  GPUQueueVk              *native;
+  GPUDeviceVk             *device;
+  GPUTransferSlotVk       *slot;
   uint64_t                 offset;
   GPUResult                result;
 
@@ -1347,7 +1347,7 @@ vk_flushTransfers(GPUQueue *queue) {
 GPU_HIDE
 GPUResult
 vk_waitCommandQueueIdle(GPUQueue *queue) {
-  QueueVk    *native;
+  GPUQueueVk *native;
   GPUResult   result;
 
   native = queue ? queue->_priv : NULL;
@@ -1370,7 +1370,7 @@ vk_waitCommandQueueIdle(GPUQueue *queue) {
 GPU_HIDE
 GPUResult
 vk_submitTransfer(GPUQueue *queue, bool wait) {
-  QueueVk    *native;
+  GPUQueueVk *native;
 
   native = queue ? queue->_priv : NULL;
 
@@ -1388,8 +1388,8 @@ vk_submitTransfer(GPUQueue *queue, bool wait) {
 GPU_HIDE
 void
 vk_abortTransfer(GPUQueue *queue) {
-  QueueVk           *native;
-  TransferSlotVk    *slot;
+  GPUQueueVk        *native;
+  GPUTransferSlotVk *slot;
 
   native = queue ? queue->_priv : NULL;
   slot   = native && native->activeTransferSlot < GPU_VK_TRANSFER_SLOT_COUNT
@@ -1414,9 +1414,9 @@ vk_createCommandQueue(GPUDevice       *device,
                       GPUQueueFlagBits bits) {
   VkCommandPoolCreateInfo poolInfo = {0};
   GPUQueue               *queue;
-  QueueVk                *native;
-  DeviceVk               *deviceVk;
-  AdapterVk              *adapterVk;
+  GPUQueueVk             *native;
+  GPUDeviceVk            *deviceVk;
+  GPUAdapterVk           *adapterVk;
 
   if (!device || !device->_priv || bits == 0u) {
     return NULL;
@@ -1482,14 +1482,14 @@ vk_createCommandQueue(GPUDevice       *device,
 GPU_HIDE
 void
 vk_destroyCommandQueue(GPUQueue *queue) {
-  CommandBufferVk    *command;
-  CommandBufferVk    *next;
-  QueueVk            *native;
-  DeviceVk           *deviceVk;
+  GPUCommandBufferVk *command;
+  GPUCommandBufferVk *next;
+  GPUQueueVk         *native;
+  GPUDeviceVk        *deviceVk;
 #ifdef __APPLE__
-  TransferChunkVk    *chunk;
+  GPUTransferChunkVk *chunk;
 #endif
-  TransferSlotVk     *transfer;
+  GPUTransferSlotVk  *transfer;
 
   if (!queue) {
     return;
@@ -1563,7 +1563,7 @@ GPU_HIDE
 GPUQueue*
 vk_getCommandQueue(GPUDevice *device, GPUQueueFlagBits bits, uint32_t index) {
   GPUQueue    *queue;
-  DeviceVk    *deviceVk;
+  GPUDeviceVk *deviceVk;
   uint32_t     matchIndex;
   uint32_t     i;
 
@@ -1589,7 +1589,7 @@ GPU_HIDE
 GPUResult
 vk_getTimestampPeriod(GPUQueue *queue,
                       double   *outNanosecondsPerTick) {
-  QueueVk    *native;
+  GPUQueueVk *native;
 
   native = queue ? queue->_priv : NULL;
 
@@ -1614,8 +1614,8 @@ vk_newCommandQueue(GPUDevice *__restrict device) {
 GPU_HIDE
 bool
 vk_reserveCommandBuffers(GPUQueue *queue, uint32_t minimumCount) {
-  CommandBufferVk    *native;
-  QueueVk            *queueVk;
+  GPUCommandBufferVk *native;
+  GPUQueueVk         *queueVk;
   uint32_t            commandCount;
 
   queueVk = queue ? queue->_priv : NULL;
@@ -1647,7 +1647,7 @@ vk_newCommandBuffer(GPUQueue         *__restrict queue,
                     void             *__restrict sender,
                     GPUCommandBufferCompletionFn oncomplete) {
   VkCommandBufferBeginInfo beginInfo = {0};
-  CommandBufferVk         *native;
+  GPUCommandBufferVk      *native;
   GPUCommandBuffer        *cmdb;
 
   if (!queue || !queue->_priv || !queue->_device) {
@@ -1713,8 +1713,8 @@ vk_commandBufferOnComplete(GPUCommandBuffer *__restrict cmdb,
 GPU_HIDE
 GPUResult
 vk_discardCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
-  CommandBufferVk    *native;
-  SwapchainVk        *swapchain;
+  GPUCommandBufferVk *native;
+  GPUSwapchainVk     *swapchain;
   VkResult            result;
 
   native = cmdb ? cmdb->_priv : NULL;
@@ -1753,11 +1753,11 @@ GPU_HIDE
 GPUResult
 vk_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
   VkSubmitInfo         submitInfo = {0};
-  CommandBufferVk     *native;
-  QueueVk             *queue;
-  DeviceVk            *deviceVk;
-  SwapchainVk         *swapchain;
-  FrameSyncVk         *frameSync;
+  GPUCommandBufferVk  *native;
+  GPUQueueVk          *queue;
+  GPUDeviceVk         *deviceVk;
+  GPUSwapchainVk      *swapchain;
+  GPUFrameSyncVk      *frameSync;
   VkSemaphore          renderFinished;
   VkFence              submitFence;
   VkPipelineStageFlags waitStage;
@@ -1891,11 +1891,11 @@ GPUResult
 vk_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
                         uint32_t                            count,
                         GPUCommandBuffer *const *__restrict buffers) {
-  CommandBufferVk    *natives[VK_SUBMIT_STACK_COUNT];
+  GPUCommandBufferVk *natives[VK_SUBMIT_STACK_COUNT];
   VkCommandBuffer     commands[VK_SUBMIT_STACK_COUNT];
   VkSubmitInfo        submitInfo = {0};
-  QueueVk            *queue;
-  DeviceVk           *device;
+  GPUQueueVk         *queue;
+  GPUDeviceVk        *device;
   VkFence             submitFence;
   GPUResult           flushResult;
   VkResult            result;
@@ -1986,7 +1986,7 @@ vk_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
 
 GPU_HIDE
 void
-vk_initCmdQue(ApiCommandQueue    *apiQue) {
+vk_initCmdQue(GPUCommandQueueApi *apiQue) {
   apiQue->getCommandQueue         = vk_getCommandQueue;
   apiQue->getTimestampPeriod      = vk_getTimestampPeriod;
   apiQue->newCommandQueue         = vk_newCommandQueue;

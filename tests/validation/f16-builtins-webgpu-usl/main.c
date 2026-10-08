@@ -144,7 +144,7 @@ webgpu_f16_begin_readback(WebGPUF16Validation *state) {
   WGPUCommandEncoderDescriptor encoderInfo  = WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
   WGPUCommandBufferDescriptor  commandInfo  = WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT;
   WGPUBufferMapCallbackInfo    callbackInfo = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
-  DeviceWebGPU                *native;
+  GPUDeviceWebGPU             *native;
   WGPUCommandEncoder           encoder;
   WGPUCommandBuffer            command;
 

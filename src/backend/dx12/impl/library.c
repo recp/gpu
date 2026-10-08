@@ -21,7 +21,7 @@ dx12__newLibrary(GPUDevice  *device,
                  const void *source,
                  uint64_t    sourceSize,
                  bool        binary) {
-  ShaderLibraryDX12    *native;
+  GPUShaderLibraryDX12 *native;
   GPUShaderLibrary     *library;
 
   if (!device || !source || sourceSize == 0u
@@ -84,7 +84,7 @@ void
 dx12_destroyLibrary(GPUShaderLibrary *library) {
   DX12ShaderCacheEntry *entry;
   DX12ShaderCacheEntry *next;
-  ShaderLibraryDX12    *native;
+  GPUShaderLibraryDX12 *native;
 
   if (!library) {
     return;
@@ -109,7 +109,7 @@ dx12_destroyLibrary(GPUShaderLibrary *library) {
 
 GPU_HIDE
 void
-dx12_initLibrary(ApiLibrary    *api) {
+dx12_initLibrary(GPULibraryApi *api) {
   api->newLibraryWithSource = dx12_newLibraryWithSource;
   api->newLibraryWithBinary = dx12_newLibraryWithBinary;
   api->destroyLibrary       = dx12_destroyLibrary;

@@ -20,58 +20,58 @@
 #include "../api/gpudef.h"
 
 void
-webgpu_initDevice(ApiDevice    *api);
+webgpu_initDevice(GPUDeviceApi *api);
 
 void
-webgpu_initInstance(ApiInstance    *api);
+webgpu_initInstance(GPUInstanceApi *api);
 
 void
-webgpu_initSurface(ApiSurface    *api);
+webgpu_initSurface(GPUSurfaceApi *api);
 
 void
-webgpu_initSwapchain(ApiSwapchain    *api);
+webgpu_initSwapchain(GPUSwapchainApi *api);
 
 void
-webgpu_initFrame(ApiFrame    *api);
+webgpu_initFrame(GPUFrameApi *api);
 
 void
-webgpu_initCommandQueue(ApiCommandQueue    *api);
+webgpu_initCommandQueue(GPUCommandQueueApi *api);
 
 void
-webgpu_initCommandBuffer(ApiCommandBuffer    *api);
+webgpu_initCommandBuffer(GPUCommandBufferApi *api);
 
 void
-webgpu_initBuffer(ApiBuffer    *api);
+webgpu_initBuffer(GPUBufferApi *api);
 
 void
-webgpu_initTexture(ApiTexture    *api);
+webgpu_initTexture(GPUTextureApi *api);
 
 void
-webgpu_initSampler(ApiSampler    *api);
+webgpu_initSampler(GPUSamplerApi *api);
 
 void
-webgpu_initLibrary(ApiLibrary    *api);
+webgpu_initLibrary(GPULibraryApi *api);
 
 void
-webgpu_initDescriptor(ApiDescriptor    *api);
+webgpu_initDescriptor(GPUDescriptorApi *api);
 
 void
-webgpu_initPipeline(ApiRender    *api);
+webgpu_initPipeline(GPURenderApi *api);
 
 void
-webgpu_initCompute(ApiCompute    *api);
+webgpu_initCompute(GPUComputeApi *api);
 
 void
-webgpu_initQuery(ApiCommandBuffer    *api);
+webgpu_initQuery(GPUCommandBufferApi *api);
 
 void
-webgpu_initRenderPass(ApiRenderPass    *api);
+webgpu_initRenderPass(GPURenderPassApi *api);
 
 void
 webgpu_blitTexture(GPUCommandBuffer         *cmdb,
                    const GPUTextureBlitInfo *info);
 
 void
-webgpu_initRenderEncoder(ApiRCE    *api);
+webgpu_initRenderEncoder(GPURCEApi *api);
 
 #endif /* gpu_webgpu_impl_h */

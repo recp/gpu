@@ -19,7 +19,7 @@
 
 #include "backends.h"
 
-static Api*
+static GPUApi*
 selectDefaultBackend(void) {
 #if GPU_BACKEND_METAL_ONLY
   return backend_metal();
@@ -45,7 +45,7 @@ selectDefaultBackend(void) {
 }
 
 GPU_HIDE
-Api*
+GPUApi*
 apiForBackend(GPUBackend backend) {
 #if GPU_BACKEND_METAL_ONLY
   if (backend == GPU_BACKEND_DEFAULT || backend == GPU_BACKEND_METAL) {
@@ -78,7 +78,7 @@ apiForBackend(GPUBackend backend) {
 
   return NULL;
 #else
-  Api    *api;
+  GPUApi *api;
 
   if (backend == GPU_BACKEND_DEFAULT) {
     return selectDefaultBackend();

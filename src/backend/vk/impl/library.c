@@ -22,8 +22,8 @@ vk_newLibraryWithBinary(GPUDevice  *device,
                         const void *data,
                         uint64_t    size) {
   VkShaderModuleCreateInfo createInfo = {0};
-  DeviceVk                *deviceVk;
-  ShaderLibraryVk         *libraryVk;
+  GPUDeviceVk             *deviceVk;
+  GPUShaderLibraryVk      *libraryVk;
   GPUShaderLibrary        *library;
   const uint32_t          *words;
   uint32_t                *alignedWords;
@@ -86,7 +86,7 @@ vk_newLibraryWithBinary(GPUDevice  *device,
 GPU_HIDE
 void
 vk_destroyLibrary(GPUShaderLibrary *library) {
-  ShaderLibraryVk    *libraryVk;
+  GPUShaderLibraryVk *libraryVk;
 
   if (!library) {
     return;
@@ -107,7 +107,7 @@ vk_destroyLibrary(GPUShaderLibrary *library) {
 
 GPU_HIDE
 void
-vk_initLibrary(ApiLibrary    *api) {
+vk_initLibrary(GPULibraryApi *api) {
   api->newLibraryWithBinary = vk_newLibraryWithBinary;
   api->destroyLibrary       = vk_destroyLibrary;
 }

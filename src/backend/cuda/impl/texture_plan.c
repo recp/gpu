@@ -69,9 +69,9 @@ cuda__textureViewSupported(GPUTextureViewType viewType) {
 
 bool
 cuda_texturePlan(const GPUTextureCreateInfo *info,
-                 const CudaFormatInfo       *format,
-                 CudaTexturePlan            *outPlan) {
-  CudaTexturePlan            plan;
+                 const GPUCudaFormatInfo    *format,
+                 GPUCudaTexturePlan         *outPlan) {
+  GPUCudaTexturePlan         plan;
   const GPUTextureUsageFlags allowedUsage = GPU_TEXTURE_USAGE_SAMPLED
                                          | GPU_TEXTURE_USAGE_STORAGE
                                          | GPU_TEXTURE_USAGE_COPY_SRC
@@ -163,8 +163,8 @@ cuda_textureStorageViewSupported(GPUTextureViewType viewType) {
 bool
 cuda_textureViewPlan(const GPUTexture               *texture,
                      const GPUTextureViewCreateInfo *info,
-                     CudaTextureViewPlan            *outPlan) {
-  CudaTextureViewPlan    plan;
+                     GPUCudaTextureViewPlan         *outPlan) {
+  GPUCudaTextureViewPlan plan;
   uint32_t               layerCount;
   bool                   cubemap, layered;
 

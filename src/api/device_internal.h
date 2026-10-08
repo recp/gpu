@@ -30,20 +30,20 @@
 #  define deviceRecordValidationError(device, message) ((void)0)
 #endif
 
-typedef struct TransientChunk {
+typedef struct GPUTransientChunk {
   GPUBuffer                *buffer;
   void                     *cpuPtr;
-  struct TransientChunk    *next;
+  struct GPUTransientChunk *next;
   uint64_t                  sizeBytes;
   uint64_t                  offset;
   GPUBufferUsageFlags       usage;
   uint32_t                  frameIndex;
   bool                      cpuPtrOwned;
-} TransientChunk;
+} GPUTransientChunk;
 
 typedef struct GPUPipelineCache GPUPipelineCache;
 
-typedef struct MeshLimits {
+typedef struct GPUMeshLimits {
   uint32_t taskWorkgroupSize[3];
   uint32_t meshWorkgroupSize[3];
   uint32_t maxTaskWorkgroupInvocations;
@@ -51,22 +51,22 @@ typedef struct MeshLimits {
   uint32_t maxPayloadSizeBytes;
   uint32_t maxOutputVertices;
   uint32_t maxOutputPrimitives;
-} MeshLimits;
+} GPUMeshLimits;
 
-typedef struct RayTracingLimits {
+typedef struct GPURayTracingLimits {
   uint64_t maxDispatchCount;
   uint32_t maxDispatchSize[3];
   uint32_t maxRecursionDepth;
   uint32_t maxHitAttributeSizeBytes;
-} RayTracingLimits;
+} GPURayTracingLimits;
 
 struct GPUDevice {
   GPUInstance                *inst;
   GPUAdapter                 *adapter;
-  Api                        *_api;
+  GPUApi                     *_api;
   void                       *_priv;
   GPUBuffer                  *transientBuffer;
-  TransientChunk             *transientChunks;
+  GPUTransientChunk          *transientChunks;
   GPUFence                  **transientFrameFences;
   GPUPipelineCache           *_pipelineCaches;
   void                       *_pipelineCacheLock;
@@ -78,8 +78,8 @@ struct GPUDevice {
   GPUFeatureSet               enabledFeatures;
   GPUCacheStats               cacheStats;
   GPUVRSCapabilitiesEXT       vrsCapabilities;
-  RayTracingLimits            rayTracingLimits;
-  MeshLimits                  meshLimits;
+  GPURayTracingLimits         rayTracingLimits;
+  GPUMeshLimits               meshLimits;
   GPURuntimeConfig            runtimeConfig;
   GPUFrameStats               currentFrameStats;
   GPUFrameStats               lastFrameStats;
@@ -248,7 +248,7 @@ devicePrepareFrameSlot(GPUDevice *device, uint32_t *outFrameIndex) {
 
 static inline void
 deviceActivateFrameSlot(GPUDevice *device, uint32_t frameIndex) {
-  TransientChunk    *chunk;
+  GPUTransientChunk *chunk;
 
   if (!device || !device->transientConfigured) {
     return;
@@ -287,7 +287,7 @@ deviceAdvanceFrameSlot(GPUDevice *device) {
   return GPU_OK;
 }
 
-static inline Api*
+static inline GPUApi*
 deviceApi(const GPUDevice *device) {
   return device ? device->_api : NULL;
 }

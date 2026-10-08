@@ -25,7 +25,7 @@ extern "C" {
 #include "library.h"
 #include "descriptor.h"
 
-typedef struct ComputePipelineState    ComputePipelineState;
+typedef struct GPUComputePipelineState GPUComputePipelineState;
 typedef struct GPUPipelineLayout       GPUPipelineLayout;
 typedef struct GPUBindGroupLayout      GPUBindGroupLayout;
 typedef struct GPUBindGroup            GPUBindGroup;
@@ -33,7 +33,7 @@ typedef struct GPUBindGroup            GPUBindGroup;
 struct GPUComputePassEncoder {
   void                   *_priv;
   void                   *_pipeline;
-  struct Api             *_api;
+  struct GPUApi          *_api;
   GPUDevice              *_device;
   GPUCommandBuffer       *_cmdb;
   GPUFrameStats          *_stats;
@@ -41,7 +41,7 @@ struct GPUComputePassEncoder {
   GPUQuerySet            *_timestampQuerySet;
   GPUBindGroup           *_boundGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout     *_boundGroupLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
-  DynamicOffsetShadow     _boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
+  GPUDynamicOffsetShadow  _boundDynamicOffsets[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t                _boundDynamicOffsetCounts[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t                _workgroupSize[3];
   uint32_t                _requiredBindGroupMask;
@@ -55,7 +55,7 @@ struct GPUComputePassEncoder {
   uint8_t                 _pushConstants[4096];
 };
 
-typedef struct ApiCompute {
+typedef struct GPUComputeApi {
   GPUResult
   (*createPipeline)(GPUDevice                          *device,
                     const GPUComputePipelineCreateInfo *info,
@@ -63,20 +63,20 @@ typedef struct ApiCompute {
 
   GPUComputePipeline * (*newComputePipeline)(void);
 
-  void (*setFunction)(GPUComputePipeline *pipeline, ShaderFunction    *func);
+  void (*setFunction)(GPUComputePipeline *pipeline, GPUShaderFunction *func);
 
   GPUResult
   (*setIntersectionFunctions)(GPUComputePipeline       *pipeline,
-                              ShaderFunction    *const *functions,
+                              GPUShaderFunction *const *functions,
                               uint32_t                  functionCount);
 
-  ComputePipelineState    * (*newComputeState)(GPUDevice *device, GPUComputePipeline *pipeline);
+  GPUComputePipelineState * (*newComputeState)(GPUDevice *device, GPUComputePipeline *pipeline);
 
   void (*destroyComputePipeline)(GPUComputePipeline *pipeline);
 
   GPUComputePassEncoder * (*computeCommandEncoder)(GPUCommandBuffer *cmdb, const GPUComputePassCreateInfo *info);
 
-  void (*setComputePipelineState)(GPUComputePassEncoder *enc, ComputePipelineState    *state);
+  void (*setComputePipelineState)(GPUComputePassEncoder *enc, GPUComputePipelineState *state);
 
   void (*buffer)(GPUComputePassEncoder *enc, GPUBuffer *buf, uint64_t off, uint32_t index);
 
@@ -100,7 +100,7 @@ typedef struct ApiCompute {
                            uint32_t               strideBytes);
 
   void (*endEncoding)(GPUComputePassEncoder *enc);
-} ApiCompute;
+} GPUComputeApi;
 
 #ifdef __cplusplus
 }

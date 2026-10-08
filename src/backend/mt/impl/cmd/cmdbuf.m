@@ -144,7 +144,7 @@ mt_prepareArgumentState(GPUCommandBuffer *cmdb,
                         MTArgumentState  *state,
                         const char       *label) {
 #if MT_HAS_METAL4
-  DeviceMT                    *deviceMT;
+  GPUDeviceMT                 *deviceMT;
   NSError                     *error;
   MTL4ArgumentTableDescriptor *desc;
 
@@ -333,7 +333,7 @@ mt_setArgumentAccelerationStructure(GPUCommandBuffer            *cmdb,
                                     GPUAccelerationStructureEXT *structure,
                                     uint32_t                     index) {
 #if MT_HAS_METAL4
-  AccelerationStructureMT    *native;
+  GPUAccelerationStructureMT *native;
 
   if (!state || !state->table || !structure
       || index >= MT_ARGUMENT_BUFFER_COUNT) {
@@ -371,7 +371,7 @@ mt_reserveUpload(GPUCommandBuffer *cmdb,
   MTCommandBuffer *native;
   MTUploadChunk   *chunk;
   MTUploadChunk   *candidate;
-  DeviceMT        *deviceMT;
+  GPUDeviceMT     *deviceMT;
   uint64_t         alignedOffset;
   uint64_t         capacity;
   uint64_t         offset;
@@ -705,7 +705,7 @@ GPUResult
 mt_createQuerySet(GPUDevice                   *device,
                   const GPUQuerySetCreateInfo *info,
                   GPUQuerySet                 *set) {
-  DeviceMT                         *deviceMT;
+  GPUDeviceMT                      *deviceMT;
   MTQuerySet                       *native;
   MTLCounterSampleBufferDescriptor *desc;
   id<MTLCounterSampleBuffer>        sampleBuffer;
@@ -1086,7 +1086,7 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
 
 GPU_HIDE
 void
-mt_initCmdBuff(ApiCommandBuffer    *api) {
+mt_initCmdBuff(GPUCommandBufferApi *api) {
   api->presentDrawable     = mt_cmdBufDrawable;
   api->createQuerySet      = mt_createQuerySet;
   api->destroyQuerySet     = mt_destroyQuerySet;

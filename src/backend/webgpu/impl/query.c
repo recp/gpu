@@ -32,7 +32,7 @@ webgpu_createQuerySet(GPUDevice                   *device,
                       const GPUQuerySetCreateInfo *info,
                       GPUQuerySet                 *set) {
   WGPUQuerySetDescriptor descriptor = WGPU_QUERY_SET_DESCRIPTOR_INIT;
-  DeviceWebGPU          *native;
+  GPUDeviceWebGPU       *native;
 
   native = webgpuDevice(device);
 
@@ -70,7 +70,7 @@ static void
 webgpu_beginOcclusionQuery(GPURenderPassEncoder *pass,
                            GPUQuerySet          *set,
                            uint32_t              queryIndex) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
 
   command = pass ? pass->_priv : NULL;
 
@@ -84,7 +84,7 @@ static void
 webgpu_endOcclusionQuery(GPURenderPassEncoder *pass,
                          GPUQuerySet          *set,
                          uint32_t              queryIndex) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
 
   GPU__UNUSED(set);
   GPU__UNUSED(queryIndex);
@@ -96,9 +96,9 @@ webgpu_endOcclusionQuery(GPURenderPassEncoder *pass,
 }
 
 static WGPUBuffer
-webgpu_queryScratch(CommandWebGPU    *command, uint64_t sizeBytes) {
+webgpu_queryScratch(GPUCommandWebGPU *command, uint64_t sizeBytes) {
   WGPUBufferDescriptor descriptor = WGPU_BUFFER_DESCRIPTOR_INIT;
-  DeviceWebGPU        *device;
+  GPUDeviceWebGPU     *device;
 
   if (sizeBytes > GPU_WEBGPU_QUERY_RESOLVE_CAPACITY) {
     return NULL;
@@ -130,7 +130,7 @@ webgpu_resolveQuerySet(GPUCommandBuffer *cmdb,
                        uint32_t          queryCount,
                        GPUBuffer        *dstBuffer,
                        uint64_t          dstOffset) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
   WGPUBuffer        destination;
   uint64_t          resultBytes;
 
@@ -168,7 +168,7 @@ webgpu_resolveQuerySet(GPUCommandBuffer *cmdb,
 }
 
 void
-webgpu_initQuery(ApiCommandBuffer    *api) {
+webgpu_initQuery(GPUCommandBufferApi *api) {
   api->createQuerySet      = webgpu_createQuerySet;
   api->destroyQuerySet     = webgpu_destroyQuerySet;
   api->writeTimestamp      = NULL;

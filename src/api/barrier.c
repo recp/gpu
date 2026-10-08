@@ -262,7 +262,7 @@ validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
 static void
 gpu_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   GPUDevice *device;
-  Api       *api;
+  GPUApi    *api;
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder) {
     return;

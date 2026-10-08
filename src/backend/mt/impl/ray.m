@@ -18,7 +18,7 @@
 #include "../../../api/compute_internal.h"
 #include "../../../api/render/pipeline_internal.h"
 
-static AccelerationStructureMT*
+static GPUAccelerationStructureMT*
 mt_rayStructure(GPUAccelerationStructureEXT *structure) {
   return structure ? structure->_priv : NULL;
 }
@@ -35,7 +35,7 @@ mt_rayBuffer(GPUBuffer *buffer) {
 
 static id<MTLAccelerationStructure>
 mt_rayNativeStructure(GPUAccelerationStructureEXT *structure) {
-  AccelerationStructureMT    *native;
+  GPUAccelerationStructureMT *native;
 
   native = mt_rayStructure(structure);
 
@@ -255,8 +255,8 @@ mt_rayClassicDescriptor(const GPUAccelerationStructureBuildInfoEXT *info) {
 }
 
 static bool
-mt_rayEnsureInstanceBuffer(DeviceMT                   *device,
-                           AccelerationStructureMT    *native,
+mt_rayEnsureInstanceBuffer(GPUDeviceMT                *device,
+                           GPUAccelerationStructureMT *native,
                            uint64_t                    sizeBytes,
                            const char                 *label) {
   id<MTLBuffer> buffer;
@@ -300,7 +300,7 @@ mt_rayEnsureInstanceBuffer(DeviceMT                   *device,
 }
 
 static bool
-mt_rayPrepareClassicBLAS(AccelerationStructureMT                    *native,
+mt_rayPrepareClassicBLAS(GPUAccelerationStructureMT                 *native,
                          const GPUAccelerationStructureBuildInfoEXT *info) {
   MTLPrimitiveAccelerationStructureDescriptor *descriptor;
   const GPUAccelerationStructureGeometryEXT   *source;
@@ -344,8 +344,8 @@ mt_rayPrepareClassicBLAS(AccelerationStructureMT                    *native,
 }
 
 static bool
-mt_rayPrepareClassicTLAS(DeviceMT                                   *device,
-                         AccelerationStructureMT                    *native,
+mt_rayPrepareClassicTLAS(GPUDeviceMT                                *device,
+                         GPUAccelerationStructureMT                 *native,
                          const GPUAccelerationStructureBuildInfoEXT *info) {
   MTLInstanceAccelerationStructureDescriptor *descriptor;
   MTLAccelerationStructureInstanceDescriptor *instances;
@@ -475,7 +475,7 @@ mt_rayFillModernGeometry(id                                         descriptor,
 }
 
 static bool
-mt_rayPrepareModernBLAS(AccelerationStructureMT                    *native,
+mt_rayPrepareModernBLAS(GPUAccelerationStructureMT                 *native,
                         const GPUAccelerationStructureBuildInfoEXT *info) {
   MTL4PrimitiveAccelerationStructureDescriptor *descriptor;
   id                                            newGeometry;
@@ -522,8 +522,8 @@ mt_rayPrepareModernBLAS(AccelerationStructureMT                    *native,
 }
 
 static bool
-mt_rayPrepareModernTLAS(DeviceMT                                   *device,
-                        AccelerationStructureMT                    *native,
+mt_rayPrepareModernTLAS(GPUDeviceMT                                *device,
+                        GPUAccelerationStructureMT                 *native,
                         const GPUAccelerationStructureBuildInfoEXT *info) {
   MTL4InstanceAccelerationStructureDescriptor        *descriptor;
   MTLIndirectAccelerationStructureInstanceDescriptor *instances;
@@ -580,7 +580,7 @@ mt_rayUseBuildResources(GPUAccelerationStructurePassEncoderEXT     *pass,
                         const GPUAccelerationStructureBuildInfoEXT *info,
                         GPUBuffer                                  *scratchBuffer) {
   const GPUAccelerationStructureGeometryEXT *geometry;
-  AccelerationStructureMT                   *native;
+  GPUAccelerationStructureMT                *native;
   uint32_t                                   geometryIndex;
   uint32_t                                   instanceIndex;
 
@@ -624,7 +624,7 @@ mt_createIntersectionFunctionTable(GPUDevice                                    
   MTIntersectionFunctionTable            *native;
   NSArray                                *functions;
   MTComputePipelineDesc                  *computeDesc;
-  ComputePipelineState                   *computeState;
+  GPUComputePipelineState                *computeState;
   id<MTLFunctionHandle>                   computeHandle;
   MTRenderPipelineDesc                   *renderDesc;
   MTRenderPipelineState                  *renderState;
@@ -891,7 +891,7 @@ mt_bindRenderIntersectionFunctionTable(GPURenderPassEncoder            *pass,
 GPU_HIDE
 void
 mt_useComputeRayResources(id<MTLComputeCommandEncoder> encoder,
-                          AccelerationStructureMT     *structure) {
+                          GPUAccelerationStructureMT  *structure) {
   id<MTLAccelerationStructure> child;
 
   if (!encoder || !structure || !structure->classicInstances) {
@@ -906,7 +906,7 @@ mt_useComputeRayResources(id<MTLComputeCommandEncoder> encoder,
 GPU_HIDE
 void
 mt_useRenderRayResources(id<MTLRenderCommandEncoder> encoder,
-                         AccelerationStructureMT    *structure,
+                         GPUAccelerationStructureMT *structure,
                          MTLRenderStages             stages) {
   id<MTLAccelerationStructure> child;
 
@@ -927,7 +927,7 @@ mt_getAccelerationStructureSizes(GPUDevice                                  *dev
                                  const GPUAccelerationStructureBuildInfoEXT *info,
                                  GPUAccelerationStructureSizesEXT           *outSizes) {
   MTLAccelerationStructureSizes       sizes;
-  DeviceMT                           *deviceMT;
+  GPUDeviceMT                        *deviceMT;
   MTLAccelerationStructureDescriptor *descriptor;
 
   deviceMT   = device->_priv;
@@ -950,8 +950,8 @@ GPUResult
 mt_createAccelerationStructure(GPUDevice                                   *device,
                                const GPUAccelerationStructureCreateInfoEXT *info,
                                GPUAccelerationStructureEXT                 *structure) {
-  AccelerationStructureMT    *native;
-  DeviceMT                   *deviceMT;
+  GPUAccelerationStructureMT *native;
+  GPUDeviceMT                *deviceMT;
 
   deviceMT = device->_priv;
 
@@ -982,7 +982,7 @@ mt_createAccelerationStructure(GPUDevice                                   *devi
 GPU_HIDE
 void
 mt_destroyAccelerationStructure(GPUAccelerationStructureEXT *structure) {
-  AccelerationStructureMT    *native;
+  GPUAccelerationStructureMT *native;
 
   native = mt_rayStructure(structure);
 
@@ -1069,8 +1069,8 @@ mt_buildAccelerationStructure(GPUAccelerationStructurePassEncoderEXT     *pass,
 #if MT_HAS_METAL4
   MTL4BufferRange                      scratch;
 #endif
-  AccelerationStructureMT             *native;
-  DeviceMT                            *device;
+  GPUAccelerationStructureMT          *native;
+  GPUDeviceMT                         *device;
   MTRayQueryEncoder                   *encoder;
 #if MT_HAS_METAL4
   MTL4AccelerationStructureDescriptor *descriptor;
@@ -1185,7 +1185,7 @@ mt_endAccelerationStructurePass(GPUAccelerationStructurePassEncoderEXT *pass) {
 
 GPU_HIDE
 void
-mt_initRayQuery(ApiRayQuery    *api) {
+mt_initRayQuery(GPURayQueryApi *api) {
   api->getSizes                             = mt_getAccelerationStructureSizes;
   api->create                               = mt_createAccelerationStructure;
   api->destroy                              = mt_destroyAccelerationStructure;

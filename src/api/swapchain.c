@@ -62,7 +62,7 @@ static GPUSwapchain*
 createSwapchainInternal(GPUDevice                    *__restrict device,
                         struct GPUQueue              *__restrict cmdQue,
                         const GPUSwapchainCreateInfo *__restrict info) {
-  Api          *api;
+  GPUApi       *api;
   GPUSwapchain *swapchain;
 
   if (!(api = deviceApi(device)))
@@ -222,7 +222,7 @@ GPUGetSwapchainStatus(GPUSwapchain *__restrict swapchain) {
 GPU_EXPORT
 void
 GPUDestroySwapchain(GPUSwapchain *__restrict swapchain) {
-  Api    *api;
+  GPUApi *api;
 
   if (!swapchain) {
     return;
@@ -243,7 +243,7 @@ GPUResizeSwapchain(GPUSwapchain *__restrict swapchain,
                    uint32_t                 width,
                    uint32_t                 height) {
   GPUExtent2D size;
-  Api        *api;
+  GPUApi     *api;
   GPUResult   result;
 
   if (!swapchain || width == 0 || height == 0)

@@ -46,9 +46,9 @@ enum {
   GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY = 12u
 };
 
-typedef uint32_t DynamicOffsetShadow[GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY];
+typedef uint32_t GPUDynamicOffsetShadow[GPU_ENCODER_DYNAMIC_OFFSET_SHADOW_CAPACITY];
 
-typedef struct ApiDescriptor {
+typedef struct GPUDescriptorApi {
   GPUResult (*createBindGroupLayout)(struct GPUDevice *device, struct GPUBindGroupLayout *layout);
 
   void (*destroyBindGroupLayout)(struct GPUBindGroupLayout *layout);
@@ -72,7 +72,7 @@ typedef struct ApiDescriptor {
                       struct GPUBindGroup          *group,
                       uint32_t                      dynamicOffsetCount,
                       const uint32_t               *dynamicOffsets);
-} ApiDescriptor;
+} GPUDescriptorApi;
 
 #ifdef __cplusplus
 }

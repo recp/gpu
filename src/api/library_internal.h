@@ -21,7 +21,7 @@
 
 typedef struct USLRuntimeSpecConstant USLRuntimeSpecConstant;
 
-typedef struct StaticSamplerDesc {
+typedef struct GPUStaticSamplerDesc {
   uint32_t logicalIndex;
   uint32_t minFilter;
   uint32_t magFilter;
@@ -31,62 +31,62 @@ typedef struct StaticSamplerDesc {
   uint32_t compareFunc;
   uint32_t hasCompare;
   uint32_t maxAnisotropy;
-} StaticSamplerDesc;
+} GPUStaticSamplerDesc;
 
-typedef struct ShaderStaticSamplerInfo {
+typedef struct GPUShaderStaticSamplerInfo {
   uint64_t             entryMask;
-  StaticSamplerDesc    desc;
+  GPUStaticSamplerDesc desc;
   GPUShaderStageFlags  visibility;
   uint32_t             hlslIndex;
   uint32_t             spirvGroup;
   uint32_t             spirvBinding;
   uint32_t             wgslGroup;
   uint32_t             wgslBinding;
-} ShaderStaticSamplerInfo;
+} GPUShaderStaticSamplerInfo;
 
-typedef struct ShaderStaticSamplerInfoList {
+typedef struct GPUShaderStaticSamplerInfoList {
   uint32_t                   count;
-  ShaderStaticSamplerInfo    items[];
-} ShaderStaticSamplerInfoList;
+  GPUShaderStaticSamplerInfo items[];
+} GPUShaderStaticSamplerInfoList;
 
-typedef struct ShaderExecutionGraphEntryInfo {
+typedef struct GPUShaderExecutionGraphEntryInfo {
   const char *entryPoint;
   const char *nodeName;
   uint32_t    nodeIndex;
   uint32_t    recordSizeBytes;
   uint32_t    nodeLaunch;
   bool        programEntry;
-} ShaderExecutionGraphEntryInfo;
+} GPUShaderExecutionGraphEntryInfo;
 
-typedef struct ShaderSourceBlob {
+typedef struct GPUShaderSourceBlob {
   void    *data;
   uint64_t size;
-} ShaderSourceBlob;
+} GPUShaderSourceBlob;
 
 enum {
   GPU_SHADER_PTX_MAX_PARAM_COUNT = 512u,
   GPU_SHADER_PTX_MAX_PARAM_BYTES = 4096u
 };
 
-typedef enum ShaderPTXParamKind {
+typedef enum GPUShaderPTXParamKind {
   GPUShaderPTXParamInvalid         = 0,
   GPUShaderPTXParamBuffer          = 1,
   GPUShaderPTXParamSurface         = 2,
   GPUShaderPTXParamTexture         = 3,
   GPUShaderPTXParamSampledTexture  = 4,
   GPUShaderPTXParamTextureMetadata = 5
-} ShaderPTXParamKind;
+} GPUShaderPTXParamKind;
 
-typedef enum ShaderPTXTextureMetadataFlags {
+typedef enum GPUShaderPTXTextureMetadataFlags {
   GPUShaderPTXTextureMetadataNone               = 0,
   GPUShaderPTXTextureMetadataMipLevelCountBit   = 1u << 0,
   GPUShaderPTXTextureMetadataArrayLayerCountBit = 1u << 1,
   GPUShaderPTXTextureMetadataSampleCountBit     = 1u << 2
-} ShaderPTXTextureMetadataFlags;
+} GPUShaderPTXTextureMetadataFlags;
 
-typedef struct ShaderPTXParamInfo {
+typedef struct GPUShaderPTXParamInfo {
   GPUBindingType        bindingType;
-  ShaderPTXParamKind    kind;
+  GPUShaderPTXParamKind kind;
   uint32_t              groupIndex;
   uint32_t              binding;
   uint32_t              arrayIndex;
@@ -96,35 +96,35 @@ typedef struct ShaderPTXParamInfo {
   uint32_t              staticSamplerId;
   uint32_t              dataOffset;
   uint32_t              metadataFlags;
-} ShaderPTXParamInfo;
+} GPUShaderPTXParamInfo;
 
-typedef struct ShaderPTXEntryInfo {
+typedef struct GPUShaderPTXEntryInfo {
   uint32_t paramStart;
   uint32_t paramCount;
   uint32_t paramDataSize;
-} ShaderPTXEntryInfo;
+} GPUShaderPTXEntryInfo;
 
-typedef struct ShaderPTXInfo {
-  ShaderPTXEntryInfo    *entries;
-  ShaderPTXParamInfo    *params;
+typedef struct GPUShaderPTXInfo {
+  GPUShaderPTXEntryInfo *entries;
+  GPUShaderPTXParamInfo *params;
   uint32_t               entryCount;
   uint32_t               paramCount;
-} ShaderPTXInfo;
+} GPUShaderPTXInfo;
 
-typedef struct ShaderPTXEntryView {
-  const ShaderPTXParamInfo    *params;
+typedef struct GPUShaderPTXEntryView {
+  const GPUShaderPTXParamInfo *params;
   uint32_t                     paramCount;
   uint32_t                     paramDataSize;
-} ShaderPTXEntryView;
+} GPUShaderPTXEntryView;
 
 struct GPUShaderLibrary {
-  Api                            *_api;
+  GPUApi                         *_api;
   GPUDevice                      *_device;
   void                           *_priv;
   void                           *_metadata;
   void                           *_uslSource;
-  ShaderStaticSamplerInfoList    *_staticSamplers;
-  ShaderPTXInfo                  *_ptxInfo;
+  GPUShaderStaticSamplerInfoList *_staticSamplers;
+  GPUShaderPTXInfo               *_ptxInfo;
   void                           *_entryInfo;
   void                           *_entryResources;
   void                           *_resourceBindings;
@@ -133,18 +133,18 @@ struct GPUShaderLibrary {
   uint32_t                        _constantCount;
 };
 
-struct ShaderFunction {
+struct GPUShaderFunction {
   void *_priv;
 };
 
 GPU_HIDE
-ShaderFunction*
+GPUShaderFunction*
 shaderFunction(GPUShaderLibrary *library, const char *name);
 
 GPU_HIDE
 void
 destroyShaderFunction(GPUShaderLibrary  *library,
-                      ShaderFunction    *function);
+                      GPUShaderFunction *function);
 
 GPU_HIDE
 int
@@ -163,7 +163,7 @@ GPU_HIDE
 int
 getShaderLibraryPTXEntry(const GPUShaderLibrary *library,
                          const char             *entryPoint,
-                         ShaderPTXEntryView     *outEntry);
+                         GPUShaderPTXEntryView  *outEntry);
 
 GPU_HIDE
 int
@@ -183,7 +183,7 @@ GPU_HIDE
 int
 getShaderLibraryExecutionGraphEntry(const GPUShaderLibrary           *library,
                                     const char                       *entryPoint,
-                                    ShaderExecutionGraphEntryInfo    *outEntry);
+                                    GPUShaderExecutionGraphEntryInfo *outEntry);
 
 GPU_HIDE
 uint32_t
@@ -193,7 +193,7 @@ GPU_HIDE
 int
 getShaderLibraryExecutionGraphEntryAt(const GPUShaderLibrary           *library,
                                       uint32_t                          index,
-                                      ShaderExecutionGraphEntryInfo    *outEntry);
+                                      GPUShaderExecutionGraphEntryInfo *outEntry);
 
 GPU_HIDE
 int
@@ -234,7 +234,7 @@ getShaderResourceBackendBinding(const GPUShaderLibrary            *library,
                                 uint32_t                          *outBinding);
 
 GPU_HIDE
-const ShaderStaticSamplerInfo*
+const GPUShaderStaticSamplerInfo*
 getShaderLibraryStaticSamplers(const GPUShaderLibrary *library,
                                uint32_t               *outCount);
 
@@ -252,25 +252,25 @@ GPUResult
 compileShaderLibraryEntry(const GPUShaderLibrary     *library,
                           const char                 *entryPoint,
                           const GPUPipelineConstants *constants,
-                          ShaderSourceBlob           *outSource);
+                          GPUShaderSourceBlob        *outSource);
 
 GPU_HIDE
 GPUResult
 compileShaderLibraryEntryMask(const GPUShaderLibrary *library,
                               uint64_t                entryMask,
-                              ShaderSourceBlob       *outSource);
+                              GPUShaderSourceBlob    *outSource);
 
 GPU_HIDE
 void
-freeShaderSourceBlob(ShaderSourceBlob    *source);
+freeShaderSourceBlob(GPUShaderSourceBlob *source);
 
 GPU_HIDE
 int
-staticSamplerDescIsValid(const StaticSamplerDesc    *desc);
+staticSamplerDescIsValid(const GPUStaticSamplerDesc *desc);
 
 GPU_HIDE
 int
-staticSamplerToSamplerDesc(const StaticSamplerDesc    *source,
+staticSamplerToSamplerDesc(const GPUStaticSamplerDesc *source,
                            GPUSamplerDesc             *outDesc);
 
 #endif /* gpu_library_internal_h */

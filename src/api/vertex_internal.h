@@ -19,22 +19,22 @@
 
 #include "../common.h"
 
-struct VertexDescriptor {
+struct GPUVertexDescriptor {
   void *_priv;
 };
 
 GPU_HIDE
-VertexDescriptor*
-createVertexDesc(Api    *api);
+GPUVertexDescriptor*
+createVertexDesc(GPUApi *api);
 
 GPU_HIDE
 void
-gpuDestroyVertexDesc(Api    *api, VertexDescriptor    *vert);
+gpuDestroyVertexDesc(GPUApi *api, GPUVertexDescriptor *vert);
 
 GPU_HIDE
 void
-vertexDescAttrib(Api                 *__restrict api,
-                 VertexDescriptor    *__restrict vertex,
+vertexDescAttrib(GPUApi              *__restrict api,
+                 GPUVertexDescriptor *__restrict vertex,
                  uint32_t                        attribIndex,
                  GPUVertexFormat                 format,
                  uint32_t                        offset,
@@ -42,8 +42,8 @@ vertexDescAttrib(Api                 *__restrict api,
 
 GPU_HIDE
 void
-vertexDescLayout(Api                 *__restrict api,
-                 VertexDescriptor    *__restrict vertex,
+vertexDescLayout(GPUApi              *__restrict api,
+                 GPUVertexDescriptor *__restrict vertex,
                  uint32_t                        layoutIndex,
                  uint32_t                        stride,
                  GPUVertexStepMode               stepMode);
@@ -51,6 +51,6 @@ vertexDescLayout(Api                 *__restrict api,
 GPU_HIDE
 void
 pipelineSetVertexDesc(GPURenderPipeline   *__restrict pipeline,
-                      VertexDescriptor    *__restrict vert);
+                      GPUVertexDescriptor *__restrict vert);
 
 #endif /* gpu_vertex_internal_h */

@@ -81,7 +81,7 @@ mt_tensorRequirements(GPUDevice                      *device,
                       uint64_t                        spanBytes,
                       GPUTensorBufferRequirementsEXT *outRequirements) {
   MTLSizeAndAlign sizeAndAlign;
-  DeviceMT       *deviceMT;
+  GPUDeviceMT    *deviceMT;
   uint32_t        i;
 
   deviceMT = device->_priv;
@@ -225,7 +225,7 @@ mt_destroyTensor(GPUTensorEXT *tensor) {
 
 GPU_HIDE
 void
-mt_initTensor(ApiTensor    *api) {
+mt_initTensor(GPUTensorApi *api) {
   api->getBufferRequirements = mt_getTensorBufferRequirements;
   api->createView            = mt_createTensorView;
   api->destroy               = mt_destroyTensor;

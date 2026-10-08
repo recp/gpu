@@ -64,7 +64,7 @@ commandQueueDevice(const GPUQueue *queue) {
   return queue ? queue->_device : NULL;
 }
 
-static inline Api*
+static inline GPUApi*
 commandQueueApi(const GPUQueue *queue) {
   return deviceApi(commandQueueDevice(queue));
 }
@@ -74,7 +74,7 @@ commandBufferDevice(const GPUCommandBuffer *cmdb) {
   return cmdb ? commandQueueDevice(cmdb->_queue) : NULL;
 }
 
-static inline Api*
+static inline GPUApi*
 commandBufferApi(const GPUCommandBuffer *cmdb) {
   return deviceApi(commandBufferDevice(cmdb));
 }

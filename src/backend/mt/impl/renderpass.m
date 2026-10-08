@@ -191,7 +191,7 @@ mt_bufferTextureRangeValid(id<MTLBuffer>                     buffer,
                            const GPUTexture                 *texture,
                            const GPUBufferTextureCopyRegion *region,
                            uint64_t                         *outBytesPerImage) {
-  FormatDataLayout    layout;
+  GPUFormatDataLayout layout;
 
   if (!buffer || !texture || !region || !outBytesPerImage
       || !formatAspectDataLayout(texture->format,
@@ -232,7 +232,7 @@ mt_copyDepthStencilPlane(GPUTransferPassEncoder              *pass,
                          GPUTexture                          *src,
                          GPUTexture                          *dst,
                          const GPUTextureToTextureCopyRegion *region) {
-  FormatLayout    layout;
+  GPUFormatLayout layout;
   MTLSize         size;
   id<MTLTexture>  srcTexture;
   id<MTLTexture>  dstTexture;
@@ -369,7 +369,7 @@ static void
 mt_generateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
   GPUTransferPassEncoder *pass;
   MTCopyEncoder          *native;
-  AdapterMT              *adapter;
+  GPUAdapterMT           *adapter;
   id<MTLTexture>          nativeTexture;
 
   adapter = texture && texture->device && texture->device->adapter ? texture->device->adapter->_priv : NULL;
@@ -410,7 +410,7 @@ mt_generateMipmaps(GPUCommandBuffer *cmdb, GPUTexture *texture) {
 }
 
 GPU_HIDE
-RenderPassDesc*
+GPURenderPassDesc*
 mt_beginRenderPass(GPUCommandBuffer              *cmdb,
                    const GPURenderPassCreateInfo *info) {
   const GPUShadingRateAttachmentEXT          *shadingRate;
@@ -418,9 +418,9 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   const GPURenderPassColorAttachment         *color;
   const GPURenderPassDepthStencilAttachment  *depthStencil;
   MTCommandBuffer                            *commandState;
-  AdapterMT                                  *adapter;
+  GPUAdapterMT                               *adapter;
   GPUDevice                                  *device;
-  RenderPassDesc                             *renderPass;
+  GPURenderPassDesc                          *renderPass;
   MTRenderPass                               *nativePass;
   MTLRenderPassDescriptor                    *rpd;
   MTQuerySet                                 *occlusion;
@@ -739,7 +739,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
 
 GPU_HIDE
 void
-mt_destroyRenderPass(RenderPassDesc    *pass) {
+mt_destroyRenderPass(GPURenderPassDesc *pass) {
   (void)pass;
 }
 
@@ -1287,7 +1287,7 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
 
 GPU_HIDE
 void
-mt_initRenderPass(ApiRenderPass    *api) {
+mt_initRenderPass(GPURenderPassApi *api) {
   api->beginRenderPass      = mt_beginRenderPass;
   api->destroyRenderPass    = mt_destroyRenderPass;
   api->beginTransferPass    = mt_beginTransferPass;

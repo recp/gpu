@@ -21,28 +21,28 @@
 
 #define GPU_PIPELINE_CACHE_INLINE_KEY_SIZE 256u
 
-typedef struct PipelineCacheEntry    PipelineCacheEntry;
-typedef struct PipelineCompileJob    PipelineCompileJob;
+typedef struct GPUPipelineCacheEntry GPUPipelineCacheEntry;
+typedef struct GPUPipelineCompileJob GPUPipelineCompileJob;
 
-typedef struct PipelineCacheKey {
+typedef struct GPUPipelineCacheKey {
   uint8_t *data;
   size_t   size;
   uint64_t hash;
   bool     ownsData;
   uint8_t  inlineData[GPU_PIPELINE_CACHE_INLINE_KEY_SIZE];
-} PipelineCacheKey;
+} GPUPipelineCacheKey;
 
 struct GPUPipelineCache {
   GPUDevice              *device;
   void                   *_sync;
   void                   *_priv;
   GPUPipelineCache       *deviceNext;
-  PipelineCacheEntry     *head;
-  PipelineCacheEntry     *tail;
-  PipelineCacheEntry    **buckets;
-  PipelineCompileJob     *jobs;
-  PipelineCompileJob     *queueHead;
-  PipelineCompileJob     *queueTail;
+  GPUPipelineCacheEntry  *head;
+  GPUPipelineCacheEntry  *tail;
+  GPUPipelineCacheEntry **buckets;
+  GPUPipelineCompileJob  *jobs;
+  GPUPipelineCompileJob  *queueHead;
+  GPUPipelineCompileJob  *queueTail;
   GPUCacheStats           stats;
   uint64_t                maxEntries;
   uint64_t                entryCount;
@@ -65,58 +65,58 @@ recordPipelineCompile(GPUDevice *device, GPUPipelineCache *cache);
 
 GPU_HIDE
 void
-pipelineCacheReleaseKey(PipelineCacheKey    *key);
+pipelineCacheReleaseKey(GPUPipelineCacheKey *key);
 
 GPU_HIDE
 GPUResult
 pipelineCacheFindRender(GPUPipelineCache                  *cache,
                         const GPURenderPipelineCreateInfo *info,
-                        PipelineCacheKey                  *outKey,
+                        GPUPipelineCacheKey               *outKey,
                         GPURenderPipeline                **outPipeline);
 
 GPU_HIDE
 GPURenderPipeline*
 pipelineCacheStoreRender(GPUPipelineCache    *cache,
-                         PipelineCacheKey    *key,
+                         GPUPipelineCacheKey *key,
                          GPURenderPipeline   *pipeline);
 
 GPU_HIDE
 GPUResult
 pipelineCacheFindCompute(GPUPipelineCache                   *cache,
                          const GPUComputePipelineCreateInfo *info,
-                         PipelineCacheKey                   *outKey,
+                         GPUPipelineCacheKey                *outKey,
                          GPUComputePipeline                **outPipeline);
 
 GPU_HIDE
 GPUComputePipeline*
 pipelineCacheStoreCompute(GPUPipelineCache    *cache,
-                          PipelineCacheKey    *key,
+                          GPUPipelineCacheKey *key,
                           GPUComputePipeline  *pipeline);
 
 GPU_HIDE
 GPUResult
 pipelineCacheFindRay(GPUPipelineCache                         *cache,
                      const GPURayTracingPipelineCreateInfoEXT *info,
-                     PipelineCacheKey                         *outKey,
+                     GPUPipelineCacheKey                      *outKey,
                      GPURayTracingPipelineEXT                **outPipeline);
 
 GPU_HIDE
 GPURayTracingPipelineEXT*
 pipelineCacheStoreRay(GPUPipelineCache         *cache,
-                      PipelineCacheKey         *key,
+                      GPUPipelineCacheKey      *key,
                       GPURayTracingPipelineEXT *pipeline);
 
 GPU_HIDE
 GPUResult
 pipelineCacheFindGraph(GPUPipelineCache                     *cache,
                        const GPUExecutionGraphCreateInfoEXT *info,
-                       PipelineCacheKey                     *outKey,
+                       GPUPipelineCacheKey                  *outKey,
                        GPUExecutionGraphEXT                **outGraph);
 
 GPU_HIDE
 GPUExecutionGraphEXT*
 pipelineCacheStoreGraph(GPUPipelineCache     *cache,
-                        PipelineCacheKey     *key,
+                        GPUPipelineCacheKey  *key,
                         GPUExecutionGraphEXT *graph);
 
 GPU_HIDE

@@ -31,12 +31,12 @@ enum {
   GPU_DX12_RAY_STACK_GEOMETRY_COUNT = 8u
 };
 
-static AccelerationStructureDX12*
+static GPUAccelerationStructureDX12*
 dx12_rayStructure(GPUAccelerationStructureEXT *structure) {
   return structure ? structure->_priv : NULL;
 }
 
-static AccelerationStructureEncoderDX12*
+static GPUAccelerationStructureEncoderDX12*
 dx12_rayEncoder(GPUAccelerationStructurePassEncoderEXT *pass) {
   return pass ? pass->_priv : NULL;
 }
@@ -107,8 +107,8 @@ dx12_rayAlign(uint64_t value, uint64_t alignment) {
 static void
 dx12_rayFillTriangle(D3D12_RAYTRACING_GEOMETRY_DESC                    *dst,
                      const GPUAccelerationStructureTriangleGeometryEXT *src) {
-  BufferDX12    *vertex;
-  BufferDX12    *index;
+  GPUBufferDX12 *vertex;
+  GPUBufferDX12 *index;
 
   vertex = src->vertexBuffer->_priv;
   index  = src->indexBuffer ? src->indexBuffer->_priv : NULL;
@@ -136,7 +136,7 @@ dx12_rayFillTriangle(D3D12_RAYTRACING_GEOMETRY_DESC                    *dst,
 static void
 dx12_rayFillAABB(D3D12_RAYTRACING_GEOMETRY_DESC                *dst,
                  const GPUAccelerationStructureAABBGeometryEXT *src) {
-  BufferDX12    *buffer;
+  GPUBufferDX12 *buffer;
 
   buffer = src->buffer->_priv;
 
@@ -202,7 +202,7 @@ dx12_raySetName(ID3D12Resource *resource, const char *label) {
 #endif
 
 static void
-dx12_rayDestroyState(AccelerationStructureDX12    *native) {
+dx12_rayDestroyState(GPUAccelerationStructureDX12 *native) {
   if (!native) {
     return;
   }
@@ -223,7 +223,7 @@ dx12_rayDestroyState(AccelerationStructureDX12    *native) {
 }
 
 static bool
-dx12_rayEnsureGeometryCapacity(AccelerationStructureDX12    *native,
+dx12_rayEnsureGeometryCapacity(GPUAccelerationStructureDX12 *native,
                                uint32_t                      count) {
   D3D12_RAYTRACING_GEOMETRY_DESC *geometries;
   uint32_t                        capacity;
@@ -255,8 +255,8 @@ dx12_rayEnsureGeometryCapacity(AccelerationStructureDX12    *native,
 }
 
 static bool
-dx12_rayEnsureInstanceBuffer(DeviceDX12                   *device,
-                             AccelerationStructureDX12    *native,
+dx12_rayEnsureInstanceBuffer(GPUDeviceDX12                *device,
+                             GPUAccelerationStructureDX12 *native,
                              uint64_t                      sizeBytes) {
   D3D12_HEAP_PROPERTIES     heap = {0};
   D3D12_RESOURCE_DESC       desc = {0};
@@ -342,12 +342,12 @@ dx12_rayEnsureInstanceBuffer(DeviceDX12                   *device,
 
 static bool
 dx12_rayPrepareBLAS(ID3D12GraphicsCommandList                  *commandList,
-                    AccelerationStructureDX12                  *native,
+                    GPUAccelerationStructureDX12               *native,
                     const GPUAccelerationStructureBuildInfoEXT *info) {
   const GPUAccelerationStructureGeometryEXT *source;
-  BufferDX12                                *buffer;
-  BufferDX12                                *vertex;
-  BufferDX12                                *index;
+  GPUBufferDX12                             *buffer;
+  GPUBufferDX12                             *vertex;
+  GPUBufferDX12                             *index;
   uint32_t                                   i;
 
   if (!dx12_rayEnsureGeometryCapacity(native,
@@ -391,12 +391,12 @@ dx12_rayPrepareBLAS(ID3D12GraphicsCommandList                  *commandList,
 }
 
 static bool
-dx12_rayPrepareTLAS(DeviceDX12                                 *device,
-                    AccelerationStructureDX12                  *native,
+dx12_rayPrepareTLAS(GPUDeviceDX12                              *device,
+                    GPUAccelerationStructureDX12               *native,
                     const GPUAccelerationStructureBuildInfoEXT *info) {
   D3D12_RAYTRACING_INSTANCE_DESC            *instances;
   const GPUAccelerationStructureInstanceEXT *source;
-  AccelerationStructureDX12                 *structure;
+  GPUAccelerationStructureDX12              *structure;
   uint64_t                                   sizeBytes;
   uint32_t                                   i;
 
@@ -508,7 +508,7 @@ dx12_rayFreeHitNames(DX12RayHitGroupNames *names, uint32_t count) {
 }
 
 static void
-dx12_rayDestroyPipelineState(RayTracingPipelineDX12    *native) {
+dx12_rayDestroyPipelineState(GPURayTracingPipelineDX12 *native) {
   uint32_t i;
 
   if (!native) {
@@ -549,9 +549,9 @@ dx12_createRayTracingPipeline(GPUDevice                                *device,
   D3D12_STATE_OBJECT_DESC            stateDesc = {0};
   DX12ShaderCode                     libraryCode = {0};
   uint64_t                           rootKey[2];
-  DeviceDX12                        *deviceDX12;
-  ShaderLibraryDX12                 *library;
-  RayTracingPipelineDX12            *native;
+  GPUDeviceDX12                     *deviceDX12;
+  GPUShaderLibraryDX12              *library;
+  GPURayTracingPipelineDX12         *native;
   DX12RayHitGroupNames              *hitNames;
   D3D12_HIT_GROUP_DESC              *hitGroups;
   D3D12_STATE_SUBOBJECT             *subobjects;
@@ -747,7 +747,7 @@ fail:
 
 static void
 dx12_destroyRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
-  RayTracingPipelineDX12    *native;
+  GPURayTracingPipelineDX12 *native;
 
   native = pipeline ? pipeline->_priv : NULL;
   dx12_rayDestroyPipelineState(native);
@@ -758,7 +758,7 @@ dx12_destroyRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
 }
 
 static void
-dx12_rayDestroyShaderTableState(ShaderTableDX12    *native) {
+dx12_rayDestroyShaderTableState(GPUShaderTableDX12 *native) {
   if (!native) {
     return;
   }
@@ -833,9 +833,9 @@ dx12_createShaderTable(GPUDevice                         *device,
   D3D12_HEAP_PROPERTIES      heap = {0};
   D3D12_RESOURCE_DESC        desc = {0};
   D3D12_RANGE                readRange = {0};
-  DeviceDX12                *deviceDX12;
-  RayTracingPipelineDX12    *pipeline;
-  ShaderTableDX12           *native;
+  GPUDeviceDX12             *deviceDX12;
+  GPURayTracingPipelineDX12 *pipeline;
+  GPUShaderTableDX12        *native;
   uint8_t                   *mapped;
   D3D12_GPU_VIRTUAL_ADDRESS  address;
   uint64_t                   rayGenerationOffset;
@@ -984,7 +984,7 @@ dx12_createShaderTable(GPUDevice                         *device,
 
 static void
 dx12_destroyShaderTable(GPUShaderTableEXT *table) {
-  ShaderTableDX12    *native;
+  GPUShaderTableDX12 *native;
 
   native = table ? table->_priv : NULL;
   dx12_rayDestroyShaderTableState(native);
@@ -996,9 +996,9 @@ dx12_destroyShaderTable(GPUShaderTableEXT *table) {
 
 static GPURayTracingPassEncoderEXT*
 dx12_beginRayTracingPass(GPUCommandBuffer *cmdb, const char *label) {
-  CommandBufferDX12           *command;
+  GPUCommandBufferDX12        *command;
   GPURayTracingPassEncoderEXT *pass;
-  RayTracingEncoderDX12       *native;
+  GPURayTracingEncoderDX12    *native;
   GPUDevice                   *device;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -1032,8 +1032,8 @@ dx12_beginRayTracingPass(GPUCommandBuffer *cmdb, const char *label) {
 static void
 dx12_bindRayTracingPipeline(GPURayTracingPassEncoderEXT *pass,
                             GPURayTracingPipelineEXT    *pipeline) {
-  RayTracingEncoderDX12     *native;
-  RayTracingPipelineDX12    *pipelineDX12;
+  GPURayTracingEncoderDX12  *native;
+  GPURayTracingPipelineDX12 *pipelineDX12;
   bool                       rootChanged;
 
   native       = pass ? pass->_priv : NULL;
@@ -1069,8 +1069,8 @@ dx12_dispatchRays(GPURayTracingPassEncoderEXT *pass,
                   uint32_t                     height,
                   uint32_t                     depth) {
   D3D12_DISPATCH_RAYS_DESC  desc = {0};
-  RayTracingEncoderDX12    *native;
-  ShaderTableDX12          *tableDX12;
+  GPURayTracingEncoderDX12 *native;
+  GPUShaderTableDX12       *tableDX12;
 
   native    = pass ? pass->_priv : NULL;
   tableDX12 = table ? table->_priv : NULL;
@@ -1092,7 +1092,7 @@ dx12_dispatchRays(GPURayTracingPassEncoderEXT *pass,
 
 static void
 dx12_endRayTracingPass(GPURayTracingPassEncoderEXT *pass) {
-  RayTracingEncoderDX12    *native;
+  GPURayTracingEncoderDX12 *native;
 
   native = pass ? pass->_priv : NULL;
 
@@ -1121,7 +1121,7 @@ dx12_getAccelerationStructureSizes(GPUDevice                                  *d
   D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS  inputs;
   D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO sizes = {0};
   D3D12_RAYTRACING_GEOMETRY_DESC                        stackGeometries[GPU_DX12_RAY_STACK_GEOMETRY_COUNT];
-  DeviceDX12                                           *deviceDX12;
+  GPUDeviceDX12                                        *deviceDX12;
   D3D12_RAYTRACING_GEOMETRY_DESC                       *geometries;
   uint32_t                                              geometryCount;
   uint32_t                                              i;
@@ -1169,8 +1169,8 @@ dx12_createAccelerationStructure(GPUDevice                                   *de
                                  GPUAccelerationStructureEXT                 *structure) {
   D3D12_HEAP_PROPERTIES         heap = {0};
   D3D12_RESOURCE_DESC           desc = {0};
-  DeviceDX12                   *deviceDX12;
-  AccelerationStructureDX12    *native;
+  GPUDeviceDX12                *deviceDX12;
+  GPUAccelerationStructureDX12 *native;
   uint64_t                      sizeBytes;
   HRESULT                       result;
 
@@ -1235,7 +1235,7 @@ dx12_createAccelerationStructure(GPUDevice                                   *de
 GPU_HIDE
 void
 dx12_destroyAccelerationStructure(GPUAccelerationStructureEXT *structure) {
-  AccelerationStructureDX12    *native;
+  GPUAccelerationStructureDX12 *native;
 
   native = dx12_rayStructure(structure);
   dx12_rayDestroyState(native);
@@ -1249,9 +1249,9 @@ GPU_HIDE
 GPUAccelerationStructurePassEncoderEXT*
 dx12_beginAccelerationStructurePass(GPUCommandBuffer *cmdb,
                                     const char       *label) {
-  CommandBufferDX12                      *command;
+  GPUCommandBufferDX12                   *command;
   GPUAccelerationStructurePassEncoderEXT *pass;
-  AccelerationStructureEncoderDX12       *native;
+  GPUAccelerationStructureEncoderDX12    *native;
   GPUDevice                              *device;
 
   command = cmdb ? cmdb->_priv : NULL;
@@ -1290,11 +1290,11 @@ dx12_buildAccelerationStructure(GPUAccelerationStructurePassEncoderEXT     *pass
                                 uint64_t                                    scratchOffset) {
   D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC build = {0};
   D3D12_RESOURCE_BARRIER                             barrier = {0};
-  AccelerationStructureEncoderDX12                  *encoder;
-  AccelerationStructureDX12                         *native;
-  AccelerationStructureDX12                         *source;
-  BufferDX12                                        *scratch;
-  DeviceDX12                                        *device;
+  GPUAccelerationStructureEncoderDX12               *encoder;
+  GPUAccelerationStructureDX12                      *native;
+  GPUAccelerationStructureDX12                      *source;
+  GPUBufferDX12                                     *scratch;
+  GPUDeviceDX12                                     *device;
   D3D12_GPU_VIRTUAL_ADDRESS                          scratchAddress;
   bool                                               prepared;
 
@@ -1361,7 +1361,7 @@ dx12_buildAccelerationStructure(GPUAccelerationStructurePassEncoderEXT     *pass
 GPU_HIDE
 void
 dx12_endAccelerationStructurePass(GPUAccelerationStructurePassEncoderEXT *pass) {
-  AccelerationStructureEncoderDX12    *native;
+  GPUAccelerationStructureEncoderDX12 *native;
 
   native = dx12_rayEncoder(pass);
 
@@ -1380,7 +1380,7 @@ dx12_endAccelerationStructurePass(GPUAccelerationStructurePassEncoderEXT *pass) 
 
 GPU_HIDE
 void
-dx12_initRayQuery(ApiRayQuery    *api) {
+dx12_initRayQuery(GPURayQueryApi *api) {
   api->getSizes  = dx12_getAccelerationStructureSizes;
   api->create    = dx12_createAccelerationStructure;
   api->destroy   = dx12_destroyAccelerationStructure;
@@ -1391,7 +1391,7 @@ dx12_initRayQuery(ApiRayQuery    *api) {
 
 GPU_HIDE
 void
-dx12_initRayTracing(ApiRayTracing    *api) {
+dx12_initRayTracing(GPURayTracingApi *api) {
   api->createPipeline     = dx12_createRayTracingPipeline;
   api->destroyPipeline    = dx12_destroyRayTracingPipeline;
   api->createShaderTable  = dx12_createShaderTable;

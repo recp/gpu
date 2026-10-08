@@ -19,7 +19,7 @@
 
 #include <gpu/gpu.h>
 
-typedef struct ApiMemory {
+typedef struct GPUMemoryApi {
   GPUResult
   (*getBufferRequirements)(GPUDevice                 *device,
                            const GPUBufferCreateInfo *info,
@@ -71,6 +71,6 @@ typedef struct ApiMemory {
                          GPUTexture                **outTexture);
 
   GPUResult (*submitSparse)(GPUQueue *queue, const GPUQueueSparseSubmitInfo *info);
-} ApiMemory;
+} GPUMemoryApi;
 
 #endif /* gpu_gpudef_memory_h */

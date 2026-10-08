@@ -22,7 +22,7 @@ GPUResult
 GPUGetSubgroupMatrixPropertiesEXT(const GPUAdapter               *adapter,
                                   uint32_t                       *inoutPropertyCount,
                                   GPUSubgroupMatrixPropertiesEXT *outProperties) {
-  Api    *api;
+  GPUApi *api;
 
   if (!adapter || !inoutPropertyCount) {
     return GPU_ERROR_INVALID_ARGUMENT;

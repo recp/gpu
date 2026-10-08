@@ -73,7 +73,7 @@ vk__hasExtension(const VkExtensionProperties *extensions,
 
 static GPUInstance*
 vk__instanceFail(GPUInstance   *gpuInst,
-                 InstanceVk    *gpuInstVk,
+                 GPUInstanceVk *gpuInstVk,
                  VkResult       result,
                  const char    *message) {
   if (message) {
@@ -119,14 +119,14 @@ vk__apiVersion(void) {
 
 GPU_HIDE
 GPUInstance*
-vk_createInstance(Api                         *__restrict api,
+vk_createInstance(GPUApi                      *__restrict api,
                   const GPUInstanceCreateInfo *__restrict info) {
   const char            *enabledExtensions[16] = {0};
 #if GPU_BUILD_WITH_VALIDATION
   char                  *validationLayers[]    = {"VK_LAYER_KHRONOS_validation"};
 #endif
   GPUInstance           *gpuInst;
-  InstanceVk            *gpuInstVk;
+  GPUInstanceVk         *gpuInstVk;
   VkExtensionProperties *instanceExtensions;
 #if GPU_BUILD_WITH_VALIDATION
   VkLayerProperties     *instanceLayers;
@@ -460,8 +460,8 @@ vk_createInstance(Api                         *__restrict api,
 
 GPU_HIDE
 void
-vk_destroyInstance(Api    * __restrict api, GPUInstance * __restrict inst) {
-  InstanceVk    *instVk;
+vk_destroyInstance(GPUApi * __restrict api, GPUInstance * __restrict inst) {
+  GPUInstanceVk *instVk;
 
   GPU__UNUSED(api);
 
@@ -492,7 +492,7 @@ vk_destroyInstance(Api    * __restrict api, GPUInstance * __restrict inst) {
 
 GPU_HIDE
 void
-vk_initInstance(ApiInstance    *api) {
+vk_initInstance(GPUInstanceApi *api) {
   api->createInstance  = vk_createInstance;
   api->destroyInstance = vk_destroyInstance;
 }

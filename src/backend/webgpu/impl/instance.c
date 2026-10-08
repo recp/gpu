@@ -18,14 +18,14 @@
 #include "../impl.h"
 
 static GPUInstance*
-webgpu_createInstance(Api                         *api,
+webgpu_createInstance(GPUApi                      *api,
                       const GPUInstanceCreateInfo *info) {
   WGPUInstanceDescriptor  descriptor     = WGPU_INSTANCE_DESCRIPTOR_INIT;
 #if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
   WGPUInstanceLimits      requiredLimits = WGPU_INSTANCE_LIMITS_INIT;
   WGPUInstanceFeatureName requiredFeatures[2];
 #endif
-  InstanceWebGPU         *native;
+  GPUInstanceWebGPU      *native;
   GPUInstance            *instance;
 
   GPU__UNUSED(api);
@@ -74,8 +74,8 @@ webgpu_createInstance(Api                         *api,
 }
 
 static void
-webgpu_destroyInstance(Api    *api, GPUInstance *instance) {
-  InstanceWebGPU    *native;
+webgpu_destroyInstance(GPUApi *api, GPUInstance *instance) {
+  GPUInstanceWebGPU *native;
 
   GPU__UNUSED(api);
   native = webgpuInstance(instance);
@@ -92,7 +92,7 @@ webgpu_destroyInstance(Api    *api, GPUInstance *instance) {
 }
 
 void
-webgpu_initInstance(ApiInstance    *api) {
+webgpu_initInstance(GPUInstanceApi *api) {
   api->createInstance  = webgpu_createInstance;
   api->destroyInstance = webgpu_destroyInstance;
 }

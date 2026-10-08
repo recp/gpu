@@ -128,7 +128,7 @@ validate_reflection(const GPUShaderReflection *reflection) {
 }
 
 static int
-validate_surface(const ShaderPTXParamInfo    *param,
+validate_surface(const GPUShaderPTXParamInfo *param,
                  uint32_t                     binding,
                  uint32_t                     dataOffset) {
   return param && param->kind == GPUShaderPTXParamSurface
@@ -143,9 +143,9 @@ validate_surface(const ShaderPTXParamInfo    *param,
 }
 
 static int
-validate_params(const ShaderPTXInfo    *info) {
-  const ShaderPTXEntryInfo    *mutate;
-  const ShaderPTXEntryInfo    *read;
+validate_params(const GPUShaderPTXInfo *info) {
+  const GPUShaderPTXEntryInfo *mutate;
+  const GPUShaderPTXEntryInfo *read;
   uint32_t                     i;
 
   if (!info || info->entryCount != 2u || info->paramCount != 11u) {
@@ -199,7 +199,7 @@ validate_source(const GPUShaderLibrary *library) {
 int
 validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
   GPUDevice         device;
-  Api               api;
+  GPUApi            api;
   GPUShaderLibrary *library;
   GPUResult         result;
   int               valid;

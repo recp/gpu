@@ -20,7 +20,7 @@
 
 static int
 validate_contract(const GPUShaderLibrary *library) {
-  const ShaderPTXInfo    *info;
+  const GPUShaderPTXInfo *info;
   const char             *ptx;
 
   if (!library || library->_reflection.resourceCount != 1u
@@ -76,7 +76,7 @@ validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
   GPUDevice         device;
   GPUAdapter        adapter;
   GPUInstance       instance;
-  Api               api;
+  GPUApi            api;
   GPUResult         result;
   int               valid;
 

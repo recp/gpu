@@ -102,8 +102,8 @@ dx12_sampledFormat(GPUFormat format) {
 static void
 dx12_queryFormatCapabilities(const GPUAdapter *adapter) {
   D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS levels;
-  AdapterDX12                                  *adapterDX12;
-  InstanceDX12                                 *instanceDX12;
+  GPUAdapterDX12                               *adapterDX12;
+  GPUInstanceDX12                              *instanceDX12;
   ID3D12Device                                 *device;
   GPUFormatCapabilities                        *caps;
   HRESULT                                       result;
@@ -213,7 +213,7 @@ void
 dx12_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
                            GPUFormat                         format,
                            GPUFormatCapabilities *__restrict outCaps) {
-  AdapterDX12    *adapterDX12;
+  GPUAdapterDX12 *adapterDX12;
 
   adapterDX12 = adapter ? adapter->_priv : NULL;
 

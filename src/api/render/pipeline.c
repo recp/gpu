@@ -197,7 +197,7 @@ metalVertexResourceSlotMask(const GPURenderPipelineCreateInfo *info,
 }
 
 static GPUResult
-validateMetalVertexBindings(const Api                         *api,
+validateMetalVertexBindings(const GPUApi                      *api,
                             const GPURenderPipelineCreateInfo *info) {
   GPUResult result;
   uint32_t  resourceSlotMask;
@@ -281,10 +281,10 @@ vertexStateIsValid(const GPUVertexState *state) {
   return true;
 }
 
-static VertexDescriptor*
-createVertexDescriptorFromState(Api                  *api,
+static GPUVertexDescriptor*
+createVertexDescriptorFromState(GPUApi               *api,
                                 const GPUVertexState *state) {
-  VertexDescriptor            *desc;
+  GPUVertexDescriptor         *desc;
   const GPUVertexBufferLayout *layout;
   const GPUVertexAttribute    *attr;
   uint32_t                     i;
@@ -488,7 +488,7 @@ validateMeshInterface(const GPUDevice                   *device,
                       const GPUMeshPipelineEXT          *mesh,
                       uint32_t                           payloadSizeBytes) {
   uint32_t             workgroupSize[3];
-  const MeshLimits    *limits;
+  const GPUMeshLimits *limits;
   uint32_t             topology;
   uint32_t             maxVertices;
   uint32_t             maxPrimitives;
@@ -740,7 +740,7 @@ pipelineInfoIsSupported(const GPURenderPipelineCreateInfo *info,
 
 GPU_HIDE
 GPURenderPipeline*
-createRenderPipelineDesc(Api    *api, GPUFormat pixelFormat, bool mesh) {
+createRenderPipelineDesc(GPUApi *api, GPUFormat pixelFormat, bool mesh) {
   if (!api || !api->render.newRenderPipeline)
     return NULL;
 
@@ -748,10 +748,10 @@ createRenderPipelineDesc(Api    *api, GPUFormat pixelFormat, bool mesh) {
 }
 
 GPU_HIDE
-RenderPipelineState*
+GPURenderPipelineState*
 compileRenderPipelineState(GPUDevice         *__restrict device,
                            GPURenderPipeline *__restrict pipeline) {
-  Api    *api;
+  GPUApi *api;
 
   if (!device || !pipeline || !(api = deviceApi(device))
       || pipeline->_api != api || !api->render.newRenderState)
@@ -763,9 +763,9 @@ compileRenderPipelineState(GPUDevice         *__restrict device,
 GPU_HIDE
 void
 pipelineSetFunction(GPURenderPipeline *__restrict pipeline,
-                    ShaderFunction    *__restrict func,
-                    FunctionType                  functionType) {
-  Api    *api;
+                    GPUShaderFunction *__restrict func,
+                    GPUFunctionType               functionType) {
+  GPUApi *api;
 
   if (!pipeline || !(api = pipeline->_api) || !api->render.setFunction)
     return;
@@ -778,7 +778,7 @@ void
 pipelineSetColorFormat(GPURenderPipeline *__restrict pipeline,
                        uint32_t                      index,
                        GPUFormat                     pixelFormat) {
-  Api    *api;
+  GPUApi *api;
 
   if (!pipeline || !(api = pipeline->_api) || !api->render.colorFormat)
     return;
@@ -790,7 +790,7 @@ GPU_HIDE
 void
 pipelineSetDepthFormat(GPURenderPipeline *__restrict pipeline,
                        GPUFormat                     pixelFormat) {
-  Api    *api;
+  GPUApi *api;
 
   if (!pipeline || !(api = pipeline->_api) || !api->render.depthFormat)
     return;
@@ -802,7 +802,7 @@ GPU_HIDE
 void
 pipelineSetStencilFormat(GPURenderPipeline *__restrict pipeline,
                          GPUFormat                     pixelFormat) {
-  Api    *api;
+  GPUApi *api;
 
   if (!pipeline || !(api = pipeline->_api) || !api->render.stencilFormat)
     return;
@@ -814,7 +814,7 @@ GPU_HIDE
 void
 pipelineSetSampleCount(GPURenderPipeline *__restrict pipeline,
                        uint32_t                      sampleCount) {
-  Api    *api;
+  GPUApi *api;
 
   if (!pipeline || !(api = pipeline->_api) || !api->render.sampleCount)
     return;
@@ -827,18 +827,18 @@ GPUResult
 createRenderPipeline(GPUDevice                         *__restrict device,
                      const GPURenderPipelineCreateInfo *__restrict info,
                      GPURenderPipeline                **__restrict outPipeline) {
-  PipelineCacheKey                          cacheKey;
+  GPUPipelineCacheKey                       cacheKey;
   const GPUPipelineConstants               *constants;
-  Api                                      *api;
-  RenderPipelineState                      *state;
+  GPUApi                                   *api;
+  GPURenderPipelineState                   *state;
   GPURenderPipeline                        *pipeline;
   const GPUMeshPipelineEXT                 *mesh;
   const GPUIntersectionFunctionPipelineEXT *intersection;
-  VertexDescriptor                         *vertexDesc;
-  ShaderFunction                           *vertexFunc;
-  ShaderFunction                           *fragmentFunc;
-  ShaderFunction                           *taskFunc;
-  ShaderFunction                           *meshFunc;
+  GPUVertexDescriptor                      *vertexDesc;
+  GPUShaderFunction                        *vertexFunc;
+  GPUShaderFunction                        *fragmentFunc;
+  GPUShaderFunction                        *taskFunc;
+  GPUShaderFunction                        *meshFunc;
   GPUFormat                                 colorFormat;
   GPUResult                                 result;
   uint32_t                                  i;
@@ -1148,7 +1148,7 @@ ready:
 GPU_EXPORT
 void
 GPUDestroyRenderPipeline(GPURenderPipeline *pipeline) {
-  Api    *api;
+  GPUApi *api;
 
   if (!pipeline)
     return;
@@ -1171,7 +1171,7 @@ GPUCreateRenderPipeline(GPUDevice                         *device,
                         const GPURenderPipelineCreateInfo *info,
                         GPURenderPipeline                **outPipeline) {
   GPURenderPipelineCreateInfo snapshot;
-  PreparedConstants           prepared;
+  GPUPreparedConstants        prepared;
   GPUResult                   result;
 
   if (!outPipeline) {

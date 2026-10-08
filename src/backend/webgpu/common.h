@@ -70,39 +70,39 @@ enum {
 };
 
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-typedef struct WebGPUPipelineError {
-  struct WebGPUPipelineError    *previous;
+typedef struct GPUWebGPUPipelineError {
+  struct GPUWebGPUPipelineError *previous;
   GPUDevice                    *device;
   GPUDeviceErrorType            type;
   GPUResult                     result;
   char                          message[512];
-} WebGPUPipelineError;
+} GPUWebGPUPipelineError;
 #endif
 
-typedef struct InstanceWebGPU {
+typedef struct GPUInstanceWebGPU {
   WGPUInstance instance;
 #if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
   bool         timedWaitAny;
 #endif
-} InstanceWebGPU;
+} GPUInstanceWebGPU;
 
-typedef struct AdapterWebGPU {
+typedef struct GPUAdapterWebGPU {
   WGPUAdapter adapter;
   char        name[128];
-} AdapterWebGPU;
+} GPUAdapterWebGPU;
 
-typedef struct SurfaceWebGPU {
+typedef struct GPUSurfaceWebGPU {
   WGPUSurface surface;
   void       *ownedPlatformHandle;
   uint32_t    formats[GPU_WEBGPU_MAX_SURFACE_FORMATS];
   uint32_t    presentModes[GPU_WEBGPU_MAX_PRESENT_MODES];
   uint32_t    formatCount;
   uint32_t    presentModeCount;
-} SurfaceWebGPU;
+} GPUSurfaceWebGPU;
 
-typedef struct SwapchainWebGPU    SwapchainWebGPU;
+typedef struct GPUSwapchainWebGPU GPUSwapchainWebGPU;
 
-typedef struct CommandWebGPU {
+typedef struct GPUCommandWebGPU {
   WGPUCommandEncoder                   encoder;
   WGPURenderPassEncoder                renderEncoder;
   WGPUComputePassEncoder               computeEncoder;
@@ -110,9 +110,9 @@ typedef struct CommandWebGPU {
   WGPUBuffer                           queryResolveScratch;
   WGPUBuffer                           pushConstantBuffer;
   WGPUBindGroup                        pushConstantGroup;
-  SwapchainWebGPU                     *present;
+  GPUSwapchainWebGPU                  *present;
   GPUCommandBuffer                     command;
-  RenderPassDesc                       renderPass;
+  GPURenderPassDesc                    renderPass;
   GPURenderPassEncoder                 render;
   GPUComputePassEncoder                compute;
   GPUTransferPassEncoder               copy;
@@ -128,9 +128,9 @@ typedef struct CommandWebGPU {
   bool                                 copyDebugGroup;
   WGPURenderPassColorAttachment        colorAttachments[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   WGPURenderPassDepthStencilAttachment depthStencilAttachment;
-} CommandWebGPU;
+} GPUCommandWebGPU;
 
-typedef struct DeviceWebGPU {
+typedef struct GPUDeviceWebGPU {
   WGPUDevice          device;
   WGPUQueue           queue;
   WGPUBindGroupLayout pushConstantLayout;
@@ -148,7 +148,7 @@ typedef struct DeviceWebGPU {
 #endif
   WGPULimits          limits;
   GPUQueue            queueHandle;
-  CommandWebGPU       commands[GPU_WEBGPU_COMMAND_SLOT_COUNT];
+  GPUCommandWebGPU    commands[GPU_WEBGPU_COMMAND_SLOT_COUNT];
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
   WGPUSubmissionIndex completionSubmissions[GPU_WEBGPU_COMMAND_SLOT_COUNT];
   uint32_t            completionHead;
@@ -157,34 +157,34 @@ typedef struct DeviceWebGPU {
   bool                completionWorkerStarted;
   bool                stoppingCompletionWorker;
 #endif
-} DeviceWebGPU;
+} GPUDeviceWebGPU;
 
-typedef struct PipelineLayoutWebGPU {
+typedef struct GPUPipelineLayoutWebGPU {
   WGPUPipelineLayout layout;
   WGPUBindGroup      automaticGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t           automaticGroupMask;
   uint32_t           pushConstantSizeBytes;
-} PipelineLayoutWebGPU;
+} GPUPipelineLayoutWebGPU;
 
-typedef struct BindGroupLayoutWebGPU {
+typedef struct GPUBindGroupLayoutWebGPU {
   WGPUBindGroupLayout layout;
   WGPUSampler        *immutableSamplers;
   uint32_t            immutableSamplerCount;
   uint32_t            nativeEntryCount;
-} BindGroupLayoutWebGPU;
+} GPUBindGroupLayoutWebGPU;
 
-typedef struct RenderPipelineWebGPU {
+typedef struct GPURenderPipelineWebGPU {
   WGPURenderPipeline      pipeline;
-  PipelineLayoutWebGPU    layout;
-} RenderPipelineWebGPU;
+  GPUPipelineLayoutWebGPU layout;
+} GPURenderPipelineWebGPU;
 
-typedef struct ComputePipelineWebGPU {
-  ComputePipelineState    base;
+typedef struct GPUComputePipelineWebGPU {
+  GPUComputePipelineState base;
   WGPUComputePipeline     pipeline;
-  PipelineLayoutWebGPU     layout;
-} ComputePipelineWebGPU;
+  GPUPipelineLayoutWebGPU  layout;
+} GPUComputePipelineWebGPU;
 
-struct SwapchainWebGPU {
+struct GPUSwapchainWebGPU {
   WGPUSurface       surface;
   WGPUDevice        device;
   WGPUTexture       currentTexture;
@@ -217,53 +217,53 @@ webgpuCreatePipelineLayout(GPUDevice               *device,
                            GPUPipelineLayout       *logicalLayout,
                            uint32_t                 requiredGroupMask,
                            uint32_t                 automaticGroupMask,
-                           PipelineLayoutWebGPU    *outLayout);
+                           GPUPipelineLayoutWebGPU *outLayout);
 
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
 GPU_HIDE
 void
 webgpuBeginPipelineError(GPUDevice              *device,
-                            WebGPUPipelineError    *error);
+                            GPUWebGPUPipelineError *error);
 
 GPU_HIDE
 GPUResult
-webgpuEndPipelineError(WebGPUPipelineError    *error);
+webgpuEndPipelineError(GPUWebGPUPipelineError *error);
 #endif
 
 GPUResult
-webgpuInitPushConstants(DeviceWebGPU    *device);
+webgpuInitPushConstants(GPUDeviceWebGPU *device);
 
 void
-webgpuDestroyPushConstants(DeviceWebGPU    *device);
+webgpuDestroyPushConstants(GPUDeviceWebGPU *device);
 
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
 bool
-webgpuStartCompletionWorker(DeviceWebGPU    *device);
+webgpuStartCompletionWorker(GPUDeviceWebGPU *device);
 
 void
-webgpuQueueCompletion(DeviceWebGPU       *device,
+webgpuQueueCompletion(GPUDeviceWebGPU    *device,
                       WGPUSubmissionIndex submission);
 
 void
-webgpuStopCompletionWorker(DeviceWebGPU    *device);
+webgpuStopCompletionWorker(GPUDeviceWebGPU *device);
 #endif
 
 bool
-webgpuUploadPushConstants(CommandWebGPU    *command,
+webgpuUploadPushConstants(GPUCommandWebGPU *command,
                           const void       *data,
                           uint32_t          sizeBytes,
                           uint32_t         *outDynamicOffset);
 
 void
-webgpuDestroyPipelineLayout(PipelineLayoutWebGPU    *layout);
+webgpuDestroyPipelineLayout(GPUPipelineLayoutWebGPU *layout);
 
 void
 webgpuBindRenderAutomaticGroups(GPURenderPassEncoder          *pass,
-                                const PipelineLayoutWebGPU    *layout);
+                                const GPUPipelineLayoutWebGPU *layout);
 
 void
 webgpuBindComputeAutomaticGroups(GPUComputePassEncoder         *pass,
-                                 const PipelineLayoutWebGPU    *layout);
+                                 const GPUPipelineLayoutWebGPU *layout);
 
 static GPU_INLINE WGPUStringView
 webgpuString(const char *text) {
@@ -287,32 +287,32 @@ webgpuStringSize(const void *text, uint64_t size) {
   return result;
 }
 
-static GPU_INLINE InstanceWebGPU*
+static GPU_INLINE GPUInstanceWebGPU*
 webgpuInstance(const GPUInstance *instance) {
   return instance ? instance->_priv : NULL;
 }
 
-static GPU_INLINE AdapterWebGPU*
+static GPU_INLINE GPUAdapterWebGPU*
 webgpuAdapter(const GPUAdapter *adapter) {
   return adapter ? adapter->_priv : NULL;
 }
 
-static GPU_INLINE DeviceWebGPU*
+static GPU_INLINE GPUDeviceWebGPU*
 webgpuDevice(const GPUDevice *device) {
   return device ? device->_priv : NULL;
 }
 
-static GPU_INLINE SurfaceWebGPU*
+static GPU_INLINE GPUSurfaceWebGPU*
 webgpuSurface(const GPUSurface *surface) {
   return surface ? surface->_priv : NULL;
 }
 
-static GPU_INLINE SwapchainWebGPU*
+static GPU_INLINE GPUSwapchainWebGPU*
 webgpuSwapchain(const GPUSwapchain *swapchain) {
   return swapchain ? swapchain->_priv : NULL;
 }
 
-static GPU_INLINE CommandWebGPU*
+static GPU_INLINE GPUCommandWebGPU*
 webgpuCommand(const GPUCommandBuffer *cmdb) {
   return cmdb ? cmdb->_priv : NULL;
 }

@@ -31,7 +31,7 @@ typedef struct ExecutionGraphDX12 {
 } ExecutionGraphDX12;
 
 typedef struct ExecutionGraphInstanceDX12 {
-  CommandBufferDX12        *recordingCommandBuffer;
+  GPUCommandBufferDX12     *recordingCommandBuffer;
   ID3D12Resource           *backingMemory;
   D3D12_NODE_CPU_INPUT     *cpuInputs;
   D3D12_GPU_VIRTUAL_ADDRESS backingAddress;
@@ -39,9 +39,9 @@ typedef struct ExecutionGraphInstanceDX12 {
   bool                      initialized;
 } ExecutionGraphInstanceDX12;
 
-struct ExecutionGraphInputChunkDX12 {
+struct GPUExecutionGraphInputChunkDX12 {
   ID3D12Resource                         *resource;
-  struct ExecutionGraphInputChunkDX12    *next;
+  struct GPUExecutionGraphInputChunkDX12 *next;
   uint8_t                                *mapped;
   D3D12_GPU_VIRTUAL_ADDRESS               address;
   uint64_t                                capacity;
@@ -112,11 +112,11 @@ dx12_createExecutionGraph(GPUDevice                            *device,
   D3D12_STATE_OBJECT_DESC              stateDesc = {0};
   D3D12_WORK_GRAPH_MEMORY_REQUIREMENTS requirements = {0};
   DX12ShaderCode                       libraryCode = {0};
-  ShaderExecutionGraphEntryInfo        entry;
+  GPUShaderExecutionGraphEntryInfo     entry;
   wchar_t                              graphName[256];
   uint64_t                             rootKey[2];
-  DeviceDX12                          *deviceDX12;
-  ShaderLibraryDX12                   *library;
+  GPUDeviceDX12                       *deviceDX12;
+  GPUShaderLibraryDX12                *library;
   ExecutionGraphDX12                  *native;
   uint64_t                             entryMask;
   uint32_t                             entryCount;
@@ -271,7 +271,7 @@ dx12_destroyExecutionGraph(GPUExecutionGraphEXT *graph) {
 }
 
 static GPUResult
-dx12_createGraphBuffer(DeviceDX12           *device,
+dx12_createGraphBuffer(GPUDeviceDX12        *device,
                        uint64_t              sizeBytes,
                        D3D12_HEAP_TYPE       heapType,
                        D3D12_RESOURCE_FLAGS  flags,
@@ -311,7 +311,7 @@ dx12_createGraphBuffer(DeviceDX12           *device,
 }
 
 static bool
-dx12_graphInputOffset(ExecutionGraphInputChunkDX12    *chunk,
+dx12_graphInputOffset(GPUExecutionGraphInputChunkDX12 *chunk,
                       uint64_t                         alignment,
                       uint64_t                         sizeBytes,
                       uint64_t                        *outOffset) {
@@ -350,10 +350,10 @@ dx12_reserveGraphInput(GPUComputePassEncoder     *pass,
                        void                     **outMapped,
                        D3D12_GPU_VIRTUAL_ADDRESS *outAddress) {
   D3D12_RANGE                      noRead = {0};
-  CommandBufferDX12               *command;
+  GPUCommandBufferDX12            *command;
   GPUDevice                       *device;
-  DeviceDX12                      *deviceDX12;
-  ExecutionGraphInputChunkDX12    *chunk;
+  GPUDeviceDX12                   *deviceDX12;
+  GPUExecutionGraphInputChunkDX12 *chunk;
   uint64_t                         capacity;
   uint64_t                         offset;
   GPUResult                        result;
@@ -451,7 +451,7 @@ static GPUResult
 dx12_createExecutionGraphInstance(GPUDevice                                    *device,
                                   const GPUExecutionGraphInstanceCreateInfoEXT *info,
                                   GPUExecutionGraphInstanceEXT                 *instance) {
-  DeviceDX12                    *deviceDX12;
+  GPUDeviceDX12                 *deviceDX12;
   ExecutionGraphDX12            *graph;
   ExecutionGraphInstanceDX12    *native;
   GPUResult                      result;
@@ -515,7 +515,7 @@ static GPUResult
 dx12_getExecutionGraphEntry(const GPUExecutionGraphEXT *graph,
                             const char                 *entryName,
                             GPUExecutionGraphEntryEXT  *outEntry) {
-  ShaderExecutionGraphEntryInfo    reflected;
+  GPUShaderExecutionGraphEntryInfo reflected;
   D3D12_NODE_ID                    node = {0};
   wchar_t                          name[256];
   ExecutionGraphDX12              *native;
@@ -549,7 +549,7 @@ dx12_getExecutionGraphEntry(const GPUExecutionGraphEXT *graph,
 static void
 dx12_bindExecutionGraph(GPUComputePassEncoder *pass,
                         GPUExecutionGraphEXT  *graph) {
-  ComputeEncoderDX12    *encoder;
+  GPUComputeEncoderDX12 *encoder;
   ExecutionGraphDX12    *native;
   bool                   rootChanged;
 
@@ -596,7 +596,7 @@ static bool
 dx12_trackGraphInitialization(GPUComputePassEncoder         *pass,
                               GPUExecutionGraphInstanceEXT  *instance,
                               ExecutionGraphInstanceDX12    *native) {
-  CommandBufferDX12    *command;
+  GPUCommandBufferDX12 *command;
 
   if (!pass || !instance || !native || native->initialized) {
     return false;
@@ -626,7 +626,7 @@ static bool
 dx12_setExecutionGraphInstance(GPUComputePassEncoder        *pass,
                                GPUExecutionGraphInstanceEXT *instance) {
   D3D12_SET_PROGRAM_DESC         setProgram = {0};
-  ComputeEncoderDX12            *encoder;
+  GPUComputeEncoderDX12         *encoder;
   ExecutionGraphDX12            *graph;
   ExecutionGraphInstanceDX12    *native;
 
@@ -663,7 +663,7 @@ dx12_dispatchExecutionGraph(GPUComputePassEncoder           *pass,
                             uint32_t                         inputCount,
                             const GPUExecutionGraphInputEXT *inputs) {
   D3D12_DISPATCH_GRAPH_DESC      desc = {0};
-  ComputeEncoderDX12            *encoder;
+  GPUComputeEncoderDX12         *encoder;
   ExecutionGraphDX12            *graph;
   ExecutionGraphInstanceDX12    *native;
   uint32_t                       i;
@@ -710,13 +710,13 @@ dx12_dispatchExecutionGraphBuffer(GPUComputePassEncoder                 *pass,
                                   uint32_t                               inputCount,
                                   const GPUExecutionGraphBufferInputEXT *inputs) {
   D3D12_DISPATCH_GRAPH_DESC      desc = {0};
-  ComputeEncoderDX12            *encoder;
+  GPUComputeEncoderDX12         *encoder;
   ExecutionGraphDX12            *graph;
   ExecutionGraphInstanceDX12    *native;
   D3D12_MULTI_NODE_GPU_INPUT    *multiInput;
   D3D12_NODE_GPU_INPUT          *gpuInputs;
-  BufferDX12                    *buffer;
-  BufferDX12                    *inputBuffer;
+  GPUBufferDX12                 *buffer;
+  GPUBufferDX12                 *inputBuffer;
   D3D12_GPU_VIRTUAL_ADDRESS      inputAddress;
   uint64_t                       entryOffset;
   uint64_t                       tableSize;
@@ -783,11 +783,11 @@ dx12_dispatchExecutionGraphBuffer(GPUComputePassEncoder                 *pass,
 
 GPU_HIDE
 void
-dx12_resetGraphInitializations(CommandBufferDX12    *command) {
+dx12_resetGraphInitializations(GPUCommandBufferDX12 *command) {
 #if GPU_DX12_HAS_EXECUTION_GRAPHS
   GPUExecutionGraphInstanceEXT    *instance;
   ExecutionGraphInstanceDX12      *native;
-  ExecutionGraphInputChunkDX12    *chunk;
+  GPUExecutionGraphInputChunkDX12 *chunk;
   uint32_t                         i;
 
   if (!command) {
@@ -817,10 +817,10 @@ dx12_resetGraphInitializations(CommandBufferDX12    *command) {
 
 GPU_HIDE
 void
-dx12_destroyGraphInputScratch(CommandBufferDX12    *command) {
+dx12_destroyGraphInputScratch(GPUCommandBufferDX12 *command) {
 #if GPU_DX12_HAS_EXECUTION_GRAPHS
-  ExecutionGraphInputChunkDX12    *chunk;
-  ExecutionGraphInputChunkDX12    *next;
+  GPUExecutionGraphInputChunkDX12 *chunk;
+  GPUExecutionGraphInputChunkDX12 *next;
 
   chunk = command ? command->graphInputChunks : NULL;
 
@@ -847,7 +847,7 @@ dx12_destroyGraphInputScratch(CommandBufferDX12    *command) {
 
 GPU_HIDE
 void
-dx12_submitGraphInitializations(CommandBufferDX12    *command) {
+dx12_submitGraphInitializations(GPUCommandBufferDX12 *command) {
 #if GPU_DX12_HAS_EXECUTION_GRAPHS
   GPUExecutionGraphInstanceEXT  *instance;
   ExecutionGraphInstanceDX12    *native;
@@ -877,7 +877,7 @@ dx12_submitGraphInitializations(CommandBufferDX12    *command) {
 
 GPU_HIDE
 void
-dx12_initExecutionGraph(ApiExecutionGraph    *api) {
+dx12_initExecutionGraph(GPUExecutionGraphApi *api) {
 #if GPU_DX12_HAS_EXECUTION_GRAPHS
   api->create          = dx12_createExecutionGraph;
   api->destroy         = dx12_destroyExecutionGraph;

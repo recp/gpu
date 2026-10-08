@@ -23,7 +23,7 @@ extern "C" {
 #include <gpu/common.h>
 #include <gpu/gpu.h>
 
-typedef struct ApiTexture {
+typedef struct GPUTextureApi {
   GPUResult
   (*create)(GPUDevice                  *__restrict device,
             const GPUTextureCreateInfo *__restrict info,
@@ -44,7 +44,7 @@ typedef struct ApiTexture {
            const GPUTextureWriteRegion *__restrict region,
            const void                  *__restrict data,
            uint64_t                                sizeBytes);
-} ApiTexture;
+} GPUTextureApi;
 
 #ifdef __cplusplus
 }

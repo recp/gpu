@@ -19,7 +19,7 @@
 
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
 static void
-webgpu_completionLock(DeviceWebGPU    *device) {
+webgpu_completionLock(GPUDeviceWebGPU *device) {
 #  if defined(_WIN32) || defined(WIN32)
   EnterCriticalSection(&device->completionLock);
 #  else
@@ -28,7 +28,7 @@ webgpu_completionLock(DeviceWebGPU    *device) {
 }
 
 static void
-webgpu_completionUnlock(DeviceWebGPU    *device) {
+webgpu_completionUnlock(GPUDeviceWebGPU *device) {
 #  if defined(_WIN32) || defined(WIN32)
   LeaveCriticalSection(&device->completionLock);
 #  else
@@ -37,7 +37,7 @@ webgpu_completionUnlock(DeviceWebGPU    *device) {
 }
 
 static void
-webgpu_completionSignal(DeviceWebGPU    *device) {
+webgpu_completionSignal(GPUDeviceWebGPU *device) {
 #  if defined(_WIN32) || defined(WIN32)
   WakeConditionVariable(&device->completionCondition);
 #  else
@@ -46,7 +46,7 @@ webgpu_completionSignal(DeviceWebGPU    *device) {
 }
 
 static void
-webgpu_completionWait(DeviceWebGPU    *device) {
+webgpu_completionWait(GPUDeviceWebGPU *device) {
 #  if defined(_WIN32) || defined(WIN32)
   SleepConditionVariableCS(&device->completionCondition,
                            &device->completionLock,
@@ -57,7 +57,7 @@ webgpu_completionWait(DeviceWebGPU    *device) {
 }
 
 static void
-webgpu_completionLoop(DeviceWebGPU    *device) {
+webgpu_completionLoop(GPUDeviceWebGPU *device) {
   WGPUSubmissionIndex submission;
 
   for (;;) {
@@ -100,7 +100,7 @@ webgpu_completionMain(void *context) {
 #  endif
 
 bool
-webgpuStartCompletionWorker(DeviceWebGPU    *device) {
+webgpuStartCompletionWorker(GPUDeviceWebGPU *device) {
   if (!device || !device->device) {
     return false;
   }
@@ -144,7 +144,7 @@ webgpuStartCompletionWorker(DeviceWebGPU    *device) {
 }
 
 void
-webgpuQueueCompletion(DeviceWebGPU       *device,
+webgpuQueueCompletion(GPUDeviceWebGPU    *device,
                       WGPUSubmissionIndex submission) {
   if (!device || !device->completionWorkerStarted) {
     return;
@@ -163,7 +163,7 @@ webgpuQueueCompletion(DeviceWebGPU       *device,
 }
 
 void
-webgpuStopCompletionWorker(DeviceWebGPU    *device) {
+webgpuStopCompletionWorker(GPUDeviceWebGPU *device) {
   if (!device || !device->completionWorkerStarted) {
     return;
   }

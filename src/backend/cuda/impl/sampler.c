@@ -17,14 +17,14 @@
 #include "../common.h"
 
 static GPUResult
-cuda_createSampler(Api             *__restrict api,
+cuda_createSampler(GPUApi          *__restrict api,
                    GPUDevice       *__restrict device,
                    const GPUSamplerCreateInfo *info,
                    bool                        staticIfSupported,
                    GPUSampler                **outSampler) {
   CUDA_TEXTURE_DESC         desc;
   const GPUSamplerLODClamp *lod;
-  SamplerCuda              *native;
+  GPUSamplerCuda           *native;
   GPUSampler               *sampler;
 
   GPU__UNUSED(api);
@@ -52,7 +52,7 @@ cuda_createSampler(Api             *__restrict api,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native         = (SamplerCuda *)(sampler + 1);
+  native         = (GPUSamplerCuda *)(sampler + 1);
   native->desc   = desc;
   sampler->_priv = native;
   *outSampler    = sampler;
@@ -66,7 +66,7 @@ cuda_destroySampler(GPUSampler *__restrict sampler) {
 }
 
 void
-cuda_initSampler(ApiSampler    *api) {
+cuda_initSampler(GPUSamplerApi *api) {
   api->createSampler  = cuda_createSampler;
   api->destroySampler = cuda_destroySampler;
 }

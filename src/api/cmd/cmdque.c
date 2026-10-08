@@ -100,7 +100,7 @@ gpu_newCommandBuffer(GPUQueue         *__restrict cmdq,
                      const char       *__restrict label,
                      void             *__restrict sender,
                      GPUCommandBufferCompletionFn oncomplete) {
-  Api              *api;
+  GPUApi           *api;
   GPUCommandBuffer *cmdb;
 
   if (!cmdq)
@@ -127,8 +127,8 @@ prepareQueueSubmit(GPUQueue                *cmdq,
                    uint32_t                 commandBufferCount,
                    GPUCommandBuffer *const *commandBuffers,
                    GPUFence                *fence,
-                   Api                    **outApi) {
-  Api              *api;
+                   GPUApi                 **outApi) {
+  GPUApi           *api;
   GPUDevice        *device;
   GPUFence         *transientFence;
   GPUCommandBuffer *lastCmdb;
@@ -297,7 +297,7 @@ GPUQueue*
 GPUGetQueue(GPUDevice *__restrict device,
             GPUQueueFlagBits      bits,
             uint32_t              index) {
-  Api    *api;
+  GPUApi *api;
 
   if (!device || bits == 0) {
     return NULL;
@@ -335,7 +335,7 @@ GPUAcquireCommandBuffer(GPUQueue          *__restrict cmdq,
 GPU_EXPORT
 GPUResult
 GPUDiscardCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
-  Api    *api;
+  GPUApi *api;
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder
       || cmdb->_pipelineStatsQuery) {
@@ -356,7 +356,7 @@ void
 GPUSetCommandBufferCompletionHandler(GPUCommandBuffer *__restrict cmdb,
                                      void             *__restrict sender,
                                      GPUCommandBufferCompletionFn oncomplete) {
-  Api    *api;
+  GPUApi *api;
 
   if (!cmdb || cmdb->_submitted)
     return;
@@ -393,7 +393,7 @@ GPU_EXPORT
 GPUResult
 GPUQueueSubmit(GPUQueue                 *__restrict cmdq,
                const GPUQueueSubmitInfo *__restrict info) {
-  Api       *api;
+  GPUApi    *api;
   GPUResult  result;
   GPUResult  commitResult;
   uint32_t   i;
@@ -448,7 +448,7 @@ GPUQueueSubmitEx(GPUQueue                   *__restrict cmdq,
                  const GPUQueueSubmitExInfo *__restrict info) {
   GPUQueueSubmitInfo   baseInfo;
   GPUSemaphore        *semaphore;
-  Api                 *api;
+  GPUApi              *api;
   GPUPipelineStageMask validStages;
   GPUResult            result;
   uint32_t             i;
@@ -697,7 +697,7 @@ GPUResult
 GPUCreateSemaphore(GPUDevice                    *__restrict device,
                    const GPUSemaphoreCreateInfo *__restrict info,
                    GPUSemaphore                **__restrict outSemaphore) {
-  Api          *api;
+  GPUApi       *api;
   GPUSemaphore *semaphore;
   GPUResult     result;
 
@@ -746,7 +746,7 @@ GPUCreateSemaphore(GPUDevice                    *__restrict device,
 GPU_EXPORT
 void
 GPUDestroySemaphore(GPUSemaphore *__restrict semaphore) {
-  Api    *api;
+  GPUApi *api;
 
   if (!semaphore) {
     return;

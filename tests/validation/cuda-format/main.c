@@ -39,7 +39,7 @@
 typedef struct ExpectedFormat {
   GPUFormat          format;
   CUarray_format     arrayFormat;
-  CudaFormatFlags    flags;
+  GPUCudaFormatFlags flags;
   uint32_t           bytesPerTexel;
   uint32_t           channelCount;
 } ExpectedFormat;
@@ -147,7 +147,7 @@ static const struct {
 };
 
 static int
-matches(const CudaFormatInfo    *actual, const ExpectedFormat *item) {
+matches(const GPUCudaFormatInfo *actual, const ExpectedFormat *item) {
   return actual->arrayFormat == item->arrayFormat
          && actual->flags == item->flags
          && actual->bytesPerTexel == item->bytesPerTexel
@@ -156,8 +156,8 @@ matches(const CudaFormatInfo    *actual, const ExpectedFormat *item) {
 
 static int
 validate_texture_desc(void) {
-  CudaFormatInfo    info;
-  CudaFormatInfo    unsupported = {0};
+  GPUCudaFormatInfo info;
+  GPUCudaFormatInfo unsupported = {0};
   CUDA_TEXTURE_DESC source      = {0};
   CUDA_TEXTURE_DESC actual;
   uint32_t          i;
@@ -260,7 +260,7 @@ validate_texture_desc(void) {
 
 static int
 validate_resource_view_formats(void) {
-  CudaFormatInfo       info;
+  GPUCudaFormatInfo    info;
   CUresourceViewFormat viewFormat;
   uint32_t             i;
 
@@ -287,7 +287,7 @@ validate_resource_view_formats(void) {
 
 int
 main(void) {
-  CudaFormatInfo        info;
+  GPUCudaFormatInfo     info;
   const ExpectedFormat *item;
   uint32_t              supported;
   GPUFormat             format;
@@ -316,7 +316,7 @@ main(void) {
 
     if (mapped != found || (mapped && !matches(&info, item))
         || (!mapped && memcmp(&info,
-                           &(CudaFormatInfo){0},
+                           &(GPUCudaFormatInfo){0},
                            sizeof(info)) != 0)) {
       fprintf(stderr,
               "CUDA format contract mismatch at %u\n",

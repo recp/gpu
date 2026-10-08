@@ -16,12 +16,12 @@
 
 #include "../common.h"
 
-CudaModule*
+GPUCudaModule*
 cuda_createModule(GPUDevice  *device,
                   const void *image,
                   uint64_t    imageSize) {
-  DeviceCuda    *deviceNative;
-  CudaModule    *module;
+  GPUDeviceCuda *deviceNative;
+  GPUCudaModule *module;
   void          *terminatedImage;
   CUresult       result;
 
@@ -72,7 +72,7 @@ cuda_createModule(GPUDevice  *device,
 }
 
 void
-cuda_retainModule(CudaModule    *module) {
+cuda_retainModule(GPUCudaModule *module) {
   if (!module)
     return;
 
@@ -84,7 +84,7 @@ cuda_retainModule(CudaModule    *module) {
 }
 
 void
-cuda_releaseModule(CudaModule    *module) {
+cuda_releaseModule(GPUCudaModule *module) {
   bool destroy;
 
   if (!module)
@@ -108,7 +108,7 @@ cuda_releaseModule(CudaModule    *module) {
 }
 
 CUresult
-cuda_getModuleFunction(CudaModule    *module,
+cuda_getModuleFunction(GPUCudaModule *module,
                        const char    *name,
                        CUfunction    *outFunction) {
   CUresult result;

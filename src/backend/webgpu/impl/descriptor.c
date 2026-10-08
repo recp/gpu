@@ -196,8 +196,8 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
   WGPUBindGroupLayoutEntry      *nativeEntries;
   const GPUBindGroupLayoutEntry *entries;
   const uint32_t                *backendBindings;
-  BindGroupLayoutWebGPU         *state;
-  DeviceWebGPU                  *native;
+  GPUBindGroupLayoutWebGPU      *state;
+  GPUDeviceWebGPU               *native;
   WGPUSampler                    sampler;
   size_t                         stateSize;
   GPUResult                      result;
@@ -347,7 +347,7 @@ fail:
 
 static void
 webgpu_destroyBindGroupLayout(GPUBindGroupLayout *layout) {
-  BindGroupLayoutWebGPU    *state;
+  GPUBindGroupLayoutWebGPU *state;
   uint32_t                  i;
 
   state = layout ? layout->_native : NULL;
@@ -370,7 +370,7 @@ webgpu_destroyBindGroupLayout(GPUBindGroupLayout *layout) {
 
 static GPUResult
 webgpu_createPipelineLayout(GPUDevice *device, GPUPipelineLayout *layout) {
-  PipelineLayoutWebGPU    state;
+  GPUPipelineLayoutWebGPU state;
   uint32_t                groupCount;
   uint32_t                requiredGroupMask;
   GPUResult               result;
@@ -431,8 +431,8 @@ webgpu_createImmutableOnlyGroup(GPUDevice          *device,
   WGPUBindGroupDescriptor        descriptor = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
   const GPUBindGroupLayoutEntry *entries;
   const uint32_t                *backendBindings;
-  BindGroupLayoutWebGPU         *state;
-  DeviceWebGPU                  *native;
+  GPUBindGroupLayoutWebGPU      *state;
+  GPUDeviceWebGPU               *native;
   WGPUBindGroupEntry            *nativeEntries;
   WGPUBindGroup                  result;
   uint32_t                       backendBindingCount;
@@ -494,7 +494,7 @@ webgpu_createImmutableOnlyGroup(GPUDevice          *device,
 
 static void
 webgpu_writeBindGroupEntry(void                          *context,
-                           const BindGroupBindingView    *binding) {
+                           const GPUBindGroupBindingView *binding) {
   WGPUTextureView                textureView;
   WebGPUBindGroupWrite          *write;
   WGPUBindGroupEntry            *entry;
@@ -592,10 +592,10 @@ webgpu_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   WGPUBindGroupEntry            *entries;
   WGPUTextureView               *ownedViews;
   GPUBindGroupLayout            *layout;
-  BindGroupLayoutWebGPU         *layoutState;
+  GPUBindGroupLayoutWebGPU      *layoutState;
   const GPUBindGroupLayoutEntry *layoutEntries;
   const uint32_t                *backendBindings;
-  DeviceWebGPU                  *native;
+  GPUDeviceWebGPU               *native;
   WGPUBindGroupEntry            *entry;
   size_t                         scratchSize;
   uint32_t                       count;
@@ -724,7 +724,7 @@ webgpu_bindRenderGroup(GPURenderPassEncoder *pass,
                        GPUBindGroup         *group,
                        uint32_t              dynamicOffsetCount,
                        const uint32_t       *dynamicOffsets) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
 
   GPU__UNUSED(pipelineLayout);
   command = pass ? pass->_priv : NULL;
@@ -749,7 +749,7 @@ webgpu_bindComputeGroup(GPUComputePassEncoder *pass,
                         GPUBindGroup          *group,
                         uint32_t               dynamicOffsetCount,
                         const uint32_t        *dynamicOffsets) {
-  CommandWebGPU    *command;
+  GPUCommandWebGPU *command;
 
   GPU__UNUSED(pipelineLayout);
   command = pass ? pass->_priv : NULL;
@@ -768,7 +768,7 @@ webgpu_bindComputeGroup(GPUComputePassEncoder *pass,
 }
 
 GPUResult
-webgpuInitPushConstants(DeviceWebGPU    *device) {
+webgpuInitPushConstants(GPUDeviceWebGPU *device) {
   WGPUBindGroupLayoutDescriptor descriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
   WGPUBindGroupLayoutEntry      entry      = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
 
@@ -797,8 +797,8 @@ webgpuInitPushConstants(DeviceWebGPU    *device) {
 }
 
 void
-webgpuDestroyPushConstants(DeviceWebGPU    *device) {
-  CommandWebGPU    *command;
+webgpuDestroyPushConstants(GPUDeviceWebGPU *device) {
+  GPUCommandWebGPU *command;
   uint32_t          i;
 
   if (!device) {
@@ -829,14 +829,14 @@ webgpuDestroyPushConstants(DeviceWebGPU    *device) {
 }
 
 bool
-webgpuUploadPushConstants(CommandWebGPU    *command,
+webgpuUploadPushConstants(GPUCommandWebGPU *command,
                           const void       *data,
                           uint32_t          sizeBytes,
                           uint32_t         *outDynamicOffset) {
   WGPUBufferDescriptor    bufferInfo = WGPU_BUFFER_DESCRIPTOR_INIT;
   WGPUBindGroupDescriptor groupInfo  = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
   WGPUBindGroupEntry      entry      = WGPU_BIND_GROUP_ENTRY_INIT;
-  DeviceWebGPU           *device;
+  GPUDeviceWebGPU        *device;
   uint32_t                offset;
 
   device = webgpuDevice(commandBufferDevice(command ? &command->command : NULL));
@@ -902,16 +902,16 @@ webgpuCreatePipelineLayout(GPUDevice               *device,
                            GPUPipelineLayout       *logicalLayout,
                            uint32_t                 requiredGroupMask,
                            uint32_t                 automaticGroupMask,
-                           PipelineLayoutWebGPU    *outLayout) {
+                           GPUPipelineLayoutWebGPU *outLayout) {
   WGPUPipelineLayoutDescriptor  descriptor      = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
   WGPUBindGroupLayoutDescriptor emptyLayoutInfo = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
   WGPUBindGroupDescriptor       emptyGroupInfo  = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
   WGPUBindGroupLayout           nativeGroups[GPU_ENCODER_MAX_BIND_GROUPS];
   WGPUBindGroupLayout           emptyLayouts[GPU_ENCODER_MAX_BIND_GROUPS];
   GPUBindGroupLayout    *const *groups;
-  DeviceWebGPU                 *native;
-  BindGroupLayoutWebGPU        *requiredGroup;
-  BindGroupLayoutWebGPU        *automaticGroup;
+  GPUDeviceWebGPU              *native;
+  GPUBindGroupLayoutWebGPU     *requiredGroup;
+  GPUBindGroupLayoutWebGPU     *automaticGroup;
   uint32_t                      groupCount;
   uint32_t                      logicalGroupCount;
   uint32_t                      pushConstantSize;
@@ -1059,7 +1059,7 @@ fail:
 }
 
 void
-webgpuDestroyPipelineLayout(PipelineLayoutWebGPU    *layout) {
+webgpuDestroyPipelineLayout(GPUPipelineLayoutWebGPU *layout) {
   uint32_t i;
 
   if (!layout) {
@@ -1081,8 +1081,8 @@ webgpuDestroyPipelineLayout(PipelineLayoutWebGPU    *layout) {
 
 void
 webgpuBindRenderAutomaticGroups(GPURenderPassEncoder          *pass,
-                                const PipelineLayoutWebGPU    *layout) {
-  CommandWebGPU    *command;
+                                const GPUPipelineLayoutWebGPU *layout) {
+  GPUCommandWebGPU *command;
   uint32_t          i;
 
   command = webgpuCommand(pass ? pass->_cmdb : NULL);
@@ -1104,8 +1104,8 @@ webgpuBindRenderAutomaticGroups(GPURenderPassEncoder          *pass,
 
 void
 webgpuBindComputeAutomaticGroups(GPUComputePassEncoder         *pass,
-                                 const PipelineLayoutWebGPU    *layout) {
-  CommandWebGPU    *command;
+                                 const GPUPipelineLayoutWebGPU *layout) {
+  GPUCommandWebGPU *command;
   uint32_t          i;
 
   command = webgpuCommand(pass ? pass->_cmdb : NULL);
@@ -1126,7 +1126,7 @@ webgpuBindComputeAutomaticGroups(GPUComputePassEncoder         *pass,
 }
 
 void
-webgpu_initDescriptor(ApiDescriptor    *api) {
+webgpu_initDescriptor(GPUDescriptorApi *api) {
   api->createBindGroupLayout  = webgpu_createBindGroupLayout;
   api->destroyBindGroupLayout = webgpu_destroyBindGroupLayout;
   api->createPipelineLayout   = webgpu_createPipelineLayout;

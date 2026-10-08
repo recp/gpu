@@ -23,15 +23,15 @@ extern "C" {
 #include <gpu/common.h>
 #include <gpu/gpu.h>
 
-typedef struct ShaderFunction    ShaderFunction;
+typedef struct GPUShaderFunction GPUShaderFunction;
 
-typedef enum ShaderSourceCompileFlags {
+typedef enum GPUShaderSourceCompileFlags {
   GPU_SHADER_SOURCE_COMPILE_NONE        = 0u,
   GPU_SHADER_SOURCE_COMPILE_STRICT_IEEE = 1u << 0u,
   GPU_SHADER_SOURCE_COMPILE_RELAXED_FP  = 1u << 1u
-} ShaderSourceCompileFlags;
+} GPUShaderSourceCompileFlags;
 
-typedef struct ApiLibrary {
+typedef struct GPULibraryApi {
   GPUShaderLibrary *
   (*newLibraryWithSource)(GPUDevice  *device,
                           const char *source,
@@ -40,16 +40,16 @@ typedef struct ApiLibrary {
 
   GPUShaderLibrary * (*newLibraryWithBinary)(GPUDevice *device, const void *data, uint64_t size);
 
-  ShaderFunction    * (*newFunction)(GPUShaderLibrary *lib, const char *name);
+  GPUShaderFunction * (*newFunction)(GPUShaderLibrary *lib, const char *name);
 
-  ShaderFunction* (*newVariant)(GPUShaderLibrary           *lib,
+  GPUShaderFunction* (*newVariant)(GPUShaderLibrary           *lib,
                                   const char                 *name,
                                   const GPUPipelineConstants *constants);
 
-  void (*destroyFunction)(ShaderFunction    *function);
+  void (*destroyFunction)(GPUShaderFunction *function);
 
   void (*destroyLibrary)(GPUShaderLibrary *lib);
-} ApiLibrary;
+} GPULibraryApi;
 
 #ifdef __cplusplus
 }

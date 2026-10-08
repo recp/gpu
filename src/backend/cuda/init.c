@@ -17,13 +17,13 @@
 #include "common.h"
 #include "impl.h"
 
-static Api    cuda = {
+static GPUApi cuda = {
   .backend     = GPU_BACKEND_CUDA,
   .initialized = false
 };
 
 GPU_HIDE
-Api*
+GPUApi*
 backend_cuda(void) {
   if (!cuda.initialized) {
     cuda_initInstance(&cuda.instance);

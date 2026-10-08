@@ -37,7 +37,7 @@ heap_chains(GPUDevice *device, const GPUHeapCreateInfo *source) {
   GPUHeapCreateInfo      info;
   const void           *chains[3];
   GPUHeap              *heap;
-  Api                  *api;
+  GPUApi               *api;
 
   GPUResult (*saved)(GPUDevice *, const GPUHeapCreateInfo *, GPUHeap **);
 

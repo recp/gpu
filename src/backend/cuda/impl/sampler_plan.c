@@ -118,7 +118,7 @@ cuda_samplerTextureDesc(const GPUSamplerDesc *source,
 }
 
 bool
-cuda_staticSamplerTextureDesc(const StaticSamplerDesc    *source,
+cuda_staticSamplerTextureDesc(const GPUStaticSamplerDesc *source,
                               CUDA_TEXTURE_DESC          *outDesc) {
   CUaddress_mode addressMode;
 

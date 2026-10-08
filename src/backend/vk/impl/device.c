@@ -70,7 +70,7 @@ vk_adapterType(VkPhysicalDeviceType type) {
 }
 
 static bool
-vk_hasQueueCapability(const AdapterVk    *adapter,
+vk_hasQueueCapability(const GPUAdapterVk *adapter,
                       VkQueueFlags        capability) {
   uint32_t i;
 
@@ -88,14 +88,14 @@ vk_hasQueueCapability(const AdapterVk    *adapter,
 }
 
 static bool
-vk_hasTimestampCapability(const AdapterVk    *adapter) {
+vk_hasTimestampCapability(const GPUAdapterVk *adapter) {
   return adapter && adapter->props.limits.timestampComputeAndGraphics;
 }
 
 static uint32_t
 vk_uslTargetProfile(const GPUAdapter *adapter) {
-  const InstanceVk    *instanceVk;
-  const AdapterVk     *adapterVk;
+  const GPUInstanceVk *instanceVk;
+  const GPUAdapterVk  *adapterVk;
   uint32_t version;
 
   if (!adapter || !adapter->inst || !adapter->inst->_priv || !adapter->_priv) {
@@ -143,9 +143,9 @@ vk_subgroupStageFromGPU(GPUShaderStageFlags stage,
 }
 
 static bool
-vk_subgroupOperationsFromGPU(BackendSubgroupOperationFlags    operations,
+vk_subgroupOperationsFromGPU(GPUBackendSubgroupOperationFlags operations,
                              VkSubgroupFeatureFlags          *outOperations) {
-  const BackendSubgroupOperationFlags    knownOperations = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
+  const GPUBackendSubgroupOperationFlags knownOperations = GPU_BACKEND_SUBGROUP_OPERATION_BASIC_BIT |
                                                            GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_BIT |
                                                            GPU_BACKEND_SUBGROUP_OPERATION_SHUFFLE_RELATIVE_BIT;
   VkSubgroupFeatureFlags native;
@@ -177,8 +177,8 @@ vk_subgroupOperationsFromGPU(BackendSubgroupOperationFlags    operations,
 static bool
 vk_supportsSubgroupOperations(const GPUAdapter     *__restrict adapter,
                               GPUShaderStageFlags              stage,
-                              BackendSubgroupOperationFlags    operations) {
-  AdapterVk    *adapterVk;
+                              GPUBackendSubgroupOperationFlags operations) {
+  GPUAdapterVk *adapterVk;
   VkShaderStageFlags     nativeStage;
   VkSubgroupFeatureFlags nativeOperations;
 
@@ -193,7 +193,7 @@ vk_supportsSubgroupOperations(const GPUAdapter     *__restrict adapter,
 }
 
 static bool
-vk_hasSubgroupCapability(const AdapterVk    *adapter) {
+vk_hasSubgroupCapability(const GPUAdapterVk *adapter) {
   return adapter && adapter->subgroupSize > 0u
          && (adapter->subgroupStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0u
          && (adapter->subgroupOperations & VK_SUBGROUP_FEATURE_BASIC_BIT) != 0u;
@@ -284,7 +284,7 @@ vk_getSubgroupMatrixProperties(const GPUAdapter               *__restrict adapte
                                uint32_t                       *__restrict inoutPropertyCount,
                                GPUSubgroupMatrixPropertiesEXT *__restrict outProperties) {
   GPUSubgroupMatrixPropertiesEXT property;
-  AdapterVk                        *adapterVk;
+  GPUAdapterVk                     *adapterVk;
   VkCooperativeMatrixPropertiesKHR *native;
   VkResult            result;
   GPUShaderStageFlags stages;
@@ -377,7 +377,7 @@ vk_getSubgroupMatrixProperties(const GPUAdapter               *__restrict adapte
 
 static bool
 vk_hasSubgroupMatrixProperty(GPUAdapter *adapter) {
-  AdapterVk    *adapterVk;
+  GPUAdapterVk *adapterVk;
   GPUResult result;
   uint32_t  count;
 
@@ -397,7 +397,7 @@ vk_hasSubgroupMatrixProperty(GPUAdapter *adapter) {
 #endif
 
 static bool
-vk_addDeviceExtension(AdapterVk    *adapter, const char *name) {
+vk_addDeviceExtension(GPUAdapterVk *adapter, const char *name) {
   uint32_t i;
 
   if (!adapter || !name) {
@@ -425,7 +425,7 @@ vk_featureEnabled(uint64_t enabledFeatureMask, GPUFeature feature) {
 }
 
 static bool
-vk_extensionEnabled(const AdapterVk    *adapter,
+vk_extensionEnabled(const GPUAdapterVk *adapter,
                     const char         *name,
                     uint64_t            enabledFeatureMask) {
   bool descriptorIndexing;
@@ -578,7 +578,7 @@ vk_extensionEnabled(const AdapterVk    *adapter,
 }
 
 static uint32_t
-vk_collectDeviceExtensions(const AdapterVk    *adapter,
+vk_collectDeviceExtensions(const GPUAdapterVk *adapter,
                            uint64_t            enabledFeatureMask,
                            const char        **extensions,
                            uint32_t            capacity) {
@@ -650,8 +650,8 @@ vk_hasHostVisibleDescriptorBufferMemory(VkPhysicalDevice physicalDevice,
 #endif
 
 static void
-vk_querySubgroupCapabilities(InstanceVk    *instance,
-                             AdapterVk     *adapter,
+vk_querySubgroupCapabilities(GPUInstanceVk *instance,
+                             GPUAdapterVk  *adapter,
                              bool           sizeControl) {
   VkPhysicalDeviceSubgroupSizeControlProperties sizeProperties = {0};
   VkPhysicalDeviceSubgroupProperties            subgroup       = {0};
@@ -703,7 +703,7 @@ vk_limitU32(uint32_t implementationLimit, uint32_t nativeLimit) {
 static void
 vk_getLimits(const GPUAdapter *__restrict adapter,
              GPULimits        *__restrict outLimits) {
-  AdapterVk                    *adapterVk;
+  GPUAdapterVk                 *adapterVk;
   const VkPhysicalDeviceLimits *native;
 
   adapterVk = adapter ? adapter->_priv : NULL;
@@ -745,7 +745,7 @@ vk_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
                          GPUFormatCapabilities *__restrict outCaps) {
   VkImageFormatProperties imageProperties;
   VkFormatProperties      properties;
-  AdapterVk    *adapterVk;
+  GPUAdapterVk *adapterVk;
   VkFormat             nativeFormat;
   VkFormatFeatureFlags features;
   VkImageUsageFlags    imageUsage;
@@ -834,7 +834,7 @@ vk__flagCount(VkQueueFlags flags) {
 }
 
 static uint32_t
-vk__findQueueFamily(const AdapterVk    *adapterVk,
+vk__findQueueFamily(const GPUAdapterVk *adapterVk,
                     GPUQueueFlagBits    requiredBits,
                     GPUQueueFlagBits    optionalBits,
                     uint32_t            count,
@@ -906,8 +906,8 @@ GPU_HIDE
 GPUAdapter*
 vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   GPUAdapter                         *adapter;
-  AdapterVk                          *adapterVk;
-  InstanceVk                         *instanceVk;
+  GPUAdapterVk                       *adapterVk;
+  GPUInstanceVk                      *instanceVk;
   VkExtensionProperties              *extensions;
   PFN_vkGetPhysicalDeviceFeatures2KHR getFeatures2;
   VkPhysicalDeviceDynamicRenderingFeaturesKHR  dynamicFeatures      = {0};
@@ -2458,7 +2458,7 @@ GPU_HIDE
 GPUResult
 vk_getAdapterProperties(const GPUAdapter     *__restrict adapter,
                         GPUAdapterProperties *__restrict outProps) {
-  AdapterVk    *adapterVk;
+  GPUAdapterVk *adapterVk;
 
   if (!adapter || !outProps || !adapter->_priv) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -2489,8 +2489,8 @@ vk_getAdapterIdentity(const GPUAdapter   *__restrict adapter,
   VkPhysicalDeviceIDProperties identity;
   uint8_t                      zeroUUID[VK_UUID_SIZE] = {0};
   PFN_vkGetPhysicalDeviceProperties2 getProperties2;
-  InstanceVk                        *instanceVk;
-  AdapterVk                         *adapterVk;
+  GPUInstanceVk                     *instanceVk;
+  GPUAdapterVk                      *adapterVk;
 
   if (!adapter || !outIdentity || !adapter->inst
       || !adapter->inst->_priv || !adapter->_priv) {
@@ -2544,7 +2544,7 @@ vk_getAdapterIdentity(const GPUAdapter   *__restrict adapter,
 GPU_HIDE
 bool
 vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
-  AdapterVk    *adapterVk;
+  GPUAdapterVk *adapterVk;
 
   if (!adapter || !(adapterVk = adapter->_priv)) {
     return false;
@@ -2632,7 +2632,7 @@ GPU_HIDE
 GPUAdapter*
 vk_getAvailableAdapters(GPUInstance *__restrict inst,
                         uint32_t                maxNumberOfItems) {
-  InstanceVk    *instVk;
+  GPUInstanceVk *instVk;
   GPUAdapter    *firstAdapter;
   GPUAdapter    *lastAdapter;
   GPUAdapter    *adapter;
@@ -2695,7 +2695,7 @@ vk_selectAdapter(GPUInstance *__restrict inst,
   GPUAdapter *adaptersByType[VK_PHYSICAL_DEVICE_TYPE_CPU + 1] = {0};
   GPUAdapter *priorityList[VK_PHYSICAL_DEVICE_TYPE_CPU + 1];
   GPUAdapter   *adapter;
-  AdapterVk    *adapterVk;
+  GPUAdapterVk *adapterVk;
   uint32_t i;
 
   GPU__UNUSED(inst);
@@ -2754,7 +2754,7 @@ err:
 GPU_HIDE
 void
 vk_destroyAdapter(GPUAdapter * __restrict adapter) {
-  AdapterVk    *adapterVk;
+  GPUAdapterVk *adapterVk;
 
   if (!adapter) {
     return;
@@ -2773,7 +2773,7 @@ vk_destroyAdapter(GPUAdapter * __restrict adapter) {
 GPU_HIDE
 GPUDevice*
 vk_createDevice(GPUAdapter   *__restrict adapter,
-                const QueueCreateInfo    queCI[],
+                const GPUQueueCreateInfo queCI[],
                 uint32_t                 nQueCI,
                 uint64_t                 enabledFeatureMask) {
   const char                                         *deviceExtensions[64];
@@ -2845,8 +2845,8 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
 #endif
   VkDeviceCreateInfo deviceCI = {0};
   GPUDevice               *device;
-  DeviceVk                *deviceVk;
-  AdapterVk               *adapterVk;
+  GPUDeviceVk             *deviceVk;
+  GPUAdapterVk            *adapterVk;
   QueuePlanVk             *plans;
   QueuePlanVk             *plan;
   VkDeviceQueueCreateInfo *queues;
@@ -3797,7 +3797,7 @@ err:
 GPU_HIDE
 void
 vk_destroyDevice(GPUDevice * __restrict device) {
-  DeviceVk    *deviceVk;
+  GPUDeviceVk *deviceVk;
   uint32_t i;
 
   if (!device) {
@@ -3840,7 +3840,7 @@ vk_destroyDevice(GPUDevice * __restrict device) {
 
 GPU_HIDE
 void
-vk_initDevice(ApiDevice    *apiDevice) {
+vk_initDevice(GPUDeviceApi *apiDevice) {
   apiDevice->getAvailableAdapters       = vk_getAvailableAdapters;
   apiDevice->selectAdapter              = vk_selectAdapter;
   apiDevice->destroyAdapter             = vk_destroyAdapter;

@@ -33,7 +33,7 @@ struct GPUAdapter {
   GPUFeature         supportedFeatureStorage[GPU_FEATURE_BUFFER_HOST_MEMORY_EXT + 1u];
 };
 
-static inline Api*
+static inline GPUApi*
 adapterApi(const GPUAdapter *adapter) {
   return adapter ? instanceApi(adapter->inst) : NULL;
 }

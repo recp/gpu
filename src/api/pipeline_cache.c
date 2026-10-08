@@ -42,9 +42,9 @@ typedef enum PipelineCacheEntryType {
   GPU_PIPELINE_CACHE_GRAPH
 } PipelineCacheEntryType;
 
-struct PipelineCacheEntry {
-  PipelineCacheEntry       *next;
-  PipelineCacheEntry       *hashNext;
+struct GPUPipelineCacheEntry {
+  GPUPipelineCacheEntry    *next;
+  GPUPipelineCacheEntry    *hashNext;
   void                     *pipeline;
   size_t                    keySize;
   uint64_t                  keyHash;
@@ -80,9 +80,9 @@ typedef enum PipelineCompileJobState {
   GPU_PIPELINE_JOB_FAILED
 } PipelineCompileJobState;
 
-struct PipelineCompileJob {
-  PipelineCompileJob         *allNext;
-  PipelineCompileJob         *queueNext;
+struct GPUPipelineCompileJob {
+  GPUPipelineCompileJob      *allNext;
+  GPUPipelineCompileJob      *queueNext;
   GPURenderPipeline          *pipeline;
   char                       *label;
   char                       *vertexEntry;
@@ -401,7 +401,7 @@ pipelineKeyWriteGraphInfo(PipelineKeyWriter                    *writer,
 }
 
 static bool
-pipelineKeyPrepare(PipelineCacheKey    *key, size_t size) {
+pipelineKeyPrepare(GPUPipelineCacheKey *key, size_t size) {
   key->size = size;
 
   if (size <= sizeof(key->inlineData)) {
@@ -420,7 +420,7 @@ pipelineKeyPrepare(PipelineCacheKey    *key, size_t size) {
 
 static bool
 buildRenderPipelineKey(const GPURenderPipelineCreateInfo *info,
-                       PipelineCacheKey                  *outKey) {
+                       GPUPipelineCacheKey               *outKey) {
   PipelineKeyWriter    writer;
 
   outKey->data     = NULL;
@@ -469,7 +469,7 @@ buildRenderPipelineKey(const GPURenderPipelineCreateInfo *info,
 
 static bool
 buildComputePipelineKey(const GPUComputePipelineCreateInfo *info,
-                        PipelineCacheKey                   *outKey) {
+                        GPUPipelineCacheKey                *outKey) {
   PipelineKeyWriter    writer;
 
   outKey->data     = NULL;
@@ -518,7 +518,7 @@ buildComputePipelineKey(const GPUComputePipelineCreateInfo *info,
 
 static bool
 buildRayPipelineKey(const GPURayTracingPipelineCreateInfoEXT *info,
-                    PipelineCacheKey                         *outKey) {
+                    GPUPipelineCacheKey                      *outKey) {
   PipelineKeyWriter    writer;
 
   outKey->data     = NULL;
@@ -571,7 +571,7 @@ buildRayPipelineKey(const GPURayTracingPipelineCreateInfoEXT *info,
 
 static bool
 buildGraphPipelineKey(const GPUExecutionGraphCreateInfoEXT *info,
-                      PipelineCacheKey                     *outKey) {
+                      GPUPipelineCacheKey                  *outKey) {
   PipelineKeyWriter    writer;
 
   outKey->data     = NULL;
@@ -622,11 +622,11 @@ buildGraphPipelineKey(const GPUExecutionGraphCreateInfoEXT *info,
   return true;
 }
 
-static PipelineCacheEntry*
+static GPUPipelineCacheEntry*
 pipelineCacheFindEntry(GPUPipelineCache          *cache,
-                       const PipelineCacheKey    *key,
+                       const GPUPipelineCacheKey *key,
                        PipelineCacheEntryType     type) {
-  PipelineCacheEntry    *entry;
+  GPUPipelineCacheEntry *entry;
   size_t                 bucket;
 
   bucket = (size_t)key->hash & (cache->bucketCount - 1u);
@@ -644,8 +644,8 @@ pipelineCacheFindEntry(GPUPipelineCache          *cache,
 
 static void
 pipelineCacheRemoveEntry(GPUPipelineCache      *cache,
-                         PipelineCacheEntry    *entry) {
-  PipelineCacheEntry    **link;
+                         GPUPipelineCacheEntry *entry) {
+  GPUPipelineCacheEntry **link;
   size_t                  bucket;
 
   bucket = (size_t)entry->keyHash & (cache->bucketCount - 1u);
@@ -660,9 +660,9 @@ pipelineCacheRemoveEntry(GPUPipelineCache      *cache,
 
 static void*
 pipelineCacheFind(GPUPipelineCache          *cache,
-                  const PipelineCacheKey    *key,
+                  const GPUPipelineCacheKey *key,
                   PipelineCacheEntryType     type) {
-  PipelineCacheEntry    *entry;
+  GPUPipelineCacheEntry *entry;
   void                  *pipeline;
 
   pipeline = NULL;
@@ -682,13 +682,13 @@ pipelineCacheFind(GPUPipelineCache          *cache,
 
 static void*
 pipelineCacheStore(GPUPipelineCache         *cache,
-                   PipelineCacheKey         *key,
+                   GPUPipelineCacheKey      *key,
                    PipelineCacheEntryType    type,
                    void                     *pipeline) {
-  PipelineCacheEntry    *entry;
-  PipelineCacheEntry    *evicted;
+  GPUPipelineCacheEntry *entry;
+  GPUPipelineCacheEntry *evicted;
   void                  *result;
-  PipelineCacheEntry    *existing;
+  GPUPipelineCacheEntry *existing;
   size_t                 bucket;
 
   if (key->size > SIZE_MAX - sizeof(*entry)) {
@@ -807,7 +807,7 @@ pipelineCacheDupString(const char *value) {
 }
 
 static void
-destroyPipelineJob(PipelineCompileJob    *job) {
+destroyPipelineJob(GPUPipelineCompileJob *job) {
   if (!job) {
     return;
   }
@@ -825,10 +825,10 @@ destroyPipelineJob(PipelineCompileJob    *job) {
   free(job);
 }
 
-static PipelineCompileJob*
+static GPUPipelineCompileJob*
 createPipelineJob(GPUPipelineCache                  *cache,
                   const GPURenderPipelineCreateInfo *info) {
-  PipelineCompileJob        *job;
+  GPUPipelineCompileJob     *job;
   const GPUPipelineConstants *constants;
   const GPUMeshPipelineEXT   *mesh;
   uint32_t                    attributeCount;
@@ -994,7 +994,7 @@ pipelineInfoCanCopy(const GPURenderPipelineCreateInfo *info) {
 static void
 pipelineCacheWorkerRun(GPUPipelineCache *cache) {
   PipelineCacheSync     *sync;
-  PipelineCompileJob    *job;
+  GPUPipelineCompileJob *job;
   GPURenderPipeline     *pipeline;
   GPUResult              result;
 
@@ -1136,7 +1136,7 @@ releaseComputePipeline(GPUComputePipeline *pipeline) {
 
 GPU_HIDE
 void
-pipelineCacheReleaseKey(PipelineCacheKey    *key) {
+pipelineCacheReleaseKey(GPUPipelineCacheKey *key) {
   if (!key) {
     return;
   }
@@ -1155,7 +1155,7 @@ GPU_HIDE
 GPUResult
 pipelineCacheFindRender(GPUPipelineCache                  *cache,
                         const GPURenderPipelineCreateInfo *info,
-                        PipelineCacheKey                  *outKey,
+                        GPUPipelineCacheKey               *outKey,
                         GPURenderPipeline                **outPipeline) {
   *outPipeline = NULL;
 
@@ -1173,7 +1173,7 @@ pipelineCacheFindRender(GPUPipelineCache                  *cache,
 GPU_HIDE
 GPURenderPipeline*
 pipelineCacheStoreRender(GPUPipelineCache    *cache,
-                         PipelineCacheKey    *key,
+                         GPUPipelineCacheKey *key,
                          GPURenderPipeline   *pipeline) {
   return pipelineCacheStore(cache,
                             key,
@@ -1185,7 +1185,7 @@ GPU_HIDE
 GPUResult
 pipelineCacheFindCompute(GPUPipelineCache                   *cache,
                          const GPUComputePipelineCreateInfo *info,
-                         PipelineCacheKey                   *outKey,
+                         GPUPipelineCacheKey                *outKey,
                          GPUComputePipeline                **outPipeline) {
   *outPipeline = NULL;
 
@@ -1203,7 +1203,7 @@ pipelineCacheFindCompute(GPUPipelineCache                   *cache,
 GPU_HIDE
 GPUComputePipeline*
 pipelineCacheStoreCompute(GPUPipelineCache    *cache,
-                          PipelineCacheKey    *key,
+                          GPUPipelineCacheKey *key,
                           GPUComputePipeline  *pipeline) {
   return pipelineCacheStore(cache,
                             key,
@@ -1215,7 +1215,7 @@ GPU_HIDE
 GPUResult
 pipelineCacheFindRay(GPUPipelineCache                         *cache,
                      const GPURayTracingPipelineCreateInfoEXT *info,
-                     PipelineCacheKey                         *outKey,
+                     GPUPipelineCacheKey                      *outKey,
                      GPURayTracingPipelineEXT                **outPipeline) {
   *outPipeline = NULL;
 
@@ -1233,7 +1233,7 @@ pipelineCacheFindRay(GPUPipelineCache                         *cache,
 GPU_HIDE
 GPURayTracingPipelineEXT*
 pipelineCacheStoreRay(GPUPipelineCache         *cache,
-                      PipelineCacheKey         *key,
+                      GPUPipelineCacheKey      *key,
                       GPURayTracingPipelineEXT *pipeline) {
   return pipelineCacheStore(cache,
                             key,
@@ -1245,7 +1245,7 @@ GPU_HIDE
 GPUResult
 pipelineCacheFindGraph(GPUPipelineCache                     *cache,
                        const GPUExecutionGraphCreateInfoEXT *info,
-                       PipelineCacheKey                     *outKey,
+                       GPUPipelineCacheKey                  *outKey,
                        GPUExecutionGraphEXT                **outGraph) {
   *outGraph = NULL;
 
@@ -1263,7 +1263,7 @@ pipelineCacheFindGraph(GPUPipelineCache                     *cache,
 GPU_HIDE
 GPUExecutionGraphEXT*
 pipelineCacheStoreGraph(GPUPipelineCache     *cache,
-                        PipelineCacheKey     *key,
+                        GPUPipelineCacheKey  *key,
                         GPUExecutionGraphEXT *graph) {
   return pipelineCacheStore(cache,
                             key,
@@ -1343,7 +1343,7 @@ compileRenderPipelineAsync(GPUDevice                         *__restrict device,
                               GPUPipelineCache                  *__restrict cache,
                               const GPURenderPipelineCreateInfo *__restrict info,
                               GPUPipelineCompileHandle          *__restrict outHandle) {
-  PipelineCompileJob    *job;
+  GPUPipelineCompileJob *job;
 
   if (!outHandle) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -1410,7 +1410,7 @@ GPUCreatePipelineCache(GPUDevice                        *__restrict device,
                        GPUPipelineCache                **__restrict outCache) {
   GPUPipelineCache     *cache;
   PipelineCacheSync    *sync;
-  Api                  *api;
+  GPUApi               *api;
   uint64_t              maxEntries;
   size_t                bucketCount;
   GPUResult             result;
@@ -1516,13 +1516,13 @@ GPUCreatePipelineCache(GPUDevice                        *__restrict device,
 GPU_EXPORT
 void
 GPUDestroyPipelineCache(GPUPipelineCache *cache) {
-  PipelineCacheEntry    *entry;
-  PipelineCompileJob    *job;
+  GPUPipelineCacheEntry *entry;
+  GPUPipelineCompileJob *job;
   PipelineCacheSync     *sync;
   GPUPipelineCache     **link;
-  Api                   *api;
-  PipelineCacheEntry    *nextEntry;
-  PipelineCompileJob    *nextJob;
+  GPUApi                *api;
+  GPUPipelineCacheEntry *nextEntry;
+  GPUPipelineCompileJob *nextJob;
 
   if (!cache) {
     return;
@@ -1637,8 +1637,8 @@ GPUPollRenderPipelineCompile(GPUDevice                *__restrict device,
                              GPUPipelineCompileStatus *__restrict outStatus,
                              GPURenderPipeline       **__restrict outPipeline) {
   GPUPipelineCache       *cache;
-  PipelineCompileJob    **link;
-  PipelineCompileJob     *job;
+  GPUPipelineCompileJob **link;
+  GPUPipelineCompileJob  *job;
 
   if (!outStatus || !outPipeline) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -1702,7 +1702,7 @@ GPUCompileRenderPipelineAsync(GPUDevice                         *device,
                               const GPURenderPipelineCreateInfo *info,
                               GPUPipelineCompileHandle          *outHandle) {
   GPURenderPipelineCreateInfo snapshot;
-  PreparedConstants           prepared;
+  GPUPreparedConstants        prepared;
   GPUResult                   result;
 
   if (!outHandle) {

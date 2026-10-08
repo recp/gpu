@@ -32,7 +32,7 @@ gpu_test_untyped_pointer(GPUDevice *device, const char *bytecodePath) {
 
   uint32_t                     values[GPU_UNTYPED_POINTER_VALUE_COUNT] = {0};
 
-  Api                         *api;
+  GPUApi                      *api;
   GPUQueue                    *queue        = NULL;
   GPUShaderLibrary            *library      = NULL;
   GPUShaderLayout             *shaderLayout = NULL;

@@ -47,8 +47,8 @@ enum {
   CUDA_PARAM_MASK_WORD_COUNT         = GPU_SHADER_PTX_MAX_PARAM_COUNT / 64u
 };
 
-typedef struct AdapterCuda {
-  CUDA    *driver;
+typedef struct GPUAdapterCuda {
+  GPUCUDA *driver;
   CUdevice device;
   CUuuid   uuid;
   char     name[256];
@@ -60,31 +60,31 @@ typedef struct AdapterCuda {
   int      maxThreadsPerBlock;
   int      warpSize;
   int      unifiedAddressing;
-} AdapterCuda;
+} GPUAdapterCuda;
 
-typedef struct BufferCuda {
-  CUDA            *driver;
+typedef struct GPUBufferCuda {
+  GPUCUDA         *driver;
   CUexternalMemory externalMemory;
   CUdeviceptr      address;
-} BufferCuda;
+} GPUBufferCuda;
 
-typedef struct TextureCuda {
-  CUDA             *driver;
+typedef struct GPUTextureCuda {
+  GPUCUDA          *driver;
   CUexternalMemory  externalMemory;
   CUmipmappedArray  mipmap;
   CUarray           array;
-  CudaFormatInfo    format;
+  GPUCudaFormatInfo format;
   uint32_t          arrayFlags;
-} TextureCuda;
+} GPUTextureCuda;
 
-typedef struct CudaTextureCacheEntry {
+typedef struct GPUCudaTextureCacheEntry {
   CUDA_TEXTURE_DESC desc;
   CUtexObject       texture;
-} CudaTextureCacheEntry;
+} GPUCudaTextureCacheEntry;
 
-typedef struct TextureViewCuda {
-  CUDA                     *driver;
-  CudaTextureCacheEntry    *cache;
+typedef struct GPUTextureViewCuda {
+  GPUCUDA                  *driver;
+  GPUCudaTextureCacheEntry *cache;
 #if defined(_WIN32) || defined(WIN32)
   CRITICAL_SECTION lock;
 #else
@@ -97,71 +97,71 @@ typedef struct TextureViewCuda {
   uint32_t                 cacheCapacity;
   bool                     cacheDynamic;
   bool                     hasResourceView;
-  CudaTextureCacheEntry    inlineCache[CUDA_INLINE_TEXTURE_CACHE_CAPACITY];
-} TextureViewCuda;
+  GPUCudaTextureCacheEntry inlineCache[CUDA_INLINE_TEXTURE_CACHE_CAPACITY];
+} GPUTextureViewCuda;
 
-typedef struct CudaTextureMetadata {
+typedef struct GPUCudaTextureMetadata {
   uint32_t mipLevelCount;
   uint32_t arrayLayerCount;
   uint32_t sampleCount;
   uint32_t reserved;
-} CudaTextureMetadata;
+} GPUCudaTextureMetadata;
 
-_Static_assert(sizeof(CudaTextureMetadata) == 16u,
+_Static_assert(sizeof(GPUCudaTextureMetadata) == 16u,
                "CUDA texture metadata ABI drift");
 
-typedef struct SemaphoreCuda {
-  CUDA               *driver;
+typedef struct GPUSemaphoreCuda {
+  GPUCUDA            *driver;
   CUexternalSemaphore semaphore;
-} SemaphoreCuda;
+} GPUSemaphoreCuda;
 
-typedef struct CudaModule {
-  CUDA     *driver;
+typedef struct GPUCudaModule {
+  GPUCUDA  *driver;
   CUcontext context;
   CUmodule  module;
   uint32_t  refCount;
-} CudaModule;
+} GPUCudaModule;
 
-typedef struct ShaderLibraryCuda {
-  CudaModule    *module;
-} ShaderLibraryCuda;
+typedef struct GPUShaderLibraryCuda {
+  GPUCudaModule *module;
+} GPUShaderLibraryCuda;
 
-typedef struct SamplerCuda {
+typedef struct GPUSamplerCuda {
   CUDA_TEXTURE_DESC desc;
-} SamplerCuda;
+} GPUSamplerCuda;
 
-typedef struct ComputePipelineCuda {
-  ComputePipelineState    base;
+typedef struct GPUComputePipelineCuda {
+  GPUComputePipelineState base;
   GPUComputePipeline     *pipeline;
-  CudaModule             *module;
+  GPUCudaModule          *module;
   CUDA_TEXTURE_DESC      *staticSamplers;
   CUfunction              function;
   uint32_t                paramCount;
   uint32_t                paramDataSize;
   uint32_t                staticSamplerCount;
-  ShaderPTXParamInfo      params[];
-} ComputePipelineCuda;
+  GPUShaderPTXParamInfo   params[];
+} GPUComputePipelineCuda;
 
-typedef struct DispatchCuda {
+typedef struct GPUDispatchCuda {
   GPUComputePipeline *pipeline;
   uint32_t            grid[3];
   uint32_t            block[3];
   uint32_t            paramDataOffset;
   uint32_t            paramDataSize;
   uint8_t             inlineParams[CUDA_INLINE_PARAM_BYTES];
-} DispatchCuda;
+} GPUDispatchCuda;
 
-typedef struct CommandCuda    CommandCuda;
+typedef struct GPUCommandCuda GPUCommandCuda;
 
-typedef struct QueueCuda {
+typedef struct GPUQueueCuda {
   GPUQueue        queue;
-  CUDA           *driver;
+  GPUCUDA        *driver;
   CUcontext       context;
   CUstream        stream;
-  CommandCuda    *freeCommands;
-  CommandCuda    *pendingHead;
-  CommandCuda    *pendingTail;
-  CommandCuda    *commands;
+  GPUCommandCuda *freeCommands;
+  GPUCommandCuda *pendingHead;
+  GPUCommandCuda *pendingTail;
+  GPUCommandCuda *commands;
 #if defined(_WIN32) || defined(WIN32)
   CRITICAL_SECTION   lock;
   CONDITION_VARIABLE condition;
@@ -174,16 +174,16 @@ typedef struct QueueCuda {
   uint32_t pendingCount;
   bool     stopping;
   bool     workerStarted;
-} QueueCuda;
+} GPUQueueCuda;
 
-struct CommandCuda {
+struct GPUCommandCuda {
   GPUCommandBuffer        command;
   GPUComputePassEncoder   compute;
-  CommandCuda            *next;
-  CommandCuda            *allNext;
-  QueueCuda              *owner;
-  DispatchCuda           *dispatches;
-  ComputePipelineCuda    *pipeline;
+  GPUCommandCuda         *next;
+  GPUCommandCuda         *allNext;
+  GPUQueueCuda           *owner;
+  GPUDispatchCuda        *dispatches;
+  GPUComputePipelineCuda *pipeline;
   uint8_t                *paramData;
   CUevent                 completion;
   uint64_t                boundParamMask[CUDA_PARAM_MASK_WORD_COUNT];
@@ -196,66 +196,66 @@ struct CommandCuda {
   uint8_t                 boundParams[GPU_SHADER_PTX_MAX_PARAM_BYTES];
 };
 
-typedef struct DeviceCuda {
-  CUDA         *driver;
+typedef struct GPUDeviceCuda {
+  GPUCUDA      *driver;
   CUdevice      cudaDevice;
   CUcontext     context;
-  QueueCuda    *queues;
+  GPUQueueCuda *queues;
   uint32_t      maxBlockDim[3];
   uint32_t      maxGridDim[3];
   uint32_t      queueCount;
   uint32_t      maxThreadsPerBlock;
-} DeviceCuda;
+} GPUDeviceCuda;
 
 GPUResult
-cuda_push(CUDA    *driver, CUcontext context);
+cuda_push(GPUCUDA *driver, CUcontext context);
 void
-cuda_pop(CUDA    *driver);
+cuda_pop(GPUCUDA *driver);
 void
 cuda_report(GPUDevice *device, CUresult result, const char *operation);
-CudaModule*
+GPUCudaModule*
 cuda_createModule(GPUDevice  *device,
                   const void *image,
                   uint64_t    imageSize);
 void
-cuda_retainModule(CudaModule    *module);
+cuda_retainModule(GPUCudaModule *module);
 void
-cuda_releaseModule(CudaModule    *module);
+cuda_releaseModule(GPUCudaModule *module);
 CUresult
-cuda_getModuleFunction(CudaModule    *module,
+cuda_getModuleFunction(GPUCudaModule *module,
                        const char    *name,
                        CUfunction    *outFunction);
 void
-cuda_queueLock(QueueCuda    *queue);
+cuda_queueLock(GPUQueueCuda *queue);
 void
-cuda_queueUnlock(QueueCuda    *queue);
+cuda_queueUnlock(GPUQueueCuda *queue);
 void
-cuda_queueSignal(QueueCuda    *queue);
+cuda_queueSignal(GPUQueueCuda *queue);
 void
 cuda_recycleCommand(GPUCommandBuffer *cmdb);
-CommandCuda*
-cuda_createCommand(QueueCuda    *queue);
+GPUCommandCuda*
+cuda_createCommand(GPUQueueCuda *queue);
 
 void
-cuda_initInstance(ApiInstance    *api);
+cuda_initInstance(GPUInstanceApi *api);
 void
-cuda_initDevice(ApiDevice    *api);
+cuda_initDevice(GPUDeviceApi *api);
 void
-cuda_initQueue(ApiCommandQueue    *api);
+cuda_initQueue(GPUCommandQueueApi *api);
 void
-cuda_initBuffer(ApiBuffer    *api);
+cuda_initBuffer(GPUBufferApi *api);
 void
-cuda_initTexture(ApiTexture    *api);
+cuda_initTexture(GPUTextureApi *api);
 void
-cuda_initSampler(ApiSampler    *api);
+cuda_initSampler(GPUSamplerApi *api);
 void
-cuda_initDescriptor(ApiDescriptor    *api);
+cuda_initDescriptor(GPUDescriptorApi *api);
 void
-cuda_initLibrary(ApiLibrary    *api);
+cuda_initLibrary(GPULibraryApi *api);
 void
-cuda_initCompute(ApiCompute    *api);
+cuda_initCompute(GPUComputeApi *api);
 void
-cuda_initMultiGPU(ApiMultiGPU    *api);
+cuda_initMultiGPU(GPUMultiGPUApi *api);
 
 GPUResult
 cuda_getTextureObject(GPUTextureView          *view,
@@ -282,7 +282,7 @@ void
 cuda_rebindComputeGroups(GPUComputePassEncoder *pass);
 
 static inline uint32_t
-cuda_ptxParamSize(ShaderPTXParamKind    kind) {
+cuda_ptxParamSize(GPUShaderPTXParamKind kind) {
   switch (kind) {
     case GPUShaderPTXParamBuffer:
     case GPUShaderPTXParamSurface:
@@ -291,29 +291,29 @@ cuda_ptxParamSize(ShaderPTXParamKind    kind) {
       return 8u;
 
     case GPUShaderPTXParamTextureMetadata:
-      return sizeof(CudaTextureMetadata);
+      return sizeof(GPUCudaTextureMetadata);
 
     default:
       return 0u;
   }
 }
 
-static GPU_INLINE AdapterCuda*
+static GPU_INLINE GPUAdapterCuda*
 cuda_adapter(const GPUAdapter *adapter) {
   return adapter ? adapter->_priv : NULL;
 }
 
-static GPU_INLINE DeviceCuda*
+static GPU_INLINE GPUDeviceCuda*
 cuda_device(const GPUDevice *device) {
   return device ? device->_priv : NULL;
 }
 
-static GPU_INLINE QueueCuda*
+static GPU_INLINE GPUQueueCuda*
 cuda_queue(const GPUQueue *queue) {
   return queue ? queue->_priv : NULL;
 }
 
-static GPU_INLINE CommandCuda*
+static GPU_INLINE GPUCommandCuda*
 cuda_command(const GPUCommandBuffer *command) {
   return command ? command->_priv : NULL;
 }

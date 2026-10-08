@@ -41,7 +41,7 @@ count_barriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
 
 static int
 check_barrier_forwarding(GPUDevice *device) {
-  Api                 *api;
+  GPUApi              *api;
   GPUBuffer           *buffer  = NULL;
   GPUTexture          *texture = NULL;
 
@@ -239,7 +239,7 @@ check_mipmap_barrier(GPUDevice *device) {
   GPUCommandBuffer  cmdb    = {0};
   GPUTextureBarrier barrier = {0};
   GPUBarrierBatch   batch   = {0};
-  Api              *api;
+  GPUApi           *api;
 
   void (*saved)(GPUCommandBuffer *, const GPUBarrierBatch *);
 

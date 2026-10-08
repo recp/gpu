@@ -31,7 +31,7 @@ struct MTTextureViewPoolPage {
 #if MT_HAS_METAL4
 
 static bool
-mt_prepareTextureViewPool(DeviceMT               *device,
+mt_prepareTextureViewPool(GPUDeviceMT            *device,
                           MTTextureViewPoolPage **outPage) {
   MTLResourceViewPoolDescriptor *descriptor;
   MTTextureViewPoolPage         *page;
@@ -90,7 +90,7 @@ mt_prepareTextureViewPool(DeviceMT               *device,
 }
 
 static bool
-mt_findTextureViewSlot(DeviceMT               *device,
+mt_findTextureViewSlot(GPUDeviceMT            *device,
                        MTTextureViewPoolPage **outPage,
                        uint32_t               *outIndex) {
   MTTextureViewPoolPage *page;
@@ -124,7 +124,7 @@ mt_findTextureViewSlot(DeviceMT               *device,
 
 GPU_HIDE
 GPUResult
-mt_acquireTextureView(DeviceMT          *device,
+mt_acquireTextureView(GPUDeviceMT       *device,
                       id<MTLTexture>     texture,
                       id                 descriptor,
                       MTTextureViewSlot *slot,
@@ -178,7 +178,7 @@ mt_acquireTextureView(DeviceMT          *device,
 
 GPU_HIDE
 void
-mt_releaseTextureView(DeviceMT    *device, MTTextureViewSlot *slot) {
+mt_releaseTextureView(GPUDeviceMT *device, MTTextureViewSlot *slot) {
 #if MT_HAS_METAL4
   MTTextureViewPoolPage *page;
   uint32_t               index;
@@ -209,7 +209,7 @@ mt_releaseTextureView(DeviceMT    *device, MTTextureViewSlot *slot) {
 
 GPU_HIDE
 void
-mt_destroyTextureViewPools(DeviceMT    *device) {
+mt_destroyTextureViewPools(GPUDeviceMT *device) {
   MTTextureViewPoolPage *page;
   MTTextureViewPoolPage *next;
 

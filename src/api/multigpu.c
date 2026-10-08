@@ -272,7 +272,7 @@ GPUCreateDeviceInteropEXT(GPUDevice            *firstDevice,
                           GPUDevice            *secondDevice,
                           GPUDeviceInteropEXT **outInterop) {
   GPUDeviceInteropEXT *interop;
-  Api                 *firstApi, *secondApi;
+  GPUApi              *firstApi, *secondApi;
   GPUResult            result;
 
   if (!outInterop) {

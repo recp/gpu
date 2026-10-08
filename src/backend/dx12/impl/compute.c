@@ -20,7 +20,7 @@
 #include "../../../api/compute_internal.h"
 #include "pipeline_cache.h"
 
-static ComputeEncoderDX12*
+static GPUComputeEncoderDX12*
 dx12__computeEncoder(GPUComputePassEncoder *encoder) {
   return encoder ? encoder->_priv : NULL;
 }
@@ -31,8 +31,8 @@ dx12__dispatchIndirect(GPUComputePassEncoder *encoder,
                        uint64_t               argsOffset,
                        uint32_t               dispatchCount,
                        uint32_t               strideBytes) {
-  ComputeEncoderDX12    *native;
-  BufferDX12            *buffer;
+  GPUComputeEncoderDX12 *native;
+  GPUBufferDX12         *buffer;
 
   native = dx12__computeEncoder(encoder);
   buffer = argsBuffer ? argsBuffer->_priv : NULL;
@@ -65,12 +65,12 @@ dx12_createComputePipeline(GPUDevice                          *device,
   D3D12_COMPUTE_PIPELINE_STATE_DESC  desc = {0};
   DX12ShaderCode                    shaderCode = {0};
   DX12PipelineKey                   rootKey;
-  DeviceDX12                       *deviceDX12;
+  GPUDeviceDX12                    *deviceDX12;
   GPUShaderLibrary                 *library;
-  ShaderLibraryDX12                *libraryDX12;
-  PipelineLayoutDX12               *layout;
-  ComputePipelineState             *state;
-  ComputePipelineDX12              *native;
+  GPUShaderLibraryDX12             *libraryDX12;
+  GPUPipelineLayoutDX12            *layout;
+  GPUComputePipelineState          *state;
+  GPUComputePipelineDX12           *native;
   ID3D12RootSignature              *rootSignature;
   uint64_t                          entryMask;
   HRESULT                           result;
@@ -90,7 +90,7 @@ dx12_createComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native        = (ComputePipelineDX12 *)(state + 1);
+  native        = (GPUComputePipelineDX12 *)(state + 1);
   rootSignature = NULL;
   entryMask     = shaderEntryBit(info->library, info->entryPoint);
 
@@ -147,8 +147,8 @@ dx12_createComputePipeline(GPUDevice                          *device,
 GPU_HIDE
 void
 dx12_destroyComputePipeline(GPUComputePipeline *pipeline) {
-  ComputePipelineState    *state;
-  ComputePipelineDX12     *native;
+  GPUComputePipelineState *state;
+  GPUComputePipelineDX12  *native;
 
   if (!pipeline) {
     return;
@@ -175,10 +175,10 @@ GPU_HIDE
 GPUComputePassEncoder*
 dx12_computeCommandEncoder(GPUCommandBuffer               *cmdb,
                            const GPUComputePassCreateInfo *info) {
-  DeviceDX12            *device;
-  CommandBufferDX12     *command;
+  GPUDeviceDX12         *device;
+  GPUCommandBufferDX12  *command;
   GPUComputePassEncoder *encoder;
-  ComputeEncoderDX12    *native;
+  GPUComputeEncoderDX12 *native;
 
   device  = cmdb && cmdb->_queue && cmdb->_queue->_device ? cmdb->_queue->_device->_priv : NULL;
   command = cmdb ? cmdb->_priv : NULL;
@@ -213,9 +213,9 @@ dx12_computeCommandEncoder(GPUCommandBuffer               *cmdb,
 GPU_HIDE
 void
 dx12_setComputePipelineState(GPUComputePassEncoder   *encoder,
-                             ComputePipelineState    *pipelineState) {
-  ComputeEncoderDX12     *native;
-  ComputePipelineDX12    *pipeline;
+                             GPUComputePipelineState *pipelineState) {
+  GPUComputeEncoderDX12  *native;
+  GPUComputePipelineDX12 *pipeline;
   bool                    rootChanged;
 
   native   = dx12__computeEncoder(encoder);
@@ -252,8 +252,8 @@ void
 dx12_computePushConstants(GPUComputePassEncoder *encoder,
                           const void            *data,
                           uint32_t               sizeBytes) {
-  ComputeEncoderDX12    *native;
-  PipelineLayoutDX12    *layout;
+  GPUComputeEncoderDX12 *native;
+  GPUPipelineLayoutDX12 *layout;
 
   native = dx12__computeEncoder(encoder);
   layout = encoder && encoder->_pipelineLayout ? encoder->_pipelineLayout->_native : NULL;
@@ -277,7 +277,7 @@ dx12_dispatch(GPUComputePassEncoder *encoder,
               uint32_t               x,
               uint32_t               y,
               uint32_t               z) {
-  ComputeEncoderDX12    *native;
+  GPUComputeEncoderDX12 *native;
 
   if (!(native = dx12__computeEncoder(encoder)) || !native->commandList) {
     return;
@@ -315,7 +315,7 @@ dx12_multiDispatchIndirect(GPUComputePassEncoder *encoder,
 GPU_HIDE
 void
 dx12_endComputeEncoding(GPUComputePassEncoder *encoder) {
-  ComputeEncoderDX12    *native;
+  GPUComputeEncoderDX12 *native;
 
   if (!(native = dx12__computeEncoder(encoder))) {
     return;
@@ -341,7 +341,7 @@ dx12_endComputeEncoding(GPUComputePassEncoder *encoder) {
 
 GPU_HIDE
 void
-dx12_initCompute(ApiCompute    *api) {
+dx12_initCompute(GPUComputeApi *api) {
   api->createPipeline          = dx12_createComputePipeline;
   api->destroyComputePipeline  = dx12_destroyComputePipeline;
   api->computeCommandEncoder   = dx12_computeCommandEncoder;

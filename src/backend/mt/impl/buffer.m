@@ -65,7 +65,7 @@ mt_createBuffer(GPUDevice                 *__restrict device,
                 const GPUBufferCreateInfo *__restrict info,
                 GPUBuffer                **__restrict outBuffer) {
   const GPUBufferHostMemoryEXT *host;
-  DeviceMT                    *deviceMT;
+  GPUDeviceMT                 *deviceMT;
   id<MTLBuffer>                buffer;
   long                         pageSize;
   GPUResult                    result;
@@ -274,7 +274,7 @@ mt_bufferContents(GPUBuffer *__restrict buff) {
 
 GPU_HIDE
 void
-mt_initBuff(ApiBuffer    *api) {
+mt_initBuff(GPUBufferApi *api) {
   api->create   = mt_createBuffer;
   api->destroy  = mt_destroyBuffer;
   api->write    = mt_writeBuffer;

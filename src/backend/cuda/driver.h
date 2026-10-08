@@ -347,7 +347,7 @@ enum {
   CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR = 76
 };
 
-typedef struct CUDA {
+typedef struct GPUCUDA {
   void *library;
 
   CUresult (CUDA_CALL *init)(unsigned int flags);
@@ -429,9 +429,9 @@ typedef struct CUDA {
   CUresult (CUDA_CALL *getErrorName)(CUresult result, const char **name);
   CUresult (CUDA_CALL *getErrorString)(CUresult result, const char **message);
   int driverVersion;
-} CUDA;
+} GPUCUDA;
 
-CUDA*
+GPUCUDA*
 cuda_driver(void);
 
 #endif /* gpu_cuda_driver_h */

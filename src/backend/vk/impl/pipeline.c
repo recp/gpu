@@ -363,10 +363,10 @@ vk_createRenderPipeline(GPUDevice                         *device,
   VkSpecializationMapEntry            constantEntries[USL_RUNTIME_MAX_SPEC_CONSTANTS];
   uint32_t                           constantData[USL_RUNTIME_MAX_SPEC_CONSTANTS];
   VkSpecializationInfo               constants = {0};
-  DeviceVk                          *deviceVk;
-  ShaderLibraryVk                   *library;
-  PipelineLayoutVk                  *layout;
-  RenderPipelineVk                  *native;
+  GPUDeviceVk                       *deviceVk;
+  GPUShaderLibraryVk                *library;
+  GPUPipelineLayoutVk               *layout;
+  GPURenderPipelineVk               *native;
   const GPUMeshPipelineEXT          *mesh;
   const GPUDepthStencilState        *depthState;
   VkVertexInputBindingDescription   *vertexBindings;
@@ -764,7 +764,7 @@ vk_createRenderPipeline(GPUDevice                         *device,
 GPU_HIDE
 void
 vk_destroyRenderPipeline(GPURenderPipeline *pipeline) {
-  RenderPipelineVk    *native;
+  GPURenderPipelineVk *native;
 
   if (!pipeline) {
     return;
@@ -790,7 +790,7 @@ vk_destroyRenderPipeline(GPURenderPipeline *pipeline) {
 
 GPU_HIDE
 void
-vk_initRenderPipeline(ApiRender    *api) {
+vk_initRenderPipeline(GPURenderApi *api) {
   api->createPipeline        = vk_createRenderPipeline;
   api->destroyRenderPipeline = vk_destroyRenderPipeline;
 }

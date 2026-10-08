@@ -48,7 +48,7 @@ bufferHostMemory(const GPUBufferCreateInfo *info) {
   return (const GPUBufferHostMemoryEXT *)info->chain.pNext;
 }
 
-static inline Api*
+static inline GPUApi*
 bufferApi(const GPUBuffer *buffer) {
   return buffer ? deviceApi(buffer->device) : NULL;
 }

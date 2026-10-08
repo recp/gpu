@@ -19,7 +19,7 @@
 
 static void
 mt_drawPrimitivesClassic(GPURenderPassEncoder *rce,
-                         PrimitiveType         type,
+                         GPUPrimitiveType      type,
                          size_t                start,
                          size_t                count,
                          uint32_t              instanceCount,
@@ -36,7 +36,7 @@ mt_drawIndexedPrimsClassic(GPURenderPassEncoder *rce,
 #if MT_HAS_METAL4
 static void
 mt_drawPrimitives4(GPURenderPassEncoder *rce,
-                   PrimitiveType         type,
+                   GPUPrimitiveType      type,
                    size_t                start,
                    size_t                count,
                    uint32_t              instanceCount,
@@ -88,7 +88,7 @@ mt_scissorAxis(int32_t     origin,
 
 static void
 mt_drawPrimitivesClassic(GPURenderPassEncoder *rce,
-                         PrimitiveType         type,
+                         GPUPrimitiveType      type,
                          size_t                start,
                          size_t                count,
                          uint32_t              instanceCount,
@@ -112,7 +112,7 @@ mt_drawPrimitivesClassic(GPURenderPassEncoder *rce,
 
 static void
 mt_drawPrimitives4(GPURenderPassEncoder *rce,
-                   PrimitiveType         type,
+                   GPUPrimitiveType      type,
                    size_t                start,
                    size_t                count,
                    uint32_t              instanceCount,
@@ -208,7 +208,7 @@ mt_drawIndexedPrims4(GPURenderPassEncoder *rce,
 
 GPU_HIDE
 GPURenderPassEncoder*
-mt_renderCommandEncoder(GPUCommandBuffer *cmdb, RenderPassDesc    *pass) {
+mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
   MTCommandBuffer      *commandState;
   GPURenderPassEncoder *enc;
   MTRenderEncoder      *nativeState;
@@ -312,7 +312,7 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, RenderPassDesc    *pass) {
 GPU_HIDE
 void
 mt_setRenderPipelineState(GPURenderPassEncoder   *rce,
-                          RenderPipelineState    *pipelineState,
+                          GPURenderPipelineState *pipelineState,
                           GPUCullMode             cullMode,
                           GPUFrontFace            frontFace) {
   MTRenderEncoder       *native;
@@ -805,7 +805,7 @@ void
 mt_rceSetVertexAccelerationStructure(GPURenderPassEncoder        *rce,
                                      GPUAccelerationStructureEXT *structure,
                                      uint32_t                     index) {
-  AccelerationStructureMT    *ray;
+  GPUAccelerationStructureMT *ray;
   MTRenderEncoder            *native;
 
   native = mt_renderEncoder(rce);
@@ -1080,7 +1080,7 @@ void
 mt_rceSetFragmentAccelerationStructure(GPURenderPassEncoder        *rce,
                                        GPUAccelerationStructureEXT *structure,
                                        uint32_t                     index) {
-  AccelerationStructureMT    *ray;
+  GPUAccelerationStructureMT *ray;
   MTRenderEncoder            *native;
 
   native = mt_renderEncoder(rce);
@@ -1108,7 +1108,7 @@ mt_rceSetFragmentAccelerationStructure(GPURenderPassEncoder        *rce,
 GPU_HIDE
 void
 mt_drawPrimitives(GPURenderPassEncoder *rce,
-                  PrimitiveType         type,
+                  GPUPrimitiveType      type,
                   size_t                start,
                   size_t                count,
                   uint32_t              instanceCount,
@@ -1218,7 +1218,7 @@ mt_drawMesh(GPURenderPassEncoder *rce,
 GPU_HIDE
 void
 mt_drawPrimitivesIndirect(GPURenderPassEncoder *rce,
-                          PrimitiveType         type,
+                          GPUPrimitiveType      type,
                           GPUBuffer            *argsBuffer,
                           uint64_t              argsOffset) {
   MTRenderEncoder *native;
@@ -1319,7 +1319,7 @@ mt_endEncoding(GPURenderPassEncoder *rce) {
 
 GPU_HIDE
 void
-mt_initRCE(ApiRCE    *api) {
+mt_initRCE(GPURCEApi *api) {
   api->renderCommandEncoder   = mt_renderCommandEncoder;
   api->setRenderPipelineState = mt_setRenderPipelineState;
   api->viewport               = mt_viewport;

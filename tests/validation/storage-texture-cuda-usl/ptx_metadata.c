@@ -56,8 +56,8 @@ destroy_library(GPUShaderLibrary *library) {
 }
 
 static int
-validate_param(const ShaderPTXParamInfo    *param,
-               ShaderPTXParamKind           kind,
+validate_param(const GPUShaderPTXParamInfo *param,
+               GPUShaderPTXParamKind        kind,
                GPUBindingType               bindingType,
                uint32_t                     binding,
                uint32_t                     dataOffset) {
@@ -73,13 +73,13 @@ validate_param(const ShaderPTXParamInfo    *param,
 }
 
 static int
-validate_entry(const ShaderPTXInfo    *info,
+validate_entry(const GPUShaderPTXInfo *info,
                uint32_t                entryIndex,
                uint32_t                imageBinding,
                uint32_t                bufferBinding,
                int                     hasBuffer) {
-  const ShaderPTXEntryInfo    *entry;
-  const ShaderPTXParamInfo    *params;
+  const GPUShaderPTXEntryInfo *entry;
+  const GPUShaderPTXParamInfo *params;
   uint32_t                     expectedCount;
 
   if (!info || entryIndex >= info->entryCount) {
@@ -164,7 +164,7 @@ validate_reflection(const GPUShaderReflection *reflection) {
 int
 validate_ptx_metadata(const void *artifact, uint64_t artifactSize) {
   GPUDevice         device;
-  Api               api;
+  GPUApi            api;
   GPUShaderLibrary *library;
   GPUResult         result;
   int               valid;
