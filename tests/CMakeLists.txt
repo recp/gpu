@@ -828,6 +828,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/api/untyped_pointer.c
     ${PROJECT_SOURCE_DIR}/tests/api/volume_texture.c
     ${PROJECT_SOURCE_DIR}/tests/api/vrs.c
+    ${PROJECT_SOURCE_DIR}/tests/api/webgpu_pipeline.c
   )
   target_link_libraries(gpu-api-test PRIVATE gpu)
   if(GPU_BUILD_METAL AND NOT BUILD_SHARED_LIBS)
@@ -903,6 +904,19 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     target_compile_options(gpu-api-test PRIVATE -Wall -Wextra -Werror)
   endif()
   gpu_enable_c11_atomics(gpu-api-test)
+  string(TOUPPER "${GPU_WEBGPU_PROVIDER}" _gpu_test_webgpu_provider)
+  if(GPU_API_DEFAULT_BACKEND STREQUAL "webgpu" AND
+     (_gpu_test_webgpu_provider STREQUAL "WGPU_NATIVE" OR
+      (_gpu_test_webgpu_provider STREQUAL "AUTO" AND
+       EXISTS "${GPU_WEBGPU_INCLUDE_DIR}/webgpu/wgpu.h")))
+    target_compile_definitions(gpu-api-test PRIVATE GPU_TEST_WGPU_NATIVE=1)
+    add_test(NAME api-webgpu-pipeline-error
+      COMMAND gpu-api-test ${GPU_API_USL_FIXTURES} webgpu)
+    set_tests_properties(api-webgpu-pipeline-error PROPERTIES
+      ENVIRONMENT "GPU_API_TEST=pipeline-error"
+      LABELS "webgpu;pipeline;errors;threading"
+      TIMEOUT 30)
+  endif()
   if(NOT WIN32)
     target_compile_definitions(gpu-api-test PRIVATE
       $<$<COMPILE_LANGUAGE:C>:_POSIX_C_SOURCE=200809L>

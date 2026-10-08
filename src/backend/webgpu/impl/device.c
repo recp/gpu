@@ -32,6 +32,14 @@ typedef struct WebGPUDeviceRequest {
   bool                             ready;
 } WebGPUDeviceRequest;
 
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+#  if defined(_MSC_VER)
+static __declspec(thread) GPUWebGPUPipelineError *webgpu_pipelineError;
+#  else
+static _Thread_local GPUWebGPUPipelineError *webgpu_pipelineError;
+#  endif
+#endif
+
 static const WGPUFeatureName webgpu_optionalFeatures[] = {
   WGPUFeatureName_CoreFeaturesAndLimits,
   WGPUFeatureName_Depth32FloatStencil8,
@@ -127,6 +135,20 @@ webgpu_uncapturedError(WGPUDevice const *nativeDevice,
       result    = GPU_ERROR_BACKEND_FAILURE;
       break;
   }
+
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  /* native pipeline errors arrive inline; keep capture local to this call/thread. */
+
+  if (webgpu_pipelineError && webgpu_pipelineError->device == request->device) {
+    if (webgpu_pipelineError->result == GPU_OK) {
+      webgpu_pipelineError->type   = errorType;
+      webgpu_pipelineError->result = result;
+      webgpu_copyString(webgpu_pipelineError->message, sizeof(webgpu_pipelineError->message), message);
+    }
+
+    return;
+  }
+#endif
 
   webgpu_copyString(text, sizeof(text), message);
   gpuDeviceReportError(request->device,
@@ -990,6 +1012,36 @@ webgpu_destroyDevice(GPUDevice *device) {
 
   free(device);
 }
+
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+GPU_HIDE
+void
+gpu_webgpuBeginPipelineError(GPUDevice              *device,
+                            GPUWebGPUPipelineError *error) {
+  error->previous      = webgpu_pipelineError;
+  error->device        = device;
+  error->result        = GPU_OK;
+  webgpu_pipelineError = error;
+}
+
+GPU_HIDE
+GPUResult
+gpu_webgpuEndPipelineError(GPUWebGPUPipelineError *error) {
+  webgpu_pipelineError = error->previous;
+
+  /* report after the native call releases its error-sink lock; callbacks may reenter. */
+
+  if (error->result != GPU_OK) {
+    gpuDeviceReportError(error->device,
+                         error->type,
+                         GPU_DEVICE_LOST_REASON_UNKNOWN,
+                         error->result,
+                         error->message[0] ? error->message : "WebGPU pipeline creation failed");
+  }
+
+  return error->result;
+}
+#endif
 
 void
 webgpu_initDevice(GPUApiDevice *api) {

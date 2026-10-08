@@ -113,6 +113,9 @@ int
 gpu_test_constants(GPUDevice *device, const char *bytecodePath);
 
 int
+gpu_test_webgpu_pipeline_error(GPUDevice *device);
+
+int
 gpu_test_lod(GPUDevice *device, const char *bytecodePath);
 
 int

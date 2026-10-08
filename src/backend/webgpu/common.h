@@ -69,6 +69,16 @@ enum {
   GPU_WEBGPU_PUSH_CONSTANT_CAPACITY  = 1024u * 1024u
 };
 
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+typedef struct GPUWebGPUPipelineError {
+  struct GPUWebGPUPipelineError *previous;
+  GPUDevice                    *device;
+  GPUDeviceErrorType            type;
+  GPUResult                     result;
+  char                          message[512];
+} GPUWebGPUPipelineError;
+#endif
+
 typedef struct GPUInstanceWebGPU {
   WGPUInstance instance;
 #if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
@@ -208,6 +218,17 @@ gpu_webgpuCreatePipelineLayout(GPUDevice               *device,
                                uint32_t                 requiredGroupMask,
                                uint32_t                 automaticGroupMask,
                                GPUPipelineLayoutWebGPU *outLayout);
+
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+GPU_HIDE
+void
+gpu_webgpuBeginPipelineError(GPUDevice              *device,
+                            GPUWebGPUPipelineError *error);
+
+GPU_HIDE
+GPUResult
+gpu_webgpuEndPipelineError(GPUWebGPUPipelineError *error);
+#endif
 
 GPUResult
 gpu_webgpuInitPushConstants(GPUDeviceWebGPU *device);

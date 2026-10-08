@@ -55,6 +55,11 @@ run_constants(void *ctx) {
 }
 
 static int
+run_pipeline_error(void *ctx) {
+  return gpu_test_webgpu_pipeline_error(((GPUApiTestContext *)ctx)->device);
+}
+
+static int
 run_bindgroup(void *ctx) {
   return gpu_test_bindgroup(((GPUApiTestContext *)ctx)->device);
 }
@@ -426,7 +431,7 @@ main(int argc, char **argv) {
   GPUInstanceCreateInfo instanceInfo  = {0};
   GPURuntimeConfig      runtimeConfig = {0};
   GPUApiTestContext     ctx;
-  GPUApiTest            tests[40];
+  GPUApiTest            tests[41];
   GPUInstance          *instance;
   GPUAdapter           *adapter;
   GPUDevice            *device;
@@ -642,6 +647,7 @@ main(int argc, char **argv) {
   };
 
   tests[39] = (GPUApiTest){ "constants", run_constants, &ctx };
+  tests[40] = (GPUApiTest){ "pipeline-error", run_pipeline_error, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

@@ -32,10 +32,14 @@ webgpu_createComputePipeline(GPUDevice                          *device,
   WGPUConstantEntry              constantEntries[USL_RUNTIME_MAX_SPEC_CONSTANTS];
   char                          constantIDs[USL_RUNTIME_MAX_SPEC_CONSTANTS][11];
   WGPUComputePipelineDescriptor descriptor = WGPU_COMPUTE_PIPELINE_DESCRIPTOR_INIT;
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  GPUWebGPUPipelineError         error;
+#endif
   GPUComputePipelineWebGPU     *state;
   GPUDeviceWebGPU              *native;
   uint64_t                      entryMask;
   uint32_t                      automaticGroupMask;
+  GPUResult                     result;
 
   native = gpu_webgpuDevice(device);
 
@@ -80,10 +84,22 @@ webgpu_createComputePipeline(GPUDevice                          *device,
   descriptor.compute.constantCount = webgpu_pipelineConstants(info->chain.pNext, constantEntries, constantIDs);
   descriptor.compute.constants     = descriptor.compute.constantCount ? constantEntries : NULL;
 
-  if (!(state->pipeline = wgpuDeviceCreateComputePipeline(native->device, &descriptor))) {
+  result = GPU_OK;
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  gpu_webgpuBeginPipelineError(device, &error);
+#endif
+  state->pipeline = wgpuDeviceCreateComputePipeline(native->device, &descriptor);
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  result = gpu_webgpuEndPipelineError(&error);
+#endif
+
+  if (!state->pipeline || result != GPU_OK) {
+    if (state->pipeline)
+      wgpuComputePipelineRelease(state->pipeline);
+
     gpu_webgpuDestroyPipelineLayout(&state->layout);
     free(state);
-    return GPU_ERROR_BACKEND_FAILURE;
+    return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
 
   state->base._priv            = state->pipeline;

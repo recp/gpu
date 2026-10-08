@@ -217,6 +217,9 @@ webgpu_createPipeline(GPUDevice                         *device,
   WGPUColorTargetState         targets[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   WGPUBlendState               blends[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   WGPUDepthStencilState        depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  GPUWebGPUPipelineError       error;
+#endif
   WGPUVertexBufferLayout      *vertexBuffers;
   WGPUVertexAttribute         *vertexAttributes;
   GPUDeviceWebGPU             *native;
@@ -234,6 +237,7 @@ webgpu_createPipeline(GPUDevice                         *device,
   uint32_t                     countIndex;
   uint32_t                     j;
   uint32_t                     targetIndex;
+  GPUResult                    result;
 
   native = gpu_webgpuDevice(device);
   module = info && info->library ? info->library->_priv : NULL;
@@ -419,14 +423,24 @@ webgpu_createPipeline(GPUDevice                         *device,
   fragment.constantCount          = descriptor.vertex.constantCount;
   fragment.constants              = descriptor.vertex.constants;
 
+  result = GPU_OK;
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  gpu_webgpuBeginPipelineError(device, &error);
+#endif
   state->pipeline = wgpuDeviceCreateRenderPipeline(native->device, &descriptor);
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  result = gpu_webgpuEndPipelineError(&error);
+#endif
   free(vertexBuffers);
   free(vertexAttributes);
 
-  if (!state->pipeline) {
+  if (!state->pipeline || result != GPU_OK) {
+    if (state->pipeline)
+      wgpuRenderPipelineRelease(state->pipeline);
+
     gpu_webgpuDestroyPipelineLayout(&state->layout);
     free(state);
-    return GPU_ERROR_BACKEND_FAILURE;
+    return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
 
   pipeline->_priv  = state->pipeline;
