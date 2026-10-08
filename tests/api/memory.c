@@ -15,6 +15,82 @@
  */
 
 #include "test.h"
+#include "../../src/api/device_internal.h"
+
+static uint32_t heapCalls;
+
+static GPUResult
+count_heap_create(GPUDevice               *device,
+                  const GPUHeapCreateInfo *info,
+                  GPUHeap                **outHeap) {
+  (void)device;
+  (void)info;
+  (void)outHeap;
+  heapCalls++;
+  return GPU_ERROR_BACKEND_FAILURE;
+}
+
+static int
+heap_chains(GPUDevice *device, const GPUHeapCreateInfo *source) {
+  GPUBufferHostMemoryEXT host      = {0};
+  GPUChainedStruct       extension = {0};
+  GPUHeapCreateInfo      info;
+  const void           *chains[3];
+  GPUHeap              *heap;
+  Api                  *api;
+
+  GPUResult (*saved)(GPUDevice *, const GPUHeapCreateInfo *, GPUHeap **);
+
+  GPUResult result;
+  uint32_t  i;
+  int       ok = 1;
+
+  info = *source;
+  api  = deviceApi(device);
+
+  host.chain.sType       = GPU_STRUCTURE_TYPE_BUFFER_HOST_MEMORY_EXT;
+  host.chain.structSize  = sizeof(host);
+
+  extension.sType        = GPU_STRUCTURE_TYPE_PIPELINE_CONSTANTS;
+  extension.structSize   = sizeof(extension);
+  extension.pNext        = &extension;
+
+  chains[0]              = &host;
+  chains[1]              = &extension;
+  chains[2]              = &info.chain;
+
+  saved                  = api->memory.createHeap;
+  api->memory.createHeap = count_heap_create;
+
+  for (i = 0u; i < GPU_ARRAY_LEN(chains); i++) {
+    info.chain.pNext = chains[i];
+    heapCalls        = 0u;
+    heap             = (GPUHeap *)(uintptr_t)1u;
+    result           = GPUCreateHeap(device, &info, &heap);
+
+    if (result != GPU_ERROR_UNSUPPORTED || heap || heapCalls) {
+      fprintf(stderr, "heap chain case=%u result=%d calls=%u output=%p\n", i, result, heapCalls, (void *)heap);
+      ok = 0;
+      break;
+    }
+  }
+
+  if (ok) {
+    /* an ordinary heap still reaches the backend and preserves its error. */
+    info.chain.pNext = NULL;
+    heapCalls        = 0u;
+    heap             = (GPUHeap *)(uintptr_t)1u;
+    result           = GPUCreateHeap(device, &info, &heap);
+    ok               = result == GPU_ERROR_BACKEND_FAILURE && !heap && heapCalls == 1u;
+  }
+
+  api->memory.createHeap = saved;
+
+  if (ok)
+    printf("heap chains: 3 unsupported chains rejected before backend, ordinary heap preserved\n");
+
+  return ok;
+}
 
 static int
 gpu_test_buffer_device_address(GPUAdapter *adapter) {
@@ -227,6 +303,9 @@ gpu_test_placed_memory(GPUAdapter *adapter) {
   heapInfo.compatibilityMask = compatibility != 0u
                                  ? compatibility
                                  : bufferMemory.compatibilityMask;
+
+  if (!heap_chains(device, &heapInfo))
+    goto cleanup;
 
   if (GPUCreateHeap(device, &heapInfo, &heap) != GPU_OK || !heap) {
     fprintf(stderr, "placed heap creation failed\n");

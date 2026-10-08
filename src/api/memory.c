@@ -454,6 +454,10 @@ GPUCreateHeap(GPUDevice               *__restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   if ((info->usage == GPU_HEAP_USAGE_PLACED
        && !GPUIsFeatureEnabled(device, GPU_FEATURE_PLACED_RESOURCES))
       || (info->usage == GPU_HEAP_USAGE_SPARSE
