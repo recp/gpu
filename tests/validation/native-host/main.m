@@ -191,11 +191,8 @@ tick(void) {
       fprintf(stdout, "unhide after pause at %u frames\n", submitted);
       [NSApp unhide:nil];
 
-      if (@available(macOS 14.0, *)) {
-        [NSApp activate];
-      } else {
-        [NSApp activateIgnoringOtherApps:YES];
-      }
+      /* force activation to exercise the host's resume notification. */
+      [NSApp activateIgnoringOtherApps:YES];
     }
   } else if (phase == 2u && NSApp.active && submitted >= pausedFrames + 3u) {
     if (!timer) {
