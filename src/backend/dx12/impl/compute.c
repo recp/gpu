@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "../impl.h"
+#include "../../../api/constants_internal.h"
 #include "../../../api/compute_internal.h"
 #include "pipeline_cache.h"
 
@@ -107,6 +108,7 @@ dx12_createComputePipeline(GPUDevice                          *device,
                           library,
                           info->entryPoint,
                           GPU_SHADER_STAGE_COMPUTE_BIT,
+                          gpuPipelineConstants(info->chain.pNext),
                           &shaderCode)) {
     rootSignature->lpVtbl->Release(rootSignature);
     free(state);

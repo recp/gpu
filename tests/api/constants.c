@@ -34,14 +34,14 @@ static const GPUConstant overrides[2][4] = {
   }
 };
 
-static const float expected[7][4] = {
-  {0.0f, -3.0f, 5.0f, 0.25f},
-  {1.0f, -7.0f, 9.0f, 1.5f},
-  {0.0f, 17.0f, 0.0f, -2.0f},
-  {0.0f, -3.0f, 5.0f, 0.25f},
-  {0.0f, -3.0f, 5.0f, 0.75f},
-  {0.0f, -3.0f, 5.0f, 0.0f},
-  {0.0f, -3.0f, 5.0f, -0.0f}
+static const float expected[7][8] = {
+  {0.0f, -3.0f, 5.0f, 0.25f, -2.75f, 0.0f, 0.0f, 0.0f},
+  {1.0f, -7.0f, 9.0f, 1.5f, 10.5f, 0.0f, 0.0f, 0.0f},
+  {0.0f, 17.0f, 0.0f, -2.0f, 15.0f, 0.0f, 0.0f, 0.0f},
+  {0.0f, -3.0f, 5.0f, 0.25f, -2.75f, 0.0f, 0.0f, 0.0f},
+  {0.0f, -3.0f, 5.0f, 0.75f, -2.25f, 0.0f, 0.0f, 0.0f},
+  {0.0f, -3.0f, 5.0f, 0.0f, -3.0f, 0.0f, 0.0f, 0.0f},
+  {0.0f, -3.0f, 5.0f, -0.0f, -3.0f, 0.0f, 0.0f, 0.0f}
 };
 
 static int
@@ -319,7 +319,7 @@ check_constants_library(GPUDevice *device, GPUShaderLibrary *library) {
   GPUConstant                  unused     = {.value.f32 = 0.0f, .id = 4u, .type = GPU_CONSTANT_F32};
   GPUConstant                  partial    = {.value.f32 = 0.75f, .id = 3u, .type = GPU_CONSTANT_F32};
   GPUCommandBuffer            *commands[1];
-  float                        output[4];
+  float                        output[8];
   GPUComputePipeline          *pipeline   = NULL;
   GPUComputePipeline          *same       = NULL;
   GPUComputePipeline          *previous   = NULL;
@@ -482,7 +482,7 @@ check_constants_library(GPUDevice *device, GPUShaderLibrary *library) {
 
     /* WGSL 15.7.2 permits ignoring the sign of zero; cache keys still differ. */
 
-    for (j = 0u; j < 4u; j++) {
+    for (j = 0u; j < 8u; j++) {
       if (!isfinite(output[j]) || output[j] != expected[i][j]
           || (i >= 5u && j == 3u && device->_api->backend != GPU_BACKEND_WEBGPU
               && !!signbit(output[j]) != (i == 6u))) {
@@ -537,7 +537,7 @@ gpu_test_constants(GPUDevice *device, const char *bytecodePath) {
   }
 
   if (properties.backend != GPU_BACKEND_METAL && properties.backend != GPU_BACKEND_VULKAN
-      && properties.backend != GPU_BACKEND_WEBGPU) {
+      && properties.backend != GPU_BACKEND_WEBGPU && properties.backend != GPU_BACKEND_DX12) {
     puts("constants: caller overrides unavailable on this backend");
     return 1;
   }

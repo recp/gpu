@@ -109,11 +109,13 @@ cuda_createComputePipeline(GPUDevice                          *device,
                            const GPUComputePipelineCreateInfo *info,
                            GPUComputePipeline                 *pipeline) {
   GPUShaderPTXEntryView             ptx;
+  GPUShaderSourceBlob               source = {0};
   uint32_t                          block[3];
   GPUComputePipelineCuda           *native;
   GPUDeviceCuda                    *deviceNative;
   GPUShaderLibraryCuda             *library;
   GPUCudaModule                    *module;
+  const GPUPipelineConstants        *constants;
   const GPUShaderStaticSamplerInfo *staticSamplers;
   GPUShaderPTXParamInfo            *param;
   uint64_t                          entryBit;
@@ -128,6 +130,7 @@ cuda_createComputePipeline(GPUDevice                          *device,
   uint32_t                          samplerIndex;
   uint32_t                          sourceIndex;
   CUresult                          result;
+  GPUResult                         compiled;
 
   deviceNative = cuda_device(device);
   library      = info && info->library ? info->library->_priv : NULL;
@@ -186,15 +189,37 @@ cuda_createComputePipeline(GPUDevice                          *device,
   }
 
   native->pipeline = pipeline;
-  result           = cuda_getModuleFunction(module, info->entryPoint, &native->function);
+
+  constants = gpuPipelineConstants(info->chain.pNext);
+
+  if (constants && constants->constantCount != 0u) {
+    compiled = gpuCompileShaderLibraryEntry(info->library, info->entryPoint, constants, &source);
+
+    if (compiled != GPU_OK) {
+      free(native);
+      return compiled;
+    }
+
+    module = cuda_createModule(device, source.data, source.size);
+    gpuFreeShaderSourceBlob(&source);
+
+    if (!module) {
+      free(native);
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  } else {
+    cuda_retainModule(module);
+  }
+
+  result = cuda_getModuleFunction(module, info->entryPoint, &native->function);
 
   if (result != CUDA_SUCCESS) {
     cuda_report(device, result, "PTX entry lookup");
+    cuda_releaseModule(module);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  cuda_retainModule(module);
   native->module         = module;
   native->paramCount     = ptx.paramCount;
   native->paramDataSize  = ptx.paramDataSize;

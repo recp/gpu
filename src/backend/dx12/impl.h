@@ -335,11 +335,12 @@ dx12_bindRayTracingGroup(GPURayTracingPassEncoderEXT *pass,
 
 GPU_HIDE
 bool
-dx12_compileShader(GPUDeviceDX12      *device,
-                   GPUShaderLibrary   *library,
-                   const char         *entry,
-                   GPUShaderStageFlags stage,
-                   DX12ShaderCode     *outCode);
+dx12_compileShader(GPUDeviceDX12              *device,
+                   GPUShaderLibrary           *library,
+                   const char                 *entry,
+                   GPUShaderStageFlags         stage,
+                   const GPUPipelineConstants *constants,
+                   DX12ShaderCode             *outCode);
 
 GPU_HIDE
 bool

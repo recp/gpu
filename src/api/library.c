@@ -237,14 +237,17 @@ gpu_setShaderUSLSource(GPUShaderLibrary        *library,
 }
 
 static GPUResult
-gpu_compileShaderLibraryEntries(const GPUShaderLibrary *library,
-                                const char *const      *entryPoints,
-                                uint32_t                entryPointCount,
-                                GPUShaderSourceBlob    *outSource) {
+gpu_compileShaderLibraryEntries(const GPUShaderLibrary     *library,
+                                const char *const          *entryPoints,
+                                uint32_t                    entryPointCount,
+                                const GPUPipelineConstants *constants,
+                                GPUShaderSourceBlob        *outSource) {
   USCompileOutput           output = {0};
   USCompileInput            input  = {0};
   USLTargetSpec             target;
   const GPUShaderUSLSource *source;
+  const GPUConstant        *value;
+  USConstant               *values;
   USResult                  result;
   uint32_t                  encoding;
   uint32_t                  i;
@@ -282,6 +285,48 @@ gpu_compileShaderLibraryEntries(const GPUShaderLibrary *library,
   input.entry_point_count = entryPointCount;
   input.options           = &source->options;
 
+  values = NULL;
+
+  if (constants && constants->constantCount != 0u) {
+    if (!constants->pConstants || constants->constantCount > USL_RUNTIME_MAX_SPEC_CONSTANTS) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!(values = calloc(constants->constantCount, sizeof(*values)))) {
+      return GPU_ERROR_OUT_OF_MEMORY;
+    }
+
+    for (i = 0u; i < constants->constantCount; i++) {
+      value        = &constants->pConstants[i];
+      values[i].id = value->id;
+
+      switch (value->type) {
+        case GPU_CONSTANT_BOOL:
+          values[i].type          = USL_RUNTIME_TYPE_BOOL;
+          values[i].value.boolean = value->value.boolean;
+          break;
+        case GPU_CONSTANT_I32:
+          values[i].type      = USL_RUNTIME_TYPE_I32;
+          values[i].value.i32 = value->value.i32;
+          break;
+        case GPU_CONSTANT_U32:
+          values[i].type      = USL_RUNTIME_TYPE_U32;
+          values[i].value.u32 = value->value.u32;
+          break;
+        case GPU_CONSTANT_F32:
+          values[i].type      = USL_RUNTIME_TYPE_F32;
+          values[i].value.f32 = value->value.f32;
+          break;
+        default:
+          free(values);
+          return GPU_ERROR_UNSUPPORTED;
+      }
+    }
+
+    input.constants      = values;
+    input.constant_count = constants->constantCount;
+  }
+
   if (source->disableDiskCache) {
     input.flags |= US_COMPILE_INPUT_FLAG_DISABLE_DISK_CACHE;
   }
@@ -298,6 +343,7 @@ gpu_compileShaderLibraryEntries(const GPUShaderLibrary *library,
                ? USL_RUNTIME_EMBEDDED_BLOB_ENCODING_BINARY
                : USL_RUNTIME_EMBEDDED_BLOB_ENCODING_TEXT;
   result   = us_compile(&input, &output);
+  free(values);
 
   if (getenv("GPU_USL_LOG")) {
     fprintf(stderr,
@@ -3183,9 +3229,10 @@ cleanup:
 
 GPU_HIDE
 GPUResult
-gpuCompileShaderLibraryEntry(const GPUShaderLibrary *library,
-                             const char             *entryPoint,
-                             GPUShaderSourceBlob    *outSource) {
+gpuCompileShaderLibraryEntry(const GPUShaderLibrary     *library,
+                             const char                 *entryPoint,
+                             const GPUPipelineConstants *constants,
+                             GPUShaderSourceBlob        *outSource) {
   if (!entryPoint || entryPoint[0] == '\0') {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
@@ -3193,6 +3240,7 @@ gpuCompileShaderLibraryEntry(const GPUShaderLibrary *library,
   return gpu_compileShaderLibraryEntries(library,
                                          &entryPoint,
                                          1u,
+                                         constants,
                                          outSource);
 }
 
@@ -3232,6 +3280,7 @@ gpuCompileShaderLibraryEntryMask(const GPUShaderLibrary *library,
   return gpu_compileShaderLibraryEntries(library,
                                          entryPoints,
                                          entryPointCount,
+                                         NULL,
                                          outSource);
 }
 

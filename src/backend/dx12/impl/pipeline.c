@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "../impl.h"
 #include "pipeline_cache.h"
+#include "../../../api/constants_internal.h"
 
 #include <d3dcompiler.h>
 #include <limits.h>
@@ -419,13 +420,21 @@ dx12__useLibraryBinary(GPUShaderLibraryDX12 *library,
 }
 
 static DX12ShaderCacheEntry*
-dx12__findShader(GPUShaderLibraryDX12 *library,
-                 const char           *entry,
-                 GPUShaderStageFlags   stage) {
+dx12__findShader(GPUShaderLibraryDX12       *library,
+                 const char                 *entry,
+                 GPUShaderStageFlags         stage,
+                 const GPUPipelineConstants *constants) {
   DX12ShaderCacheEntry *cached;
+  uint32_t              count;
+
+  count = constants ? constants->constantCount : 0u;
 
   for (cached = library->cache; cached; cached = cached->next) {
-    if (cached->stage == stage && strcmp(cached->entry, entry) == 0) {
+    if (cached->stage == stage && strcmp(cached->entry, entry) == 0
+        && cached->constantCount == count
+        && (count == 0u || memcmp(cached->constants,
+                                  constants->pConstants,
+                                  (size_t)count * sizeof(*cached->constants)) == 0)) {
       return cached;
     }
   }
@@ -434,14 +443,15 @@ dx12__findShader(GPUShaderLibraryDX12 *library,
 }
 
 static bool
-dx12__getCachedShader(GPUShaderLibraryDX12 *library,
-                      const char           *entry,
-                      GPUShaderStageFlags   stage,
-                      DX12ShaderCode       *outCode) {
+dx12__getCachedShader(GPUShaderLibraryDX12       *library,
+                      const char                 *entry,
+                      GPUShaderStageFlags         stage,
+                      const GPUPipelineConstants *constants,
+                      DX12ShaderCode             *outCode) {
   DX12ShaderCacheEntry *cached;
 
   AcquireSRWLockShared(&library->cacheLock);
-  cached = dx12__findShader(library, entry, stage);
+  cached = dx12__findShader(library, entry, stage, constants);
 
   if (cached) {
     outCode->data  = cached->data;
@@ -455,17 +465,20 @@ dx12__getCachedShader(GPUShaderLibraryDX12 *library,
 }
 
 static bool
-dx12__cacheShader(GPUShaderLibraryDX12 *library,
-                  const char           *entry,
-                  GPUShaderStageFlags   stage,
-                  DX12ShaderCode       *code,
-                  DX12ShaderCode       *outCode) {
+dx12__cacheShader(GPUShaderLibraryDX12       *library,
+                  const char                 *entry,
+                  GPUShaderStageFlags         stage,
+                  const GPUPipelineConstants *constants,
+                  DX12ShaderCode             *code,
+                  DX12ShaderCode             *outCode) {
   DX12ShaderCacheEntry *cached;
   DX12ShaderCacheEntry *newEntry;
   size_t                entrySize;
+  uint32_t              count;
 
   entrySize = strlen(entry) + 1u;
-  newEntry  = calloc(1, sizeof(*newEntry));
+  count     = constants ? constants->constantCount : 0u;
+  newEntry  = calloc(1, sizeof(*newEntry) + (size_t)count * sizeof(*newEntry->constants));
 
   if (newEntry) {
     newEntry->entry = malloc(entrySize);
@@ -485,8 +498,25 @@ dx12__cacheShader(GPUShaderLibraryDX12 *library,
 
   memcpy(newEntry->entry, entry, entrySize);
 
+  newEntry->constantCount = count;
+
+  if (count != 0u) {
+    memcpy(newEntry->constants, constants->pConstants, (size_t)count * sizeof(*newEntry->constants));
+  }
+
   AcquireSRWLockExclusive(&library->cacheLock);
-  cached = dx12__findShader(library, entry, stage);
+  cached = dx12__findShader(library, entry, stage, constants);
+
+  /* keep borrowed cache blobs stable; excess variants remain caller-owned. */
+
+  if (!cached && library->cacheCount >= 256u) {
+    ReleaseSRWLockExclusive(&library->cacheLock);
+    free(newEntry->entry);
+    free(newEntry);
+    *outCode = *code;
+    memset(code, 0, sizeof(*code));
+    return true;
+  }
 
   if (!cached) {
     newEntry->next  = library->cache;
@@ -494,6 +524,7 @@ dx12__cacheShader(GPUShaderLibraryDX12 *library,
     newEntry->size  = code->size;
     newEntry->stage = stage;
     library->cache  = newEntry;
+    library->cacheCount++;
     cached          = newEntry;
     newEntry        = NULL;
     memset(code, 0, sizeof(*code));
@@ -1137,11 +1168,12 @@ dx12_hasLinearAlgebraCompiler(HMODULE module) {
 
 GPU_HIDE
 bool
-dx12_compileShader(GPUDeviceDX12      *device,
-                   GPUShaderLibrary   *library,
-                   const char         *entry,
-                   GPUShaderStageFlags stage,
-                   DX12ShaderCode     *outCode) {
+dx12_compileShader(GPUDeviceDX12              *device,
+                   GPUShaderLibrary           *library,
+                   const char                 *entry,
+                   GPUShaderStageFlags         stage,
+                   const GPUPipelineConstants *constants,
+                   DX12ShaderCode             *outCode) {
   GPUShaderSourceBlob   selectedSource;
   DX12ShaderCode        compiled;
   wchar_t               dxcProfile[16];
@@ -1163,7 +1195,7 @@ dx12_compileShader(GPUDeviceDX12      *device,
 
   memset(outCode, 0, sizeof(*outCode));
 
-  if (dx12__getCachedShader(native, entry, stage, outCode)) {
+  if (dx12__getCachedShader(native, entry, stage, constants, outCode)) {
     return true;
   }
 
@@ -1172,12 +1204,13 @@ dx12_compileShader(GPUDeviceDX12      *device,
   sourceSize   = native->sourceSize;
   sourceResult = gpuCompileShaderLibraryEntry(library,
                                               entry,
+                                              constants,
                                               &selectedSource);
 
   if (sourceResult == GPU_OK) {
     source     = selectedSource.data;
     sourceSize = selectedSource.size;
-  } else if (sourceResult != GPU_ERROR_UNSUPPORTED) {
+  } else if (sourceResult != GPU_ERROR_UNSUPPORTED || (constants && constants->constantCount != 0u)) {
     return false;
   }
 
@@ -1221,6 +1254,7 @@ dx12_compileShader(GPUDeviceDX12      *device,
   return success && dx12__cacheShader(native,
                                       entry,
                                       stage,
+                                      constants,
                                       &compiled,
                                       outCode);
 }
@@ -1259,6 +1293,7 @@ dx12_compileRayLibrary(GPUDeviceDX12    *device,
   if (dx12__getCachedShader(native,
                             cacheEntry,
                             GPU_SHADER_STAGE_RAY_GENERATION_BIT,
+                            NULL,
                             outCode)) {
     return true;
   }
@@ -1305,6 +1340,7 @@ dx12_compileRayLibrary(GPUDeviceDX12    *device,
   return success && dx12__cacheShader(native,
                                       cacheEntry,
                                       GPU_SHADER_STAGE_RAY_GENERATION_BIT,
+                                      NULL,
                                       &compiled,
                                       outCode);
 }
@@ -1344,6 +1380,7 @@ dx12_compileExecutionGraphLibrary(GPUDeviceDX12    *device,
   if (dx12__getCachedShader(native,
                             cacheEntry,
                             GPU_SHADER_STAGE_COMPUTE_BIT,
+                            NULL,
                             outCode)) {
     return true;
   }
@@ -1390,6 +1427,7 @@ dx12_compileExecutionGraphLibrary(GPUDeviceDX12    *device,
   return success && dx12__cacheShader(native,
                                       cacheEntry,
                                       GPU_SHADER_STAGE_COMPUTE_BIT,
+                                      NULL,
                                       &compiled,
                                       outCode);
 }
@@ -1508,6 +1546,7 @@ dx12_createRenderPipeline(GPUDevice                         *__restrict device,
                           info->library,
                           info->fragmentEntry,
                           GPU_SHADER_STAGE_FRAGMENT_BIT,
+                          gpuPipelineConstants(info->chain.pNext),
                           &fragmentCode)) {
     fprintf(stderr,
             "GPU Direct3D 12 fragment shader '%s' failed to compile\n",
@@ -1519,6 +1558,7 @@ dx12_createRenderPipeline(GPUDevice                         *__restrict device,
                                    info->library,
                                    info->vertexEntry,
                                    GPU_SHADER_STAGE_VERTEX_BIT,
+                                   gpuPipelineConstants(info->chain.pNext),
                                    &vertexCode)) {
     fprintf(stderr,
             "GPU Direct3D 12 vertex shader '%s' failed to compile\n",
@@ -1531,6 +1571,7 @@ dx12_createRenderPipeline(GPUDevice                         *__restrict device,
                              info->library,
                              mesh->taskEntry,
                              GPU_SHADER_STAGE_TASK_BIT,
+                             gpuPipelineConstants(info->chain.pNext),
                              &taskCode)) {
     fprintf(stderr,
             "GPU Direct3D 12 task shader '%s' failed to compile\n",
@@ -1542,6 +1583,7 @@ dx12_createRenderPipeline(GPUDevice                         *__restrict device,
                                   info->library,
                                   mesh->meshEntry,
                                   GPU_SHADER_STAGE_MESH_BIT,
+                                  gpuPipelineConstants(info->chain.pNext),
                                   &meshCode)) {
     fprintf(stderr,
             "GPU Direct3D 12 mesh shader '%s' failed to compile\n",

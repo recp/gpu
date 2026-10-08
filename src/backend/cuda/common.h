@@ -25,6 +25,7 @@
 #include "../../api/descr/descriptor_internal.h"
 #include "../../api/instance_internal.h"
 #include "../../api/library_internal.h"
+#include "../../api/constants_internal.h"
 #include "../../api/pipeline_cache_internal.h"
 #include "../../api/sampler_internal.h"
 #include "../../api/texture_internal.h"

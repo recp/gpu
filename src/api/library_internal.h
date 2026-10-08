@@ -249,9 +249,10 @@ gpuShaderWGSLStaticGroups(const GPUShaderLibrary *library,
 
 GPU_HIDE
 GPUResult
-gpuCompileShaderLibraryEntry(const GPUShaderLibrary *library,
-                             const char             *entryPoint,
-                             GPUShaderSourceBlob    *outSource);
+gpuCompileShaderLibraryEntry(const GPUShaderLibrary     *library,
+                             const char                 *entryPoint,
+                             const GPUPipelineConstants *constants,
+                             GPUShaderSourceBlob        *outSource);
 
 GPU_HIDE
 GPUResult

@@ -161,7 +161,12 @@ gpuPrepareConstants(const GPUShaderLibrary *library,
   backend = library->_api->backend;
 
   if (backend != GPU_BACKEND_METAL && backend != GPU_BACKEND_VULKAN
-      && backend != GPU_BACKEND_WEBGPU) {
+      && backend != GPU_BACKEND_WEBGPU && backend != GPU_BACKEND_DX12
+      && backend != GPU_BACKEND_CUDA) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  if ((backend == GPU_BACKEND_DX12 || backend == GPU_BACKEND_CUDA) && !library->_uslSource) {
     return GPU_ERROR_UNSUPPORTED;
   }
 

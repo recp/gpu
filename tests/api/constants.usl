@@ -25,8 +25,16 @@ spec const OFFSET: float = 0.25
 #function_constant(4)
 spec const UNUSED: float = 99.0
 
+fn adjusted(x: float) -> float {
+  if (ENABLED) {
+    return x + float(SCALE)
+  }
+  return x + float(BIAS)
+}
+
 kern(1, 1, 1) constants_cs(inout result: [float4] #buffer(0)) {
   result[0] = float4(float(ENABLED), float(BIAS), float(SCALE), OFFSET)
+  result[1] = float4(adjusted(OFFSET), 0.0, 0.0, 0.0)
 }
 
 vert constants_vs(index: uint #vertex_id) -> float4 {

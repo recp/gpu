@@ -190,6 +190,8 @@ typedef struct DX12ShaderCacheEntry {
   void                        *data;
   SIZE_T                       size;
   GPUShaderStageFlags          stage;
+  uint32_t                     constantCount;
+  GPUConstant                  constants[];
 } DX12ShaderCacheEntry;
 
 typedef struct GPUShaderLibraryDX12 {
@@ -197,6 +199,7 @@ typedef struct GPUShaderLibraryDX12 {
   char                 *source;
   SRWLOCK               cacheLock;
   uint64_t              sourceSize;
+  uint32_t              cacheCount;
   bool                  binary;
 } GPUShaderLibraryDX12;
 
