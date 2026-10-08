@@ -113,7 +113,7 @@ struct GPUDevice {
   bool                        uslStorageExtFormats;
   bool                        uslBoundedDescriptorIndexing;
   bool                        uslUntypedPointers;
-  GPUFeature                  enabledFeatureStorage[GPU_FEATURE_ML_MODEL_EXT + 1u];
+  GPUFeature                  enabledFeatureStorage[GPU_FEATURE_BUFFER_HOST_MEMORY_EXT + 1u];
 };
 
 GPU_HIDE

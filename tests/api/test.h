@@ -134,6 +134,12 @@ int
 gpu_test_resources(GPUDevice *device);
 
 int
+gpu_test_host_buffer(GPUDevice *device);
+
+size_t
+gpu_test_host_page_size(void);
+
+int
 gpu_test_copy(GPUDevice *device);
 
 int

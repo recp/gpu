@@ -260,6 +260,89 @@ cleanup:
 }
 
 static int
+host_binding(GPUDevice *device, GPUMLBindingsCreateInfoEXT *info) {
+  GPUMLTensorBindingEXT           items[3];
+  GPUBufferHostMemoryEXT          host         = {0};
+  GPUBufferCreateInfo             bufferInfo   = {0};
+  GPUTensorViewCreateInfoEXT      viewInfo     = {0};
+  GPUTensorBufferRequirementsEXT  requirements;
+  GPUBuffer                      *buffers[2]   = {NULL};
+  GPUTensorEXT                   *tensors[2]   = {NULL};
+  const GPUMLTensorBindingEXT    *original;
+  GPUMLBindingsEXT               *bindings     = NULL;
+  uint8_t                        *allocation   = NULL;
+  uint8_t                        *bytes;
+  uint64_t                        extent;
+  size_t                          page;
+  uint32_t                        i;
+  int                             ok           = 0;
+
+  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_BUFFER_HOST_MEMORY_EXT))
+    return 1;
+
+  original = info->pBindings;
+  page     = gpu_test_host_page_size();
+  extent   = 0u;
+
+  for (i = 0u; i < 2u; i++) {
+    if (GPUGetTensorBufferRequirementsEXT(device,
+                                         GPUGetTensorDescEXT(original[i == 0u ? 0u : 2u].tensor),
+                                         &requirements) != GPU_OK)
+      goto cleanup;
+
+    if (requirements.sizeBytes > extent)
+      extent = requirements.sizeBytes;
+  }
+
+  if (page == 0u || extent > SIZE_MAX - 2u * page)
+    goto cleanup;
+
+  extent = (extent + page - 1u) / page * page;
+
+  if (!(allocation = malloc((size_t)extent + page)))
+    goto cleanup;
+
+  bytes = (uint8_t *)(((uintptr_t)allocation + page - 1u) / page * page);
+  host.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_HOST_MEMORY_EXT;
+  host.chain.structSize = sizeof(host);
+  host.pData            = bytes;
+  host.allocationSize   = extent;
+
+  bufferInfo.chain.pNext = &host;
+  bufferInfo.sizeBytes   = extent;
+  bufferInfo.usage       = GPU_BUFFER_USAGE_STORAGE;
+
+  for (i = 0u; i < 2u; i++) {
+    if (GPUCreateBuffer(device, &bufferInfo, &buffers[i]) != GPU_OK)
+      goto cleanup;
+
+    viewInfo.buffer = buffers[i];
+    viewInfo.pDesc  = GPUGetTensorDescEXT(original[i == 0u ? 0u : 2u].tensor);
+
+    if (GPUCreateTensorViewEXT(device, &viewInfo, &tensors[i]) != GPU_OK)
+      goto cleanup;
+  }
+
+  memcpy(items, original, sizeof(items));
+  items[0].tensor = tensors[0];
+  items[2].tensor = tensors[1];
+  info->pBindings = items;
+  ok = GPUCreateMLBindingsEXT(device, info, &bindings) == GPU_ERROR_UNSUPPORTED && !bindings;
+  info->pBindings = original;
+
+cleanup:
+  GPUDestroyMLBindingsEXT(bindings);
+
+  for (i = 0u; i < 2u; i++) {
+    GPUDestroyTensorEXT(tensors[i]);
+    GPUDestroyBuffer(buffers[i]);
+  }
+
+  free(allocation);
+  return ok;
+}
+
+static int
 invalid_model(GPUDevice *device, const GPUMLModelCreateInfoEXT *info, GPUResult expected) {
   GPUMLModelEXT *model;
   GPUResult      result;
@@ -422,6 +505,7 @@ run_profile(GPUDevice          *device,
 
   if (!invalid_bindings(device, &bindingInfo, buffers[0])
       || !placement_alias(device, &bindingInfo)
+      || !host_binding(device, &bindingInfo)
       || GPUCreateMLBindingsEXT(device, &bindingInfo, &bindings) != GPU_OK) {
     goto cleanup;
   }
@@ -606,7 +690,8 @@ gpu_test_ml(GPUDevice *baseDevice) {
   GPUMLModelCreateInfoEXT    modelInfo        = {0};
   GPUMLPipelineCreateInfoEXT pipelineInfo     = {0};
   const GPUFeature           features[]       = {GPU_FEATURE_COMPUTE, GPU_FEATURE_TENSOR_RESOURCES_EXT,
-                                                 GPU_FEATURE_PLACED_RESOURCES, GPU_FEATURE_ML_MODEL_EXT};
+                                                 GPU_FEATURE_PLACED_RESOURCES, GPU_FEATURE_ML_MODEL_EXT,
+                                                 GPU_FEATURE_BUFFER_HOST_MEMORY_EXT};
   uint64_t                   dimensions[4][2] = {{16u, 8u}, {8u, 16u}, {24u, 12u}, {20u, 24u}};
   GPUMLTensorShapeEXT        inputs[2][2]     = {
     {{dimensions[0], GPU_TENSOR_DATA_TYPE_F32_EXT, 0u, 2u}, {dimensions[1], GPU_TENSOR_DATA_TYPE_F32_EXT, 1u, 2u}},
@@ -651,7 +736,8 @@ gpu_test_ml(GPUDevice *baseDevice) {
   }
 
   deviceInfo.required.pFeatures    = features;
-  deviceInfo.required.featureCount = GPU_ARRAY_LEN(features);
+  deviceInfo.required.featureCount = GPU_ARRAY_LEN(features)
+                                     - !GPUIsFeatureSupported(baseDevice->adapter, GPU_FEATURE_BUFFER_HOST_MEMORY_EXT);
   result                           = gpu_test_create_device(baseDevice->adapter, &deviceInfo, &device);
 
   if (!GPUIsFeatureSupported(baseDevice->adapter, GPU_FEATURE_ML_MODEL_EXT)) {

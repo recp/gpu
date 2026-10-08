@@ -403,7 +403,7 @@ GPUCreateMLBindingsEXT(GPUDevice                        *device,
       break;
     }
 
-    if (tensor->buffer->_sharedPeer) {
+    if (tensor->buffer->_sharedPeer || tensor->buffer->_hostImported) {
       result = GPU_ERROR_UNSUPPORTED;
       break;
     }

@@ -151,7 +151,8 @@ typedef enum GPUFeature {
   GPU_FEATURE_INTERSECTION_FUNCTION_TABLE = 28,
   GPU_FEATURE_TEXTURE_VIEW_MIN_LOD        = 29,
   GPU_FEATURE_TENSOR_RESOURCES_EXT        = 30,
-  GPU_FEATURE_ML_MODEL_EXT                = 31
+  GPU_FEATURE_ML_MODEL_EXT                = 31,
+  GPU_FEATURE_BUFFER_HOST_MEMORY_EXT      = 32
 } GPUFeature;
 
 typedef struct GPUFeatureSet {

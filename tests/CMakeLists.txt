@@ -811,6 +811,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/api/ray.c
     ${PROJECT_SOURCE_DIR}/tests/api/render.c
     ${PROJECT_SOURCE_DIR}/tests/api/resources.c
+    ${PROJECT_SOURCE_DIR}/tests/api/host_buffer.c
     ${PROJECT_SOURCE_DIR}/tests/api/runner.c
     ${PROJECT_SOURCE_DIR}/tests/api/runtime.c
     ${PROJECT_SOURCE_DIR}/tests/api/sampler.c
@@ -939,6 +940,12 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
             ${GPU_API_DEFAULT_BACKEND}
   )
   if(GPU_BUILD_METAL)
+    add_test(NAME api-metal-host-buffer
+      COMMAND gpu-api-test ${GPU_API_USL_FIXTURES} metal)
+    set_tests_properties(api-metal-host-buffer PROPERTIES
+      ENVIRONMENT "GPU_API_TEST=host-buffer;MTL_DEBUG_LAYER=1"
+      LABELS "metal;buffer;host"
+      TIMEOUT 30)
     add_test(NAME api-metal-ml
       COMMAND gpu-api-test ${GPU_API_USL_FIXTURES} metal)
     set_tests_properties(api-metal-ml PROPERTIES

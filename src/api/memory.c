@@ -257,7 +257,7 @@ GPUGetBufferMemoryRequirements(GPUDevice                 *__restrict device,
 
   memset(outRequirements, 0, sizeof(*outRequirements));
 
-  result = validateBufferCreateInfo(device, info);
+  result = validateBufferCreateInfo(device, info, false);
 
   if (result != GPU_OK) {
     return result;
@@ -347,7 +347,7 @@ GPUGetSparseBufferRequirements(GPUDevice                   *__restrict device,
 
   memset(outRequirements, 0, sizeof(*outRequirements));
 
-  result = validateBufferCreateInfo(device, info);
+  result = validateBufferCreateInfo(device, info, false);
 
   if (result != GPU_OK) {
     return result;

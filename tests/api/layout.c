@@ -34,6 +34,7 @@ GPU_ASSERT_CHAIN_FIRST(GPUNativeSurfaceCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUDeviceQueueCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUDeviceCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUBufferCreateInfo);
+GPU_ASSERT_CHAIN_FIRST(GPUBufferHostMemoryEXT);
 GPU_ASSERT_CHAIN_FIRST(GPUTextureCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUTextureViewCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUTextureViewMinLODEXT);
@@ -79,6 +80,7 @@ _Static_assert(offsetof(GPUTransientAllocatorConfig, chunkBytes) <
   "transient allocator 64-bit fields must stay packed"
 );
 GPU_ASSERT_64BIT_SIZE(GPUMemoryRequirements, 24u);
+GPU_ASSERT_64BIT_SIZE(GPUBufferHostMemoryEXT, 32u);
 GPU_ASSERT_64BIT_SIZE(GPUBufferBindingLayout, 16u);
 _Static_assert(offsetof(GPUBufferBindingLayout, byteAddress) == 12u,
                "buffer access must occupy existing layout padding");

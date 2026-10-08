@@ -217,13 +217,13 @@ validateSharedBufferInfo(GPUDeviceInteropEXT       *interop,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  result = validateBufferCreateInfo(interop->firstDevice, firstInfo);
+  result = validateBufferCreateInfo(interop->firstDevice, firstInfo, false);
 
   if (result != GPU_OK) {
     return result;
   }
 
-  return validateBufferCreateInfo(interop->secondDevice, secondInfo);
+  return validateBufferCreateInfo(interop->secondDevice, secondInfo, false);
 }
 
 static GPUResult

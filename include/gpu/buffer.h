@@ -48,6 +48,17 @@ typedef struct GPUBufferCreateInfo {
   GPUBufferUsageFlags usage;
 } GPUBufferCreateInfo;
 
+/* borrows page-aligned host storage until all GPU uses and views finish.
+ * sizeBytes stays logical; allocationSize is the whole-page native extent.
+ * GPUCreateBuffer requires GPU_FEATURE_BUFFER_HOST_MEMORY_EXT.
+ * GPUDestroyBuffer does not free pData; host access needs completion ordering.
+ */
+typedef struct GPUBufferHostMemoryEXT {
+  GPUChainedStruct chain;
+  void            *pData;
+  uint64_t         allocationSize;
+} GPUBufferHostMemoryEXT;
+
 GPU_EXPORT
 GPUResult
 GPUCreateBuffer(GPUDevice                 *__restrict device,

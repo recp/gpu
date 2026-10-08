@@ -22,6 +22,7 @@
 
 struct GPUBuffer {
   void                        *_priv;
+  void                        *_hostMemory;
   GPUDevice                   *device;
   GPUHeap                     *_heap;
   GPUBuffer                   *_sharedPeer;
@@ -32,12 +33,20 @@ struct GPUBuffer {
   GPUSparseBufferRequirements  _sparseRequirements;
   GPUBufferUsageFlags          usage;
   bool                         _sparse;
+  bool                         _hostImported;
 };
 
 GPU_HIDE
 GPUResult
 validateBufferCreateInfo(const GPUDevice           *device,
-                         const GPUBufferCreateInfo *info);
+                         const GPUBufferCreateInfo *info,
+                         bool                       allowHostMemory);
+
+/* only use after buffer creation-info validation. */
+static inline const GPUBufferHostMemoryEXT*
+bufferHostMemory(const GPUBufferCreateInfo *info) {
+  return (const GPUBufferHostMemoryEXT *)info->chain.pNext;
+}
 
 static inline Api*
 bufferApi(const GPUBuffer *buffer) {

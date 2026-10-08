@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include <string.h>
+#include <unistd.h>
 
 GPU_HIDE
 GPUResult
@@ -45,6 +46,10 @@ mt_wrapBuffer(GPUDevice                 *device,
   buffer->sizeBytes = info->sizeBytes;
   buffer->usage     = info->usage;
 
+  if (nativeBuffer.storageMode == MTLStorageModeShared) {
+    buffer->_hostMemory = nativeBuffer.contents;
+  }
+
   if (@available(macOS 13.0, iOS 16.0, *)) {
     buffer->_gpuAddress = nativeBuffer.gpuAddress;
   }
@@ -59,9 +64,11 @@ GPUResult
 mt_createBuffer(GPUDevice                 *__restrict device,
                 const GPUBufferCreateInfo *__restrict info,
                 GPUBuffer                **__restrict outBuffer) {
-  DeviceMT     *deviceMT;
-  id<MTLBuffer> buffer;
-  GPUResult     result;
+  const GPUBufferHostMemoryEXT *host;
+  DeviceMT                    *deviceMT;
+  id<MTLBuffer>                buffer;
+  long                         pageSize;
+  GPUResult                    result;
 
   if (!device || !info || !outBuffer || info->sizeBytes == 0) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -73,8 +80,28 @@ mt_createBuffer(GPUDevice                 *__restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(buffer = [deviceMT->device newBufferWithLength:(NSUInteger)info->sizeBytes
-                                               options:MTLResourceStorageModeShared])) {
+  host = bufferHostMemory(info);
+
+  if (host) {
+    pageSize = sysconf(_SC_PAGESIZE);
+
+    if (pageSize <= 0 || host->allocationSize > NSUIntegerMax
+        || host->allocationSize > deviceMT->device.maxBufferLength
+        || (uintptr_t)host->pData % (uintptr_t)pageSize != 0u
+        || host->allocationSize % (uint64_t)pageSize != 0u) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+
+    buffer = [deviceMT->device newBufferWithBytesNoCopy:host->pData
+                                                 length:(NSUInteger)host->allocationSize
+                                                options:MTLResourceStorageModeShared
+                                            deallocator:nil];
+  } else {
+    buffer = [deviceMT->device newBufferWithLength:(NSUInteger)info->sizeBytes
+                                           options:MTLResourceStorageModeShared];
+  }
+
+  if (!buffer) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -83,6 +110,11 @@ mt_createBuffer(GPUDevice                 *__restrict device,
   if (result != GPU_OK) {
     [buffer release];
     return result;
+  }
+
+  if (host) {
+    (*outBuffer)->_hostImported   = true;
+    (*outBuffer)->_allocationSize = host->allocationSize;
   }
 
   return GPU_OK;

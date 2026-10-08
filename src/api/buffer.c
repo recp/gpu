@@ -21,17 +21,19 @@
 GPU_HIDE
 GPUResult
 validateBufferCreateInfo(const GPUDevice           *device,
-                         const GPUBufferCreateInfo *info) {
-  const GPUBufferUsageFlags known = GPU_BUFFER_USAGE_VERTEX |
-                                   GPU_BUFFER_USAGE_INDEX |
-                                   GPU_BUFFER_USAGE_UNIFORM |
-                                   GPU_BUFFER_USAGE_STORAGE |
-                                   GPU_BUFFER_USAGE_COPY_SRC |
-                                   GPU_BUFFER_USAGE_COPY_DST |
-                                   GPU_BUFFER_USAGE_INDIRECT |
-                                   GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
-                                   GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT |
-                                   GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
+                         const GPUBufferCreateInfo *info,
+                         bool                       allowHostMemory) {
+  const GPUBufferHostMemoryEXT *host;
+  const GPUBufferUsageFlags     known = GPU_BUFFER_USAGE_VERTEX |
+                                       GPU_BUFFER_USAGE_INDEX |
+                                       GPU_BUFFER_USAGE_UNIFORM |
+                                       GPU_BUFFER_USAGE_STORAGE |
+                                       GPU_BUFFER_USAGE_COPY_SRC |
+                                       GPU_BUFFER_USAGE_COPY_DST |
+                                       GPU_BUFFER_USAGE_INDIRECT |
+                                       GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
+                                       GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT |
+                                       GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
 
   if (!device || !info || info->sizeBytes == 0u || info->usage == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -52,7 +54,19 @@ validateBufferCreateInfo(const GPUDevice           *device,
   }
 
   if (info->chain.pNext) {
-    return GPU_ERROR_INVALID_ARGUMENT;
+    host = bufferHostMemory(info);
+
+    if (!allowHostMemory || host->chain.sType != GPU_STRUCTURE_TYPE_BUFFER_HOST_MEMORY_EXT
+        || host->chain.structSize < sizeof(*host) || host->chain.pNext
+        || !host->pData || host->allocationSize == 0u
+        || info->sizeBytes > host->allocationSize || host->allocationSize > UINTPTR_MAX
+        || (uintptr_t)host->pData > UINTPTR_MAX - host->allocationSize) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!GPUIsFeatureEnabled(device, GPU_FEATURE_BUFFER_HOST_MEMORY_EXT)) {
+      return GPU_ERROR_UNSUPPORTED;
+    }
   }
 
   if ((info->usage &
@@ -84,7 +98,7 @@ GPUCreateBuffer(GPUDevice                 *__restrict device,
 
   *outBuffer = NULL;
 
-  result = validateBufferCreateInfo(device, info);
+  result = validateBufferCreateInfo(device, info, true);
 
   if (result != GPU_OK) {
     return result;

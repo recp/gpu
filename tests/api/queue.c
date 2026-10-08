@@ -1002,7 +1002,7 @@ feature_set_matches_adapter(const GPUAdapter    *adapter,
   GPUFeature feature;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_TENSOR_RESOURCES_EXT;
+       feature <= GPU_FEATURE_BUFFER_HOST_MEMORY_EXT;
        feature = (GPUFeature)(feature + 1)) {
     if (feature_set_contains(set, feature) != GPUIsFeatureSupported(adapter, feature)) {
       return false;
@@ -1018,7 +1018,7 @@ feature_set_matches_device(const GPUDevice     *device,
   GPUFeature feature;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_TENSOR_RESOURCES_EXT;
+       feature <= GPU_FEATURE_BUFFER_HOST_MEMORY_EXT;
        feature = (GPUFeature)(feature + 1)) {
     if (feature_set_contains(set, feature) != GPUIsFeatureEnabled(device, feature)) {
       return false;
