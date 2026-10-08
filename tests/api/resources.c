@@ -15,9 +15,12 @@
  */
 
 #include "test.h"
+#include "../../src/api/adapter_internal.h"
 #include "../../src/api/buffer_internal.h"
 #include "../../src/api/cmdqueue_internal.h"
 #include "../../src/api/device_internal.h"
+#include "../../src/api/memory_internal.h"
+#include "../../src/api/multigpu_internal.h"
 #include "../../src/api/texture_internal.h"
 #include <stdatomic.h>
 
@@ -48,6 +51,17 @@ typedef struct Texture1DViewCase {
   bool               arrayTexture;
   bool               valid;
 } Texture1DViewCase;
+
+enum {
+  TEXTURE_CHAIN_CREATE,
+  TEXTURE_CHAIN_REQUIREMENTS,
+  TEXTURE_CHAIN_SPARSE_REQUIREMENTS,
+  TEXTURE_CHAIN_PLACED,
+  TEXTURE_CHAIN_SPARSE,
+  TEXTURE_CHAIN_SHARED_REQUIREMENTS,
+  TEXTURE_CHAIN_SHARED_CREATE,
+  TEXTURE_CHAIN_COUNT
+};
 
 static const TextureViewFormatCase textureViewFormatCases[] = {
   {GPU_FORMAT_RGBA8_UNORM           , GPU_FORMAT_RGBA8_UNORM           , true},
@@ -99,6 +113,258 @@ static uint32_t       gScopedBufferDestroyCalls;
 static uint32_t       gScopedTextureViewCreateCalls;
 static uint32_t       gScopedTextureViewDestroyCalls;
 static uint32_t       gScopedTextureWriteCalls;
+static uint32_t       gTextureChainCalls;
+static uint32_t       gTextureChainFormatCalls;
+
+static void
+texture_chain_caps(const GPUAdapter *adapter, GPUFormat format, GPUFormatCapabilities *caps) {
+  (void)adapter;
+  (void)format;
+  caps->sampled               = true;
+  caps->supportedSampleCounts = 1u;
+  gTextureChainFormatCalls++;
+}
+
+static GPUResult
+texture_chain_create(GPUDevice *device, const GPUTextureCreateInfo *info, GPUTexture **outTexture) {
+  (void)device;
+  (void)info;
+  (void)outTexture;
+  gTextureChainCalls++;
+  return GPU_ERROR_BACKEND_FAILURE;
+}
+
+static GPUResult
+texture_chain_requirements(GPUDevice                  *device,
+                           const GPUTextureCreateInfo *info,
+                           GPUMemoryRequirements      *requirements) {
+  (void)device;
+  (void)info;
+  (void)requirements;
+  gTextureChainCalls++;
+  return GPU_ERROR_BACKEND_FAILURE;
+}
+
+static GPUResult
+texture_chain_sparse_requirements(GPUDevice                    *device,
+                                  const GPUTextureCreateInfo   *info,
+                                  GPUSparseTextureRequirements *requirements) {
+  (void)device;
+  (void)info;
+  (void)requirements;
+  gTextureChainCalls++;
+  return GPU_ERROR_BACKEND_FAILURE;
+}
+
+static GPUResult
+texture_chain_shared_requirements(GPUDeviceInteropEXT        *interop,
+                                  const GPUTextureCreateInfo *first,
+                                  const GPUTextureCreateInfo *second,
+                                  GPUMemoryRequirements      *requirements) {
+  (void)interop;
+  (void)first;
+  (void)second;
+  (void)requirements;
+  gTextureChainCalls++;
+  return GPU_ERROR_BACKEND_FAILURE;
+}
+
+static GPUResult
+texture_chain_shared_create(GPUDeviceInteropEXT        *interop,
+                            const GPUTextureCreateInfo *first,
+                            const GPUTextureCreateInfo *second,
+                            GPUTexture                **outFirst,
+                            GPUTexture                **outSecond) {
+  (void)interop;
+  (void)first;
+  (void)second;
+  (void)outFirst;
+  (void)outSecond;
+  gTextureChainCalls++;
+  return GPU_ERROR_BACKEND_FAILURE;
+}
+
+static int
+check_texture_chain_call(GPUDevice                  *device,
+                         const GPUTextureCreateInfo *info,
+                         const GPUTextureCreateInfo *secondInfo,
+                         GPUHeap                    *heap,
+                         GPUDeviceInteropEXT        *interop,
+                         uint32_t                    route,
+                         GPUResult                   expected) {
+  GPUSparseTextureRequirements sparse;
+  GPUMemoryRequirements        requirements;
+  uint8_t                      zero[sizeof(sparse) + sizeof(requirements)] = {0};
+  GPUTexture                  *texture    = NULL;
+  GPUTexture                  *second     = NULL;
+  const void                  *output     = NULL;
+  size_t                       outputSize = 0u;
+  GPUResult                    result;
+
+  gTextureChainCalls       = 0u;
+  gTextureChainFormatCalls = 0u;
+
+  switch (route) {
+    case TEXTURE_CHAIN_CREATE:
+      texture = (GPUTexture *)(uintptr_t)1u;
+      result  = GPUCreateTexture(device, info, &texture);
+      break;
+    case TEXTURE_CHAIN_REQUIREMENTS:
+    case TEXTURE_CHAIN_SHARED_REQUIREMENTS:
+      memset(&requirements, 0xa5, sizeof(requirements));
+      output     = &requirements;
+      outputSize = sizeof(requirements);
+      result     = route == TEXTURE_CHAIN_REQUIREMENTS
+                     ? GPUGetTextureMemoryRequirements(device, info, &requirements)
+                     : GPUGetSharedTextureMemoryRequirementsEXT(interop, info, secondInfo, &requirements);
+      break;
+    case TEXTURE_CHAIN_SPARSE_REQUIREMENTS:
+      memset(&sparse, 0xa5, sizeof(sparse));
+      output     = &sparse;
+      outputSize = sizeof(sparse);
+      result     = GPUGetSparseTextureRequirements(device, info, &sparse);
+      break;
+    case TEXTURE_CHAIN_PLACED:
+      heap->usage = GPU_HEAP_USAGE_PLACED;
+      texture     = (GPUTexture *)(uintptr_t)1u;
+      result      = GPUCreatePlacedTexture(device, info, heap, 0u, &texture);
+      break;
+    case TEXTURE_CHAIN_SPARSE:
+      heap->usage = GPU_HEAP_USAGE_SPARSE;
+      texture     = (GPUTexture *)(uintptr_t)1u;
+      result      = GPUCreateSparseTexture(device, info, heap, &texture);
+      break;
+    case TEXTURE_CHAIN_SHARED_CREATE:
+      texture = (GPUTexture *)(uintptr_t)1u;
+      second  = (GPUTexture *)(uintptr_t)1u;
+      result  = GPUCreateSharedTextureEXT(interop, info, secondInfo, &texture, &second);
+      break;
+    default:
+      return 0;
+  }
+
+  if (result != expected || texture || second
+      || (outputSize && memcmp(output, zero, outputSize) != 0)) {
+    fprintf(stderr, "texture chain route=%u result=%d expected=%d outputs not cleared=%d\n",
+            route, result, expected, texture != NULL || second != NULL
+                                    || (outputSize && memcmp(output, zero, outputSize) != 0));
+    return 0;
+  }
+
+  return 1;
+}
+
+static int
+check_texture_create_chains(void) {
+  GPUDevice               devices[2]    = {0};
+  GPUApi                  api           = {0};
+  GPUAdapter              adapter       = {0};
+  GPUInstance             instance      = {0};
+  GPUTextureCreateInfo    info          = {0};
+  GPUTextureCreateInfo    clean;
+  GPUDeviceInteropEXT     interop       = {0};
+  GPUHeap                 heap          = {0};
+  GPUTextureViewMinLODEXT lod           = {0};
+  GPUBufferHostMemoryEXT  host          = {0};
+  GPUChainedStruct        extensions[3] = {0};
+  const void             *chains[6];
+  uint32_t                i;
+  uint32_t                route;
+
+  api.device.getFormatCapabilities        = texture_chain_caps;
+  api.texture.create                      = texture_chain_create;
+  api.memory.getTextureRequirements       = texture_chain_requirements;
+  api.memory.getSparseTextureRequirements = texture_chain_sparse_requirements;
+  api.multigpu.getTextureRequirements     = texture_chain_shared_requirements;
+  api.multigpu.createTexture              = texture_chain_shared_create;
+
+  instance._api                 = &api;
+  adapter.inst                  = &instance;
+  devices[0]._api               = &api;
+  devices[0].adapter            = &adapter;
+  devices[0].enabledFeatureMask = UINT64_MAX;
+  devices[1]._api               = &api;
+  devices[1].adapter            = &adapter;
+  heap.device                   = &devices[0];
+
+  interop.firstDevice           = &devices[0];
+  interop.secondDevice          = &devices[1];
+  interop.api                   = &api;
+
+  info.chain.sType              = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  info.chain.structSize         = sizeof(info);
+  info.dimension                = GPU_TEXTURE_DIMENSION_2D;
+  info.format                   = GPU_FORMAT_RGBA8_UNORM;
+  info.width                    = 2u;
+  info.height                   = 2u;
+  info.depthOrLayers            = 1u;
+  info.mipLevelCount            = 1u;
+  info.sampleCount              = 1u;
+  info.usage                    = GPU_TEXTURE_USAGE_SAMPLED;
+  clean                         = info;
+
+  lod.chain.sType               = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_MIN_LOD_EXT;
+  lod.chain.structSize          = sizeof(lod);
+  host.chain.sType              = GPU_STRUCTURE_TYPE_BUFFER_HOST_MEMORY_EXT;
+  host.chain.structSize         = sizeof(host);
+  extensions[0].sType           = GPU_STRUCTURE_TYPE_PIPELINE_CONSTANTS;
+  extensions[0].structSize      = sizeof(extensions[0]);
+  extensions[1]                 = extensions[0];
+  extensions[1].structSize      = 1u;
+  extensions[2]                 = extensions[0];
+  extensions[2].pNext           = &extensions[2];
+  chains[0]                     = &lod;
+  chains[1]                     = &host;
+  chains[2]                     = &extensions[0];
+  chains[3]                     = &extensions[1];
+  chains[4]                     = &extensions[2];
+  chains[5]                     = &info.chain;
+
+  for (i = 0u; i < GPU_ARRAY_LEN(chains); i++) {
+    info.chain.pNext = chains[i];
+
+    for (route = 0u; route < TEXTURE_CHAIN_COUNT; route++) {
+      if (!check_texture_chain_call(&devices[0], &info, &info, &heap, &interop, route, GPU_ERROR_UNSUPPORTED)
+          || gTextureChainCalls != 0u || gTextureChainFormatCalls != 0u) {
+        fprintf(stderr, "texture chain case=%u route=%u was not rejected before backend\n", i, route);
+        return 0;
+      }
+    }
+
+    for (route = TEXTURE_CHAIN_SHARED_REQUIREMENTS; route < TEXTURE_CHAIN_COUNT; route++) {
+      if (!check_texture_chain_call(&devices[0], &clean, &info, &heap, &interop, route, GPU_ERROR_UNSUPPORTED)
+          || gTextureChainCalls != 0u || gTextureChainFormatCalls != 1u) {
+        fprintf(stderr, "texture chain case=%u second shared descriptor was ignored\n", i);
+        return 0;
+      }
+    }
+  }
+
+  info.width = 0u;
+
+  for (route = 0u; route < TEXTURE_CHAIN_COUNT; route++) {
+    if (!check_texture_chain_call(&devices[0], &info, &info, &heap, &interop, route, GPU_ERROR_INVALID_ARGUMENT)
+        || gTextureChainCalls != 0u || gTextureChainFormatCalls != 0u) {
+      fprintf(stderr, "texture chain route=%u changed base validation\n", route);
+      return 0;
+    }
+  }
+
+  info = clean;
+
+  for (route = 0u; route < TEXTURE_CHAIN_COUNT; route++) {
+    if (!check_texture_chain_call(&devices[0], &info, &info, &heap, &interop, route, GPU_ERROR_BACKEND_FAILURE)
+        || gTextureChainCalls != 1u
+        || gTextureChainFormatCalls != (route < TEXTURE_CHAIN_SHARED_REQUIREMENTS ? 1u : 2u)) {
+      fprintf(stderr, "texture chain route=%u changed ordinary backend dispatch\n", route);
+      return 0;
+    }
+  }
+
+  printf("texture chains: 54 rejects,7 base guards,7 ordinary backend-error controls; outputs cleared\n");
+
+  return 1;
+}
 
 static GPUResult
 create_scoped_buffer(GPUDevice                 *__restrict device,
@@ -1492,6 +1758,7 @@ check_1d_view_validation(GPUDevice *device) {
 int
 gpu_test_resources(GPUDevice *device) {
   return check_destroy_null_handles()
+         && check_texture_create_chains()
          && check_buffer_device_dispatch(device)
          && check_format_capability_textures(device)
          && check_texture_transfer_layout(device)

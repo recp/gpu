@@ -325,6 +325,10 @@ validateTextureCreateInfo(const GPUDevice            *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  if (info->chain.pNext) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
   return validateTextureFormatUsage(device,
                                     info->format,
                                     info->usage,
