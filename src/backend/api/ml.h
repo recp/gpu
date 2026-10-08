@@ -14,21 +14,18 @@
  * limitations under the License.
  */
 
-#ifndef gpu_tensor_internal_h
-#define gpu_tensor_internal_h
+#ifndef gpu_api_ml_h
+#define gpu_api_ml_h
 
-#include "../common.h"
+#include <gpu/ml.h>
 
-struct GPUTensorEXT {
-  void             *_priv;
-  GPUDevice        *device;
-  GPUBuffer        *buffer;
-  char             *label;
-  uint64_t          offsetBytes;
-  uint64_t          sizeBytes;
-  GPUTensorDescEXT  desc;
-  uint64_t          dimensions[2];
-  uint64_t          strides[2];
-};
+typedef struct ApiML {
+  GPUResult (*createModel)(GPUMLModelEXT *model);
+  void      (*destroyModel)(GPUMLModelEXT *model);
+  GPUResult (*createPipeline)(GPUMLPipelineEXT *pipeline);
+  GPUResult (*createBindings)(GPUMLBindingsEXT *bindings);
+  void      (*destroyBindings)(GPUMLBindingsEXT *bindings);
+  GPUResult (*encode)(GPUCommandBuffer *cmdb, GPUMLBindingsEXT *bindings);
+} ApiML;
 
-#endif /* gpu_tensor_internal_h */
+#endif /* gpu_api_ml_h */

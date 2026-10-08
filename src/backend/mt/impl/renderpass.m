@@ -65,7 +65,8 @@ mt_clearColor(const GPUClearColorValue *color, GPUFormat format) {
 
 #if MT_HAS_COMMAND_BARRIERS
 
-static uint64_t
+GPU_HIDE
+uint64_t
 mt_stageMask(GPUPipelineStageMask stages) {
   uint64_t result;
 
@@ -84,6 +85,11 @@ mt_stageMask(GPUPipelineStageMask stages) {
       result |= MTLStageDispatch;
     }
 
+#if MT_HAS_METAL4
+    if ((stages & GPU_STAGE_ML_EXT) != 0u) {
+      result |= MTLStageMachineLearning;
+    }
+#endif
     if ((stages & GPU_STAGE_TRANSFER) != 0u) {
       result |= MTLStageBlit;
     }
@@ -766,7 +772,7 @@ mt_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
   if (commandState->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       native->modern = [commandState->modern computeCommandEncoder];
-      mt_applyPendingBarrier(cmdb, native->modern);
+      mt_applyPendingBarrier(cmdb, native->modern, MT_ENCODER_STAGES(MTLStageBlit));
     }
   } else
 #endif
@@ -775,7 +781,7 @@ mt_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
       native->classic = [[mt_classicCommandBuffer(cmdb) blitCommandEncoder] retain];
     }
 
-    mt_applyPendingBarrier(cmdb, native->classic);
+    mt_applyPendingBarrier(cmdb, native->classic, MT_ENCODER_STAGES(MTLStageBlit));
   }
 
   if (!native->classic && !native->modern) {
@@ -1250,11 +1256,19 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
         }
       }
 
+      if (((barriers->srcStages | barriers->dstStages) & GPU_STAGE_ML_EXT) != 0u) {
+        /* apply the queue dependency on its actual destination encoder. */
+        native->pendingMLAfterStages  |= afterStages;
+        native->pendingMLBeforeStages |= beforeStages;
+        native->pendingMLVisibility   |= visibility;
+        return;
+      }
+
       if (!(encoder = [(id<MTL4CommandBuffer>)native->modern computeCommandEncoder])) {
         return;
       }
 
-      mt_applyPendingBarrier(cmdb, encoder);
+      mt_applyPendingBarrier(cmdb, encoder, 0u);
       [encoder barrierAfterStages:afterStages
                 beforeQueueStages:beforeStages
                 visibilityOptions:visibility];

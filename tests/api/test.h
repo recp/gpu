@@ -113,6 +113,9 @@ int
 gpu_test_tensor(GPUDevice *device);
 
 int
+gpu_test_ml(GPUDevice *device);
+
+int
 gpu_test_constants(GPUDevice *device, const char *bytecodePath);
 
 int

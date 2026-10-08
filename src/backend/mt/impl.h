@@ -63,6 +63,10 @@ mt_initTensor(ApiTensor    *api);
 
 GPU_HIDE
 void
+mt_initML(ApiML *api);
+
+GPU_HIDE
+void
 mt_initRenderPass(ApiRenderPass    *api);
 
 GPU_HIDE

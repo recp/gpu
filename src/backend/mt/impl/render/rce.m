@@ -249,7 +249,9 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, RenderPassDesc    *pass) {
 
     if (@available(macOS 26.0, iOS 26.0, *)) {
       nativeState->modern = [commandState->modern renderCommandEncoderWithDescriptor:nativePass->modern];
-      mt_applyPendingBarrier(cmdb, nativeState->modern);
+      mt_applyPendingBarrier(cmdb,
+                             nativeState->modern,
+                             MT_ENCODER_STAGES(MTLStageVertex | MTLStageObject | MTLStageMesh | MTLStageFragment));
 
       nativeState->vertexArguments   = &commandState->vertexArguments;
       nativeState->fragmentArguments = &commandState->fragmentArguments;
@@ -266,7 +268,9 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, RenderPassDesc    *pass) {
         renderCommandEncoderWithDescriptor:nativePass->classic] retain];
     }
 
-    mt_applyPendingBarrier(cmdb, nativeState->classic);
+    mt_applyPendingBarrier(cmdb,
+                           nativeState->classic,
+                           MT_ENCODER_STAGES(MTLStageVertex | MTLStageObject | MTLStageMesh | MTLStageFragment));
   }
 
   if (!nativeState->classic && !nativeState->modern) {

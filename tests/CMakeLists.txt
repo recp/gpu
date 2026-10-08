@@ -826,11 +826,14 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/api/texture_view_render.c
     ${PROJECT_SOURCE_DIR}/tests/api/threading.c
     ${PROJECT_SOURCE_DIR}/tests/api/tensor.c
+    ${PROJECT_SOURCE_DIR}/tests/api/ml.c
     ${PROJECT_SOURCE_DIR}/tests/api/untyped_pointer.c
     ${PROJECT_SOURCE_DIR}/tests/api/volume_texture.c
     ${PROJECT_SOURCE_DIR}/tests/api/vrs.c
     ${PROJECT_SOURCE_DIR}/tests/api/webgpu_pipeline.c
   )
+  target_compile_definitions(gpu-api-test PRIVATE
+    GPU_TEST_ML_ROOT="${PROJECT_SOURCE_DIR}/tests/api/ml")
   target_link_libraries(gpu-api-test PRIVATE gpu)
   if(GPU_BUILD_METAL)
     target_sources(gpu-api-test PRIVATE ${PROJECT_SOURCE_DIR}/tests/api/metal_tensor.m)
@@ -935,6 +938,14 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
             ${GPU_API_USL_FIXTURES}
             ${GPU_API_DEFAULT_BACKEND}
   )
+  if(GPU_BUILD_METAL)
+    add_test(NAME api-metal-ml
+      COMMAND gpu-api-test ${GPU_API_USL_FIXTURES} metal)
+    set_tests_properties(api-metal-ml PROPERTIES
+      ENVIRONMENT "GPU_API_TEST=ml;MTL_DEBUG_LAYER=1"
+      LABELS "metal;ml;tensor"
+      TIMEOUT 60)
+  endif()
   set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
     "GPU_CONSTANTS_USL_PATH=${GPU_API_CONSTANTS_USL_FIXTURE}"
     "GPU_LOD_USL_PATH=${GPU_API_LOD_USL_FIXTURE}"

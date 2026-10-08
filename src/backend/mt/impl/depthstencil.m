@@ -229,7 +229,7 @@ mt_writeSparseTexture4(GPUQueue                    *queue,
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
-    mt_applyPendingBarrier(cmdb, encoder);
+    mt_applyPendingBarrier(cmdb, encoder, MT_ENCODER_STAGES(MTLStageBlit));
     mt_useAllocation(cmdb, nativeHeap->heap);
     mt_useAllocation(cmdb, nativeTexture);
     size = MTLSizeMake(region->width,

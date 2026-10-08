@@ -715,7 +715,8 @@ mt_selectCommandMode(id<MTLDevice>  device,
   rayQuery        = (enabledFeatureMask &
                     (UINT64_C(1) << GPU_FEATURE_RAY_QUERY)) != 0u;
   supportsMetal4  = mt_supportsMetal4(device);
-  tensorResources = (enabledFeatureMask & (UINT64_C(1) << GPU_FEATURE_TENSOR_RESOURCES_EXT)) != 0u;
+  tensorResources = (enabledFeatureMask & ((UINT64_C(1) << GPU_FEATURE_TENSOR_RESOURCES_EXT)
+                                          | (UINT64_C(1) << GPU_FEATURE_ML_MODEL_EXT))) != 0u;
 
   if (mode && strcmp(mode, "classic") == 0) {
     if (explicitSparse || tensorResources) {
@@ -982,6 +983,7 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_SHADER_F16:
       return true;
     case GPU_FEATURE_TENSOR_RESOURCES_EXT:
+    case GPU_FEATURE_ML_MODEL_EXT:
 #if MT_HAS_METAL4
       mode = getenv("GPU_METAL_MODE");
 

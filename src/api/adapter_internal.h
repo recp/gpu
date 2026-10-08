@@ -30,7 +30,7 @@ struct GPUAdapter {
   bool               supportsDisplayTiming;
   bool               supportsIncrementalPresent;
   bool               separatePresentQueue;
-  GPUFeature         supportedFeatureStorage[GPU_FEATURE_TENSOR_RESOURCES_EXT + 1u];
+  GPUFeature         supportedFeatureStorage[GPU_FEATURE_ML_MODEL_EXT + 1u];
 };
 
 static inline Api*

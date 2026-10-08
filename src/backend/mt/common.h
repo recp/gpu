@@ -57,6 +57,13 @@
 #  define MT_HAS_COMMAND_BARRIERS 0
 #endif
 
+/* discard stage tokens entirely when compiling against an older sdk. */
+#if MT_HAS_COMMAND_BARRIERS
+#  define MT_ENCODER_STAGES(stages) ((uint64_t)(stages))
+#else
+#  define MT_ENCODER_STAGES(stages) UINT64_C(0)
+#endif
+
 typedef CALayer ViewLayer;
 
 #if TARGET_OS_IOS
@@ -326,6 +333,9 @@ struct MTCommandBuffer {
   uint64_t                               pendingAfterStages;
   uint64_t                               pendingBeforeStages;
   uint64_t                               pendingVisibility;
+  uint64_t                               pendingMLAfterStages;
+  uint64_t                               pendingMLBeforeStages;
+  uint64_t                               pendingMLVisibility;
   uint32_t                               residencyAllocationCount;
   MTCommandMode                          mode;
   atomic_bool                            completionReady;
@@ -497,8 +507,14 @@ GPUResult
 mt_waitCommandQueueIdle(GPUQueue *queue);
 
 GPU_HIDE
+uint64_t
+mt_stageMask(GPUPipelineStageMask stages);
+
+GPU_HIDE
 void
-mt_applyPendingBarrier(GPUCommandBuffer *cmdb, id encoder);
+mt_applyPendingBarrier(GPUCommandBuffer *cmdb,
+                       id                encoder,
+                       uint64_t          encoderStages);
 
 GPU_HIDE
 void

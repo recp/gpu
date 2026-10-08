@@ -28,7 +28,8 @@ validStageMask(GPUPipelineStageMask stages) {
                             GPU_STAGE_FRAGMENT |
                             GPU_STAGE_COMPUTE |
                             GPU_STAGE_TRANSFER |
-                            GPU_STAGE_BOTTOM;
+                            GPU_STAGE_BOTTOM |
+                            GPU_STAGE_ML_EXT;
 
   return stages != 0u && (((uint32_t)stages & ~knownMask) == 0u);
 }
@@ -206,7 +207,9 @@ validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
   }
 
   if (!validStageMask(barriers->srcStages)
-      || !validStageMask(barriers->dstStages)) {
+      || !validStageMask(barriers->dstStages)
+      || (((barriers->srcStages | barriers->dstStages) & GPU_STAGE_ML_EXT) != 0u
+          && !GPUIsFeatureEnabled(device, GPU_FEATURE_ML_MODEL_EXT))) {
     return false;
   }
 
@@ -252,7 +255,8 @@ validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
 
   return barriers->bufferBarrierCount > 0u
          || barriers->textureBarrierCount > 0u
-         || barriers->aliasingBarrierCount > 0u;
+         || barriers->aliasingBarrierCount > 0u
+         || ((barriers->srcStages | barriers->dstStages) & GPU_STAGE_ML_EXT) != 0u;
 }
 
 static void

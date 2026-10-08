@@ -14,21 +14,40 @@
  * limitations under the License.
  */
 
-#ifndef gpu_tensor_internal_h
-#define gpu_tensor_internal_h
+#ifndef gpu_ml_internal_h
+#define gpu_ml_internal_h
 
 #include "../common.h"
 
-struct GPUTensorEXT {
-  void             *_priv;
-  GPUDevice        *device;
-  GPUBuffer        *buffer;
-  char             *label;
-  uint64_t          offsetBytes;
-  uint64_t          sizeBytes;
-  GPUTensorDescEXT  desc;
-  uint64_t          dimensions[2];
-  uint64_t          strides[2];
+typedef struct MLProfile {
+  void                 *_priv;
+  GPUMLShapeProfileEXT  desc;
+  GPUMLPipelineInfoEXT  info;
+} MLProfile;
+
+struct GPUMLModelEXT {
+  void      *_priv;
+  GPUDevice *device;
+  MLProfile *profiles;
+  char      *label;
+  char      *path;
+  char      *functionName;
+  uint32_t   profileCount;
 };
 
-#endif /* gpu_tensor_internal_h */
+struct GPUMLPipelineEXT {
+  GPUMLModelEXT *model;
+  MLProfile     *profile;
+  char          *label;
+};
+
+struct GPUMLBindingsEXT {
+  void             *_priv;
+  GPUMLPipelineEXT *pipeline;
+  GPUHeap          *scratch;
+  char             *label;
+  GPUTensorEXT    **tensors;
+  uint32_t          bindingCount;
+};
+
+#endif /* gpu_ml_internal_h */

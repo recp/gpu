@@ -317,7 +317,7 @@ mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
 
     if (@available(macOS 26.0, iOS 26.0, *)) {
       nativeState->modern = [commandState->modern computeCommandEncoder];
-      mt_applyPendingBarrier(cmdb, nativeState->modern);
+      mt_applyPendingBarrier(cmdb, nativeState->modern, MT_ENCODER_STAGES(MTLStageDispatch));
 
       nativeState->arguments = &commandState->computeArguments;
       [nativeState->modern setArgumentTable:nativeState->arguments->table];
@@ -329,7 +329,7 @@ mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
       nativeState->classic = [[mt_classicCommandBuffer(cmdb) computeCommandEncoder] retain];
     }
 
-    mt_applyPendingBarrier(cmdb, nativeState->classic);
+    mt_applyPendingBarrier(cmdb, nativeState->classic, MT_ENCODER_STAGES(MTLStageDispatch));
   }
 
   if (!nativeState->classic && !nativeState->modern) {

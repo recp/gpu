@@ -33,6 +33,7 @@ extern "C" {
 #include "cmdqueue.h"
 #include "buffer.h"
 #include "tensor.h"
+#include "ml.h"
 #include "memory.h"
 #include "multigpu.h"
 #include "cmd-enc.h"

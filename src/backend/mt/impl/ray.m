@@ -1026,7 +1026,7 @@ mt_beginAccelerationStructurePass(GPUCommandBuffer *cmdb, const char *label) {
   if (command->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       native->modern = [command->modern computeCommandEncoder];
-      mt_applyPendingBarrier(cmdb, native->modern);
+      mt_applyPendingBarrier(cmdb, native->modern, MT_ENCODER_STAGES(MTLStageAccelerationStructure));
     }
   } else
 #endif
@@ -1035,7 +1035,7 @@ mt_beginAccelerationStructurePass(GPUCommandBuffer *cmdb, const char *label) {
       native->classic = [[command->classic accelerationStructureCommandEncoder] retain];
     }
 
-    mt_applyPendingBarrier(cmdb, native->classic);
+    mt_applyPendingBarrier(cmdb, native->classic, MT_ENCODER_STAGES(MTLStageAccelerationStructure));
   }
 
   if (!native->classic && !native->modern) {

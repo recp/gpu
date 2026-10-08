@@ -137,7 +137,7 @@ reportDeviceLostOnce(GPUDevice *device) {
 static bool
 knownFeature(GPUFeature feature) {
   return feature >= GPU_FEATURE_COMPUTE
-         && feature <= GPU_FEATURE_TENSOR_RESOURCES_EXT;
+         && feature <= GPU_FEATURE_ML_MODEL_EXT;
 }
 
 static bool
@@ -263,7 +263,7 @@ adapterSupportsMask(const GPUAdapter *adapter, uint64_t requiredMask) {
   GPUFeature feature;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_TENSOR_RESOURCES_EXT;
+       feature <= GPU_FEATURE_ML_MODEL_EXT;
        feature = (GPUFeature)(feature + 1)) {
     bit = featureBit(feature);
 
@@ -378,7 +378,7 @@ supportedFeatureMask(const GPUAdapter *adapter) {
   mask = 0;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_TENSOR_RESOURCES_EXT;
+       feature <= GPU_FEATURE_ML_MODEL_EXT;
        feature = (GPUFeature)(feature + 1)) {
     if (adapterSupportsFeature(adapter, feature)) {
       mask |= featureBit(feature);
@@ -399,7 +399,7 @@ fillFeatureSet(uint64_t       mask,
   count = 0u;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_TENSOR_RESOURCES_EXT
+       feature <= GPU_FEATURE_ML_MODEL_EXT
          && count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & featureBit(feature)) {
@@ -2053,6 +2053,42 @@ GPUGetProcAddr(GPUDevice *device, const char *name) {
 
   if (!(api = deviceApi(device)) || !name || name[0] == '\0') {
     return NULL;
+  }
+
+  if (GPUIsFeatureEnabled(device, GPU_FEATURE_ML_MODEL_EXT)
+      && api->ml.createModel && api->ml.destroyModel && api->ml.createPipeline
+      && api->ml.createBindings && api->ml.destroyBindings && api->ml.encode) {
+    if (strcmp(name, "GPUCreateMLModelEXT") == 0) {
+      return (GPUProc)GPUCreateMLModelEXT;
+    }
+
+    if (strcmp(name, "GPUDestroyMLModelEXT") == 0) {
+      return (GPUProc)GPUDestroyMLModelEXT;
+    }
+
+    if (strcmp(name, "GPUCreateMLPipelineEXT") == 0) {
+      return (GPUProc)GPUCreateMLPipelineEXT;
+    }
+
+    if (strcmp(name, "GPUGetMLPipelineInfoEXT") == 0) {
+      return (GPUProc)GPUGetMLPipelineInfoEXT;
+    }
+
+    if (strcmp(name, "GPUDestroyMLPipelineEXT") == 0) {
+      return (GPUProc)GPUDestroyMLPipelineEXT;
+    }
+
+    if (strcmp(name, "GPUCreateMLBindingsEXT") == 0) {
+      return (GPUProc)GPUCreateMLBindingsEXT;
+    }
+
+    if (strcmp(name, "GPUDestroyMLBindingsEXT") == 0) {
+      return (GPUProc)GPUDestroyMLBindingsEXT;
+    }
+
+    if (strcmp(name, "GPUEncodeMLEXT") == 0) {
+      return (GPUProc)GPUEncodeMLEXT;
+    }
   }
 
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_TENSOR_RESOURCES_EXT)

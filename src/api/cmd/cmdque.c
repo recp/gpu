@@ -492,6 +492,10 @@ GPUQueueSubmitEx(GPUQueue                   *__restrict cmdq,
   validStages = GPU_STAGE_TOP | GPU_STAGE_VERTEX | GPU_STAGE_FRAGMENT |
                 GPU_STAGE_COMPUTE | GPU_STAGE_TRANSFER | GPU_STAGE_BOTTOM;
 
+  if (GPUIsFeatureEnabled(cmdq->_device, GPU_FEATURE_ML_MODEL_EXT)) {
+    validStages |= GPU_STAGE_ML_EXT;
+  }
+
   for (i = 0; i < info->waitCount; i++) {
     semaphore = info->pWaits[i].semaphore;
 

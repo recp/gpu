@@ -198,7 +198,8 @@ mt_createTensorView(GPUTensorEXT *tensor, uint64_t spanBytes) {
         nativeTensor.label = [NSString stringWithUTF8String:tensor->label];
       }
 #endif
-      tensor->_priv = nativeTensor;
+      tensor->_priv     = nativeTensor;
+      tensor->sizeBytes = requirements.sizeBytes;
 
       return GPU_OK;
     }

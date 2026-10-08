@@ -23,6 +23,7 @@ target_sources(gpu PRIVATE
   impl/swapchain.m
   impl/texture_view_pool.m
   impl/tensor.m
+  impl/ml.m
   impl/vertex.m
   impl/vrs.m
 )

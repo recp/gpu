@@ -24,6 +24,9 @@
   _Static_assert(sizeof(void *) != 8u || sizeof(TYPE) == (SIZE), \
                  #TYPE " 64-bit ABI size changed")
 
+GPU_ASSERT_CHAIN_FIRST(GPUMLModelCreateInfoEXT);
+GPU_ASSERT_CHAIN_FIRST(GPUMLPipelineCreateInfoEXT);
+GPU_ASSERT_CHAIN_FIRST(GPUMLBindingsCreateInfoEXT);
 GPU_ASSERT_CHAIN_FIRST(GPUInstanceCreateInfo);
 GPU_ASSERT_CHAIN_FIRST(GPUAdapterRequestOptions);
 GPU_ASSERT_CHAIN_FIRST(GPUSurfaceCreateInfo);

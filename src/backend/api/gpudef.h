@@ -48,6 +48,7 @@ extern "C" {
 #include "execution-graph.h"
 #include "sampler-feedback.h"
 #include "tensor.h"
+#include "ml.h"
 
 typedef struct Api {
   GPUBackend            backend;
@@ -79,6 +80,7 @@ typedef struct Api {
   ApiExecutionGraph     executionGraph;
   ApiSamplerFeedback    samplerFeedback;
   ApiTensor             tensor;
+  ApiML                 ml;
   void                 *reserved;
 } Api;
 

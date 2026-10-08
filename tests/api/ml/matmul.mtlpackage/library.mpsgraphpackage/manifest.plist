@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Package Version</key>
+	<dict>
+		<key>6.0.10</key>
+		<dict>
+			<key>Binary File Resources</key>
+			<dict/>
+			<key>Callables</key>
+			<dict/>
+			<key>Data File Names</key>
+			<array/>
+			<key>Optimized Modules</key>
+			<dict/>
+			<key>Optimized No Device Modules</key>
+			<dict/>
+			<key>Optimized No Device Resources Used</key>
+			<dict/>
+			<key>Optimized Resources Used</key>
+			<dict/>
+			<key>Original</key>
+			<string>model_0.mpsgraph</string>
+			<key>Original Resources Used</key>
+			<array/>
+			<key>Resource Offsets</key>
+			<dict/>
+			<key>Resource Storage Mode</key>
+			<integer>1</integer>
+			<key>Symbols With Mutable Weight</key>
+			<array/>
+		</dict>
+	</dict>
+</dict>
+</plist>
