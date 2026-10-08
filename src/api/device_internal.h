@@ -104,6 +104,7 @@ struct GPUDevice {
   uint8_t                     uslFloatAtomicAdd; /* buffer/workgroup bits, enabled on the device */
   bool                        uslFloatControls2;
   bool                        uslHalfRoundtrip;
+  bool                        uslStorageF16;
   bool                        uslCubeGradFixup;
   bool                        transientConfigured;
   bool                        transientFrameBegun;

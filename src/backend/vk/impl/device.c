@@ -3448,6 +3448,7 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   device->uslDenormPreserve = adapterVk->denormPreserve;
   device->uslRoundingRTE    = adapterVk->roundingRTE;
   device->uslFloatControls2 = adapterVk->floatControls2;
+  device->uslStorageF16     = storage16Features.storageBuffer16BitAccess == VK_TRUE;
   device->uslHalfRoundtrip  = gpu_uslVulkanHalfRoundtrip(adapterVk->props.vendorID,
                                                          adapterVk->props.deviceID,
                                                          adapterVk->props.driverVersion);

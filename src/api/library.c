@@ -2713,6 +2713,11 @@ gpu_createShaderLibraryFromUSLImpl(GPUDevice         *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
+    if (device->uslStorageF16
+        && us_cap_atom_text(&targetAtoms[targetAtomCount++], "spv_storage_buffer16_bit_access") != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       if (us_cap_atom_init(&targetAtoms[targetAtomCount++],
                            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
