@@ -728,7 +728,7 @@ GPUResult
 vk_writeBuffer(GPUQueue   *__restrict queue,
                GPUBuffer  *__restrict buffer,
                uint64_t               dstOffset,
-               const void *__restrict data,
+               const void            *data,
                uint64_t               sizeBytes) {
   VkCommandBuffer     command;
   GPUBuffer          *staging;
@@ -748,7 +748,7 @@ vk_writeBuffer(GPUQueue   *__restrict queue,
   }
 
   if (native->mapped) {
-    memcpy((uint8_t *)native->mapped + dstOffset, data, (size_t)sizeBytes);
+    memmove((uint8_t *)native->mapped + dstOffset, data, (size_t)sizeBytes);
 
     if (!native->coherent) {
       range.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
@@ -832,7 +832,7 @@ GPUResult
 vk_readBuffer(GPUQueue  *__restrict queue,
               GPUBuffer *__restrict buffer,
               uint64_t              srcOffset,
-              void      *__restrict outData,
+              void                 *outData,
               uint64_t              sizeBytes) {
   VkCommandBuffer     command;
   GPUBuffer          *staging;
@@ -870,9 +870,9 @@ vk_readBuffer(GPUQueue  *__restrict queue,
       }
     }
 
-    memcpy(outData,
-           (const uint8_t *)native->mapped + srcOffset,
-           (size_t)sizeBytes);
+    memmove(outData,
+            (const uint8_t *)native->mapped + srcOffset,
+            (size_t)sizeBytes);
     return GPU_OK;
   }
 

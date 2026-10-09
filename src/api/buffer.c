@@ -170,7 +170,7 @@ GPUResult
 GPUQueueWriteBuffer(GPUQueue   *__restrict queue,
                     GPUBuffer  *__restrict buff,
                     uint64_t               dstOffset,
-                    const void *__restrict data,
+                    const void            *data,
                     uint64_t               sizeBytes) {
   GPUApi *api;
 

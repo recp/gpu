@@ -518,6 +518,106 @@ check_transient_fallback(GPUDevice *device) {
 }
 
 static int
+check_transient_alias(GPUDevice *device) {
+  GPUTransientAllocatorConfig config = {0};
+  GPUTransientBufferSlice     slice;
+  const uint32_t              sources[]      = {0u, 4u, 8u, 0u};
+  const uint32_t              destinations[] = {4u, 0u, 8u, 40u};
+  const uint32_t              sizes[]        = {32u, 32u, 16u, 16u};
+  uint8_t                     original[64];
+  uint8_t                     expected[64];
+  uint8_t                     observed[64];
+  GPUQueue                   *queue;
+  uint8_t                    *bytes;
+  uint32_t                    direction;
+  uint32_t                    caseIndex;
+  uint32_t                    i;
+  GPUResult                   result;
+
+  config.chain.sType        = GPU_STRUCTURE_TYPE_TRANSIENT_ALLOCATOR_CONFIG;
+  config.chain.structSize   = sizeof(config);
+  config.ringBytesPerFrame  = sizeof(original);
+  config.framesInFlight     = 1u;
+
+  if (!(queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u))
+      || GPUConfigureTransientAllocator(device, &config) != GPU_OK
+      || GPUAllocateTransientBuffer(device,
+                                     GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST,
+                                     sizeof(original),
+                                     16u,
+                                     &slice) != GPU_OK
+      || !slice.buffer || !slice.cpuPtr) {
+    fprintf(stderr, "transient alias setup failed\n");
+    return 0;
+  }
+
+  if (device->transientCpuPtrOwned) {
+    printf("transient aliases: separate CPU upload storage, mapped cases skipped\n");
+    return 1;
+  }
+
+  bytes = slice.cpuPtr;
+
+  for (direction = 0u; direction < 2u; direction++) {
+    for (caseIndex = 0u; caseIndex < GPU_ARRAY_LEN(sources); caseIndex++) {
+      for (i = 0u; i < sizeof(original); i++) {
+        original[i] = (uint8_t)(i * 3u + caseIndex + direction);
+      }
+
+      memcpy(expected, original, sizeof(expected));
+      memcpy(expected + destinations[caseIndex],
+             original + sources[caseIndex],
+             sizes[caseIndex]);
+
+      if (GPUQueueWriteBuffer(queue,
+                              slice.buffer,
+                              slice.offset,
+                              original,
+                              sizeof(original)) != GPU_OK
+          || GPUQueueReadBuffer(queue,
+                                 slice.buffer,
+                                 slice.offset,
+                                 observed,
+                                 sizeof(observed)) != GPU_OK
+          || memcmp(observed, original, sizeof(original)) != 0) {
+        fprintf(stderr, "transient alias reset failed\n");
+        return 0;
+      }
+
+      if (direction == 0u) {
+        result = GPUQueueReadBuffer(queue,
+                                    slice.buffer,
+                                    slice.offset + sources[caseIndex],
+                                    bytes + destinations[caseIndex],
+                                    sizes[caseIndex]);
+      } else {
+        result = GPUQueueWriteBuffer(queue,
+                                     slice.buffer,
+                                     slice.offset + destinations[caseIndex],
+                                     bytes + sources[caseIndex],
+                                     sizes[caseIndex]);
+      }
+
+      if (result != GPU_OK
+          || GPUQueueReadBuffer(queue,
+                                 slice.buffer,
+                                 slice.offset,
+                                 observed,
+                                 sizeof(observed)) != GPU_OK
+          || memcmp(observed, expected, sizeof(expected)) != 0
+          || memcmp(bytes, expected, sizeof(expected)) != 0) {
+        fprintf(stderr, "transient alias direction %u case %u failed\n", direction, caseIndex);
+        return 0;
+      }
+    }
+  }
+
+  printf("transient aliases: four reads and four writes passed\n");
+
+  return 1;
+}
+
+static int
 check_stats_queries(GPUDevice *device) {
   double            gpuFrameMs;
   GPUFrameStats     frameStats;
@@ -681,6 +781,7 @@ gpu_test_runtime(GPUDevice *device) {
 #endif
          && check_transient_validation(device)
          && check_transient_fallback(device)
+         && check_transient_alias(device)
          && check_stats_queries(device)
          && check_extension_lookup(device)
          && check_warm_command_path(device);
