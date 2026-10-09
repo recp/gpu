@@ -296,6 +296,7 @@ typedef struct MTCommandQueue {
   uint32_t            nextTransferSlot;
   bool                transferOpen;
   bool                pendingSparseBarrier;
+  bool                shaderValidation;
 
   id<MTLSharedEvent>   transferEvent;
   uint64_t            transferValue;
@@ -339,6 +340,7 @@ struct MTCommandBuffer {
   uint32_t                               residencyAllocationCount;
   MTCommandMode                          mode;
   atomic_bool                            completionReady;
+  bool                                   refreshModern;
 };
 
 typedef struct MTQuerySet {

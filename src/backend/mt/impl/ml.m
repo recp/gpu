@@ -568,6 +568,9 @@ encode(GPUCommandBuffer *cmdb, GPUMLBindingsEXT *bindings) {
     [encoder setArgumentTable:native->table];
     [encoder dispatchNetworkWithIntermediatesHeap:heap->heap];
     [encoder endEncoding];
+
+    command->refreshModern = command->owner->shaderValidation;
+
     return GPU_OK;
   }
 #else

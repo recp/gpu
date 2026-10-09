@@ -667,6 +667,13 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
 #if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
+      /* shader validation retains stale ml scratch heap records across reuse. */
+      if (native->refreshModern) {
+        [native->modern release];
+        native->modern        = nil;
+        native->refreshModern = false;
+      }
+
       [native->allocator reset];
       [native->residency removeAllAllocations];
       native->residencyAllocationCount    = 0u;

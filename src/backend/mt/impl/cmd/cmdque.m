@@ -783,6 +783,9 @@ mt_newCommandQueue(GPUDevice *__restrict device) {
   GPUDeviceMT    *deviceMT;
   GPUQueue       *que;
   MTCommandQueue *native;
+#if MT_HAS_METAL4
+  const char     *shaderValidation;
+#endif
 
   deviceMT = device->_priv;
   que      = calloc(1, sizeof(*que));
@@ -799,6 +802,9 @@ mt_newCommandQueue(GPUDevice *__restrict device) {
 #if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
+      shaderValidation         = getenv("MTL_SHADER_VALIDATION");
+      native->shaderValidation = shaderValidation && strcmp(shaderValidation, "1") == 0;
+
       native->modern = [deviceMT->device newMTL4CommandQueue];
       native->upload = [deviceMT->device newCommandQueue];
       native->transferEvent = [deviceMT->device newSharedEvent];
@@ -954,6 +960,9 @@ mt_newCommandBuffer(GPUQueue         *__restrict cmdb,
   GPUCommandBuffer *cb;
   MTCommandBuffer  *native;
   MTUploadChunk    *upload;
+#if MT_HAS_METAL4
+  GPUDeviceMT      *deviceMT;
+#endif
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   NSString         *nativeLabel;
 #endif
@@ -988,6 +997,11 @@ mt_newCommandBuffer(GPUQueue         *__restrict cmdb,
 #if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
+      if (!native->modern) {
+        deviceMT       = cmdb->_device->_priv;
+        native->modern = [deviceMT->device newCommandBuffer];
+      }
+
       [native->modern beginCommandBufferWithAllocator:native->allocator];
       [native->modern useResidencySet:native->residency];
     }
