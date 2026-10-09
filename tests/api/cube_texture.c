@@ -17,6 +17,8 @@
 #include "test.h"
 #include "../../src/api/device_internal.h"
 
+#include <math.h>
+
 enum {
   GPU_CUBE_BASE_SIZE   = 8u,
   GPU_CUBE_VIEW_SIZE   = GPU_CUBE_BASE_SIZE / 2u,
@@ -406,6 +408,8 @@ gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath) {
                          0u,
                          result,
                          sizeof(result)) != GPU_OK
+      || !isfinite(result[0]) || !isfinite(result[1])
+      || !isfinite(result[2]) || !isfinite(result[3])
       || result[0] < 0.99f || result[0] > 1.01f
       || result[1] < 0.99f || result[1] > 1.01f
       || result[2] < -0.01f || result[2] > 0.01f
