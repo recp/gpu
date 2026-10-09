@@ -333,7 +333,8 @@ mt_setArgumentAccelerationStructure(GPUCommandBuffer            *cmdb,
                                     GPUAccelerationStructureEXT *structure,
                                     uint32_t                     index) {
 #if MT_HAS_METAL4
-  GPUAccelerationStructureMT *native;
+  GPUAccelerationStructureMT  *native;
+  id<MTLAccelerationStructure> child;
 
   if (!state || !state->table || !structure
       || index >= MT_ARGUMENT_BUFFER_COUNT) {
@@ -352,6 +353,10 @@ mt_setArgumentAccelerationStructure(GPUCommandBuffer            *cmdb,
     atBufferIndex:index];
     state->resourceMask |= 1u << index;
     mt_useAllocation(cmdb, native->structure);
+
+    for (child in native->children) {
+      mt_useAllocation(cmdb, child);
+    }
   }
 #else
   GPU__UNUSED(cmdb);

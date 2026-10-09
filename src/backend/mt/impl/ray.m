@@ -343,6 +343,22 @@ mt_rayPrepareClassicBLAS(GPUAccelerationStructureMT                 *native,
   return true;
 }
 
+static void
+resizeChildStructures(GPUAccelerationStructureMT                 *native,
+                      const GPUAccelerationStructureBuildInfoEXT *info) {
+  if (!native->children) {
+    native->children = [[NSMutableArray alloc] initWithCapacity:info->topLevel.instanceCount];
+  }
+
+  while (native->children.count < info->topLevel.instanceCount) {
+    [native->children addObject:[NSNull null]];
+  }
+
+  while (native->children.count > info->topLevel.instanceCount) {
+    [native->children removeLastObject];
+  }
+}
+
 static bool
 mt_rayPrepareClassicTLAS(GPUDeviceMT                                *device,
                          GPUAccelerationStructureMT                 *native,
@@ -362,15 +378,7 @@ mt_rayPrepareClassicTLAS(GPUDeviceMT                                *device,
     return false;
   }
 
-  if (!native->classicInstances) {
-    native->classicInstances = [[NSMutableArray alloc] initWithCapacity:info->topLevel.instanceCount];
-  }
-  while (native->classicInstances.count < info->topLevel.instanceCount) {
-    [native->classicInstances addObject:[NSNull null]];
-  }
-  while (native->classicInstances.count > info->topLevel.instanceCount) {
-    [native->classicInstances removeLastObject];
-  }
+  resizeChildStructures(native, info);
 
   instances = (MTLAccelerationStructureInstanceDescriptor *)
     native->instanceBuffer.contents;
@@ -382,7 +390,7 @@ mt_rayPrepareClassicTLAS(GPUDeviceMT                                *device,
     instances[i].mask                            = source->mask ? source->mask : 0xffu;
     instances[i].intersectionFunctionTableOffset = source->hitGroupOffset;
     instances[i].accelerationStructureIndex      = i;
-    native->classicInstances[i]                  = mt_rayNativeStructure(source->structure);
+    native->children[i]                          = mt_rayNativeStructure(source->structure);
   }
 
   if (!native->classicDescriptor) {
@@ -395,7 +403,7 @@ mt_rayPrepareClassicTLAS(GPUDeviceMT                                *device,
   descriptor.instanceDescriptorBufferOffset  = 0u;
   descriptor.instanceDescriptorStride        = sizeof(*instances);
   descriptor.instanceCount                   = info->topLevel.instanceCount;
-  descriptor.instancedAccelerationStructures = native->classicInstances;
+  descriptor.instancedAccelerationStructures = native->children;
   descriptor.instanceDescriptorType          = MTLAccelerationStructureInstanceDescriptorTypeDefault;
   descriptor.usage                           = mt_rayUsage(info->flags);
 
@@ -541,6 +549,8 @@ mt_rayPrepareModernTLAS(GPUDeviceMT                                *device,
     return false;
   }
 
+  resizeChildStructures(native, info);
+
   instances = (MTLIndirectAccelerationStructureInstanceDescriptor *)
     native->instanceBuffer.contents;
 
@@ -553,6 +563,7 @@ mt_rayPrepareModernTLAS(GPUDeviceMT                                *device,
     instances[i].intersectionFunctionTableOffset = source->hitGroupOffset;
     instances[i].userID                          = i;
     instances[i].accelerationStructureID         = structure.gpuResourceID;
+    native->children[i]                          = structure;
   }
 
   if (!native->modernDescriptor) {
@@ -894,11 +905,11 @@ mt_useComputeRayResources(id<MTLComputeCommandEncoder> encoder,
                           GPUAccelerationStructureMT  *structure) {
   id<MTLAccelerationStructure> child;
 
-  if (!encoder || !structure || !structure->classicInstances) {
+  if (!encoder || !structure || !structure->children) {
     return;
   }
 
-  for (child in structure->classicInstances) {
+  for (child in structure->children) {
     [encoder useResource:child usage:MTLResourceUsageRead];
   }
 }
@@ -910,11 +921,11 @@ mt_useRenderRayResources(id<MTLRenderCommandEncoder> encoder,
                          MTLRenderStages             stages) {
   id<MTLAccelerationStructure> child;
 
-  if (!encoder || !structure || !structure->classicInstances) {
+  if (!encoder || !structure || !structure->children) {
     return;
   }
 
-  for (child in structure->classicInstances) {
+  for (child in structure->children) {
     [encoder useResource:child
                    usage:MTLResourceUsageRead
                   stages:stages];
@@ -992,7 +1003,7 @@ mt_destroyAccelerationStructure(GPUAccelerationStructureEXT *structure) {
 
   [native->modernDescriptor release];
   [native->classicDescriptor release];
-  [native->classicInstances release];
+  [native->children release];
   [native->modernGeometry release];
   [native->classicGeometry release];
   [native->instanceBuffer release];

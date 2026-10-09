@@ -179,7 +179,7 @@ typedef struct GPUAccelerationStructureMT {
   id<MTLBuffer>                       instanceBuffer;
   NSMutableArray                     *classicGeometry;
   NSMutableArray                     *modernGeometry;
-  NSMutableArray                     *classicInstances;
+  NSMutableArray                     *children;
   MTLAccelerationStructureDescriptor *classicDescriptor;
   id                                  modernDescriptor;
   uint64_t                            instanceCapacity;
