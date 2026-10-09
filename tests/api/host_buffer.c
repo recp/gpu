@@ -46,6 +46,45 @@ expect_host_failure(GPUDevice                 *device,
 }
 
 static int
+read_host_alias(GPUQueue *queue, GPUBuffer *buffer, uint8_t *bytes) {
+  uint8_t      saved[64];
+  uint8_t      expected[64];
+  const size_t sources[]      = {0u, 4u, 8u, 0u};
+  const size_t destinations[] = {4u, 0u, 8u, 40u};
+  const size_t sizes[]        = {32u, 32u, 16u, 16u};
+  size_t       i;
+  uint32_t     caseIndex;
+  int          ok = 1;
+
+  memcpy(saved, bytes, sizeof(saved));
+
+  for (caseIndex = 0u; caseIndex < GPU_ARRAY_LEN(sources); caseIndex++) {
+    for (i = 0u; i < sizeof(expected); i++) {
+      bytes[i] = (uint8_t)(i * 17u + caseIndex * 31u);
+    }
+
+    /* snapshot the source before the overlapping destination is written. */
+    memcpy(expected, bytes, sizeof(expected));
+    memcpy(expected + destinations[caseIndex], bytes + sources[caseIndex], sizes[caseIndex]);
+
+    if (GPUQueueReadBuffer(queue,
+                           buffer,
+                           sources[caseIndex],
+                           bytes + destinations[caseIndex],
+                           sizes[caseIndex]) != GPU_OK
+        || memcmp(bytes, expected, sizeof(expected)) != 0) {
+      fprintf(stderr, "host buffer alias read failed: case=%u\n", caseIndex);
+      ok = 0;
+      break;
+    }
+  }
+
+  memcpy(bytes, saved, sizeof(saved));
+
+  return ok;
+}
+
+static int
 invalid_host_buffers(GPUDevice *device, GPUBufferCreateInfo *info, size_t page) {
   GPUMemoryRequirements       requirements;
   GPUSparseBufferRequirements sparse;
@@ -208,6 +247,9 @@ gpu_test_host_buffer(GPUDevice *baseDevice) {
     goto cleanup;
   }
 
+  if (!read_host_alias(queue, alias, bytes))
+    goto cleanup;
+
   GPUDestroyBuffer(alias);
   GPUDestroyBuffer(buffer);
   alias  = NULL;
@@ -220,7 +262,8 @@ gpu_test_host_buffer(GPUDevice *baseDevice) {
     ok = bytes[i] == 0x5a && ok;
   }
 
-  printf("host buffer: two aliases,12 rejects, logical bounds and borrowed lifetime=%s\n", ok ? "pass" : "fail");
+  printf("host buffer: two aliases, four alias reads,12 rejects, logical bounds and borrowed lifetime=%s\n",
+         ok ? "pass" : "fail");
 
 cleanup:
   GPUDestroyBuffer(alias);

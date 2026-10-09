@@ -197,7 +197,7 @@ GPUResult
 GPUQueueReadBuffer(GPUQueue  *__restrict queue,
                    GPUBuffer *__restrict buff,
                    uint64_t              srcOffset,
-                   void      *__restrict outData,
+                   void                 *outData,
                    uint64_t              sizeBytes) {
   GPUApi *api;
 

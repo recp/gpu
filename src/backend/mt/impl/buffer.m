@@ -193,7 +193,7 @@ GPUResult
 mt_readBuffer(GPUQueue  *__restrict queue,
               GPUBuffer *__restrict buff,
               uint64_t              srcOffset,
-              void      *__restrict outData,
+              void                 *outData,
               uint64_t              sizeBytes) {
   id<MTLBuffer>             buffer;
   id<MTLBuffer>             staging;
@@ -257,7 +257,7 @@ mt_readBuffer(GPUQueue  *__restrict queue,
     return GPU_OK;
   }
 
-  memcpy(outData, contents + srcOffset, (size_t)sizeBytes);
+  memmove(outData, contents + srcOffset, (size_t)sizeBytes);
 
   return GPU_OK;
 }
