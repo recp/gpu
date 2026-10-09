@@ -1095,7 +1095,7 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_TEXTURE_VIEW_MIN_LOD:
 #if defined(__MAC_27_0) && defined(__IPHONE_27_0)
       if (@available(macOS 27.0, iOS 27.0, *)) {
-        return true;
+        return [adapterMT->device supportsFamily:MTLGPUFamilyApple11];
       }
 #endif
       return false;
