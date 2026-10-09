@@ -17,6 +17,8 @@
 #include "test.h"
 #include "../../src/api/device_internal.h"
 
+#include <math.h>
+
 enum {
   GPU_DESCRIPTOR_ARRAY_UNIFORM_BYTES  = 256u,
   GPU_DESCRIPTOR_ARRAY_READBACK_BYTES = 256u,
@@ -818,6 +820,8 @@ gpu_testDescriptorArray(GPUDevice  *device,
                          0u,
                          output,
                          sizeof(output)) != GPU_OK
+      || !isfinite(output[0]) || !isfinite(output[1])
+      || !isfinite(output[2]) || !isfinite(output[3])
       || output[0] < -0.01f || output[0] > 0.01f
       || output[1] < 0.99f || output[1] > 1.01f
       || output[2] < -0.01f || output[2] > 0.01f

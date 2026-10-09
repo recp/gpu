@@ -16,6 +16,8 @@
 
 #include "test.h"
 
+#include <math.h>
+
 static int
 gpu_testBufferDescriptorArray(GPUDevice  *device,
                               const char *bytecodePath,
@@ -340,6 +342,8 @@ gpu_testBufferDescriptorArray(GPUDevice  *device,
                          0u,
                          output,
                          sizeof(output)) != GPU_OK
+      || !isfinite(output[0]) || !isfinite(output[1])
+      || !isfinite(output[2]) || !isfinite(output[3])
       || output[0] < -0.01f || output[0] > 0.01f
       || output[1] < 0.99f || output[1] > 1.01f
       || output[2] < -0.01f || output[2] > 0.01f
@@ -360,6 +364,8 @@ gpu_testBufferDescriptorArray(GPUDevice  *device,
                              256u,
                              updated,
                              sizeof(updated)) != GPU_OK
+          || !isfinite(updated[0]) || !isfinite(updated[1])
+          || !isfinite(updated[2]) || !isfinite(updated[3])
           || updated[0] < 0.24f || updated[0] > 0.26f
           || updated[1] < 0.49f || updated[1] > 0.51f
           || updated[2] < 0.74f || updated[2] > 0.76f
