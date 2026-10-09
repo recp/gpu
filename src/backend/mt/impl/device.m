@@ -861,6 +861,7 @@ GPUAdapter*
 mt_selectAdapter(GPUInstance *__restrict inst,
                  GPUAdapter  *__restrict adapters,
                  GPUPowerPreference      powerPreference) {
+#if TARGET_OS_OSX
   id<MTLDevice> preferred;
   GPUAdapter   *adapter;
   bool          lowPower;
@@ -897,6 +898,10 @@ mt_selectAdapter(GPUInstance *__restrict inst,
 
     adapter = adapter->next;
   }
+#else
+  GPU__UNUSED(inst);
+  GPU__UNUSED(powerPreference);
+#endif
 
   return adapters;
 }
@@ -934,11 +939,15 @@ mt_getAdapterProperties(const GPUAdapter     *__restrict adapter,
   memset(outProps, 0, sizeof(*outProps));
   outProps->backend        = GPU_BACKEND_METAL;
   outProps->name           = device.name.UTF8String;
-  outProps->type           = device.isLowPower ?
-    GPU_ADAPTER_TYPE_INTEGRATED :
-    GPU_ADAPTER_TYPE_DISCRETE;
+  outProps->type           = GPU_ADAPTER_TYPE_INTEGRATED;
   outProps->executionFlags = GPU_EXECUTION_GRAPHICS_BIT |
                              GPU_EXECUTION_COMPUTE_BIT;
+
+#if TARGET_OS_OSX
+  if (!mt_adapter(adapter)->appleFamily1 && !device.isLowPower) {
+    outProps->type = GPU_ADAPTER_TYPE_DISCRETE;
+  }
+#endif
 
   return GPU_OK;
 }
