@@ -211,6 +211,7 @@ check_pipeline_disk_cache(GPUDevice                   *device,
   GPUPipelineCache          *cache;
   GPURenderPipeline         *pipeline;
   GPUApi                    *api;
+  const char                *validation;
   GPUResult                  result;
   char                       path[160];
   char                       metadataPath[168];
@@ -227,6 +228,16 @@ check_pipeline_disk_cache(GPUDevice                   *device,
 
   if (!(api = deviceApi(device))) {
     return 0;
+  }
+
+  /* shader instrumentation is incompatible with Metal binary archives.
+   * https://developer.apple.com/documentation/xcode/validating-your-apps-metal-shader-usage
+   */
+  if (api->backend == GPU_BACKEND_METAL
+      && (validation = getenv("MTL_SHADER_VALIDATION"))
+      && strtol(validation, NULL, 10) != 0) {
+    puts("render: Metal binary archive check skipped during shader validation");
+    return 1;
   }
 
   cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
