@@ -609,12 +609,14 @@ gpu_test_vrs(GPUAdapter *adapter,
                                                  0u,
                                                  screen,
                                                  &physical) != GPU_OK
+      || !isfinite(physical.x) || !isfinite(physical.y)
       || physical.x < 0.0f || physical.y < 0.0f
       || physical.x > screen.x || physical.y > screen.y
       || GPUMapRasterizationRatePhysicalToScreenEXT(map,
                                                     0u,
                                                     physical,
                                                     &roundTrip) != GPU_OK
+      || !isfinite(roundTrip.x) || !isfinite(roundTrip.y)
       || fabsf(roundTrip.x - screen.x) > 1.0f
       || fabsf(roundTrip.y - screen.y) > 1.0f
       || GPUMapRasterizationRateScreenToPhysicalEXT(map,
