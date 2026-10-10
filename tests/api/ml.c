@@ -614,7 +614,8 @@ run_profile(GPUDevice          *device,
   count = shape.m * shape.n > count ? shape.m * shape.n : count;
 
   for (shape.round = 0u; shape.round < ROUNDS; shape.round++) {
-    barrier.srcStages = GPU_STAGE_ML_EXT;
+    /* wait for the previous consume before overwriting its ml output. */
+    barrier.srcStages = GPU_STAGE_COMPUTE | GPU_STAGE_ML_EXT;
     barrier.dstStages = GPU_STAGE_COMPUTE;
     GPUEncodeBarriers(cmdb, &barrier);
 
@@ -730,7 +731,15 @@ run_profile(GPUDevice          *device,
             }
 
             if (values[j * shape.m * shape.n + row * shape.n + column] != (float)expected) {
-              fprintf(stderr, "ML output mismatch: profile=%u round=%u row=%u col=%u\n", profileId, j, row, column);
+              fprintf(stderr,
+                      "ML output mismatch: profile=%u storage=%s round=%u row=%u col=%u got=%a expected=%d\n",
+                      profileId,
+                      imported ? "host" : "owned",
+                      j,
+                      row,
+                      column,
+                      values[j * shape.m * shape.n + row * shape.n + column],
+                      expected);
               goto cleanup;
             }
           }
