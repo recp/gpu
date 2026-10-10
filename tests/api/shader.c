@@ -1179,6 +1179,7 @@ static int
 check_usl_shader_library_helper(GPUDevice  *device,
                                 const void *bytecode,
                                 uint64_t    bytecodeSize) {
+  const uint8_t       invalidArtifact[4] = {0u};
   GPUShaderReflection reflection;
   GPUShaderLibrary   *library;
   GPUShaderLayout    *shaderLayout;
@@ -1210,6 +1211,35 @@ check_usl_shader_library_helper(GPUDevice  *device,
 
   if (GPUCreateShaderLibraryFromUSL(device, bytecode, bytecodeSize, NULL) != GPU_ERROR_INVALID_ARGUMENT) {
     fprintf(stderr, "USL shader helper accepted null output\n");
+    return 0;
+  }
+
+  library = (GPUShaderLibrary *)(uintptr_t)1u;
+
+  if (GPUCreateShaderLibraryFromUSL(device,
+                                    invalidArtifact,
+                                    sizeof(invalidArtifact),
+                                    &library) != GPU_ERROR_UNSUPPORTED
+      || library != NULL) {
+    fprintf(stderr, "USL shader helper accepted malformed artifact\n");
+    if (library != (GPUShaderLibrary *)(uintptr_t)1u) {
+      GPUDestroyShaderLibrary(library);
+    }
+    return 0;
+  }
+
+  library = (GPUShaderLibrary *)(uintptr_t)1u;
+
+  if (bytecodeSize < 2u
+      || GPUCreateShaderLibraryFromUSL(device,
+                                       bytecode,
+                                       bytecodeSize - 1u,
+                                       &library) != GPU_ERROR_UNSUPPORTED
+      || library != NULL) {
+    fprintf(stderr, "USL shader helper accepted truncated artifact\n");
+    if (library != (GPUShaderLibrary *)(uintptr_t)1u) {
+      GPUDestroyShaderLibrary(library);
+    }
     return 0;
   }
 

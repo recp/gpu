@@ -3041,11 +3041,12 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  targetSupported = us_supports_target(bytecodeData,
-                                       (size_t)bytecodeSize,
-                                       &target);
+  /* dxil bootstraps one entry but still requires module-wide support. */
 
-  if (target.backend == USL_BACKEND_DXIL && !targetSupported) {
+  if (target.backend == USL_BACKEND_DXIL
+      && !us_supports_target(bytecodeData,
+                             (size_t)bytecodeSize,
+                             &target)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -3135,6 +3136,13 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
               targetCaps);
     }
 
+    /* us_compile validates successful outputs; decode again only to classify
+     * a failure. dxil already passed its module-wide check above. */
+
+    targetSupported = target.backend == USL_BACKEND_DXIL
+                      || us_supports_target(bytecodeData,
+                                            (size_t)bytecodeSize,
+                                            &target);
     rc = targetSupported
            ? GPU_ERROR_BACKEND_FAILURE
            : GPU_ERROR_UNSUPPORTED;
