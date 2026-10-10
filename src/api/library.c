@@ -912,6 +912,25 @@ bindingTypeFromUSLResource(const GPUShaderLibrary   *library,
   }
 }
 
+static GPUBindingType
+webgpuStorageAccess(const USRuntimeInfo *runtimeInfo, const USLRuntimeResource *resource) {
+  const USLRuntimeResource *peer;
+  uint32_t                 i;
+
+  /* a shared WGSL buffer declaration uses read_write if any used entry writes. */
+  for (i = 0u; i < runtimeInfo->resource_count; i++) {
+    peer = &runtimeInfo->resources[i];
+
+    if (peer->used && peer->kind == USL_RUNTIME_RESOURCE_BUFFER
+        && peer->type.kind == USL_RUNTIME_TYPE_ARRAY
+        && peer->access != USL_RUNTIME_IMAGE_ACCESS_READ
+        && peer->group == resource->group && peer->binding == resource->binding)
+      return GPU_BINDING_STORAGE_BUFFER;
+  }
+
+  return GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
+}
+
 static int
 textureViewTypeFromUSL(uint32_t source, GPUTextureViewType *outType) {
   if (!outType) {
@@ -2158,6 +2177,9 @@ setShaderLibraryMetadata(GPUShaderLibrary   *library,
       free(metadata);
       return 0;
     }
+
+    if (backend == GPU_BACKEND_WEBGPU && bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER)
+      bindingType = webgpuStorageAccess(runtimeInfo, sourceResource);
 
     resourceLayout.bindingType = bindingType;
 

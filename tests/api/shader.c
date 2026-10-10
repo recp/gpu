@@ -1455,6 +1455,159 @@ cleanup:
   return ok;
 }
 
+static int
+check_webgpu_storage_access(GPUDevice *device) {
+  const char                     *names[] = {"write_first", "read_first", "read_after", "write_after",
+                                             "unused_write", "read_unused", "read_group"};
+  GPUBindGroupLayoutEntry         entries[4];
+  GPUShaderLibraryCreateInfo      info = {0};
+  GPUComputePipelineCreateInfo    compute = {0};
+  GPUBindGroupLayoutCreateInfo    groupInfo = {0};
+  GPUPipelineLayoutCreateInfo     layoutInfo = {0};
+  GPUShaderReflection             reflection = {0};
+  GPUBindGroupLayout             *groups[2] = {0};
+  GPUComputePipeline             *pipelines[GPU_ARRAY_LEN(names)] = {0};
+  const GPUBindGroupLayoutEntry  *layoutEntries;
+  GPUComputePipeline             *badPipeline = NULL;
+  GPUShaderLibrary               *library = NULL;
+  GPUShaderLayout                *layout = NULL;
+  GPUPipelineLayout              *badLayout = NULL;
+  GPUApi                         *api;
+  void                           *bytecode = NULL;
+  const char                     *path;
+  uint64_t                        bytecodeSize;
+  uint32_t                        i, count;
+  GPUResult                       result;
+  int                             ok = 0;
+
+  api = deviceApi(device);
+
+  if (!api || api->backend != GPU_BACKEND_WEBGPU)
+    return 1;
+
+#if defined(GPU_STORAGE_ACCESS_USL_PATH)
+  path = GPU_STORAGE_ACCESS_USL_PATH;
+#else
+  fprintf(stderr, "WebGPU storage access fixture unavailable\n");
+  return 0;
+#endif
+
+  if (!(bytecode = gpu_test_read_file(path, &bytecodeSize)))
+    goto cleanup;
+
+  info.chain.sType        = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
+  info.chain.structSize   = sizeof(info);
+  info.sourceData         = bytecode;
+  info.sourceSize         = bytecodeSize;
+  info.sourceKind         = GPU_SHADER_SOURCE_USL_BYTECODE;
+  info.generateReflection = true;
+  info.disableDiskCache   = true;
+
+  if (GPUCreateShaderLibrary(device, &info, &library) != GPU_OK || !library
+      || GPUGetShaderReflection(library, &reflection) != GPU_OK
+      || reflection.resourceCount != 5u)
+    goto cleanup;
+
+  if (!shader_reflection_has_resource(&reflection,
+                                      GPU_BINDING_STORAGE_BUFFER,
+                                      GPU_SHADER_STAGE_COMPUTE_BIT,
+                                      0u,
+                                      5u,
+                                      0)
+      || !shader_reflection_has_resource(&reflection,
+                                         GPU_BINDING_STORAGE_BUFFER,
+                                         GPU_SHADER_STAGE_COMPUTE_BIT,
+                                         0u,
+                                         7u,
+                                         0)
+      || !shader_reflection_has_resource(&reflection,
+                                         GPU_BINDING_STORAGE_BUFFER,
+                                         GPU_SHADER_STAGE_COMPUTE_BIT,
+                                         0u,
+                                         11u,
+                                         0)
+      || !shader_reflection_has_resource(&reflection,
+                                         GPU_BINDING_READ_ONLY_STORAGE_BUFFER,
+                                         GPU_SHADER_STAGE_COMPUTE_BIT,
+                                         0u,
+                                         8u,
+                                         0)
+      || !shader_reflection_has_resource(&reflection,
+                                         GPU_BINDING_READ_ONLY_STORAGE_BUFFER,
+                                         GPU_SHADER_STAGE_COMPUTE_BIT,
+                                         1u,
+                                         5u,
+                                         0)
+      || GPUCreateShaderLayout(device, library, &layout) != GPU_OK || !layout
+      || layout->bindGroupLayoutCount != 2u)
+    goto cleanup;
+
+  compute.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  compute.chain.structSize = sizeof(compute);
+  compute.layout           = layout->pipelineLayout;
+  compute.library          = library;
+
+  for (i = 0u; i < GPU_ARRAY_LEN(names); i++) {
+    compute.entryPoint = names[i];
+
+    if (GPUCreateComputePipeline(device, &compute, &pipelines[i]) != GPU_OK || !pipelines[i])
+      goto cleanup;
+  }
+
+  layoutEntries = GPUGetBindGroupLayoutEntries(layout->bindGroupLayouts[0], &count);
+
+  if (!layoutEntries || count != GPU_ARRAY_LEN(entries))
+    goto cleanup;
+
+  memcpy(entries, layoutEntries, sizeof(entries));
+
+  for (i = 0u; i < count; i++) {
+    if (entries[i].binding == 5u)
+      entries[i].bindingType = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
+  }
+
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.entryCount       = count;
+  groupInfo.pEntries         = entries;
+
+  if (GPUCreateBindGroupLayout(device, &groupInfo, &groups[0]) != GPU_OK || !groups[0])
+    goto cleanup;
+
+  groups[1] = layout->bindGroupLayouts[1];
+
+  layoutInfo.chain.sType          = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize     = sizeof(layoutInfo);
+  layoutInfo.bindGroupLayoutCount = 2u;
+  layoutInfo.ppBindGroupLayouts   = groups;
+
+  if (GPUCreatePipelineLayout(device, &layoutInfo, &badLayout) != GPU_OK || !badLayout)
+    goto cleanup;
+
+  compute.layout     = badLayout;
+  compute.entryPoint = "read_first";
+
+  result = GPUCreateComputePipeline(device, &compute, &badPipeline);
+  ok     = result == GPU_ERROR_INVALID_ARGUMENT && badPipeline == NULL;
+
+cleanup:
+  if (!ok)
+    fprintf(stderr, "WebGPU shared storage access reflection/layout failed\n");
+
+  GPUDestroyComputePipeline(badPipeline);
+
+  for (i = 0u; i < GPU_ARRAY_LEN(pipelines); i++)
+    GPUDestroyComputePipeline(pipelines[i]);
+
+  GPUDestroyPipelineLayout(badLayout);
+  GPUDestroyBindGroupLayout(groups[0]);
+  GPUDestroyShaderLayout(layout);
+  GPUFreeShaderReflection(&reflection);
+  GPUDestroyShaderLibrary(library);
+  free(bytecode);
+  return ok;
+}
+
 int
 gpu_test_shader(GPUDevice  *device,
                 const char *bytecodePath,
@@ -1477,7 +1630,8 @@ gpu_test_shader(GPUDevice  *device,
        && check_usl_shader_library_helper(device,
                                           bytecode,
                                           bytecodeSize)
-       && check_descriptor_array_reflection(device, descriptorArrayBytecodePath);
+       && check_descriptor_array_reflection(device, descriptorArrayBytecodePath)
+       && check_webgpu_storage_access(device);
 
   free(bytecode);
   return ok;

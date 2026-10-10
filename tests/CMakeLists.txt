@@ -259,6 +259,16 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     DEPENDS ${GPU_API_ATOMIC64_USL_FIXTURE}
   )
   add_custom_target(gpu-api-fixtures DEPENDS ${GPU_API_USL_FIXTURES})
+  if(GPU_BUILD_WEBGPU)
+    gpu_add_usl_fixtures(
+      GPU_API_STORAGE_ACCESS_USL_FIXTURE
+      "webgpu"
+      api-storage-access
+      "${PROJECT_SOURCE_DIR}/tests/api/storage_access.usl"
+    )
+    add_custom_target(gpu-api-storage-access-fixture
+      DEPENDS ${GPU_API_STORAGE_ACCESS_USL_FIXTURE})
+  endif()
 
   if(GPU_BUILD_METAL OR GPU_BUILD_DX12)
     if(GPU_BUILD_METAL)
@@ -853,6 +863,11 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     target_compile_definitions(gpu-api-test PRIVATE GPU_TEST_METAL_ERRORS=1)
   endif()
   add_dependencies(gpu-api-test gpu-api-fixtures)
+  if(TARGET gpu-api-storage-access-fixture)
+    add_dependencies(gpu-api-test gpu-api-storage-access-fixture)
+    target_compile_definitions(gpu-api-test PRIVATE
+      "GPU_STORAGE_ACCESS_USL_PATH=\"${GPU_API_STORAGE_ACCESS_USL_FIXTURE}\"")
+  endif()
   add_dependencies(gpu-api-test gpu-api-lod-fixture gpu-api-constants-fixture)
   add_dependencies(gpu-api-test gpu-api-dx12-binding-plan-fixture)
   add_dependencies(gpu-api-test gpu-api-msaa-fixture)
@@ -943,6 +958,14 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
             ${GPU_API_USL_FIXTURES}
             ${GPU_API_DEFAULT_BACKEND}
   )
+  if(GPU_BUILD_WEBGPU)
+    add_test(NAME api-webgpu-storage-access
+      COMMAND gpu-api-test ${GPU_API_USL_FIXTURES} webgpu)
+    set_tests_properties(api-webgpu-storage-access PROPERTIES
+      ENVIRONMENT "GPU_API_TEST=shader;MTL_DEBUG_LAYER=1"
+      LABELS "webgpu;shader;reflection"
+      TIMEOUT 30)
+  endif()
   if(GPU_BUILD_METAL)
     add_test(NAME api-metal-host-buffer
       COMMAND gpu-api-test ${GPU_API_USL_FIXTURES} metal)
