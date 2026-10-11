@@ -14,12 +14,21 @@
  * limitations under the License.
  */
 
+#undef calloc
+#undef free
+
 #include "api/constants_internal.h"
 #include "api/device_internal.h"
+
+#include <math.h>
 
 static const uint32_t kinds[] = {
   USL_RUNTIME_TYPE_BOOL, USL_RUNTIME_TYPE_I32, USL_RUNTIME_TYPE_U32, USL_RUNTIME_TYPE_F32
 };
+
+static uint32_t allocationCalls;
+static uint32_t releaseCalls;
+static bool     failAllocation;
 
 static GPUConstant
 constantValue(const USLRuntimeSpecConstant *metadata) {
@@ -209,6 +218,189 @@ cleanup:
   return ok;
 }
 
+static int
+checkNormalization(uint32_t count, uint32_t pattern, uint32_t order) {
+  GPUConstant            values[USL_RUNTIME_MAX_SPEC_CONSTANTS];
+  GPUConstant            original[USL_RUNTIME_MAX_SPEC_CONSTANTS];
+  GPUConstant            expected[USL_RUNTIME_MAX_SPEC_CONSTANTS] = {0};
+  GPUConstant            value;
+  GPUPreparedConstants   prepared;
+  GPUPipelineConstants   constants = {0};
+  GPUShaderLibrary       library   = {0};
+  GPUDevice              device    = {0};
+  GPUApi                 api       = {0};
+  USLRuntimeSpecConstant *metadata;
+  uint32_t                i;
+  uint32_t                index;
+  GPUResult               result;
+  int                     ok = 0;
+  bool                    duplicate;
+
+  if (!(metadata = calloc(count ? count : 1u, sizeof(*metadata)))) {
+    return 0;
+  }
+
+  memset(values, 0xa5, sizeof(values));
+
+  for (i = 0u; i < count; i++) {
+    metadata[i].function_constant_id = pattern ? UINT32_MAX - i * 3u : i;
+    metadata[i].type.kind            = kinds[i % 4u];
+    metadata[i].default_uint         = i;
+  }
+
+  for (i = 0u; i < count; i++) {
+    index = order == 1u ? count - 1u - i : order == 2u ? (i + count / 2u) % count : i;
+
+    if (order == 3u && count > 1u && i >= count - 2u) {
+      index = 2u * count - 3u - i;
+    }
+
+    value          = constantValue(&metadata[index]);
+    values[i].id   = value.id;
+    values[i].type = value.type;
+
+    switch (value.type) {
+      case GPU_CONSTANT_BOOL: values[i].value.boolean = value.value.boolean; break;
+      case GPU_CONSTANT_I32:  values[i].value.i32 = value.value.i32; break;
+      case GPU_CONSTANT_U32:  values[i].value.u32 = value.value.u32; break;
+      case GPU_CONSTANT_F32:  values[i].value.f32 = value.value.f32; break;
+      default: goto cleanup;
+    }
+
+    expected[i] = constantValue(&metadata[pattern ? count - 1u - i : i]);
+  }
+
+  duplicate = count > 1u && order >= 4u;
+
+  if (duplicate) {
+    values[count - 1u] = values[order == 4u ? count - 2u : 0u];
+  }
+
+  memcpy(original, values, sizeof(values));
+
+  api.backend            = GPU_BACKEND_METAL;
+  library._api           = &api;
+  library._device        = &device;
+  library._metadata      = metadata;
+  library._constants     = metadata;
+  library._constantCount = count;
+  indexConstantMetadata(&library);
+
+  constants.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CONSTANTS;
+  constants.chain.structSize = sizeof(constants);
+  constants.pConstants       = values;
+  constants.constantCount    = count;
+
+  allocationCalls = releaseCalls = 0u;
+
+  result = prepareConstants(&library, &constants.chain, true, &prepared);
+
+  ok = result == (duplicate ? GPU_ERROR_INVALID_ARGUMENT : GPU_OK)
+       && allocationCalls == (uint32_t)(count != 0u)
+       && releaseCalls == (uint32_t)duplicate
+       && memcmp(values, original, sizeof(values)) == 0;
+
+  if (count && !duplicate) {
+    ok = ok && prepared.values && prepared.values != values
+         && prepared.constants.constantCount == count
+         && prepared.constants.pConstants == prepared.values
+         && prepared.chain == &prepared.constants.chain && !prepared.constants.chain.pNext
+         && memcmp(prepared.values, expected, (size_t)count * sizeof(*expected)) == 0;
+    free(prepared.values);
+  } else {
+    ok = ok && !prepared.values && !prepared.chain && !prepared.constants.pConstants;
+  }
+
+  if (count) {
+    failAllocation  = true;
+    allocationCalls = releaseCalls = 0u;
+
+    result = prepareConstants(&library, &constants.chain, true, &prepared);
+    failAllocation = false;
+
+    ok = ok && result == GPU_ERROR_OUT_OF_MEMORY && !prepared.values && !prepared.chain
+         && !prepared.constants.pConstants && allocationCalls == 1u && releaseCalls == 0u;
+  }
+
+cleanup:
+  if (!ok) {
+    fprintf(stderr, "normalization count=%u metadata=%u order=%u\n", count, pattern, order);
+  }
+
+  free(metadata);
+  return ok;
+}
+
+static int
+checkAllocationErrors(void) {
+  USLRuntimeSpecConstant metadata  = {0};
+  GPUConstant           value     = {0};
+  GPUPreparedConstants  prepared;
+  GPUPipelineConstants  constants = {0};
+  GPUShaderLibrary      library   = {0};
+  GPUDevice             device    = {0};
+  GPUApi                api       = {0};
+  uint32_t              i;
+  GPUResult             result;
+  GPUResult             expected;
+
+  api.backend            = GPU_BACKEND_METAL;
+  library._api           = &api;
+  library._device        = &device;
+  library._metadata      = &metadata;
+  library._constants     = &metadata;
+  library._constantCount = 1u;
+  indexConstantMetadata(&library);
+
+  constants.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CONSTANTS;
+  constants.chain.structSize = sizeof(constants);
+  constants.pConstants       = &value;
+  constants.constantCount    = 1u;
+
+  for (i = 0u; i < 8u; i++) {
+    metadata.type.kind = USL_RUNTIME_TYPE_BOOL;
+    value.id           = 0u;
+    value.type         = GPU_CONSTANT_BOOL;
+    expected           = GPU_ERROR_INVALID_ARGUMENT;
+
+    switch (i) {
+      case 0u: value.id = 1u; break;
+      case 1u: value.type = GPU_CONSTANT_U32; break;
+      case 2u: value.type = (GPUConstantType)0u; break;
+      case 3u:
+      case 4u:
+        metadata.type.kind = USL_RUNTIME_TYPE_F32;
+        value.type         = GPU_CONSTANT_F32;
+        value.value.f32    = i == 3u ? NAN : INFINITY;
+        break;
+      case 5u:
+      case 7u:
+        metadata.type.kind = USL_RUNTIME_TYPE_F64;
+        value.type         = GPU_CONSTANT_F64;
+        value.value.f64    = i == 5u ? NAN : 1.0;
+        expected           = i == 5u ? GPU_ERROR_INVALID_ARGUMENT : GPU_ERROR_UNSUPPORTED;
+        break;
+      case 6u:
+        metadata.type.kind = USL_RUNTIME_TYPE_I64;
+        value.type         = GPU_CONSTANT_I64;
+        expected           = GPU_ERROR_UNSUPPORTED;
+        break;
+    }
+
+    failAllocation  = true;
+    allocationCalls = releaseCalls = 0u;
+
+    result = prepareConstants(&library, &constants.chain, true, &prepared);
+    failAllocation = false;
+
+    if (result != expected || prepared.values || prepared.chain || allocationCalls || releaseCalls) {
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
 /* only normalization is linked; this backend entry is never called. */
 GPUShaderFunction*
 shaderFunction(GPUShaderLibrary *library, const char *name) {
@@ -217,10 +409,23 @@ shaderFunction(GPUShaderLibrary *library, const char *name) {
   return NULL;
 }
 
+void*
+constantTestCalloc(size_t count, size_t size) {
+  allocationCalls++;
+  return failAllocation ? NULL : calloc(count, size);
+}
+
+void
+constantTestFree(void *data) {
+  releaseCalls++;
+  free(data);
+}
+
 int
 main(void) {
   uint32_t count;
   uint32_t pattern;
+  uint32_t order;
 
   for (count = 0u; count <= USL_RUNTIME_MAX_SPEC_CONSTANTS; count++) {
     for (pattern = 0u; pattern < 4u; pattern++) {
@@ -230,6 +435,22 @@ main(void) {
     }
   }
 
+  for (count = 0u; count <= USL_RUNTIME_MAX_SPEC_CONSTANTS; count++) {
+    for (pattern = 0u; pattern < 2u; pattern++) {
+      for (order = 0u; order < 6u; order++) {
+        if (!checkNormalization(count, pattern, order)) {
+          return 1;
+        }
+      }
+    }
+  }
+
+  if (!checkAllocationErrors()) {
+    return 1;
+  }
+
   puts("constant metadata/lookup: 516 count/order cases passed");
+  puts("normalization: 1548 order/byte/owner cases, 1536 allocation faults and 8 early errors passed");
+
   return 0;
 }

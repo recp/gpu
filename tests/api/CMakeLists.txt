@@ -8,6 +8,12 @@ target_include_directories(gpu-constant-lookup-test PRIVATE
   ${PROJECT_SOURCE_DIR}/src
 )
 
+target_compile_definitions(gpu-constant-lookup-test PRIVATE
+  GPU_STATIC
+  calloc=constantTestCalloc
+  free=constantTestFree
+)
+
 if(TARGET us)
   target_link_libraries(gpu-constant-lookup-test PRIVATE us)
 else()

@@ -234,7 +234,12 @@ prepareConstants(const GPUShaderLibrary *library,
     }
   }
 
-  qsort(out->values, constants->constantCount, sizeof(*out->values), constantCompare);
+  for (i = 1u; i < constants->constantCount; i++) {
+    if (out->values[i - 1u].id > out->values[i].id) {
+      qsort(out->values, constants->constantCount, sizeof(*out->values), constantCompare);
+      break;
+    }
+  }
 
   for (i = 1u; i < constants->constantCount; i++) {
     if (out->values[i - 1u].id == out->values[i].id) {
