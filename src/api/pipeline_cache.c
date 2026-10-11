@@ -346,7 +346,8 @@ pipelineKeyWriteRenderInfo(PipelineKeyWriter                 *writer,
 
 static void
 pipelineKeyWriteComputeInfo(PipelineKeyWriter                  *writer,
-                            const GPUComputePipelineCreateInfo *info) {
+                            const GPUComputePipelineCreateInfo *info,
+                            size_t                              entrySize) {
   uintptr_t layout;
   uintptr_t library;
 
@@ -354,7 +355,7 @@ pipelineKeyWriteComputeInfo(PipelineKeyWriter                  *writer,
   library = (uintptr_t)info->library;
   GPU_PIPELINE_KEY_WRITE(writer, layout);
   GPU_PIPELINE_KEY_WRITE(writer, library);
-  pipelineKeyWriteString(writer, info->entryPoint);
+  pipelineKeyWrite(writer, info->entryPoint, entrySize);
   pipelineKeyWriteConstants(writer, info->chain.pNext);
 }
 
@@ -470,32 +471,48 @@ buildRenderPipelineKey(const GPURenderPipelineCreateInfo *info,
 static bool
 buildComputePipelineKey(const GPUComputePipelineCreateInfo *info,
                         GPUPipelineCacheKey                *outKey) {
-  PipelineKeyWriter    writer;
+  PipelineKeyWriter           writer;
+  const GPUPipelineConstants *constants;
+  size_t                      entrySize;
+  size_t                      size;
+  size_t                      valueSize;
+  uint32_t                    i;
 
   outKey->data     = NULL;
   outKey->size     = 0u;
   outKey->hash     = 0u;
   outKey->ownsData = false;
 
-  writer.data     = outKey->inlineData;
-  writer.offset   = 0u;
-  writer.capacity = sizeof(outKey->inlineData);
-  writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
-  writer.valid    = true;
-  pipelineKeyWriteComputeInfo(&writer, info);
+  entrySize = strlen(info->entryPoint) + 1u;
+  size      = 2u * sizeof(uintptr_t) + sizeof(uint32_t);
 
-  if (!writer.valid || writer.offset == 0u) {
+  if (entrySize > SIZE_MAX - size) {
     return false;
   }
 
-  if (writer.offset <= writer.capacity) {
-    outKey->data = outKey->inlineData;
-    outKey->size = writer.offset;
-    outKey->hash = writer.hash;
-    return true;
+  size += entrySize;
+
+  constants = pipelineConstants(info->chain.pNext);
+
+  for (i = 0u; constants && i < constants->constantCount; i++) {
+    switch (constants->pConstants[i].type) {
+      case GPU_CONSTANT_BOOL: valueSize = sizeof(bool); break;
+      case GPU_CONSTANT_I32:  valueSize = sizeof(int32_t); break;
+      case GPU_CONSTANT_U32:  valueSize = sizeof(uint32_t); break;
+      case GPU_CONSTANT_F32:  valueSize = sizeof(float); break;
+      default: return false;
+    }
+
+    valueSize += sizeof(constants->pConstants[i].id) + sizeof(constants->pConstants[i].type);
+
+    if (valueSize > SIZE_MAX - size) {
+      return false;
+    }
+
+    size += valueSize;
   }
 
-  if (!pipelineKeyPrepare(outKey, writer.offset)) {
+  if (!pipelineKeyPrepare(outKey, size)) {
     return false;
   }
 
@@ -504,7 +521,7 @@ buildComputePipelineKey(const GPUComputePipelineCreateInfo *info,
   writer.capacity = outKey->size;
   writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid    = true;
-  pipelineKeyWriteComputeInfo(&writer, info);
+  pipelineKeyWriteComputeInfo(&writer, info, entrySize);
 
   if (!writer.valid || writer.offset != outKey->size) {
     pipelineCacheReleaseKey(outKey);
