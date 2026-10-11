@@ -45,6 +45,21 @@ constantCompare(const void *left, const void *right) {
 }
 
 GPU_HIDE
+void
+indexConstantMetadata(GPUShaderLibrary *library) {
+  uint32_t i;
+
+  library->_constantIdsDense = true;
+
+  for (i = 0u; i < library->_constantCount; i++) {
+    if (library->_constants[i].function_constant_id != i) {
+      library->_constantIdsDense = false;
+      break;
+    }
+  }
+}
+
+GPU_HIDE
 const GPUPipelineConstants*
 pipelineConstants(const GPUChainedStruct *chain) {
   uint32_t count;
@@ -182,9 +197,13 @@ prepareConstants(const GPUShaderLibrary *library,
       return GPU_ERROR_INVALID_ARGUMENT;
     }
 
-    for (j = 0u; j < library->_constantCount; j++) {
-      if (library->_constants[j].function_constant_id == value->id) {
-        break;
+    if (library->_constantIdsDense) {
+      j = value->id < library->_constantCount ? value->id : library->_constantCount;
+    } else {
+      for (j = 0u; j < library->_constantCount; j++) {
+        if (library->_constants[j].function_constant_id == value->id) {
+          break;
+        }
       }
     }
 

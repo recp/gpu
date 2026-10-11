@@ -131,6 +131,7 @@ struct GPUShaderLibrary {
   USLRuntimeSpecConstant         *_constants;
   GPUShaderReflection             _reflection;
   uint32_t                        _constantCount;
+  bool                            _constantIdsDense;
 };
 
 struct GPUShaderFunction {

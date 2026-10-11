@@ -30,6 +30,11 @@ typedef struct GPUPreparedConstants {
   GPUConstant                         *values;
 } GPUPreparedConstants;
 
+/* mark the existing id order once, without changing reflected metadata. */
+GPU_HIDE
+void
+indexConstantMetadata(GPUShaderLibrary *library);
+
 GPU_HIDE
 GPUResult
 prepareConstants(const GPUShaderLibrary *library,

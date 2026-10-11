@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "constants_internal.h"
 #include "device_internal.h"
 #include "library_internal.h"
 #include "usl_target.h"
@@ -180,6 +181,7 @@ clearShaderMetadata(GPUShaderLibrary *library) {
   library->_ptxInfo          = NULL;
   library->_constants        = NULL;
   library->_constantCount    = 0u;
+  library->_constantIdsDense = false;
   memset(&library->_reflection, 0, sizeof(library->_reflection));
 }
 
@@ -2360,6 +2362,7 @@ setShaderLibraryMetadata(GPUShaderLibrary   *library,
   if (library->_constantCount > 0u) {
     memcpy(library->_constants, runtimeInfo->spec_constants,
            (size_t)library->_constantCount * sizeof(*library->_constants));
+    indexConstantMetadata(library);
   }
 
   library->_metadata         = metadata;
