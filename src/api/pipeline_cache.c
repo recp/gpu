@@ -58,6 +58,7 @@ typedef struct PipelineKeyWriter {
   size_t   capacity;
   uint64_t hash;
   bool     valid;
+  bool     hashing; /* false for an overflow copy pass. */
 } PipelineKeyWriter;
 
 typedef struct PipelineCacheSync {
@@ -192,7 +193,9 @@ pipelineKeyWrite(PipelineKeyWriter    *writer,
   if (writer->data && writer->offset <= writer->capacity
       && size <= writer->capacity - writer->offset) {
     memcpy(writer->data + writer->offset, value, size);
+  }
 
+  if (writer->hashing) {
     for (i = 0u; i < size; i++) {
       writer->hash ^= ((const uint8_t *)value)[i];
       writer->hash *= 1099511628211ull;
@@ -434,6 +437,7 @@ buildRenderPipelineKey(const GPURenderPipelineCreateInfo *info,
   writer.capacity = sizeof(outKey->inlineData);
   writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid    = true;
+  writer.hashing  = true;
   pipelineKeyWriteRenderInfo(&writer, info);
 
   if (!writer.valid || writer.offset == 0u) {
@@ -454,8 +458,8 @@ buildRenderPipelineKey(const GPURenderPipelineCreateInfo *info,
   writer.data     = outKey->data;
   writer.offset   = 0u;
   writer.capacity = outKey->size;
-  writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid    = true;
+  writer.hashing  = false;
   pipelineKeyWriteRenderInfo(&writer, info);
 
   if (!writer.valid || writer.offset != outKey->size) {
@@ -521,6 +525,7 @@ buildComputePipelineKey(const GPUComputePipelineCreateInfo *info,
   writer.capacity = outKey->size;
   writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid    = true;
+  writer.hashing  = true;
   pipelineKeyWriteComputeInfo(&writer, info, entrySize);
 
   if (!writer.valid || writer.offset != outKey->size) {
@@ -552,6 +557,7 @@ buildRayPipelineKey(const GPURayTracingPipelineCreateInfoEXT *info,
   writer.capacity = sizeof(outKey->inlineData);
   writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid    = true;
+  writer.hashing  = true;
   pipelineKeyWriteRayInfo(&writer, info);
 
   if (!writer.valid || writer.offset == 0u) {
@@ -572,8 +578,8 @@ buildRayPipelineKey(const GPURayTracingPipelineCreateInfoEXT *info,
   writer.data     = outKey->data;
   writer.offset   = 0u;
   writer.capacity = outKey->size;
-  writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid    = true;
+  writer.hashing  = false;
   pipelineKeyWriteRayInfo(&writer, info);
 
   if (!writer.valid || writer.offset != outKey->size) {
@@ -605,6 +611,7 @@ buildGraphPipelineKey(const GPUExecutionGraphCreateInfoEXT *info,
   writer.capacity = sizeof(outKey->inlineData);
   writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid    = true;
+  writer.hashing  = true;
   pipelineKeyWriteGraphInfo(&writer, info);
 
   if (!writer.valid || writer.offset == 0u) {
@@ -625,8 +632,8 @@ buildGraphPipelineKey(const GPUExecutionGraphCreateInfoEXT *info,
   writer.data     = outKey->data;
   writer.offset   = 0u;
   writer.capacity = outKey->size;
-  writer.hash     = GPU_PIPELINE_KEY_HASH_SEED;
   writer.valid    = true;
+  writer.hashing  = false;
   pipelineKeyWriteGraphInfo(&writer, info);
 
   if (!writer.valid || writer.offset != outKey->size) {
