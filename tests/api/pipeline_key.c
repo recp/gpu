@@ -105,7 +105,7 @@ checkStateKey(GPUPipelineCache *cache,
 
   for (i = 0u; i < size; i++) {
     hash ^= expected[i];
-    hash * = 1099511628211ull;
+    hash *= 1099511628211ull;
   }
 
   allocationCalls = releaseCalls = 0u;
