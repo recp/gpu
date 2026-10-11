@@ -37,6 +37,11 @@ kern(1, 1, 1) constants_cs(inout result: [float4] #buffer(0)) {
   result[1] = float4(adjusted(OFFSET), 0.0, 0.0, 0.0)
 }
 
+kern(1, 1, 1) constants_plain_cs(inout result: [float4] #buffer(0)) {
+  result[0] = float4(1.0, 2.0, 3.0, 4.0)
+  result[1] = float4(5.0, 6.0, 7.0, 8.0)
+}
+
 vert constants_vs(index: uint #vertex_id) -> float4 {
   let x = float((index << 1u) & 2u)
   let y = float(index & 2u)

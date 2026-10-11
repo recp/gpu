@@ -176,8 +176,15 @@ mt_newVariant(GPUShaderLibrary           *lib,
   mtName = [NSString stringWithUTF8String:name];
   values = nil;
   error  = nil;
+  mtFunc = [(id<MTLLibrary>)lib->_priv newFunctionWithName:mtName];
 
-  if (lib->_constantCount > 0u) {
+  if (!mtFunc) {
+    return NULL;
+  }
+
+  /* specialize only functions that reference function constants. */
+
+  if (lib->_constantCount > 0u && mtFunc.functionConstantsDictionary.count > 0u) {
     values = [MTLFunctionConstantValues new];
 
     for (i = 0u; i < lib->_constantCount; i++) {
@@ -232,7 +239,7 @@ mt_newVariant(GPUShaderLibrary           *lib,
     }
   }
 
-  if (constants) {
+  if (constants && values) {
     for (i = 0u; i < constants->constantCount; i++) {
       value = &constants->pConstants[i];
 
@@ -254,9 +261,10 @@ mt_newVariant(GPUShaderLibrary           *lib,
     }
   }
 
-  mtFunc = values
-             ? [(id<MTLLibrary>)lib->_priv newFunctionWithName:mtName constantValues:values error:&error]
-             : [(id<MTLLibrary>)lib->_priv newFunctionWithName:mtName];
+  if (values) {
+    [mtFunc release];
+    mtFunc = [(id<MTLLibrary>)lib->_priv newFunctionWithName:mtName constantValues:values error:&error];
+  }
 
   if (!mtFunc) {
     [values release];

@@ -1,3 +1,6 @@
+#function_constant(0)
+spec const UNRELATED: uint = 7
+
 struct HitAttributes {
   marker: float
 }

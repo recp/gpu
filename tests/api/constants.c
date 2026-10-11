@@ -34,14 +34,17 @@ static const GPUConstant overrides[2][4] = {
   }
 };
 
-static const float expected[7][8] = {
+static const float expected[10][8] = {
   {0.0f, -3.0f, 5.0f, 0.25f, -2.75f, 0.0f, 0.0f, 0.0f},
   {1.0f, -7.0f, 9.0f, 1.5f, 10.5f, 0.0f, 0.0f, 0.0f},
   {0.0f, 17.0f, 0.0f, -2.0f, 15.0f, 0.0f, 0.0f, 0.0f},
   {0.0f, -3.0f, 5.0f, 0.25f, -2.75f, 0.0f, 0.0f, 0.0f},
   {0.0f, -3.0f, 5.0f, 0.75f, -2.25f, 0.0f, 0.0f, 0.0f},
   {0.0f, -3.0f, 5.0f, 0.0f, -3.0f, 0.0f, 0.0f, 0.0f},
-  {0.0f, -3.0f, 5.0f, -0.0f, -3.0f, 0.0f, 0.0f, 0.0f}
+  {0.0f, -3.0f, 5.0f, -0.0f, -3.0f, 0.0f, 0.0f, 0.0f},
+  {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f},
+  {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f},
+  {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f}
 };
 
 static int
@@ -403,20 +406,25 @@ check_constants_library(GPUDevice *device, GPUShaderLibrary *library) {
   submit.commandBufferCount  = 1u;
   submit.fence               = fence;
 
-  for (i = 0u; i < 7u; i++) {
-    info.chain.pNext        = i ? &constants : NULL;
-    constants.constantCount = i > 2u ? 1u : 4u;
+  for (i = 0u; i < GPU_ARRAY_LEN(expected); i++) {
+    info.entryPoint         = i < 7u ? "constants_cs" : "constants_plain_cs";
+    info.chain.pNext        = i && i != 7u ? &constants : NULL;
+    constants.constantCount = i <= 2u || i == 8u ? 4u : 1u;
 
-    if (i == 3u) {
+    if (i == 3u || i == 9u) {
       constants.pConstants = &unused;
-    } else if (i > 3u) {
+    } else if (i > 3u && i != 8u) {
       constants.pConstants = &partial;
     } else {
-      constants.pConstants = i ? overrides[i - 1u] : NULL;
+      constants.pConstants = i == 2u ? overrides[1] : overrides[0];
     }
 
-    if (i >= 5u) {
+    if (i == 5u || i == 6u) {
       partial.value.f32 = i == 5u ? 0.0f : -0.0f;
+    }
+
+    if (i == 7u && !check_invalid_constants(device, &info)) {
+      goto cleanup;
     }
 
     createdAt = gpu_test_now_ns();
@@ -443,7 +451,7 @@ check_constants_library(GPUDevice *device, GPUShaderLibrary *library) {
       same = NULL;
     }
 
-    if (i == 1u || i == 2u) {
+    if (i == 1u || i == 2u || i == 8u) {
       for (j = 0u; j < 4u; j++) {
         reversed[j] = constants.pConstants[3u - j];
       }
@@ -484,7 +492,7 @@ check_constants_library(GPUDevice *device, GPUShaderLibrary *library) {
 
     for (j = 0u; j < 8u; j++) {
       if (!isfinite(output[j]) || output[j] != expected[i][j]
-          || (i >= 5u && j == 3u && device->_api->backend != GPU_BACKEND_WEBGPU
+          || ((i == 5u || i == 6u) && j == 3u && device->_api->backend != GPU_BACKEND_WEBGPU
               && !!signbit(output[j]) != (i == 6u))) {
         fprintf(stderr, "constants variant %u component %u: %g != %g\n",
                 i, j, output[j], expected[i][j]);
