@@ -3057,13 +3057,14 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  sourceCompileFlags = GPU_SHADER_SOURCE_COMPILE_NONE;
+  /* unrelaxed USL must not inherit a native compiler's implicit fast math. */
 
-  if ((compileOptions.flags & USL_COMPILE_OPTION_FLAG_STRICT_IEEE) != 0u
-      || (compileOptions.flags & USL_COMPILE_OPTION_FLAG_METAL_STRICT_IEEE) != 0u) {
-    sourceCompileFlags |= GPU_SHADER_SOURCE_COMPILE_STRICT_IEEE;
-  } else if ((compileOptions.flags & USL_COMPILE_OPTION_FLAG_RELAXED_FP) != 0u) {
-    sourceCompileFlags |= GPU_SHADER_SOURCE_COMPILE_RELAXED_FP;
+  sourceCompileFlags = GPU_SHADER_SOURCE_COMPILE_STRICT_IEEE;
+
+  if ((compileOptions.flags & USL_COMPILE_OPTION_FLAG_RELAXED_FP) != 0u
+      && (compileOptions.flags & (USL_COMPILE_OPTION_FLAG_STRICT_IEEE
+                                  | USL_COMPILE_OPTION_FLAG_METAL_STRICT_IEEE)) == 0u) {
+    sourceCompileFlags = GPU_SHADER_SOURCE_COMPILE_RELAXED_FP;
   }
 
   encoding   = target.backend == USL_BACKEND_SPIRV

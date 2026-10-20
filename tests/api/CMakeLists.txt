@@ -76,3 +76,58 @@ if(NOT MSVC)
 endif()
 
 add_test(NAME api-pipeline-key COMMAND gpu-pipeline-key-test)
+
+if(GPU_BUILD_METAL)
+  gpu_add_usl_fixtures(GPU_MATH_POLICY_FIXTURE metal api-math-policy
+    "${CMAKE_CURRENT_SOURCE_DIR}/compute.usl"
+  )
+
+  add_executable(gpu-math-policy-test math_policy.c ${GPU_MATH_POLICY_FIXTURE})
+
+  target_link_libraries(gpu-math-policy-test PRIVATE gpu)
+
+  set_target_properties(gpu-math-policy-test PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+
+  if(NOT MSVC)
+    target_compile_options(gpu-math-policy-test PRIVATE -Wall -Wextra -Werror)
+  endif()
+
+  foreach(mode default strict relaxed fast-alias metal-strict backend-strict)
+    set(strict 0)
+    set(relaxed 0)
+    set(fast 0)
+    set(metalStrict 0)
+    set(backendStrict 0)
+    set(expected safe)
+
+    if(mode STREQUAL "strict")
+      set(strict 1)
+    elseif(mode STREQUAL "relaxed")
+      set(relaxed 1)
+      set(expected relaxed)
+    elseif(mode STREQUAL "fast-alias")
+      set(fast 1)
+      set(expected relaxed)
+    elseif(mode STREQUAL "metal-strict")
+      set(metalStrict 1)
+      set(relaxed 1)
+    elseif(mode STREQUAL "backend-strict")
+      set(backendStrict 1)
+    endif()
+
+    add_test(NAME api-math-policy-${mode}
+      COMMAND gpu-math-policy-test ${GPU_MATH_POLICY_FIXTURE} ${expected}
+    )
+
+    set_tests_properties(api-math-policy-${mode} PROPERTIES
+      ENVIRONMENT
+        "USL_STRICT_IEEE=${strict};USL_RELAXED_FP=${relaxed};USL_FAST_MATH=${fast};USL_METAL_STRICT_IEEE=${metalStrict};USL_BACKEND_STRICT_IEEE=${backendStrict}"
+      LABELS "usl;metal;math-policy"
+      TIMEOUT 60
+    )
+  endforeach()
+endif()
