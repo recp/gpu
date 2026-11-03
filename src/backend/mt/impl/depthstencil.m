@@ -369,6 +369,9 @@ mt_createTextureDescriptor(GPUDevice                  *device,
   *outDesc              = nil;
   *outStencilCopyFormat = MTLPixelFormatInvalid;
 
+  if (info->dimension == GPU_TEXTURE_DIMENSION_1D && info->mipLevelCount > 1u)
+    return GPU_ERROR_UNSUPPORTED;
+
   deviceMT    = device->_priv;
   sampleCount = info->sampleCount ? info->sampleCount : 1u;
 

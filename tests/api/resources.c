@@ -1755,6 +1755,53 @@ check_1d_view_validation(GPUDevice *device) {
   return 1;
 }
 
+static int
+check_metal_1d_mip_limits(GPUDevice *device) {
+  GPUTextureCreateInfo  info = {0};
+  GPUAdapterProperties  properties;
+  GPUMemoryRequirements requirements;
+  GPUTexture           *texture;
+  uint32_t              layers, mips;
+  GPUResult             result;
+
+  if (GPUGetAdapterProperties(device->adapter, &properties) != GPU_OK)
+    return 0;
+
+  if (properties.backend != GPU_BACKEND_METAL)
+    return 1;
+
+  info.dimension = GPU_TEXTURE_DIMENSION_1D;
+  info.format    = GPU_FORMAT_RGBA8_UNORM;
+  info.width     = 8u;
+  info.height    = 1u;
+  info.usage     = GPU_TEXTURE_USAGE_COPY_SRC | GPU_TEXTURE_USAGE_COPY_DST;
+
+  for (layers = 1u; layers <= 2u; layers++) {
+    info.depthOrLayers = layers;
+    for (mips = 0u; mips <= 3u; mips++) {
+      info.mipLevelCount = mips;
+      texture           = NULL;
+      result            = GPUCreateTexture(device, &info, &texture);
+      if ((mips <= 1u && (result != GPU_OK || !texture))
+          || (mips > 1u && (result != GPU_ERROR_UNSUPPORTED || texture))) {
+        GPUDestroyTexture(texture);
+        return 0;
+      }
+      GPUDestroyTexture(texture);
+
+      if (mips > 1u && GPUIsFeatureEnabled(device, GPU_FEATURE_PLACED_RESOURCES)) {
+        memset(&requirements, 0xa5, sizeof(requirements));
+        if (GPUGetTextureMemoryRequirements(device, &info, &requirements) != GPU_ERROR_UNSUPPORTED
+            || requirements.sizeBytes || requirements.alignmentBytes || requirements.compatibilityMask)
+          return 0;
+      }
+    }
+  }
+
+  return 1;
+}
+
+
 int
 gpu_test_resources(GPUDevice *device) {
   return check_destroy_null_handles()
@@ -1767,5 +1814,6 @@ gpu_test_resources(GPUDevice *device) {
          && check_resource_validation(device)
          && check_cube_view_validation(device)
          && check_3d_view_validation(device)
-         && check_1d_view_validation(device);
+         && check_1d_view_validation(device)
+         && check_metal_1d_mip_limits(device);
 }
