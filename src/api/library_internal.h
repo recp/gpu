@@ -181,6 +181,11 @@ getShaderLibraryEntryStage(const GPUShaderLibrary *library,
                            GPUShaderStageFlags    *outStage);
 
 GPU_HIDE
+uint32_t
+shaderFramebufferFetchMask(const GPUShaderLibrary *library,
+                           const char             *entryPoint);
+
+GPU_HIDE
 int
 getShaderLibraryExecutionGraphEntry(const GPUShaderLibrary           *library,
                                     const char                       *entryPoint,

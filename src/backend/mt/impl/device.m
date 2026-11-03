@@ -987,6 +987,12 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
   }
 
   switch (feature) {
+    case GPU_FEATURE_FRAMEBUFFER_FETCH:
+#if TARGET_OS_SIMULATOR
+      return false;
+#else
+      return adapterMT->appleFamily2;
+#endif
     case GPU_FEATURE_COMPUTE:
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_SHADER_F16:

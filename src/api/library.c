@@ -48,6 +48,7 @@ typedef struct ShaderEntryInfo {
   uint32_t hitAttributeSizeBytes;
   uint32_t callableDataSizeBytes;
   uint32_t pushConstantSizeBytes;
+  uint32_t framebufferFetchMask;
   uint32_t nodeIndex;
   uint32_t nodeLaunch;
   uint32_t nameLength;
@@ -2067,6 +2068,7 @@ setShaderLibraryMetadata(GPUShaderLibrary   *library,
     dst->hitAttributeSizeBytes = sourceEntry->hit_attribute_size_bytes;
     dst->callableDataSizeBytes = sourceEntry->callable_data_size_bytes;
     dst->pushConstantSizeBytes = sourceEntry->push_constant_size_bytes;
+    dst->framebufferFetchMask  = sourceEntry->framebuffer_fetch_mask;
     dst->nodeIndex             = sourceEntry->node_index;
     dst->nodeLaunch            = sourceEntry->node_launch;
     dst->nodeProgramEntry      = sourceEntry->node_is_program_entry != 0u;
@@ -2858,6 +2860,16 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
       }
     }
   } else if (api->backend == GPU_BACKEND_METAL) {
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_FRAMEBUFFER_FETCH)) {
+      if (us_cap_atom_init(&targetAtoms[targetAtomCount++],
+                           USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+                           USL_SEMANTIC_FEATURE_ID_FRAMEBUFFER_FETCH,
+                           0u,
+                           0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+
     if (device->uslCubeGradFixup
         && us_cap_atom_text(&targetAtoms[targetAtomCount++], "metal_cube_grad_fixup") != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;
@@ -3540,6 +3552,17 @@ getShaderLibraryEntryStage(const GPUShaderLibrary *library,
   *outStage = entry->stage;
 
   return 1;
+}
+
+GPU_HIDE
+uint32_t
+shaderFramebufferFetchMask(const GPUShaderLibrary *library,
+                           const char             *entryPoint) {
+  const ShaderEntryInfo *entry;
+
+  entry = findShaderEntry(library, entryPoint);
+
+  return entry ? entry->framebufferFetchMask : 0u;
 }
 
 GPU_HIDE

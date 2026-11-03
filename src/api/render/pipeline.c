@@ -132,6 +132,26 @@ validatePipelineFormats(const GPUDevice                   *device,
   return GPU_OK;
 }
 
+static GPUResult
+validateFramebufferFetch(const GPUDevice                   *device,
+                         const GPURenderPipelineCreateInfo *info) {
+  uint32_t mask;
+
+  mask = shaderFramebufferFetchMask(info->library, info->fragmentEntry);
+
+  if (mask == 0u)
+    return GPU_OK;
+
+  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_FRAMEBUFFER_FETCH))
+    return GPU_ERROR_UNSUPPORTED;
+
+  /* colorTargetCount is already bounded to eight by pipelineInfoIsSupported. */
+  if ((mask >> info->colorTargetCount) != 0u)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  return GPU_OK;
+}
+
 static bool
 bindingTypeIsBuffer(GPUBindingType type) {
   return type == GPU_BINDING_UNIFORM_BUFFER
@@ -871,6 +891,11 @@ createRenderPipeline(GPUDevice                         *__restrict device,
 
   if (!pipelineInfoIsSupported(info, mesh != NULL))
     return GPU_ERROR_INVALID_ARGUMENT;
+
+  result = validateFramebufferFetch(device, info);
+
+  if (result != GPU_OK)
+    return result;
 
   result = validatePipelineFormats(device, info);
 
