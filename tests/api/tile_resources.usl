@@ -1,0 +1,39 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+vert resource_vs(vertexId: uint #vertex_id) -> float4 {
+  let x = float(vertexId & 1u) * 4.0 - 1.0
+  let y = float((vertexId >> 1u) & 1u) * 4.0 - 1.0
+  return float4(x, y, 0.0, 1.0)
+}
+
+struct Adjust {
+  add: float4
+}
+
+frag resource_fs(dst:     float4          #color(0),
+                 weight:  float4          #buffer(5) #group(1) #dynamic_offset,
+                 values:  [float4]        #buffer(7) #group(1) #dynamic_offset,
+                 image:   texture2d<float> #texture(9) #group(2),
+                 filter:  sampler         #sampler(11) #group(2),
+                 adjust:  Adjust          #push_constant) -> float4 {
+  return dst * 0.5 + weight + values[0]
+         + image.sample(filter, float2(1.25, 0.5), level(0.0)) + adjust.add
+}
+
+frag resource_idle_fs(dst: float4 #color(0)) -> float4 {
+  return dst * 0.5
+}

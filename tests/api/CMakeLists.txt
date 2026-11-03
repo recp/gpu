@@ -17,6 +17,13 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   gpu_add_usl_fixtures(GPU_TILE_FIXTURE metal api-tile
     "${CMAKE_CURRENT_SOURCE_DIR}/tile_shader.usl"
   )
+  gpu_add_usl_fixtures(GPU_TILE_RESOURCE_FIXTURE metal api-tile-resources
+    "${CMAKE_CURRENT_SOURCE_DIR}/tile_resources.usl"
+  )
+  set(GPU_USL_FIXTURE_TARGET_CAPS framebuffer_fetch,descriptor_indexing)
+  gpu_add_usl_fixtures(GPU_TILE_ARRAY_FIXTURE metal api-tile-arrays
+    "${CMAKE_CURRENT_SOURCE_DIR}/tile_array_resources.usl"
+  )
   set(GPU_USL_FIXTURE_TARGET_CAPS imageblock)
   gpu_add_usl_fixtures(GPU_IMAGEBLOCK_FIXTURE metal api-imageblock
     "${CMAKE_CURRENT_SOURCE_DIR}/imageblock_shader.usl"
@@ -24,7 +31,7 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
 
   add_executable(gpu-metal-tile-test metal_tile.m
-    ${GPU_TILE_FIXTURE} ${GPU_IMAGEBLOCK_FIXTURE})
+    ${GPU_TILE_FIXTURE} ${GPU_IMAGEBLOCK_FIXTURE} ${GPU_TILE_RESOURCE_FIXTURE} ${GPU_TILE_ARRAY_FIXTURE})
 
   target_link_libraries(gpu-metal-tile-test PRIVATE gpu)
   target_compile_options(gpu-metal-tile-test PRIVATE -fobjc-arc)
@@ -32,7 +39,7 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
 
   foreach(mode classic metal4)
     add_test(NAME metal-tile-${mode}
-      COMMAND gpu-metal-tile-test ${GPU_TILE_FIXTURE} ${GPU_IMAGEBLOCK_FIXTURE})
+      COMMAND gpu-metal-tile-test ${GPU_TILE_FIXTURE} ${GPU_IMAGEBLOCK_FIXTURE} ${GPU_TILE_RESOURCE_FIXTURE} ${GPU_TILE_ARRAY_FIXTURE})
     set_tests_properties(metal-tile-${mode} PROPERTIES
       ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1"
       SKIP_RETURN_CODE 77 LABELS "tile;imageblock" TIMEOUT 30 RUN_SERIAL TRUE)

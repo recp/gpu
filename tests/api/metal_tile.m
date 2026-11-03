@@ -532,6 +532,571 @@ cleanup:
   return ok;
 }
 
+static bool
+check_resources(GPUDevice *device, GPUShaderLibrary *library, uint32_t samples) {
+  GPURenderPipelineCreateInfo render = {0};
+  GPUTilePipelineCreateInfo   tile = {0};
+  GPURenderPassCreateInfo     passInfo = {0};
+  GPURenderPassColorAttachment attachment = {0};
+  GPUTileRenderPassEXT        tileInfo = {0};
+  GPUBindGroupCreateInfo      groupInfo = {0};
+  GPUBindGroupEntry           entries[2] = {{0}};
+  GPUBufferCreateInfo         bufferInfo = {0};
+  GPUTextureCreateInfo        textureInfo = {0};
+  GPUTextureViewCreateInfo    viewInfo = {0};
+  GPUTextureWriteRegion       write = {0};
+  GPUSamplerCreateInfo        samplerInfo = {0};
+  GPUColorTargetState         color = {0};
+  GPUBarrierBatch             barriers = {0};
+  GPUBufferBarrier            bufferBarrier = {0};
+  GPUTextureBarrier           textureBarrier = {0};
+  Target                      target = {0};
+  float                       pixels[FETCH_HEIGHT][FETCH_ROW / sizeof(float)];
+  float                       bufferData[64][4] = {{0}};
+  float                       expected[4], push[4], copied[4];
+  const float                 weights[2][4] = {
+    {0.03125f, 0.0625f, 0.125f, 0.25f}, {0.25f, 0.125f, 0.0625f, 0.03125f}
+  };
+  const float                 values[2][4] = {
+    {0.0625f, 0.03125f, 0.015625f, 0.125f}, {0.125f, 0.015625f, 0.03125f, 0.0625f}
+  };
+  const float                 texels[2][4] = {
+    {0.0625f, 0.125f, 0.25f, 0.5f}, {0.25f, 0.0625f, 0.125f, 0.03125f}
+  };
+  const float                 basePush[4] = {0.015625f, 0.03125f, 0.0625f, 0.125f};
+  const uint16_t              halfTexels[2][4] = {
+    {0x2c00, 0x3000, 0x3400, 0x3800}, {0x3400, 0x2c00, 0x3000, 0x2800}
+  };
+  const uint32_t              choices[5] = {0u, 1u, 0u, 0u, 1u};
+  GPUShaderLayout            *layout = NULL, *other = NULL;
+  GPURenderPipeline          *draw = NULL;
+  GPUTilePipeline            *pipeline = NULL, *idle = NULL, *rejected = NULL;
+  GPUTilePipelineCreateInfo  *shortInfo = NULL;
+  GPUBindGroup               *buffers = NULL, *wrongBuffers = NULL, *textures[2] = {NULL};
+  GPUSampler                 *samplers[2] = {NULL};
+  GPUBuffer                  *buffer = NULL;
+  GPUTexture                 *texture = NULL;
+  GPUTextureView             *view = NULL;
+  GPUCommandBuffer           *command = NULL;
+  GPURenderPassEncoder       *pass = NULL;
+  GPUQueue                   *queue;
+  GPUFormat                   format = GPU_FORMAT_RGBA32_FLOAT;
+  uint32_t                    offsets[2], invalid[2];
+  uint32_t                    width, height, i, j, x, y, c, choice;
+  bool                        ok = false;
+
+#define REQUIRE(expr) do { \
+  if (!(expr)) { \
+    fprintf(stderr, "tile resource check failed at line %u: %s\n", __LINE__, #expr); \
+    goto cleanup; \
+  } \
+} while (0)
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  REQUIRE(create_target(device, samples, &target));
+  REQUIRE(GPUCreateShaderLayout(device, library, &layout) == GPU_OK);
+  REQUIRE(GPUCreateShaderLayout(device, library, &other) == GPU_OK);
+  REQUIRE(layout->bindGroupLayoutCount == 3u);
+
+  tile.chain.sType                    = GPU_STRUCTURE_TYPE_TILE_PIPELINE_CREATE_INFO;
+  tile.chain.structSize               = sizeof(tile);
+  tile.library                        = library;
+  tile.entryPoint                     = "resource_fs";
+  tile.pColorFormats                  = &format;
+  tile.colorAttachmentCount           = 1u;
+  tile.sampleCount                    = samples;
+  tile.threadgroupSizeMatchesTileSize = true;
+  REQUIRE(GPUCreateTilePipeline(device, &tile, &rejected) == GPU_ERROR_INVALID_ARGUMENT);
+  REQUIRE(!rejected);
+  REQUIRE((shortInfo = malloc(offsetof(GPUTilePipelineCreateInfo, layout))));
+  memcpy(shortInfo, &tile, offsetof(GPUTilePipelineCreateInfo, layout));
+  ((GPUChainedStruct *)shortInfo)->structSize = offsetof(GPUTilePipelineCreateInfo, layout);
+  REQUIRE(GPUCreateTilePipeline(device, shortInfo, &rejected) == GPU_ERROR_INVALID_ARGUMENT);
+  REQUIRE(!rejected);
+  tile.layout = layout->pipelineLayout;
+  REQUIRE(GPUCreateTilePipeline(device, &tile, &pipeline) == GPU_OK);
+  tile.entryPoint = "resource_idle_fs";
+  REQUIRE(GPUCreateTilePipeline(device, &tile, &idle) == GPU_OK);
+
+  color.format          = format;
+  color.blend.writeMask = GPU_COLOR_WRITE_ALL;
+  render.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
+  render.chain.structSize        = sizeof(render);
+  render.library                = library;
+  render.layout                 = layout->pipelineLayout;
+  render.vertexEntry            = "resource_vs";
+  render.fragmentEntry          = "resource_fs";
+  render.pColorTargets          = &color;
+  render.colorTargetCount       = 1u;
+  render.primitiveTopology      = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  render.cullMode               = GPU_CULL_MODE_NONE;
+  render.multisample.sampleCount = samples;
+  render.multisample.sampleMask  = UINT32_MAX;
+  REQUIRE(GPUCreateRenderPipeline(device, &render, &draw) == GPU_OK);
+
+  memcpy(bufferData[0], weights[0], sizeof(weights[0]));
+  memcpy(bufferData[16], weights[1], sizeof(weights[1]));
+  memcpy(bufferData[32], values[0], sizeof(values[0]));
+  memcpy(bufferData[48], values[1], sizeof(values[1]));
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.sizeBytes        = sizeof(bufferData);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_STORAGE
+                               | GPU_BUFFER_USAGE_COPY_DST;
+  REQUIRE(GPUCreateBuffer(device, &bufferInfo, &buffer) == GPU_OK);
+  REQUIRE(GPUQueueWriteBuffer(queue, buffer, 0u, bufferData, sizeof(bufferData)) == GPU_OK);
+
+  entries[0].binding       = 5u;
+  entries[0].bindingType   = GPU_BINDING_UNIFORM_BUFFER;
+  entries[0].buffer.buffer = buffer;
+  entries[0].buffer.size   = sizeof(weights[0]);
+  entries[1].binding       = 7u;
+  entries[1].bindingType   = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
+  entries[1].buffer.buffer = buffer;
+  entries[1].buffer.offset = 512u;
+  entries[1].buffer.size   = sizeof(values[0]);
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.layout           = layout->bindGroupLayouts[1];
+  groupInfo.pEntries         = entries;
+  groupInfo.entryCount       = 2u;
+  REQUIRE(GPUCreateBindGroup(device, &groupInfo, &buffers) == GPU_OK);
+  groupInfo.layout = other->bindGroupLayouts[1];
+  REQUIRE(GPUCreateBindGroup(device, &groupInfo, &wrongBuffers) == GPU_OK);
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA16_FLOAT;
+  textureInfo.width            = 2u;
+  textureInfo.height           = 1u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
+  REQUIRE(GPUCreateTexture(device, &textureInfo, &texture) == GPU_OK);
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format           = textureInfo.format;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.arrayLayerCount  = 1u;
+  REQUIRE(GPUCreateTextureView(texture, &viewInfo, &view) == GPU_OK);
+  write.width        = 2u;
+  write.height       = 1u;
+  write.depth        = 1u;
+  write.layerCount   = 1u;
+  write.bytesPerRow  = sizeof(halfTexels);
+  write.rowsPerImage = 1u;
+  REQUIRE(GPUQueueWriteTexture(queue, texture, &write, halfTexels, sizeof(halfTexels)) == GPU_OK);
+
+  memset(entries, 0, sizeof(entries));
+  entries[0].binding     = 9u;
+  entries[0].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+  entries[0].textureView = view;
+  entries[1].binding     = 11u;
+  entries[1].bindingType = GPU_BINDING_SAMPLER;
+  groupInfo.layout      = layout->bindGroupLayouts[2];
+  samplerInfo.chain.sType      = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  samplerInfo.chain.structSize = sizeof(samplerInfo);
+  samplerInfo.desc.maxAnisotropy = 1u;
+  for (i = 0u; i < 2u; i++) {
+    samplerInfo.desc.addressU = i ? GPU_ADDRESS_MODE_CLAMP_TO_EDGE : GPU_ADDRESS_MODE_REPEAT;
+    REQUIRE(GPUCreateSampler(device, &samplerInfo, false, &samplers[i]) == GPU_OK);
+    entries[1].sampler = samplers[i];
+    REQUIRE(GPUCreateBindGroup(device, &groupInfo, &textures[i]) == GPU_OK);
+  }
+
+  REQUIRE(GPUAcquireCommandBuffer(queue, "tile-resources", &command) == GPU_OK);
+  bufferBarrier.buffer    = buffer;
+  bufferBarrier.srcAccess = GPU_ACCESS_TRANSFER_WRITE;
+  bufferBarrier.dstAccess = GPU_ACCESS_SHADER_READ;
+  textureBarrier.texture    = texture;
+  textureBarrier.srcAccess  = GPU_ACCESS_TRANSFER_WRITE;
+  textureBarrier.dstAccess  = GPU_ACCESS_SHADER_READ;
+  textureBarrier.mipCount   = 1u;
+  textureBarrier.layerCount = 1u;
+  barriers.srcStages           = GPU_STAGE_TRANSFER;
+  barriers.dstStages           = GPU_STAGE_FRAGMENT | GPU_STAGE_TILE;
+  barriers.pBufferBarriers     = &bufferBarrier;
+  barriers.bufferBarrierCount = 1u;
+  barriers.pTextureBarriers    = &textureBarrier;
+  barriers.textureBarrierCount = 1u;
+  GPUEncodeBarriers(command, &barriers);
+
+  tileInfo.chain.sType      = GPU_STRUCTURE_TYPE_TILE_RENDER_PASS_EXT;
+  tileInfo.chain.structSize = sizeof(tileInfo);
+  tileInfo.tileWidth        = 16u;
+  tileInfo.tileHeight       = 16u;
+  attachment.view          = target.multisampleView ? target.multisampleView : target.view;
+  attachment.resolveView   = target.multisampleView ? target.view : NULL;
+  attachment.loadOp        = GPU_LOAD_OP_CLEAR;
+  attachment.storeOp       = GPU_STORE_OP_STORE;
+  memcpy(attachment.clearColor.float32, kClear, sizeof(kClear));
+  passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.structSize     = sizeof(passInfo);
+  passInfo.chain.pNext          = &tileInfo;
+  passInfo.pColorAttachments    = &attachment;
+  passInfo.colorAttachmentCount = 1u;
+  REQUIRE((pass = GPUBeginRenderPass(command, &passInfo)));
+  REQUIRE(GPUGetRenderPassTileSize(pass, &width, &height) == GPU_OK);
+  offsets[0] = offsets[1] = 0u;
+  REQUIRE(GPUBindTileGroup(pass, 1u, buffers, 2u, offsets) == GPU_ERROR_INVALID_ARGUMENT);
+  REQUIRE(GPUSetTilePushConstants(pass, 0u, sizeof(push), basePush) == GPU_ERROR_INVALID_ARGUMENT);
+  memcpy(expected, kClear, sizeof(expected));
+
+  REQUIRE(GPUBindTilePipeline(pass, idle) == GPU_OK);
+  REQUIRE(GPUBindTileGroup(pass, 1u, buffers, 2u, offsets) == GPU_OK);
+  REQUIRE(GPUBindTileGroup(pass, 2u, textures[0], 0u, NULL) == GPU_OK);
+  REQUIRE(GPUDispatchThreadsPerTile(pass, width, height) == GPU_OK);
+  for (c = 0u; c < 4u; c++) {
+    expected[c] *= 0.5f;
+  }
+
+  for (i = 0u; i < 5u; i++) {
+    choice = choices[i];
+    offsets[0] = offsets[1] = choice * 256u;
+    if (i != 2u) {
+      memcpy(copied, basePush, sizeof(copied));
+      if (i == 0u || i == 3u) {
+        GPUBindRenderPipeline(pass, draw);
+        GPUBindRenderGroup(pass, 1u, buffers, 2u, offsets);
+        GPUBindRenderGroup(pass, 2u, textures[1u - choice], 0u, NULL);
+        GPUSetRenderPushConstants(pass, 0u, sizeof(copied), copied);
+        GPUDraw(pass, 3u, 1u, 0u, 0u);
+        REQUIRE(GPUDispatchThreadsPerTile(pass, width, height) == GPU_ERROR_INVALID_ARGUMENT);
+      } else {
+        REQUIRE(GPUBindTilePipeline(pass, pipeline) == GPU_OK);
+        REQUIRE(GPUDispatchThreadsPerTile(pass, width, height) == GPU_ERROR_INVALID_ARGUMENT);
+        REQUIRE(GPUBindTileGroup(pass, 1u, buffers, 2u, offsets) == GPU_OK);
+        REQUIRE(GPUDispatchThreadsPerTile(pass, width, height) == GPU_ERROR_INVALID_ARGUMENT);
+        REQUIRE(GPUBindTileGroup(pass, 2u, textures[1u - choice], 0u, NULL) == GPU_OK);
+        REQUIRE(GPUDispatchThreadsPerTile(pass, width, height) == GPU_ERROR_INVALID_ARGUMENT);
+        if (i == 4u)
+          copied[2] = copied[3] = 0.0f;
+        memcpy(push, copied, sizeof(push));
+        REQUIRE(GPUSetTilePushConstants(pass, 0u, (i == 4u ? 2u : 4u) * sizeof(float), push) == GPU_OK);
+        REQUIRE(GPUSetTilePushConstants(pass, 0u, (i == 4u ? 2u : 4u) * sizeof(float), push) == GPU_OK);
+        for (j = 0u; j < 4u; j++) {
+          push[j] = -99.0f;
+        }
+        REQUIRE(GPUDispatchThreadsPerTile(pass, width, height) == GPU_OK);
+      }
+    } else {
+      REQUIRE(GPUBindTileGroup(pass, 1u, buffers, 2u, offsets) == GPU_OK);
+      REQUIRE(GPUBindTileGroup(pass, 2u, textures[1u - choice], 0u, NULL) == GPU_OK);
+      copied[0] = 0.25f;
+      copied[1] = 0.5f;
+      REQUIRE(GPUSetTilePushConstants(pass, 0u, 2u * sizeof(float), copied) == GPU_OK);
+      invalid[0] = 256u;
+      invalid[1] = UINT32_MAX;
+      REQUIRE(GPUBindTileGroup(pass, 1u, buffers, 2u, invalid) == GPU_ERROR_INVALID_ARGUMENT);
+      REQUIRE(GPUBindTileGroup(pass, 1u, buffers, 1u, offsets) == GPU_ERROR_INVALID_ARGUMENT);
+      REQUIRE(GPUBindTileGroup(pass, 1u, wrongBuffers, 2u, offsets) == GPU_ERROR_INVALID_ARGUMENT);
+      REQUIRE(GPUBindTileGroup(pass, 2u, buffers, 2u, offsets) == GPU_ERROR_INVALID_ARGUMENT);
+      REQUIRE(GPUBindTileGroup(pass, 32u, buffers, 2u, offsets) == GPU_ERROR_INVALID_ARGUMENT);
+      REQUIRE(GPUSetTilePushConstants(pass, 1u, sizeof(float), basePush) == GPU_ERROR_INVALID_ARGUMENT);
+      REQUIRE(GPUSetTilePushConstants(pass, sizeof(push), sizeof(float), basePush) == GPU_ERROR_INVALID_ARGUMENT);
+      REQUIRE(GPUDispatchThreadsPerTile(pass, width, height) == GPU_OK);
+    }
+
+    for (c = 0u; c < 4u; c++) {
+      expected[c] = expected[c] * 0.5f + weights[choice][c] + values[choice][c]
+                    + texels[1u - choice][c] + copied[c];
+    }
+  }
+
+  GPUEndRenderPass(pass);
+  pass = NULL;
+  ok = read_targets(device, command, &target, 1u, &pixels[0][0]);
+  command = NULL;
+  REQUIRE(ok);
+  ok = false;
+  for (y = 0u; y < FETCH_HEIGHT; y++) {
+    for (x = 0u; x < FETCH_WIDTH; x++) {
+      for (c = 0u; c < 4u; c++) {
+        REQUIRE(pixels[y][x * 4u + c] == expected[c]);
+      }
+    }
+  }
+  ok = true;
+
+cleanup:
+  free(shortInfo);
+  if (pass)
+    GPUEndRenderPass(pass);
+  if (command)
+    GPUDiscardCommandBuffer(command);
+  GPUDestroyTilePipeline(rejected);
+  GPUDestroyTilePipeline(pipeline);
+  GPUDestroyTilePipeline(idle);
+  GPUDestroyRenderPipeline(draw);
+  GPUDestroyBindGroup(wrongBuffers);
+  GPUDestroyBindGroup(buffers);
+  for (i = 0u; i < 2u; i++) {
+    GPUDestroyBindGroup(textures[i]);
+    GPUDestroySampler(samplers[i]);
+  }
+  GPUDestroyTextureView(view);
+  GPUDestroyTexture(texture);
+  GPUDestroyBuffer(buffer);
+  GPUDestroyShaderLayout(other);
+  GPUDestroyShaderLayout(layout);
+  GPUDestroyTextureView(target.multisampleView);
+  GPUDestroyTexture(target.multisample);
+  GPUDestroyTextureView(target.view);
+  GPUDestroyTexture(target.texture);
+  printf("tile resources samples=%u exact CPU oracle=%s\n", samples, ok ? "pass" : "fail");
+  return ok;
+#undef REQUIRE
+}
+
+static bool
+check_array_resources(GPUDevice *device, GPUShaderLibrary *library) {
+  GPUTilePipelineCreateInfo    tileInfo      = {0};
+  GPURenderPassCreateInfo      passInfo      = {0};
+  GPURenderPassColorAttachment attachment    = {0};
+  GPUTileRenderPassEXT         tile          = {0};
+  GPUBindGroupCreateInfo       groupInfo     = {0};
+  GPUBindGroupEntry            entries[6]    = {{0}};
+  GPUBufferCreateInfo          bufferInfo    = {0};
+  GPUTextureCreateInfo         textureInfo   = {0};
+  GPUTextureViewCreateInfo     viewInfo      = {0};
+  GPUTextureWriteRegion        write         = {0};
+  GPUSamplerCreateInfo         samplerInfo   = {0};
+  GPUBarrierBatch              barriers      = {0};
+  GPUBufferBarrier             bufferBarriers[2]  = {{0}};
+  GPUTextureBarrier            textureBarriers[2] = {{0}};
+  Target                       target        = {0};
+  float                        pixels[FETCH_HEIGHT][FETCH_ROW / sizeof(float)];
+  float                        bufferData[64][4];
+  float                        expected[4];
+  const float                  values[2][2][4] = {
+    {{0.03125f, 0.0625f, 0.125f, 0.25f}, {0.25f, 0.125f, 0.0625f, 0.03125f}},
+    {{0.0625f, 0.03125f, 0.015625f, 0.125f}, {0.125f, 0.015625f, 0.03125f, 0.0625f}}
+  };
+  const float                  sampled[2][4] = {
+    {0.25f, 0.125f, 0.0625f, 0.03125f}, {0.0625f, 0.015625f, 0.03125f, 0.125f}
+  };
+  const uint16_t               halfTexels[2][2][4] = {
+    {{0x2800, 0x2c00, 0x3000, 0x3400}, {0x3400, 0x3000, 0x2c00, 0x2800}},
+    {{0x2c00, 0x2400, 0x2800, 0x3000}, {0x3000, 0x2800, 0x2400, 0x2c00}}
+  };
+  const uint32_t               offsets[2][2] = {{256u, 512u}, {512u, 768u}};
+  const uint32_t               invalid[2]    = {512u, 1024u};
+  const uint32_t               choices[4]    = {0u, 0u, 1u, 0u};
+  const GPUBindGroupLayoutEntry *layoutEntries;
+  GPUShaderLayout             *layout       = NULL;
+  GPUTilePipeline             *pipeline     = NULL;
+  GPUBindGroup                *group        = NULL;
+  GPUSampler                  *samplers[2]  = {NULL};
+  GPUBuffer                   *buffers[2]   = {NULL};
+  GPUTexture                  *textures[2]  = {NULL};
+  GPUTextureView              *views[2]     = {NULL};
+  GPUCommandBuffer            *command      = NULL;
+  GPURenderPassEncoder        *pass         = NULL;
+  GPUQueue                    *queue;
+  const GPUFormat              format       = GPU_FORMAT_RGBA32_FLOAT;
+  uint32_t                     count, width, height, i, j, x, y, c, choice;
+  bool                         ok           = false;
+
+#define ARRAY_REQUIRE(expr) do { \
+  if (!(expr)) { \
+    fprintf(stderr, "tile array check failed at line %u: %s\n", __LINE__, #expr); \
+    goto cleanup; \
+  } \
+} while (0)
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  ARRAY_REQUIRE(create_target(device, 1u, &target));
+  ARRAY_REQUIRE(GPUCreateShaderLayout(device, library, &layout) == GPU_OK);
+  ARRAY_REQUIRE(layout->bindGroupLayoutCount == 2u);
+  layoutEntries = GPUGetBindGroupLayoutEntries(layout->bindGroupLayouts[1], &count);
+  ARRAY_REQUIRE(layoutEntries && count == 3u
+                && layoutEntries[0].binding == 5u
+                && layoutEntries[0].bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER
+                && layoutEntries[0].hasDynamicOffset
+                && layoutEntries[0].buffer.strideBytes == sizeof(values[0][0])
+                && layoutEntries[0].buffer.minBindingSize == sizeof(values[0][0])
+                && layoutEntries[1].binding == 9u
+                && layoutEntries[1].bindingType == GPU_BINDING_SAMPLED_TEXTURE
+                && layoutEntries[2].binding == 11u
+                && layoutEntries[2].bindingType == GPU_BINDING_SAMPLER);
+  for (i = 0u; i < count; i++) {
+    ARRAY_REQUIRE(layoutEntries[i].arrayCount == 2u);
+  }
+
+  tileInfo.chain.sType                    = GPU_STRUCTURE_TYPE_TILE_PIPELINE_CREATE_INFO;
+  tileInfo.chain.structSize               = sizeof(tileInfo);
+  tileInfo.library                        = library;
+  tileInfo.layout                         = layout->pipelineLayout;
+  tileInfo.entryPoint                     = "array_resource_fs";
+  tileInfo.pColorFormats                  = &format;
+  tileInfo.colorAttachmentCount           = 1u;
+  tileInfo.sampleCount                    = 1u;
+  tileInfo.threadgroupSizeMatchesTileSize = true;
+  ARRAY_REQUIRE(GPUCreateTilePipeline(device, &tileInfo, &pipeline) == GPU_OK);
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.sizeBytes        = sizeof(bufferData);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_DST;
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.dimension       = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA16_FLOAT;
+  textureInfo.width            = 2u;
+  textureInfo.height           = 1u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_DST;
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format           = textureInfo.format;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.arrayLayerCount  = 1u;
+  write.width        = 2u;
+  write.height       = 1u;
+  write.depth        = 1u;
+  write.layerCount   = 1u;
+  write.bytesPerRow  = sizeof(halfTexels[0]);
+  write.rowsPerImage = 1u;
+  samplerInfo.chain.sType        = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  samplerInfo.chain.structSize   = sizeof(samplerInfo);
+  samplerInfo.desc.minFilter     = GPU_FILTER_NEAREST;
+  samplerInfo.desc.magFilter     = GPU_FILTER_NEAREST;
+  samplerInfo.desc.mipFilter     = GPU_MIP_FILTER_NEAREST;
+  samplerInfo.desc.maxAnisotropy = 1u;
+
+  for (i = 0u; i < 2u; i++) {
+    for (j = 0u; j < 64u; j++) {
+      for (c = 0u; c < 4u; c++) {
+        bufferData[j][c] = -8.0f;
+      }
+    }
+    memcpy(bufferData[16u + i * 16u], values[i][0], sizeof(values[i][0]));
+    memcpy(bufferData[32u + i * 16u], values[i][1], sizeof(values[i][1]));
+    ARRAY_REQUIRE(GPUCreateBuffer(device, &bufferInfo, &buffers[i]) == GPU_OK);
+    ARRAY_REQUIRE(GPUQueueWriteBuffer(queue, buffers[i], 0u, bufferData, sizeof(bufferData)) == GPU_OK);
+    ARRAY_REQUIRE(GPUCreateTexture(device, &textureInfo, &textures[i]) == GPU_OK);
+    ARRAY_REQUIRE(GPUCreateTextureView(textures[i], &viewInfo, &views[i]) == GPU_OK);
+    ARRAY_REQUIRE(GPUQueueWriteTexture(queue, textures[i], &write,
+                                      halfTexels[i], sizeof(halfTexels[i])) == GPU_OK);
+    samplerInfo.desc.addressU = i ? GPU_ADDRESS_MODE_REPEAT : GPU_ADDRESS_MODE_CLAMP_TO_EDGE;
+    ARRAY_REQUIRE(GPUCreateSampler(device, &samplerInfo, false, &samplers[i]) == GPU_OK);
+
+    entries[i].binding       = 5u;
+    entries[i].arrayIndex    = i;
+    entries[i].bindingType   = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
+    entries[i].buffer.buffer = buffers[i];
+    entries[i].buffer.size   = sizeof(values[i][0]);
+    entries[2u + i].binding     = 9u;
+    entries[2u + i].arrayIndex  = i;
+    entries[2u + i].bindingType = GPU_BINDING_SAMPLED_TEXTURE;
+    entries[2u + i].textureView = views[i];
+    entries[4u + i].binding     = 11u;
+    entries[4u + i].arrayIndex  = i;
+    entries[4u + i].bindingType = GPU_BINDING_SAMPLER;
+    entries[4u + i].sampler     = samplers[i];
+
+    bufferBarriers[i].buffer    = buffers[i];
+    bufferBarriers[i].srcAccess = GPU_ACCESS_TRANSFER_WRITE;
+    bufferBarriers[i].dstAccess = GPU_ACCESS_SHADER_READ;
+    textureBarriers[i].texture    = textures[i];
+    textureBarriers[i].srcAccess  = GPU_ACCESS_TRANSFER_WRITE;
+    textureBarriers[i].dstAccess  = GPU_ACCESS_SHADER_READ;
+    textureBarriers[i].mipCount   = 1u;
+    textureBarriers[i].layerCount = 1u;
+  }
+
+  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize = sizeof(groupInfo);
+  groupInfo.layout           = layout->bindGroupLayouts[1];
+  groupInfo.pEntries         = entries;
+  groupInfo.entryCount       = 6u;
+  ARRAY_REQUIRE(GPUCreateBindGroup(device, &groupInfo, &group) == GPU_OK);
+  ARRAY_REQUIRE(GPUAcquireCommandBuffer(queue, "tile-array-resources", &command) == GPU_OK);
+  barriers.srcStages           = GPU_STAGE_TRANSFER;
+  barriers.dstStages           = GPU_STAGE_TILE;
+  barriers.pBufferBarriers      = bufferBarriers;
+  barriers.bufferBarrierCount  = 2u;
+  barriers.pTextureBarriers     = textureBarriers;
+  barriers.textureBarrierCount = 2u;
+  GPUEncodeBarriers(command, &barriers);
+
+  tile.chain.sType      = GPU_STRUCTURE_TYPE_TILE_RENDER_PASS_EXT;
+  tile.chain.structSize = sizeof(tile);
+  tile.tileWidth        = 16u;
+  tile.tileHeight       = 16u;
+  attachment.view      = target.view;
+  attachment.loadOp    = GPU_LOAD_OP_CLEAR;
+  attachment.storeOp   = GPU_STORE_OP_STORE;
+  memcpy(attachment.clearColor.float32, kClear, sizeof(kClear));
+  passInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  passInfo.chain.structSize     = sizeof(passInfo);
+  passInfo.chain.pNext          = &tile;
+  passInfo.pColorAttachments    = &attachment;
+  passInfo.colorAttachmentCount = 1u;
+  ARRAY_REQUIRE((pass = GPUBeginRenderPass(command, &passInfo)));
+  ARRAY_REQUIRE(GPUGetRenderPassTileSize(pass, &width, &height) == GPU_OK);
+  ARRAY_REQUIRE(GPUBindTilePipeline(pass, pipeline) == GPU_OK);
+  ARRAY_REQUIRE(GPUDispatchThreadsPerTile(pass, width, height) != GPU_OK);
+  memcpy(expected, kClear, sizeof(expected));
+
+  for (i = 0u; i < 4u; i++) {
+    choice = choices[i];
+    if (i == 1u) {
+      /* a rejected second offset must preserve both previous descriptor addresses. */
+      ARRAY_REQUIRE(GPUBindTileGroup(pass, 1u, group, 2u, invalid) != GPU_OK);
+      ARRAY_REQUIRE(GPUBindTileGroup(pass, 1u, group, 1u, offsets[choice]) != GPU_OK);
+    } else {
+      ARRAY_REQUIRE(GPUBindTileGroup(pass, 1u, group, 2u, offsets[choice]) == GPU_OK);
+    }
+    ARRAY_REQUIRE(GPUDispatchThreadsPerTile(pass, width, height) == GPU_OK);
+    for (c = 0u; c < 4u; c++) {
+      expected[c] = expected[c] * 0.5f + values[0][choice][c] + values[1][choice][c] * 0.5f
+                    + sampled[0][c] + sampled[1][c] * 0.5f;
+    }
+  }
+
+  GPUEndRenderPass(pass);
+  pass = NULL;
+  ok   = read_targets(device, command, &target, 1u, &pixels[0][0]);
+  command = NULL;
+  ARRAY_REQUIRE(ok);
+  ok = false;
+  for (y = 0u; y < FETCH_HEIGHT; y++) {
+    for (x = 0u; x < FETCH_WIDTH; x++) {
+      for (c = 0u; c < 4u; c++) {
+        ARRAY_REQUIRE(pixels[y][x * 4u + c] == expected[c]);
+      }
+    }
+  }
+  ok = true;
+
+cleanup:
+  if (pass)
+    GPUEndRenderPass(pass);
+  if (command)
+    GPUDiscardCommandBuffer(command);
+  GPUDestroyTilePipeline(pipeline);
+  GPUDestroyBindGroup(group);
+  for (i = 0u; i < 2u; i++) {
+    GPUDestroySampler(samplers[i]);
+    GPUDestroyTextureView(views[i]);
+    GPUDestroyTexture(textures[i]);
+    GPUDestroyBuffer(buffers[i]);
+  }
+  GPUDestroyShaderLayout(layout);
+  GPUDestroyTextureView(target.view);
+  GPUDestroyTexture(target.texture);
+  printf("tile resource arrays exact CPU oracle=%s\n", ok ? "pass" : "fail");
+  return ok;
+#undef ARRAY_REQUIRE
+}
+
 int
 main(int argc, const char *argv[]) {
   @autoreleasepool {
@@ -539,21 +1104,22 @@ main(int argc, const char *argv[]) {
     GPUFormatCapabilities caps = {0};
     const GPUFeature     features[] = {GPU_FEATURE_FRAMEBUFFER_FETCH,
                                      GPU_FEATURE_TILE_SHADERS,
-                                     GPU_FEATURE_IMAGEBLOCKS};
+                                     GPU_FEATURE_IMAGEBLOCKS,
+                                     GPU_FEATURE_DESCRIPTOR_INDEXING};
     GPUInstance       *instance = NULL;
     GPUAdapter        *adapter;
     GPUDevice         *device = NULL, *disabled = NULL;
-    GPUShaderLibrary  *libraries[2] = {NULL}, *disabledLibrary = NULL;
+    GPUShaderLibrary  *libraries[4] = {NULL}, *disabledLibrary = NULL;
     GPUShaderLibrary  *rejectedLibrary = NULL;
     GPUTilePipeline   *rejected = NULL;
-    NSData            *data[2];
+    NSData            *data[4];
     const char        *mode;
-    uint32_t           i;
+    uint32_t           i, featureCount = 3u;
     bool               ok = false;
 
-    if (argc != 3)
+    if (argc != 5)
       return 1;
-    for (i = 0u; i < 2u; i++) {
+    for (i = 0u; i < 4u; i++) {
       if (!(data[i] = [NSData dataWithContentsOfFile:[NSString stringWithUTF8String:argv[i + 1u]]]))
         return 1;
     }
@@ -580,10 +1146,12 @@ main(int argc, const char *argv[]) {
         || rejectedLibrary)
       goto cleanup;
 
-    info.required.featureCount = 3u;
+    if (GPUIsFeatureSupported(adapter, GPU_FEATURE_DESCRIPTOR_INDEXING))
+      featureCount = 4u;
+    info.required.featureCount = featureCount;
     if (GPUCreateDevice(adapter, &info, &device) != GPU_OK)
       goto cleanup;
-    for (i = 0u; i < 2u; i++) {
+    for (i = 0u; i < featureCount; i++) {
       if (GPUCreateShaderLibraryFromUSL(device, [data[i] bytes], [data[i] length], &libraries[i]) != GPU_OK)
         goto cleanup;
     }
@@ -600,6 +1168,13 @@ main(int argc, const char *argv[]) {
     } else {
       printf("tile 4x MSAA: RGBA32_FLOAT unsupported, subcase skipped\n");
     }
+    if (featureCount == 4u)
+      ok = check_array_resources(device, libraries[3]) && ok;
+    else
+      printf("tile descriptor arrays: descriptor indexing unsupported, subcase skipped\n");
+    ok = check_resources(device, libraries[2], 1u) && ok;
+    if ((caps.supportedSampleCounts & 4u) != 0u)
+      ok = check_resources(device, libraries[2], 4u) && ok;
     ok = check_invalid_passes(device, libraries[0], false, (caps.supportedSampleCounts & 4u) != 0u) && ok;
     ok = check_invalid_passes(device, libraries[1], true, (caps.supportedSampleCounts & 4u) != 0u) && ok;
     mode = getenv("GPU_METAL_MODE");
@@ -611,7 +1186,7 @@ cleanup:
     GPUDestroyShaderLibrary(rejectedLibrary);
     GPUDestroyShaderLibrary(disabledLibrary);
     GPUDestroyDevice(disabled);
-    for (i = 0u; i < 2u; i++) {
+    for (i = 0u; i < 4u; i++) {
       GPUDestroyShaderLibrary(libraries[i]);
     }
     GPUDestroyDevice(device);
