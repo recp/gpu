@@ -3122,6 +3122,7 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   coreFeatures.shaderFloat64     = adapterVk->features.shaderFloat64;
   coreFeatures.imageCubeArray    = adapterVk->features.imageCubeArray;
   coreFeatures.samplerAnisotropy = adapterVk->features.samplerAnisotropy;
+  coreFeatures.sampleRateShading = adapterVk->features.sampleRateShading;
 
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_ATOMIC64)) != 0u
       || vk_featureEnabled(enabledFeatureMask,
