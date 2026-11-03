@@ -45,10 +45,14 @@ if(GPU_BUILD_SAMPLES AND WIN32 AND GPU_BUILD_DX12)
 endif()
 
 function(gpu_gallery_sample sampleDir)
-  set(options ASSETKIT USES_STDLIB)
+  set(options ASSETKIT USES_STDLIB METAL_ONLY)
   set(multiValueArgs CAPS FALLBACK_CAPS)
   cmake_parse_arguments(GPU_SAMPLE
     "${options}" "" "${multiValueArgs}" ${ARGN})
+
+  if(GPU_SAMPLE_METAL_ONLY AND NOT GPU_BUILD_METAL)
+    return()
+  endif()
 
   get_filename_component(sampleId "${sampleDir}" NAME)
   file(GLOB sampleSources CONFIGURE_DEPENDS
@@ -146,6 +150,10 @@ set(galleryOptions_assetkit_damaged_helmet
 set(galleryOptions_descriptor_array
   CAPS descriptor_array=descriptor_indexing
   FALLBACK_CAPS descriptor_array=bounded_descriptor_indexing
+)
+set(galleryOptions_framebuffer_fetch
+  METAL_ONLY
+  CAPS framebuffer_fetch=framebuffer_fetch
 )
 set(galleryOptions_pbr_material
   USES_STDLIB

@@ -229,5 +229,12 @@
     "title": "Texture blit",
     "detail": "Nearest and linear magnification from one source texture.",
     "preview": "blit.png"
+  },
+  {
+    "id": "framebuffer-fetch",
+    "category": "Render + Tile Memory",
+    "title": "Metal framebuffer fetch",
+    "detail": "Ordered source-over compositing from the current color attachment.",
+    "preview": "framebuffer-fetch.png"
   }
 ]
