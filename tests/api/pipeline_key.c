@@ -684,6 +684,37 @@ createRenderPipeline(GPUDevice                         *device,
   return GPU_ERROR_OUT_OF_MEMORY;
 }
 
+GPUResult
+GPUCreateRenderPipeline(GPUDevice                         *device,
+                        const GPURenderPipelineCreateInfo *info,
+                        GPURenderPipeline                **outPipeline) {
+  return createRenderPipeline(device, info, outPipeline);
+}
+
+void
+GPUDestroyRenderPipeline(GPURenderPipeline *pipeline) {
+  (void)pipeline;
+  unexpectedCalls++;
+}
+
+void
+GPUDestroyComputePipeline(GPUComputePipeline *pipeline) {
+  (void)pipeline;
+  unexpectedCalls++;
+}
+
+void
+GPUDestroyRayTracingPipelineEXT(GPURayTracingPipelineEXT *pipeline) {
+  (void)pipeline;
+  unexpectedCalls++;
+}
+
+void
+GPUDestroyExecutionGraphEXT(GPUExecutionGraphEXT *graph) {
+  (void)graph;
+  unexpectedCalls++;
+}
+
 void
 retainRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
   (void)pipeline;
