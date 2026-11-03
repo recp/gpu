@@ -274,6 +274,20 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
 endif()
 
 if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  if(NOT BUILD_SHARED_LIBS)
+    add_executable(gpu-metal-completion-timing-test metal_completion_timing.m)
+
+    target_compile_definitions(gpu-metal-completion-timing-test PRIVATE
+      $<TARGET_PROPERTY:gpu,COMPILE_DEFINITIONS>)
+    target_link_libraries(gpu-metal-completion-timing-test PRIVATE gpu)
+    target_link_options(gpu-metal-completion-timing-test PRIVATE -Wl,-dead_strip)
+    set_target_properties(gpu-metal-completion-timing-test PROPERTIES
+      OBJC_STANDARD 11 OBJC_STANDARD_REQUIRED YES OBJC_EXTENSIONS NO)
+
+    add_test(NAME metal-completion-timing COMMAND gpu-metal-completion-timing-test)
+    set_tests_properties(metal-completion-timing PROPERTIES LABELS "frame-feedback;timing" TIMEOUT 10)
+  endif()
+
   add_executable(gpu-metal-frame-feedback-test metal_frame_feedback.m)
 
   target_link_libraries(gpu-metal-frame-feedback-test PRIVATE gpu)
