@@ -1,3 +1,19 @@
+if(UNIX AND NOT EMSCRIPTEN)
+  add_executable(gpu-frame-feedback-test
+    frame_feedback.c
+    "${PROJECT_SOURCE_DIR}/src/api/frame_feedback.c"
+  )
+
+  target_include_directories(gpu-frame-feedback-test PRIVATE "${PROJECT_SOURCE_DIR}/include")
+  target_link_libraries(gpu-frame-feedback-test PRIVATE Threads::Threads)
+  set_target_properties(gpu-frame-feedback-test PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+  target_compile_options(gpu-frame-feedback-test PRIVATE -Wall -Wextra -Werror)
+
+  add_test(NAME api-frame-feedback COMMAND gpu-frame-feedback-test)
+  set_tests_properties(api-frame-feedback PROPERTIES LABELS "frame-feedback;threading" TIMEOUT 20)
+endif()
+
 if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   add_executable(gpu-metal-uploader-layout-test metal_uploader.m)
 
@@ -254,5 +270,22 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set_tests_properties(metal-residency-${mode} PROPERTIES
       ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1"
       SKIP_RETURN_CODE 77 LABELS "residency;memory" TIMEOUT 20 RUN_SERIAL TRUE)
+  endforeach()
+endif()
+
+if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  add_executable(gpu-metal-frame-feedback-test metal_frame_feedback.m)
+
+  target_link_libraries(gpu-metal-frame-feedback-test PRIVATE gpu)
+  gpu_link_apple_framework(gpu-metal-frame-feedback-test AppKit "${GPU_FRAMEWORK_UI}")
+  gpu_link_apple_framework(gpu-metal-frame-feedback-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+  gpu_link_apple_framework(gpu-metal-frame-feedback-test Metal "${GPU_FRAMEWORK_METAL}")
+  gpu_link_apple_framework(gpu-metal-frame-feedback-test QuartzCore "${GPU_FRAMEWORK_QUARTZCORE}")
+
+  foreach(mode classic metal4)
+    add_test(NAME metal-frame-feedback-${mode} COMMAND gpu-metal-frame-feedback-test)
+    set_tests_properties(metal-frame-feedback-${mode} PROPERTIES
+      ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1"
+      SKIP_RETURN_CODE 77 LABELS "frame-feedback;timing" TIMEOUT 30 RUN_SERIAL TRUE)
   endforeach()
 endif()
