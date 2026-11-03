@@ -53,6 +53,10 @@ typedef struct GPUCommandQueueApi {
   void (*destroySemaphore)(GPUSemaphore *semaphore);
 
   GPUResult (*submitEx)(GPUQueue *queue, const GPUQueueSubmitExInfo *info);
+
+  /* serialize native queue order without serializing command recording. */
+  void (*lock)(GPUQueue *queue);
+  void (*unlock)(GPUQueue *queue);
 } GPUCommandQueueApi;
 
 #ifdef __cplusplus

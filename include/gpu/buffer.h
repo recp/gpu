@@ -69,6 +69,11 @@ GPU_EXPORT
 void
 GPUDestroyBuffer(GPUBuffer *__restrict buff);
 
+/* borrowed persistent coherent mapping, or NULL; host access needs GPU completion. */
+GPU_EXPORT
+void*
+GPUGetBufferHostAddress(GPUBuffer *buffer);
+
 /*! returns zero unless device-address support and usage were enabled. */
 GPU_EXPORT
 uint64_t

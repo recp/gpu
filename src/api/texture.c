@@ -552,6 +552,7 @@ GPUQueueWriteTexture(GPUQueue                    *__restrict queue,
                      uint64_t                                sizeBytes) {
   GPUFormatDataLayout layout;
   GPUApi             *api;
+  GPUResult           result;
 
   if (!queue || !data || !textureWriteRegionValid(texture, region, sizeBytes, &layout)
       || queue->_device != texture->device)
@@ -561,5 +562,8 @@ GPUQueueWriteTexture(GPUQueue                    *__restrict queue,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  return api->texture.write(queue, texture, region, data, sizeBytes, &layout);
+  commandQueueLock(queue, api);
+  result = api->texture.write(queue, texture, region, data, sizeBytes, &layout);
+  commandQueueUnlock(queue, api);
+  return result;
 }

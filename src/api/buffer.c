@@ -166,13 +166,23 @@ GPUGetBufferDeviceAddressEXT(const GPUBuffer *__restrict buff) {
 }
 
 GPU_EXPORT
+void*
+GPUGetBufferHostAddress(GPUBuffer *buffer) {
+  GPUApi *api;
+
+  api = bufferApi(buffer);
+  return api && api->buf.contents ? api->buf.contents(buffer) : NULL;
+}
+
+GPU_EXPORT
 GPUResult
 GPUQueueWriteBuffer(GPUQueue   *__restrict queue,
                     GPUBuffer  *__restrict buff,
                     uint64_t               dstOffset,
                     const void            *data,
                     uint64_t               sizeBytes) {
-  GPUApi *api;
+  GPUApi   *api;
+  GPUResult result;
 
   if (!queue || !buff || !data || sizeBytes == 0
       || commandQueueDevice(queue) != buff->device
@@ -189,7 +199,10 @@ GPUQueueWriteBuffer(GPUQueue   *__restrict queue,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  return api->buf.write(queue, buff, dstOffset, data, sizeBytes);
+  commandQueueLock(queue, api);
+  result = api->buf.write(queue, buff, dstOffset, data, sizeBytes);
+  commandQueueUnlock(queue, api);
+  return result;
 }
 
 GPU_EXPORT
@@ -199,7 +212,8 @@ GPUQueueReadBuffer(GPUQueue  *__restrict queue,
                    uint64_t              srcOffset,
                    void                 *outData,
                    uint64_t              sizeBytes) {
-  GPUApi *api;
+  GPUApi   *api;
+  GPUResult result;
 
   if (!queue || !buff || !outData || sizeBytes == 0
       || commandQueueDevice(queue) != buff->device
@@ -216,5 +230,8 @@ GPUQueueReadBuffer(GPUQueue  *__restrict queue,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  return api->buf.read(queue, buff, srcOffset, outData, sizeBytes);
+  commandQueueLock(queue, api);
+  result = api->buf.read(queue, buff, srcOffset, outData, sizeBytes);
+  commandQueueUnlock(queue, api);
+  return result;
 }

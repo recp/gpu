@@ -46,6 +46,7 @@ extern "C" {
 #include "subgroup.h"
 #include "stage-io.h"
 #include "texture.h"
+#include "uploader.h"
 #include "swapchain.h"
 #include "frame.h"
 #include "bindgroup.h"

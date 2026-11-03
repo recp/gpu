@@ -27,6 +27,7 @@ target_sources(gpu PRIVATE
   subgroup.c
   swapchain.c
   texture.c
+  uploader.c
   tensor.c
   tile.c
   ml.c

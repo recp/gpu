@@ -797,7 +797,8 @@ mt_newCommandQueue(GPUDevice *__restrict device) {
     return NULL;
   }
 
-  native->poolLock = OS_UNFAIR_LOCK_INIT;
+  native->poolLock   = OS_UNFAIR_LOCK_INIT;
+  native->submitLock = OS_UNFAIR_LOCK_INIT;
   native->mode     = deviceMT->commandMode;
 #if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
@@ -1019,14 +1020,16 @@ mt_newCommandBuffer(GPUQueue         *__restrict cmdb,
   }
 #if GPU_BUILD_WITH_DEBUG_MARKERS
   if (label && label[0] != '\0') {
-    nativeLabel = [NSString stringWithUTF8String:label];
+    @autoreleasepool {
+      nativeLabel = [NSString stringWithUTF8String:label];
 
-    native->classic.label = nativeLabel;
+      native->classic.label = nativeLabel;
 #if MT_HAS_METAL4
-    if (@available(macOS 26.0, iOS 26.0, *)) {
-      [(id<MTL4CommandBuffer>)native->modern setLabel:nativeLabel];
-    }
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        [(id<MTL4CommandBuffer>)native->modern setLabel:nativeLabel];
+      }
 #endif
+    }
   }
 #else
   GPU__UNUSED(label);
@@ -1259,9 +1262,21 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
 #endif
 }
 
+static void
+mt_lockQueue(GPUQueue *queue) {
+  os_unfair_lock_lock(&mt_commandQueue(queue)->submitLock);
+}
+
+static void
+mt_unlockQueue(GPUQueue *queue) {
+  os_unfair_lock_unlock(&mt_commandQueue(queue)->submitLock);
+}
+
 GPU_HIDE
 void
 mt_initCmdQue(GPUCommandQueueApi *api) {
+  api->lock                    = mt_lockQueue;
+  api->unlock                  = mt_unlockQueue;
   api->newCommandQueue         = mt_newCommandQueue;
   api->getCommandQueue         = mt_getCommandQueue;
   api->getTimestampPeriod      = mt_getTimestampPeriod;

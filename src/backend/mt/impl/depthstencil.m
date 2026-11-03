@@ -181,8 +181,6 @@ mt_writeSparseTexture4(GPUQueue                    *queue,
                        const GPUTextureWriteRegion *region,
                        const void                  *data,
                        const GPUFormatDataLayout   *dataLayout) {
-  GPUCommandBuffer             *submitList[1];
-  GPUQueueSubmitInfo            submitInfo = {0};
   MTLSize                       size;
   GPUCommandBuffer             *cmdb;
   MTCommandQueue               *nativeQueue;
@@ -213,7 +211,7 @@ mt_writeSparseTexture4(GPUQueue                    *queue,
                            &upload,
                            &uploadOffset)) {
     if (cmdb) {
-      GPUCommit(cmdb);
+      GPUDiscardCommandBuffer(cmdb);
     }
 
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
@@ -225,7 +223,7 @@ mt_writeSparseTexture4(GPUQueue                    *queue,
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
     if (!(encoder = [(id<MTL4CommandBuffer>)mt_modernCommandBuffer(cmdb) computeCommandEncoder])) {
-      GPUCommit(cmdb);
+      GPUDiscardCommandBuffer(cmdb);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -269,16 +267,12 @@ mt_writeSparseTexture4(GPUQueue                    *queue,
               visibilityOptions:MTL4VisibilityOptionDevice];
     [encoder endEncoding];
 
-    submitList[0]                 = cmdb;
-    submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
-    submitInfo.chain.structSize   = sizeof(submitInfo);
-    submitInfo.ppCommandBuffers   = submitList;
-    submitInfo.commandBufferCount = 1u;
-
-    return GPUQueueSubmit(queue, &submitInfo);
+    /* the queue write already owns native submission order. */
+    cmdb->_submitted = true;
+    return commandQueueApi(queue)->cmdque.commit(cmdb);
   }
 
-  GPUCommit(cmdb);
+  GPUDiscardCommandBuffer(cmdb);
 
   return GPU_ERROR_UNSUPPORTED;
 }
@@ -714,6 +708,35 @@ mt_destroyTextureView(GPUTextureView *__restrict view) {
   free(view);
 }
 
+static bool
+mt_textureWriteIdle(GPUQueue *queue, id<MTLTexture> texture) {
+  MTCommandQueue *native;
+  MTLStorageMode  storageMode;
+  uint32_t        i;
+
+  native      = mt_commandQueue(queue);
+  storageMode = texture.storageMode;
+  if (storageMode != MTLStorageModeShared
+#if TARGET_OS_OSX
+      && storageMode != MTLStorageModeManaged
+#endif
+     )
+    return false;
+
+  if (!native
+      || native->transferOpen
+      || dispatch_group_wait(native->inFlightGroup, DISPATCH_TIME_NOW) != 0)
+    return false;
+
+  for (i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
+    if (native->transferSlots[i].pending
+        && native->transferSlots[i].command.status != MTLCommandBufferStatusCompleted)
+      return false;
+  }
+
+  return true;
+}
+
 GPU_HIDE
 GPUResult
 mt_writeTexture(GPUQueue                        *__restrict queue,
@@ -784,6 +807,10 @@ mt_writeTexture(GPUQueue                        *__restrict queue,
   if (!nativeTexture) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
+  /* direct host writes are ordered only while all preceding queue work is idle. */
+  if (!mt_textureWriteIdle(queue, nativeTexture))
+    return mt_writeTextureBlit(queue, texture, region, data, validatedLayout, MTLBlitOptionNone);
 
   bytes = data;
 

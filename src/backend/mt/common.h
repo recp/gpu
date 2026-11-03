@@ -295,6 +295,7 @@ typedef struct MTCommandQueue {
   MTCommandBuffer    *freeCommands;
   MTTransferSlot      transferSlots[MT_TRANSFER_SLOT_COUNT];
   os_unfair_lock      poolLock;
+  os_unfair_lock      submitLock;
   MTCommandMode       mode;
   uint32_t            activeTransferSlot;
   uint32_t            nextTransferSlot;

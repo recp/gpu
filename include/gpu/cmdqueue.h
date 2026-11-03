@@ -28,6 +28,13 @@ typedef struct GPUSemaphore     GPUSemaphore;
 typedef struct GPUQueue         GPUQueue;
 typedef struct GPUCommandBuffer GPUCommandBuffer;
 
+/* command buffers and encoders have one recording thread each. with
+ * GPU_FEATURE_THREADED_UPLOADS enabled, independent uploaders, queue writes
+ * and submissions may share a queue across threads; otherwise serialize queue
+ * operations externally. coordinate flush-before-consume order explicitly.
+ * device/runtime/transient configuration and destruction require workers idle.
+ */
+
 typedef enum GPUQueueFlagBits {
   GPU_QUEUE_GRAPHICS_BIT = 0x00000001,
   GPU_QUEUE_COMPUTE_BIT  = 0x00000002,

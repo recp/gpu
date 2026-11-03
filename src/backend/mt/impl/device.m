@@ -1007,6 +1007,7 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_SHADER_F16:
     case GPU_FEATURE_BUFFER_HOST_MEMORY_EXT:
+    case GPU_FEATURE_THREADED_UPLOADS:
       return true;
     case GPU_FEATURE_TENSOR_RESOURCES_EXT:
     case GPU_FEATURE_ML_MODEL_EXT:

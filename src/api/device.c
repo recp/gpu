@@ -21,6 +21,7 @@
 #include "device_internal.h"
 #include "pass/blit_internal.h"
 #include "pipeline_cache_internal.h"
+#include <stddef.h>
 
 #if !defined(_WIN32) && !defined(WIN32)
 #  include <sched.h>
@@ -54,6 +55,24 @@ static const GPUExecutionFlags gpu_workloadFlags[] = {
   [GPU_WORKLOAD_HYBRID]   = GPU_EXECUTION_GRAPHICS_BIT |
                             GPU_EXECUTION_COMPUTE_BIT
 };
+
+static void
+clearFrameStats(GPUDevice *device) {
+  GPUFrameStats *stats;
+
+  stats = &device->currentFrameStats;
+  if (!(device->enabledFeatureMask & (UINT64_C(1) << GPU_FEATURE_THREADED_UPLOADS))) {
+    memset(stats, 0, sizeof(*stats));
+    return;
+  }
+
+  /* worker allocations must not race the render thread's frame reset. */
+  memset(stats, 0, offsetof(GPUFrameStats, hotPathAllocCount));
+  deviceCacheCounterReset(&stats->hotPathAllocCount);
+  deviceCacheCounterReset(&stats->hotPathAllocBytes);
+  deviceCacheCounterReset(&stats->hotPathFreeCount);
+  deviceCacheCounterReset(&stats->hotPathFreeBytes);
+}
 
 static const char*
 gpu_backendName(GPUBackend backend) {
@@ -138,6 +157,7 @@ static bool
 knownFeature(GPUFeature feature) {
   return (feature >= GPU_FEATURE_COMPUTE
           && feature <= GPU_FEATURE_BUFFER_HOST_MEMORY_EXT)
+         || feature == GPU_FEATURE_THREADED_UPLOADS
          || (feature >= GPU_FEATURE_FRAMEBUFFER_FETCH
              && feature <= GPU_FEATURE_IMAGEBLOCKS);
 }
@@ -887,8 +907,7 @@ allocateTransientChunk(GPUDevice               *device,
   device->transientChunks = chunk;
 
   device->allocatorStats.uploadStallCount++;
-  device->currentFrameStats.hotPathAllocCount++;
-  device->currentFrameStats.hotPathAllocBytes += chunkBytes;
+  deviceRecordHotPathAlloc(device, chunkBytes);
 
   outSlice->buffer    = buffer;
   outSlice->offset    = 0;
@@ -1356,7 +1375,7 @@ deviceActivateFrame(GPUDevice *device, uint32_t frameIndex) {
     return;
   }
 
-  memset(&device->currentFrameStats, 0, sizeof(device->currentFrameStats));
+  clearFrameStats(device);
   deviceActivateFrameSlot(device, frameIndex);
 }
 
@@ -1367,7 +1386,16 @@ deviceEndFrame(GPUDevice *device) {
     return;
   }
 
-  device->lastFrameStats = device->currentFrameStats;
+  if (!(device->enabledFeatureMask & (UINT64_C(1) << GPU_FEATURE_THREADED_UPLOADS))) {
+    device->lastFrameStats = device->currentFrameStats;
+    return;
+  }
+
+  memcpy(&device->lastFrameStats, &device->currentFrameStats, offsetof(GPUFrameStats, hotPathAllocCount));
+  device->lastFrameStats.hotPathAllocCount = deviceCacheCounterLoad(&device->currentFrameStats.hotPathAllocCount);
+  device->lastFrameStats.hotPathAllocBytes = deviceCacheCounterLoad(&device->currentFrameStats.hotPathAllocBytes);
+  device->lastFrameStats.hotPathFreeCount  = deviceCacheCounterLoad(&device->currentFrameStats.hotPathFreeCount);
+  device->lastFrameStats.hotPathFreeBytes  = deviceCacheCounterLoad(&device->currentFrameStats.hotPathFreeBytes);
 }
 
 GPU_HIDE
@@ -1377,8 +1405,13 @@ deviceRecordHotPathAlloc(GPUDevice *device, uint64_t sizeBytes) {
     return;
   }
 
-  device->currentFrameStats.hotPathAllocCount++;
-  device->currentFrameStats.hotPathAllocBytes += sizeBytes;
+  if (device->enabledFeatureMask & (UINT64_C(1) << GPU_FEATURE_THREADED_UPLOADS)) {
+    deviceCacheCounterAdd(&device->currentFrameStats.hotPathAllocCount, 1u);
+    deviceCacheCounterAdd(&device->currentFrameStats.hotPathAllocBytes, sizeBytes);
+  } else {
+    device->currentFrameStats.hotPathAllocCount++;
+    device->currentFrameStats.hotPathAllocBytes += sizeBytes;
+  }
 }
 
 GPU_HIDE
@@ -1388,8 +1421,13 @@ deviceRecordHotPathFree(GPUDevice *device, uint64_t sizeBytes) {
     return;
   }
 
-  device->currentFrameStats.hotPathFreeCount++;
-  device->currentFrameStats.hotPathFreeBytes += sizeBytes;
+  if (device->enabledFeatureMask & (UINT64_C(1) << GPU_FEATURE_THREADED_UPLOADS)) {
+    deviceCacheCounterAdd(&device->currentFrameStats.hotPathFreeCount, 1u);
+    deviceCacheCounterAdd(&device->currentFrameStats.hotPathFreeBytes, sizeBytes);
+  } else {
+    device->currentFrameStats.hotPathFreeCount++;
+    device->currentFrameStats.hotPathFreeBytes += sizeBytes;
+  }
 }
 
 GPU_HIDE
@@ -2013,7 +2051,7 @@ GPUResetStats(GPUDevice *device) {
   }
 
   deviceResetCacheStats(device);
-  memset(&device->currentFrameStats, 0, sizeof(device->currentFrameStats));
+  clearFrameStats(device);
   memset(&device->lastFrameStats, 0, sizeof(device->lastFrameStats));
 #if defined(_WIN32) || defined(WIN32)
   InterlockedExchange64((volatile LONG64 *)&device->_completedGPUFrameTimeBits,

@@ -265,7 +265,8 @@ mt_readBuffer(GPUQueue  *__restrict queue,
 GPU_HIDE
 void*
 mt_bufferContents(GPUBuffer *__restrict buff) {
-  if (!buff || [(id<MTLBuffer>)buff->_priv storageMode] == MTLStorageModePrivate) {
+  /* managed storage requires explicit coherency and is not a persistent host map. */
+  if (!buff || [(id<MTLBuffer>)buff->_priv storageMode] != MTLStorageModeShared) {
     return NULL;
   }
 

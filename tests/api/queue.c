@@ -759,6 +759,9 @@ check_queue_frame_device_dispatch(GPUDevice *activeDevice) {
   }
 
   scopedApi = *api;
+  /* scoped handles have no native queue synchronization state. */
+  scopedApi.cmdque.lock                    = NULL;
+  scopedApi.cmdque.unlock                  = NULL;
   scopedApi.cmdque.getCommandQueue         = get_scoped_queue;
   scopedApi.cmdque.newCommandBuffer        = new_scoped_cmdb;
   scopedApi.cmdque.commandBufferOnComplete = set_scoped_cmdb_completion;

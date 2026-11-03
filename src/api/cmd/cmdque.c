@@ -35,7 +35,8 @@ struct GPUFence {
   pthread_mutex_t mutex;
   pthread_cond_t  cond;
 #endif
-  bool signaled;
+  uint32_t references;
+  bool     signaled;
 };
 
 static void
@@ -428,12 +429,14 @@ GPUQueueSubmit(GPUQueue                 *__restrict cmdq,
   }
 
   if (info->commandBufferCount > 1u && api->cmdque.submit) {
-    return api->cmdque.submit(cmdq,
-                              info->commandBufferCount,
-                              info->ppCommandBuffers);
+    commandQueueLock(cmdq, api);
+    result = api->cmdque.submit(cmdq, info->commandBufferCount, info->ppCommandBuffers);
+    commandQueueUnlock(cmdq, api);
+    return result;
   }
 
   result = GPU_OK;
+  commandQueueLock(cmdq, api);
 
   for (i = 0; i < info->commandBufferCount; i++) {
     commitResult = api->cmdque.commit(info->ppCommandBuffers[i]);
@@ -443,6 +446,7 @@ GPUQueueSubmit(GPUQueue                 *__restrict cmdq,
     }
   }
 
+  commandQueueUnlock(cmdq, api);
   return result;
 }
 
@@ -532,7 +536,13 @@ GPUQueueSubmitEx(GPUQueue                   *__restrict cmdq,
                               info->fence,
                               &api);
 
-  return result == GPU_OK ? api->cmdque.submitEx(cmdq, info) : result;
+  if (result != GPU_OK)
+    return result;
+
+  commandQueueLock(cmdq, api);
+  result = api->cmdque.submitEx(cmdq, info);
+  commandQueueUnlock(cmdq, api);
+  return result;
 }
 
 GPU_EXPORT
@@ -586,18 +596,59 @@ GPUCreateFence(GPUDevice                *__restrict device,
   }
 #endif
 
-  fence->signaled = info ? info->signaled : false;
+  fence->references = 1u;
+  fence->signaled   = info ? info->signaled : false;
   *outFence       = fence;
 
   return GPU_OK;
 }
 
+GPU_HIDE
+void
+retainFence(GPUFence *fence) {
+#if defined(_WIN32) || defined(WIN32)
+  InterlockedIncrement((volatile LONG *)&fence->references);
+#else
+  __atomic_add_fetch(&fence->references, 1u, __ATOMIC_RELAXED);
+#endif
+}
+
+GPU_HIDE
+GPUResult
+submitUploadCommandBuffer(GPUCommandBuffer *cmdb, GPUFence *fence) {
+  GPUApi   *api;
+  GPUQueue *queue;
+  GPUResult result;
+
+  if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder || !fence
+      || !(api = commandBufferApi(cmdb)) || !api->cmdque.commit
+      || !api->cmdque.commandBufferOnComplete)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  resetFenceInternal(fence);
+  queue = cmdb->_queue;
+  cmdb->_submitFence = fence;
+  cmdb->_submitted   = true;
+  commandQueueLock(queue, api);
+  result = api->cmdque.commit(cmdb);
+  /* completion may recycle cmdb before commit returns. */
+  commandQueueUnlock(queue, api);
+  return result;
+}
+
 GPU_EXPORT
 void
 GPUDestroyFence(GPUFence *__restrict fence) {
-  if (!fence) {
+  if (!fence)
     return;
-  }
+
+#if defined(_WIN32) || defined(WIN32)
+  if (InterlockedDecrement((volatile LONG *)&fence->references) != 0)
+    return;
+#else
+  if (__atomic_sub_fetch(&fence->references, 1u, __ATOMIC_ACQ_REL) != 0u)
+    return;
+#endif
 
 #if defined(_WIN32) || defined(WIN32)
   DeleteCriticalSection(&fence->lock);

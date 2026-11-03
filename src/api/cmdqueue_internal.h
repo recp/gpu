@@ -45,6 +45,7 @@ struct GPUCommandBuffer {
   bool                          _activeEncoder;
   bool                          _transientFrameTagged;
   bool                          _recordsGPUFrameTime;
+  bool                          _orderedUploads;
 };
 
 typedef void (*GPUCommandBufferRecycleFn)(GPUCommandBuffer *cmdb);
@@ -58,6 +59,28 @@ GPU_HIDE
 void
 discardCommandBufferState(GPUCommandBuffer         *cmdb,
                           GPUCommandBufferRecycleFn recycle);
+
+GPU_HIDE
+GPUResult
+submitUploadCommandBuffer(GPUCommandBuffer *cmdb, GPUFence *fence);
+
+GPU_HIDE
+void
+retainFence(GPUFence *fence);
+
+static inline void
+commandQueueLock(GPUQueue *queue, GPUApi *api) {
+  if (api->cmdque.lock
+      && (queue->_device->enabledFeatureMask & (UINT64_C(1) << GPU_FEATURE_THREADED_UPLOADS)))
+    api->cmdque.lock(queue);
+}
+
+static inline void
+commandQueueUnlock(GPUQueue *queue, GPUApi *api) {
+  if (api->cmdque.unlock
+      && (queue->_device->enabledFeatureMask & (UINT64_C(1) << GPU_FEATURE_THREADED_UPLOADS)))
+    api->cmdque.unlock(queue);
+}
 
 static inline GPUDevice*
 commandQueueDevice(const GPUQueue *queue) {

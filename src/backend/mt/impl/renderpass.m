@@ -807,6 +807,11 @@ mt_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       native->modern = [commandState->modern computeCommandEncoder];
       mt_applyPendingBarrier(cmdb, native->modern, MT_ENCODER_STAGES(MTLStageBlit));
+      if (cmdb->_orderedUploads) {
+        [native->modern barrierAfterQueueStages:MTLStageAll
+                                  beforeStages:MTLStageBlit
+                             visibilityOptions:MTL4VisibilityOptionDevice];
+      }
     }
   } else
 #endif
@@ -1199,6 +1204,11 @@ mt_endTransferPass(GPUTransferPassEncoder *pass) {
 #if MT_HAS_METAL4
   if (native && native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
+      if (pass->_cmdb->_orderedUploads) {
+        [native->modern barrierAfterStages:MTLStageBlit
+                        beforeQueueStages:MTLStageAll
+                        visibilityOptions:MTL4VisibilityOptionDevice];
+      }
       [native->modern endEncoding];
     }
   } else

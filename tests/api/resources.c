@@ -599,6 +599,8 @@ check_buffer_device_dispatch(GPUDevice *activeDevice) {
   scopedApi                 = *deviceApi(activeDevice);
   scopedApi.buf.create      = create_scoped_buffer;
   scopedApi.buf.destroy     = destroy_scoped_buffer;
+  scopedApi.cmdque.lock   = NULL;
+  scopedApi.cmdque.unlock = NULL;
   scopedApi.buf.write       = write_scoped_buffer;
   scopedApi.buf.read        = read_scoped_buffer;
   device._api               = &scopedApi;
@@ -697,6 +699,8 @@ check_texture_transfer_layout(GPUDevice *activeDevice) {
   }
 
   scopedApi               = *deviceApi(activeDevice);
+  scopedApi.cmdque.lock   = NULL;
+  scopedApi.cmdque.unlock = NULL;
   scopedApi.texture.write = write_scoped_texture;
   device._api             = &scopedApi;
   queue._device           = &device;
@@ -795,6 +799,8 @@ check_texture_write_aspects(GPUDevice *activeDevice) {
   }
 
   scopedApi               = *deviceApi(activeDevice);
+  scopedApi.cmdque.lock   = NULL;
+  scopedApi.cmdque.unlock = NULL;
   scopedApi.texture.write = write_scoped_texture;
   device._api             = &scopedApi;
   queue._device           = &device;
