@@ -241,3 +241,18 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   endforeach()
 
 endif()
+
+if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  add_executable(gpu-metal-residency-test metal_residency.m)
+
+  target_link_libraries(gpu-metal-residency-test PRIVATE gpu)
+  gpu_link_apple_framework(gpu-metal-residency-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+  gpu_link_apple_framework(gpu-metal-residency-test Metal "${GPU_FRAMEWORK_METAL}")
+
+  foreach(mode classic metal4)
+    add_test(NAME metal-residency-${mode} COMMAND gpu-metal-residency-test)
+    set_tests_properties(metal-residency-${mode} PROPERTIES
+      ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1"
+      SKIP_RETURN_CODE 77 LABELS "residency;memory" TIMEOUT 20 RUN_SERIAL TRUE)
+  endforeach()
+endif()
