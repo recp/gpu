@@ -1,0 +1,51 @@
+// Copyright (C) 2026 Recep Aslantas
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+struct Scene {
+  viewport: float4 // width, height, half atlas texel, unused
+}
+
+vertex QuadIn {
+  corner: float2
+  rect:   float4
+  uv:     float4
+}
+
+struct QuadOut {
+  position: float4 #position
+  uv:       float2
+  bounds:   float4
+}
+
+vert layout_vs(v:     QuadIn #stage_in,
+               scene: Scene  #push_constant) -> QuadOut {
+  let p   = mix(v.rect.xy, v.rect.zw, v.corner)
+  let ndc = float2(p.x / scene.viewport.x * 2.0 - 1.0,
+                   1.0 - p.y / scene.viewport.y * 2.0)
+  let uv  = mix(v.uv.xy, v.uv.zw, v.corner)
+
+  return QuadOut {
+    float4(ndc, 0.0, 1.0),
+    uv,
+    float4(v.uv.xy + float2(scene.viewport.z),
+           v.uv.zw - float2(scene.viewport.z))
+  }
+}
+
+frag layout_fs(i:      QuadOut          #stage_in,
+               image:  texture2d<float> #texture(0),
+               linear: sampler         #sampler(1)) -> float4 {
+  let uv = clamp(i.uv, i.bounds.xy, i.bounds.zw)
+  return image.sample(linear, uv, level(0.0))
+}

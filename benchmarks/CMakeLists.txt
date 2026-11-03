@@ -484,6 +484,19 @@ if(GPU_BUILD_BENCHMARKS)
   endforeach()
 
   if(APPLE AND GPU_BUILD_METAL)
+    add_executable(gpu-native-metal-texture-bench
+      ${CMAKE_CURRENT_SOURCE_DIR}/native_metal_texture.m
+    )
+    target_link_libraries(gpu-native-metal-texture-bench PRIVATE
+      "-framework Foundation"
+      "-framework Metal"
+    )
+    target_compile_options(gpu-native-metal-texture-bench PRIVATE
+      -fobjc-arc
+      -Wall
+      -Wextra
+    )
+
     add_executable(gpu-native-metal-render-bench
       ${PROJECT_SOURCE_DIR}/benchmarks/bench.c
       ${PROJECT_SOURCE_DIR}/benchmarks/native_metal_render.m
