@@ -223,3 +223,21 @@ if(GPU_BUILD_METAL)
     )
   endforeach()
 endif()
+
+if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  add_executable(gpu-metal-frame-pacer-test metal_frame_pacer.m)
+
+  target_link_libraries(gpu-metal-frame-pacer-test PRIVATE gpu)
+  gpu_link_apple_framework(gpu-metal-frame-pacer-test AppKit "${GPU_FRAMEWORK_UI}")
+  gpu_link_apple_framework(gpu-metal-frame-pacer-test Metal "${GPU_FRAMEWORK_METAL}")
+  gpu_link_apple_framework(gpu-metal-frame-pacer-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+  gpu_link_apple_framework(gpu-metal-frame-pacer-test QuartzCore "${GPU_FRAMEWORK_QUARTZCORE}")
+
+  foreach(mode classic metal4)
+    add_test(NAME metal-frame-pacer-${mode} COMMAND gpu-metal-frame-pacer-test)
+    set_tests_properties(metal-frame-pacer-${mode} PROPERTIES
+      ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1"
+      SKIP_RETURN_CODE 77 LABELS "frame-pacer" TIMEOUT 20 RUN_SERIAL TRUE)
+  endforeach()
+
+endif()
