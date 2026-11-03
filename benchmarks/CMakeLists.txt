@@ -3,6 +3,18 @@ if(MSVC)
 endif()
 
 if(GPU_BUILD_BENCHMARKS)
+  add_executable(gpu-uploader-bench bench.c uploader.c)
+
+  target_include_directories(gpu-uploader-bench PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  target_link_libraries(gpu-uploader-bench PRIVATE gpu)
+  set_target_properties(gpu-uploader-bench PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+  if(MSVC)
+    target_compile_options(gpu-uploader-bench PRIVATE /W3)
+  else()
+    target_compile_options(gpu-uploader-bench PRIVATE -Wall -Wextra)
+  endif()
+
   set(GPU_BENCHMARK_USL_SOURCES
     "${PROJECT_SOURCE_DIR}/tests/api/render_mrt.usl"
     "${PROJECT_SOURCE_DIR}/tests/validation/triangle-usl/triangle.usl"

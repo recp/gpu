@@ -1,4 +1,18 @@
 if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  add_executable(gpu-metal-uploader-layout-test metal_uploader.m)
+
+  target_link_libraries(gpu-metal-uploader-layout-test PRIVATE gpu)
+  gpu_link_apple_framework(gpu-metal-uploader-layout-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+
+  foreach(mode classic metal4)
+    add_test(NAME metal-uploader-layout-${mode} COMMAND gpu-metal-uploader-layout-test)
+    set_tests_properties(metal-uploader-layout-${mode} PROPERTIES
+      ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1"
+      SKIP_RETURN_CODE 77 LABELS "upload;layout" TIMEOUT 30 RUN_SERIAL TRUE)
+  endforeach()
+endif()
+
+if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   set(GPU_USL_FIXTURE_TARGET_CAPS framebuffer_fetch)
   gpu_add_usl_fixtures(GPU_TILE_FIXTURE metal api-tile
     "${CMAKE_CURRENT_SOURCE_DIR}/tile_shader.usl"
