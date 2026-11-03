@@ -28,6 +28,10 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   gpu_add_usl_fixtures(GPU_IMAGEBLOCK_FIXTURE metal api-imageblock
     "${CMAKE_CURRENT_SOURCE_DIR}/imageblock_shader.usl"
   )
+  set(GPU_USL_FIXTURE_TARGET_CAPS imageblock,tile_shader)
+  gpu_add_usl_fixtures(GPU_TILE_KERNEL_FIXTURE metal api-tile-kernel
+    "${CMAKE_CURRENT_SOURCE_DIR}/tile_kernel.usl"
+  )
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
 
   add_executable(gpu-metal-tile-test metal_tile.m
@@ -43,6 +47,20 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set_tests_properties(metal-tile-${mode} PROPERTIES
       ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1"
       SKIP_RETURN_CODE 77 LABELS "tile;imageblock" TIMEOUT 30 RUN_SERIAL TRUE)
+  endforeach()
+
+  add_executable(gpu-metal-tile-kernel-test metal_tile_kernel.m ${GPU_TILE_KERNEL_FIXTURE})
+
+  target_link_libraries(gpu-metal-tile-kernel-test PRIVATE gpu)
+  gpu_link_apple_framework(gpu-metal-tile-kernel-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+  gpu_link_apple_framework(gpu-metal-tile-kernel-test Metal "${GPU_FRAMEWORK_METAL}")
+
+  foreach(mode classic metal4)
+    add_test(NAME metal-tile-kernel-${mode}
+      COMMAND gpu-metal-tile-kernel-test ${GPU_TILE_KERNEL_FIXTURE})
+    set_tests_properties(metal-tile-kernel-${mode} PROPERTIES
+      ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1"
+      SKIP_RETURN_CODE 77 LABELS "tile;imageblock;kernel" TIMEOUT 30 RUN_SERIAL TRUE)
   endforeach()
 endif()
 
