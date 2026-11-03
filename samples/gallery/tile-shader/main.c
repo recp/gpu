@@ -26,6 +26,7 @@ typedef struct TileSample {
   GPUShaderLayout   *layout;
   GPURenderPipeline *draw;
   GPUTilePipeline   *initialize;
+  GPUTilePipeline   *adjust;
   GPUTilePipeline   *resolve;
   GPUBuffer         *resolveBuffer;
   GPUBindGroup      *resolveGroup;
@@ -94,8 +95,17 @@ prepare(TileSample *state, GPUDevice *device) {
     return 0;
 
   state->imageblockBytes = properties.imageblockSampleLength;
-  tile.entryPoint       = "resolve_tile";
+  tile.entryPoint       = "adjust_tile";
   tile.layout           = state->layout->pipelineLayout;
+  if (GPUCreateTilePipeline(device, &tile, &state->adjust) != GPU_OK
+      || GPUGetTilePipelineProperties(state->adjust, &properties) != GPU_OK)
+    return 0;
+
+  if (properties.imageblockSampleLength > state->imageblockBytes)
+    state->imageblockBytes = properties.imageblockSampleLength;
+
+  tile.entryPoint = "resolve_tile";
+  tile.layout     = NULL;
   if (GPUCreateTilePipeline(device, &tile, &state->resolve) != GPU_OK
       || GPUGetTilePipelineProperties(state->resolve, &properties) != GPU_OK)
     return 0;
@@ -175,9 +185,11 @@ render(void *user) {
   if (ok) {
     GPUBindRenderPipeline(pass, state->draw);
     GPUDraw(pass, 6u, 1u, 0u, 0u);
-    ok = GPUBindTilePipeline(pass, state->resolve) == GPU_OK
+    ok = GPUBindTilePipeline(pass, state->adjust) == GPU_OK
          && GPUBindTileGroup(pass, 0u, state->resolveGroup, 0u, NULL) == GPU_OK
          && GPUSetTilePushConstants(pass, 0u, sizeof(bias), bias) == GPU_OK
+         && GPUDispatchThreadsPerTile(pass, width, height) == GPU_OK
+         && GPUBindTilePipeline(pass, state->resolve) == GPU_OK
          && GPUDispatchThreadsPerTile(pass, width, height) == GPU_OK;
   }
   GPUEndRenderPass(pass);
@@ -215,7 +227,7 @@ ready(GPUResult result, GPUAdapter *adapter, GPUDevice *device, void *user) {
     return;
   }
 
-  set_status("GPU: tile initialization, ordered imageblock compositing and tile resolve", 0);
+  set_status("GPU: ordered compositing, imageblock kernel adjustment and tile resolve", 0);
   emscripten_set_main_loop_arg(render, state, 0, true);
 }
 

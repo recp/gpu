@@ -59,8 +59,20 @@ struct Adjust {
   bias: float4
 }
 
-frag resolve_tile(data:   Scratch #imageblock,
-                  config: Resolve #buffer(0) #group(0),
-                  adjust: Adjust  #push_constant) -> float4 {
-  return data.rgba * config.gain + adjust.bias
+@tile
+kern adjust_tile(inout data: imageblock<Scratch>,
+                 localId:   uint2   #local_id,
+                 config:    Resolve #buffer(0) #group(0),
+                 adjust:    Adjust  #push_constant) {
+  let xy      = ushort2(localId)
+  let samples = data.get_num_samples()
+  for (var sample: uint = 0u; sample < samples; sample++) {
+    var value = data.read(xy, ushort(sample))
+    value.rgba = value.rgba * config.gain + adjust.bias
+    data.write(value, xy, ushort(sample))
+  }
+}
+
+frag resolve_tile(data: Scratch #imageblock) -> float4 {
+  return data.rgba
 }
