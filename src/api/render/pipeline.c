@@ -182,7 +182,8 @@ metalVertexResourceSlotMask(const GPURenderPipelineCreateInfo *info,
   if (!shaderEntryView(info->library,
                        info->vertexEntry,
                        &stage,
-                       &reflection)
+                       &reflection,
+                       NULL)
       || stage != GPU_SHADER_STAGE_VERTEX_BIT) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }

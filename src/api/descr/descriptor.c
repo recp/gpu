@@ -3460,7 +3460,8 @@ pipelineLayoutMatchesShaderEntries(GPUPipelineLayout      *pipelineLayout,
       if (!shaderEntryView(library,
                            entryPoints[entryIndex],
                            &entryStage,
-                           &entryReflection)) {
+                           &entryReflection,
+                           NULL)) {
         return 0;
       }
 

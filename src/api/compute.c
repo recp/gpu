@@ -328,6 +328,24 @@ createComputePipeline(GPUDevice                          *__restrict device,
     return result;
   }
 
+  {
+    GPUShaderExecutionGraphEntryInfo graphEntry;
+    GPUShaderStageFlags              stage;
+    uint32_t                         executionFlags;
+
+    if (shaderEntryView(info->library, info->entryPoint, &stage, NULL, &executionFlags)
+        && (stage != GPU_SHADER_STAGE_COMPUTE_BIT
+            || (executionFlags & GPUShaderEntryExecutionTileBit))) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (getShaderLibraryExecutionGraphEntry(info->library,
+                                            info->entryPoint,
+                                            &graphEntry)) {
+      return GPU_ERROR_INVALID_ARGUMENT;
+    }
+  }
+
   if (info->cache && !intersection) {
     result = pipelineCacheFindCompute(info->cache,
                                       info,
@@ -343,24 +361,6 @@ createComputePipeline(GPUDevice                          *__restrict device,
 
       *outPipeline = pipeline;
       return GPU_OK;
-    }
-  }
-
-  {
-    GPUShaderExecutionGraphEntryInfo graphEntry;
-    GPUShaderStageFlags              stage;
-
-    if (getShaderLibraryEntryStage(info->library, info->entryPoint, &stage)
-        && stage != GPU_SHADER_STAGE_COMPUTE_BIT) {
-      pipelineCacheReleaseKey(&cacheKey);
-      return GPU_ERROR_INVALID_ARGUMENT;
-    }
-
-    if (getShaderLibraryExecutionGraphEntry(info->library,
-                                            info->entryPoint,
-                                            &graphEntry)) {
-      pipelineCacheReleaseKey(&cacheKey);
-      return GPU_ERROR_INVALID_ARGUMENT;
     }
   }
 

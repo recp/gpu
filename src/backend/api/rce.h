@@ -107,6 +107,7 @@ struct GPURenderPassEncoder {
   uint32_t                _tileHeight;
   uint32_t                _tileMaxThreads;
   uint32_t                _tileBoundGroupMask;
+  GPUShaderStageFlags     _tileSourceStage;
   uint32_t                _tileImageblockSampleLength;
   float                   _blendConstant[4];
   bool                    _colorAttachmentHasResolve[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];

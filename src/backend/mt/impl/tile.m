@@ -22,7 +22,7 @@
 #include "../../../api/descr/descriptor_internal.h"
 
 static bool
-mt_tileLayoutSupported(GPUPipelineLayout *layout) {
+mt_tileLayoutSupported(GPUPipelineLayout *layout, GPUShaderStageFlags sourceStage) {
   GPUPipelineLayoutPriv        *pipeline;
   GPUBindGroupLayoutPriv       *group;
   const GPUBindGroupLayoutEntry *entry;
@@ -43,7 +43,7 @@ mt_tileLayoutSupported(GPUPipelineLayout *layout) {
 
     for (j = 0u; j < group->count; j++) {
       entry = &group->entries[j];
-      if (!(entry->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT))
+      if (!(entry->visibility & sourceStage))
         continue;
 
       count = entry->arrayCount ? entry->arrayCount : 1u;
@@ -85,7 +85,7 @@ mt_createTilePipeline(GPUDevice                       *device,
   NSError                         *error = nil;
   uint32_t                         i;
 
-  if (!mt_tileLayoutSupported(info->layout))
+  if (!mt_tileLayoutSupported(info->layout, pipeline->sourceStage))
     return GPU_ERROR_UNSUPPORTED;
 
   native = device->_priv;

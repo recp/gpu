@@ -30,6 +30,9 @@ _Static_assert((uint32_t)GPUShaderPTXTextureMetadataSampleCountBit ==
                  (uint32_t)USL_RUNTIME_PTX_TEXTURE_METADATA_SAMPLE_COUNT,
                "USL PTX sample metadata ABI drift");
 
+_Static_assert(GPUShaderEntryExecutionTileBit == USL_RUNTIME_ENTRY_EXECUTION_TILE,
+               "USL tile execution ABI drift");
+
 typedef struct ShaderEntryInfo {
   char    *name;
   char    *nodeName;
@@ -37,6 +40,7 @@ typedef struct ShaderEntryInfo {
   uint64_t nameHash;
   uint32_t stage;
   uint32_t runtimeStage;
+  uint32_t executionFlags;
   uint32_t workgroupSize[3];
   uint32_t meshTopology;
   uint32_t meshMaxVertices;
@@ -1877,6 +1881,15 @@ setShaderLibraryMetadata(GPUShaderLibrary   *library,
 
     textEntry = &runtimeInfo->entry_points[textEntryIndex];
 
+    if ((textEntry->execution_flags & ~GPUShaderEntryExecutionTileBit)
+        || ((textEntry->execution_flags & GPUShaderEntryExecutionTileBit)
+            && (textEntry->stage != USL_RUNTIME_STAGE_COMPUTE
+                || textEntry->workgroup_size[0] || textEntry->workgroup_size[1]
+                || textEntry->workgroup_size[2]
+                || !GPUIsFeatureEnabled(library->_device, GPU_FEATURE_TILE_SHADERS)))) {
+      return 0;
+    }
+
     if (!runtimeTextSize(textEntry->name, &size)
         || textSize > SIZE_MAX - size) {
       return 0;
@@ -2083,6 +2096,7 @@ setShaderLibraryMetadata(GPUShaderLibrary   *library,
     dst->nameLength            = (uint32_t)(nameSize - 1u);
     dst->stage                 = stage;
     dst->runtimeStage          = sourceEntry->stage;
+    dst->executionFlags        = sourceEntry->execution_flags;
     dst->meshTopology          = sourceEntry->mesh_topology;
     dst->meshMaxVertices       = sourceEntry->mesh_max_vertices;
     dst->meshMaxPrimitives     = sourceEntry->mesh_max_primitives;
@@ -2132,11 +2146,11 @@ setShaderLibraryMetadata(GPUShaderLibrary   *library,
                                            payloadTypeSize);
     }
 
-    dst->workgroupSize[0] = sourceEntry->workgroup_size[0]
+    dst->workgroupSize[0] = (sourceEntry->workgroup_size[0] || dst->executionFlags)
                               ? sourceEntry->workgroup_size[0] : 1u;
-    dst->workgroupSize[1] = sourceEntry->workgroup_size[1]
+    dst->workgroupSize[1] = (sourceEntry->workgroup_size[1] || dst->executionFlags)
                               ? sourceEntry->workgroup_size[1] : 1u;
-    dst->workgroupSize[2] = sourceEntry->workgroup_size[2]
+    dst->workgroupSize[2] = (sourceEntry->workgroup_size[2] || dst->executionFlags)
                               ? sourceEntry->workgroup_size[2] : 1u;
   }
 
@@ -2885,6 +2899,16 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
       }
     }
   } else if (api->backend == GPU_BACKEND_METAL) {
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_TILE_SHADERS)) {
+      if (us_cap_atom_init(&targetAtoms[targetAtomCount++],
+                           USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+                           USL_SEMANTIC_FEATURE_ID_TILE_SHADER,
+                           0u,
+                           0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_IMAGEBLOCKS)) {
       if (us_cap_atom_init(&targetAtoms[targetAtomCount++],
                            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
@@ -3771,16 +3795,19 @@ int
 shaderEntryView(const GPUShaderLibrary *library,
                 const char             *entryPoint,
                 GPUShaderStageFlags    *outStage,
-                GPUShaderReflection    *outReflection) {
+                GPUShaderReflection    *outReflection,
+                uint32_t               *outExecutionFlags) {
   const GPUShaderResourceReflection *resources;
   const ShaderEntryInfo             *entry;
 
-  if (!library || !entryPoint || !outStage || !outReflection
-      || !library->_entryInfo) {
+  if (!library || !entryPoint || !outStage || !library->_entryInfo) {
     return 0;
   }
 
-  memset(outReflection, 0, sizeof(*outReflection));
+  if (outReflection)
+    memset(outReflection, 0, sizeof(*outReflection));
+  if (outExecutionFlags)
+    *outExecutionFlags = 0u;
   *outStage = 0u;
   resources = library->_entryResources;
   entry     = findShaderEntry(library, entryPoint);
@@ -3789,16 +3816,18 @@ shaderEntryView(const GPUShaderLibrary *library,
     return 0;
   }
 
-  *outStage                    = entry->stage;
-  outReflection->resourceCount = entry->resourceCount;
-  outReflection->pResources    = entry->resourceCount > 0u
-                                ? resources + entry->resourceStart
-                                : NULL;
-  outReflection->pushConstantSizeBytes =
-    entry->pushConstantSizeBytes;
-  outReflection->pushConstantStages = entry->pushConstantSizeBytes > 0u
-                                        ? entry->stage
-                                        : 0u;
+  *outStage = entry->stage;
+  if (outExecutionFlags)
+    *outExecutionFlags = entry->executionFlags;
+
+  if (outReflection) {
+    outReflection->resourceCount = entry->resourceCount;
+    outReflection->pResources    = entry->resourceCount > 0u
+                                    ? resources + entry->resourceStart : NULL;
+    outReflection->pushConstantSizeBytes = entry->pushConstantSizeBytes;
+    outReflection->pushConstantStages    = entry->pushConstantSizeBytes > 0u
+                                            ? entry->stage : 0u;
+  }
 
   return 1;
 }

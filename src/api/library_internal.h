@@ -21,6 +21,10 @@
 
 typedef struct USLRuntimeSpecConstant USLRuntimeSpecConstant;
 
+enum {
+  GPUShaderEntryExecutionTileBit = 1u << 0
+};
+
 typedef struct GPUStaticSamplerDesc {
   uint32_t logicalIndex;
   uint32_t minFilter;
@@ -230,12 +234,14 @@ GPU_HIDE
 const GPUShaderReflection*
 shaderReflectionView(const GPUShaderLibrary *library);
 
+/* reflection and execution outputs may be omitted for a cold entry-role check. */
 GPU_HIDE
 int
 shaderEntryView(const GPUShaderLibrary *library,
                 const char             *entryPoint,
                 GPUShaderStageFlags    *outStage,
-                GPUShaderReflection    *outReflection);
+                GPUShaderReflection    *outReflection,
+                uint32_t               *outExecutionFlags);
 
 GPU_HIDE
 int

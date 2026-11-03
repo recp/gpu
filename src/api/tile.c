@@ -86,6 +86,7 @@ GPUCreateTilePipeline(GPUDevice                       *device,
   GPUShaderStageFlags        stage;
   GPUResult                  result;
   uint32_t                   samples;
+  uint32_t                   executionFlags;
   uint32_t                   requiredGroups = 0u;
   uint32_t                   i;
 
@@ -108,8 +109,10 @@ GPUCreateTilePipeline(GPUDevice                       *device,
       || !api || !api->tile.createPipeline)
     return GPU_ERROR_UNSUPPORTED;
 
-  if (!shaderEntryView(info->library, info->entryPoint, &stage, &reflection)
-      || stage != GPU_SHADER_STAGE_FRAGMENT_BIT)
+  if (!shaderEntryView(info->library, info->entryPoint, &stage, &reflection, &executionFlags)
+      || (stage != GPU_SHADER_STAGE_FRAGMENT_BIT
+          && (stage != GPU_SHADER_STAGE_COMPUTE_BIT
+              || !(executionFlags & GPUShaderEntryExecutionTileBit))))
     return GPU_ERROR_UNSUPPORTED;
 
   if ((reflection.resourceCount || reflection.pushConstantSizeBytes) && !info->layout)
@@ -124,7 +127,7 @@ GPUCreateTilePipeline(GPUDevice                       *device,
                                              info->library,
                                              &info->entryPoint,
                                              1u,
-                                             GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                             stage,
                                              &requiredGroups))
     return GPU_ERROR_INVALID_ARGUMENT;
 
@@ -153,6 +156,7 @@ GPUCreateTilePipeline(GPUDevice                       *device,
   pipeline->colorCount  = info->colorAttachmentCount;
   pipeline->sampleCount = samples;
   pipeline->layout      = info->layout;
+  pipeline->sourceStage = stage;
   pipeline->requiredGroupMask = requiredGroups;
   pipeline->pushConstantSize  = reflection.pushConstantSizeBytes;
   if (pipeline->colorCount)
@@ -250,6 +254,7 @@ GPUBindTilePipeline(GPURenderPassEncoder *pass, GPUTilePipeline *pipeline) {
   memset(pass->_boundGroupLayouts, 0, sizeof(pass->_boundGroupLayouts));
   memset(pass->_boundDynamicOffsetCounts, 0, sizeof(pass->_boundDynamicOffsetCounts));
   pass->_tileBoundGroupMask    = 0u;
+  pass->_tileSourceStage       = pipeline->sourceStage;
   pass->_requiredBindGroupMask = pipeline->requiredGroupMask;
   pass->_pushConstantSizeBytes = pipeline->pushConstantSize;
   pass->_pushConstantsEmitted  = false;

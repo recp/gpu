@@ -30,6 +30,7 @@ struct GPUTilePipeline {
   uint32_t                   sampleCount;
   uint32_t                   requiredGroupMask;
   uint32_t                   pushConstantSize;
+  GPUShaderStageFlags        sourceStage;
   bool                       nonSquareDispatch;
 };
 

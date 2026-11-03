@@ -54,7 +54,7 @@ typedef struct GPUTileRenderPassEXT {
   uint32_t         threadgroupMemoryLength;
 } GPUTileRenderPassEXT;
 
-/* typed USL fragment entries use their fragment-visible pipeline layout.
+/* typed USL fragment and tile kernel entries use their source-stage layout.
  * pipelines, layouts, groups and resources outlive recorded GPU work using them.
  */
 GPU_EXPORT

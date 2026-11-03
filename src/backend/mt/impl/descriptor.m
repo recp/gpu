@@ -1210,7 +1210,7 @@ mt_tileBinding(void *context, const GPUBindGroupBindingView *binding) {
   uint32_t                  index, recordIndex;
 
   ctx = context;
-  if (!ctx->valid || !(binding->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT))
+  if (!ctx->valid || !(binding->visibility & ctx->pass->_tileSourceStage))
     return;
 
   native = ctx->pass->_priv;

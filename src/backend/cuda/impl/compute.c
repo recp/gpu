@@ -35,7 +35,8 @@ cuda__validComputeInterface(const GPUDevice                    *device,
       || !shaderEntryView(info->library,
                           info->entryPoint,
                           &stage,
-                          &reflection)
+                          &reflection,
+                          NULL)
       || !getShaderLibraryPTXEntry(info->library, info->entryPoint, &ptx)
       || stage != GPU_SHADER_STAGE_COMPUTE_BIT
       || reflection.pushConstantSizeBytes != 0u
