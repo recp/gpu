@@ -208,7 +208,7 @@ deviceResetCacheStats(GPUDevice *device) {
 }
 
 static inline GPUResult
-devicePrepareFrameSlot(GPUDevice *device, uint32_t *outFrameIndex) {
+devicePrepareFrameSlotTimeout(GPUDevice *device, uint32_t *outFrameIndex, uint64_t timeout) {
   GPUFence *fence;
   GPUResult result;
   uint32_t  nextFrameIndex;
@@ -233,8 +233,11 @@ devicePrepareFrameSlot(GPUDevice *device, uint32_t *outFrameIndex) {
             : NULL;
 
   if (fence && !GPUIsFenceSignaled(fence)) {
+    if (timeout == 0u)
+      return GPU_ERROR_TIMEOUT;
+
     device->allocatorStats.uploadStallCount++;
-    result = GPUWaitFence(fence, UINT64_MAX);
+    result = GPUWaitFence(fence, timeout);
 
     if (result != GPU_OK) {
       return result;
@@ -244,6 +247,11 @@ devicePrepareFrameSlot(GPUDevice *device, uint32_t *outFrameIndex) {
   *outFrameIndex = nextFrameIndex;
 
   return GPU_OK;
+}
+
+static inline GPUResult
+devicePrepareFrameSlot(GPUDevice *device, uint32_t *outFrameIndex) {
+  return devicePrepareFrameSlotTimeout(device, outFrameIndex, UINT64_MAX);
 }
 
 static inline void

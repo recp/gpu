@@ -31,6 +31,18 @@ struct GPUFrame {
   bool            transientFrameActive;
 };
 
+struct GPUFramePacer {
+  GPUDevice     *device;
+  GPUSwapchain  *swapchain;
+  GPUFramePacerFn callback;
+  void          *user;
+  void          *_priv;
+};
+
+GPU_HIDE
+GPUFrame*
+frameBeginDrawable(GPUSwapchain *swapchain, void *drawable);
+
 GPU_HIDE
 bool
 schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame);

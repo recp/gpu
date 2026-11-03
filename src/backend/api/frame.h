@@ -29,6 +29,12 @@ typedef struct GPUFrameApi {
   GPUFrame* (*beginFrame)(struct GPUApi *__restrict api, GPUSwapchain *__restrict swapchain);
 
   void (*endFrame)(struct GPUApi *__restrict api, GPUFrame *__restrict frame);
+
+  GPUFrame* (*beginDrawable)(struct GPUApi *api, GPUSwapchain *swapchain, void *drawable);
+  GPUResult (*createPacer)(GPUFramePacer *pacer, const GPUFramePacerCreateInfo *info);
+  void (*pausePacer)(GPUFramePacer *pacer, bool paused);
+  void (*destroyPacer)(GPUFramePacer *pacer);
+  bool (*prepareWithPacer)(GPUFramePacer *pacer);
 } GPUFrameApi;
 
 #ifdef __cplusplus

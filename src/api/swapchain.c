@@ -232,6 +232,8 @@ GPUDestroySwapchain(GPUSwapchain *__restrict swapchain) {
     return;
   }
 
+  GPUDestroyFramePacer(swapchain->pacer);
+
   if (!(api = deviceApi(swapchain->device))) {
     return;
   }

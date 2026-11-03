@@ -1009,6 +1009,12 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_BUFFER_HOST_MEMORY_EXT:
     case GPU_FEATURE_THREADED_UPLOADS:
       return true;
+    case GPU_FEATURE_FRAME_PACER:
+#if __has_include(<QuartzCore/CAMetalDisplayLink.h>)
+      if (@available(macOS 14.0, iOS 17.0, *))
+        return true;
+#endif
+      return false;
     case GPU_FEATURE_TENSOR_RESOURCES_EXT:
     case GPU_FEATURE_ML_MODEL_EXT:
 #if MT_HAS_METAL4

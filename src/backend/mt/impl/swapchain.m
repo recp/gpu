@@ -207,6 +207,9 @@ mt_destroySwapchain(GPUSwapchain *__restrict swapchain) {
   swapchainMtl = swapchain->_priv;
 
   if (swapchainMtl) {
+    if (swapchainMtl->frameActive)
+      GPUEndFrame(&swapchainMtl->frame);
+
     if (swapchainMtl->objc) {
       [(GPUSwapchainObjc *)swapchainMtl->objc gpuStopObserving];
       [(id)swapchainMtl->objc release];

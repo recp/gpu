@@ -20,6 +20,7 @@
 #include "frame_internal.h"
 #include "swapchain_internal.h"
 #include "texture_internal.h"
+#include <math.h>
 
 #if !defined(_WIN32) && !defined(WIN32)
 #  include <time.h>
@@ -74,9 +75,8 @@ frameClockElapsedMs(const GPUFrame *frame) {
   return (double)(end - start) * 1000.0 / (double)frequency;
 }
 
-GPU_EXPORT
-GPUFrame*
-GPUBeginFrame(GPUSwapchain *swapchain) {
+static GPUFrame*
+frameBegin(GPUSwapchain *swapchain, void *drawable) {
   GPUApi    *api;
   GPUDevice *device;
   GPUFrame  *frame;
@@ -93,10 +93,15 @@ GPUBeginFrame(GPUSwapchain *swapchain) {
   if (!api->frame.beginFrame)
     return NULL;
 
-  if (devicePrepareFrame(device, &frameIndex) != GPU_OK)
+  if (drawable && !api->frame.beginDrawable)
     return NULL;
 
-  frame = api->frame.beginFrame(api, swapchain);
+  if (devicePrepareFrameSlotTimeout(device, &frameIndex, drawable ? 0u : UINT64_MAX) != GPU_OK)
+    return NULL;
+
+  frame = drawable && api->frame.beginDrawable
+            ? api->frame.beginDrawable(api, swapchain, drawable)
+            : api->frame.beginFrame(api, swapchain);
 
   if (frame) {
     deviceActivateFrame(device, frameIndex);
@@ -123,6 +128,103 @@ GPUBeginFrame(GPUSwapchain *swapchain) {
   }
 
   return frame;
+}
+
+GPU_HIDE
+GPUFrame*
+frameBeginDrawable(GPUSwapchain *swapchain, void *drawable) {
+  return drawable ? frameBegin(swapchain, drawable) : NULL;
+}
+
+GPU_EXPORT
+GPUFrame*
+GPUBeginFrame(GPUSwapchain *swapchain) {
+  GPUApi *api;
+
+  if (!swapchain)
+    return NULL;
+
+  if (swapchain->pacer) {
+    api = deviceApi(swapchain->device);
+    if (!api || !api->frame.prepareWithPacer
+        || !api->frame.prepareWithPacer(swapchain->pacer))
+      return NULL;
+  }
+
+  return frameBegin(swapchain, NULL);
+}
+
+GPU_EXPORT
+GPUResult
+GPUCreateFramePacer(GPUDevice                     *device,
+                    const GPUFramePacerCreateInfo *info,
+                    GPUFramePacer                **outPacer) {
+  GPUFramePacer *pacer;
+  GPUApi        *api;
+  GPUResult      result;
+
+  if (outPacer)
+    *outPacer = NULL;
+
+  if (!device || !info || !outPacer || !info->swapchain || !info->callback
+      || info->swapchain->device != device || info->swapchain->pacer
+      || info->chain.sType != GPU_STRUCTURE_TYPE_FRAME_PACER_CREATE_INFO
+      || info->chain.structSize < sizeof(*info) || info->chain.pNext
+      || info->latencyFrames > 2u
+      || !isfinite(info->minRate) || !isfinite(info->maxRate) || !isfinite(info->preferredRate)
+      || info->minRate < 0.0f || info->maxRate < 0.0f || info->preferredRate < 0.0f
+      || info->minRate > info->maxRate || info->preferredRate > info->maxRate
+      || (info->preferredRate > 0.0f && info->preferredRate < info->minRate))
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  api = deviceApi(device);
+  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_FRAME_PACER) || !api
+      || !api->frame.createPacer || !api->frame.beginDrawable)
+    return GPU_ERROR_UNSUPPORTED;
+
+  if (!(pacer = calloc(1u, sizeof(*pacer))))
+    return GPU_ERROR_OUT_OF_MEMORY;
+
+  pacer->device    = device;
+  pacer->swapchain = info->swapchain;
+  pacer->callback  = info->callback;
+  pacer->user      = info->user;
+  result = api->frame.createPacer(pacer, info);
+
+  if (result != GPU_OK) {
+    free(pacer);
+    return result;
+  }
+
+  info->swapchain->pacer = pacer;
+  *outPacer = pacer;
+  return GPU_OK;
+}
+
+GPU_EXPORT
+void
+GPUSetFramePacerPaused(GPUFramePacer *pacer, bool paused) {
+  GPUApi *api;
+
+  api = pacer ? deviceApi(pacer->device) : NULL;
+  if (api && api->frame.pausePacer)
+    api->frame.pausePacer(pacer, paused);
+}
+
+GPU_EXPORT
+void
+GPUDestroyFramePacer(GPUFramePacer *pacer) {
+  GPUApi *api;
+
+  if (!pacer)
+    return;
+
+  api = deviceApi(pacer->device);
+  if (api && api->frame.destroyPacer)
+    api->frame.destroyPacer(pacer);
+
+  pacer->swapchain->pacer = NULL;
+  free(pacer);
 }
 
 GPU_EXPORT
