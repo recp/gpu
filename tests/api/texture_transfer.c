@@ -89,6 +89,40 @@ typedef struct CubeCopy {
   uint32_t face;
 } CubeCopy;
 
+typedef struct WriteCase {
+  GPUTextureDimension dimension;
+  uint32_t            width;
+  uint32_t            height;
+  uint32_t            images;
+  uint32_t            mipCount;
+  uint32_t            mip;
+  uint32_t            x;
+  uint32_t            y;
+  uint32_t            z;
+  uint32_t            firstLayer;
+  uint32_t            imageCount;
+  uint32_t            patchWidth;
+  uint32_t            patchHeight;
+} WriteCase;
+
+static const WriteCase write_cases[] = {
+  {GPU_TEXTURE_DIMENSION_2D, 8u, 8u, 4u, 3u, 0u, 1u, 1u, 0u, 1u, 1u, 2u, 2u},
+  {GPU_TEXTURE_DIMENSION_2D, 8u, 8u, 2u, 3u, 1u, 1u, 1u, 0u, 1u, 1u, 2u, 2u},
+  {GPU_TEXTURE_DIMENSION_3D, 4u, 4u, 4u, 3u, 0u, 1u, 1u, 2u, 0u, 1u, 2u, 2u},
+  {GPU_TEXTURE_DIMENSION_2D, 8u, 8u, 4u, 3u, 0u, 6u, 6u, 0u, 1u, 2u, 2u, 2u},
+  {GPU_TEXTURE_DIMENSION_3D, 8u, 8u, 8u, 3u, 1u, 2u, 2u, 1u, 0u, 2u, 2u, 2u},
+  {GPU_TEXTURE_DIMENSION_1D, 8u, 1u, 2u, 1u, 0u, 7u, 0u, 0u, 1u, 1u, 1u, 1u},
+  {GPU_TEXTURE_DIMENSION_2D, 8u, 8u, 2u, 3u, 2u, 1u, 1u, 0u, 0u, 1u, 1u, 1u},
+  {GPU_TEXTURE_DIMENSION_1D, 8u, 1u, 2u, 3u, 1u, 3u, 0u, 0u, 1u, 1u, 1u, 1u},
+  {GPU_TEXTURE_DIMENSION_1D, 8u, 1u, 1u, 3u, 1u, 3u, 0u, 0u, 0u, 1u, 1u, 1u}
+};
+
+static uint32_t
+mip_extent(uint32_t extent, uint32_t mip) {
+  extent >>= mip;
+  return extent ? extent : 1u;
+}
+
 static void
 transfer_pack(uint8_t       *padded,
               const uint8_t *tight,
@@ -1933,9 +1967,264 @@ cleanup:
   return ok;
 }
 
+static int
+check_texture_write_origins(GPUDevice *device) {
+  uint8_t                   initial[8u * 8u * 8u * 4u];
+  uint8_t                   patch[2u * 3u * 16u];
+  uint8_t                   actual[8u * 8u * 256u];
+  GPUBufferCreateInfo        bufferInfo  = {0};
+  GPUTextureCreateInfo       textureInfo = {0};
+  GPUAdapterProperties       properties;
+  GPUTextureWriteRegion      write       = {0};
+  GPUTextureWriteRegion      invalid;
+  GPUBufferTextureCopyRegion copy        = {0};
+  GPUQueue                  *queue;
+  GPUTexture                *texture = NULL;
+  GPUBuffer                 *readback = NULL;
+  GPUCommandBuffer          *cmdb = NULL;
+  GPUTransferPassEncoder    *pass = NULL;
+  const WriteCase           *entry;
+  uint64_t                   bytes;
+  uint32_t                   shape, width, height, images, mip, firstImage;
+  uint32_t                   x, y, image, channel, destination, patchOffset;
+  uint32_t                   pixelChecks = 0u, guardChecks = 0u;
+  uint32_t                   shapeChecks = 0u, unsupportedChecks = 0u;
+  GPUResult                  result;
+  int                        ok = 0;
+  uint8_t                    expected;
+
+  if (!(queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u)))
+    return 0;
+
+  if (GPUGetAdapterProperties(device->adapter, &properties) != GPU_OK)
+    return 0;
+
+  memset(initial, 0x11, sizeof(initial));
+  memset(patch, 0xaa, sizeof(patch));
+
+  for (image = 0u; image < 2u; image++) {
+    for (y = 0u; y < 2u; y++) {
+      for (x = 0u; x < 8u; x++) {
+        patch[image * 48u + y * 16u + x] = (uint8_t)(0x80u + image * 48u + y * 16u + x);
+      }
+    }
+  }
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COPY_SRC | GPU_TEXTURE_USAGE_COPY_DST;
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.sizeBytes        = sizeof(actual);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
+
+  if (GPUCreateBuffer(device, &bufferInfo, &readback) != GPU_OK || !readback)
+    goto cleanup;
+
+  for (shape = 0u; shape < GPU_ARRAY_LEN(write_cases); shape++) {
+    entry                     = &write_cases[shape];
+    textureInfo.dimension     = entry->dimension;
+    textureInfo.width         = entry->width;
+    textureInfo.height        = entry->height;
+    textureInfo.depthOrLayers = entry->images;
+    textureInfo.mipLevelCount = entry->mipCount;
+
+    result = GPUCreateTexture(device, &textureInfo, &texture);
+    if (entry->dimension == GPU_TEXTURE_DIMENSION_1D && entry->mipCount > 1u
+        && properties.backend == GPU_BACKEND_METAL) {
+      if (result != GPU_ERROR_UNSUPPORTED || texture)
+        goto cleanup;
+
+      unsupportedChecks++;
+      continue;
+    }
+
+    if (result != GPU_OK || !texture)
+      goto cleanup;
+
+    /* initialize every mip so a misplaced write has a defined witness. */
+    for (mip = 0u; mip < textureInfo.mipLevelCount; mip++) {
+      width  = mip_extent(entry->width, mip);
+      height = mip_extent(entry->height, mip);
+      images = entry->dimension == GPU_TEXTURE_DIMENSION_3D
+                 ? mip_extent(entry->images, mip) : entry->images;
+      bytes  = (uint64_t)width * height * images * 4u;
+
+      memset(&write, 0, sizeof(write));
+      write.width        = width;
+      write.height       = height;
+      write.depth        = entry->dimension == GPU_TEXTURE_DIMENSION_3D ? images : 1u;
+      write.layerCount   = entry->dimension == GPU_TEXTURE_DIMENSION_3D ? 1u : images;
+      write.mipLevel     = mip;
+      write.bytesPerRow  = width * 4u;
+      write.rowsPerImage = height;
+
+      if (GPUQueueWriteTexture(queue, texture, &write, initial, bytes) != GPU_OK)
+        goto cleanup;
+    }
+
+    width  = mip_extent(entry->width, entry->mip);
+    height = mip_extent(entry->height, entry->mip);
+    images = entry->dimension == GPU_TEXTURE_DIMENSION_3D
+               ? mip_extent(entry->images, entry->mip) : entry->images;
+
+    memset(&write, 0, sizeof(write));
+    write.x              = entry->x;
+    write.y              = entry->y;
+    write.z              = entry->z;
+    write.width          = entry->patchWidth;
+    write.height         = entry->patchHeight;
+    write.depth          = entry->dimension == GPU_TEXTURE_DIMENSION_3D ? entry->imageCount : 1u;
+    write.baseArrayLayer = entry->firstLayer;
+    write.layerCount     = entry->dimension == GPU_TEXTURE_DIMENSION_3D ? 1u : entry->imageCount;
+    write.mipLevel       = entry->mip;
+    write.bytesPerRow    = 16u;
+    write.rowsPerImage   = 3u;
+    bytes                = (uint64_t)(entry->imageCount - 1u) * 48u
+                           + (entry->patchHeight - 1u) * 16u + entry->patchWidth * 4u;
+
+    if (GPUQueueWriteTexture(queue, texture, &write, patch, bytes) != GPU_OK)
+      goto cleanup;
+
+    if (GPUQueueWriteTexture(queue, texture, &write, patch, bytes - 1u) != GPU_ERROR_INVALID_ARGUMENT)
+      goto cleanup;
+
+    invalid   = write;
+    invalid.x = UINT32_MAX;
+    if (GPUQueueWriteTexture(queue, texture, &invalid, patch, sizeof(patch)) != GPU_ERROR_INVALID_ARGUMENT)
+      goto cleanup;
+
+    invalid   = write;
+    invalid.y = UINT32_MAX;
+    if (GPUQueueWriteTexture(queue, texture, &invalid, patch, sizeof(patch)) != GPU_ERROR_INVALID_ARGUMENT)
+      goto cleanup;
+
+    invalid   = write;
+    invalid.z = entry->dimension == GPU_TEXTURE_DIMENSION_3D ? images : 1u;
+    if (GPUQueueWriteTexture(queue, texture, &invalid, patch, sizeof(patch)) != GPU_ERROR_INVALID_ARGUMENT)
+      goto cleanup;
+
+    invalid   = write;
+    invalid.x = width - entry->patchWidth + 1u;
+    if (GPUQueueWriteTexture(queue, texture, &invalid, patch, sizeof(patch)) != GPU_ERROR_INVALID_ARGUMENT)
+      goto cleanup;
+
+    invalid                = write;
+    invalid.baseArrayLayer = UINT32_MAX;
+    if (GPUQueueWriteTexture(queue, texture, &invalid, patch, sizeof(patch)) != GPU_ERROR_INVALID_ARGUMENT)
+      goto cleanup;
+
+    invalid             = write;
+    invalid.bytesPerRow = entry->patchWidth * 4u - 1u;
+    if (GPUQueueWriteTexture(queue, texture, &invalid, patch, sizeof(patch)) != GPU_ERROR_INVALID_ARGUMENT)
+      goto cleanup;
+
+    firstImage = entry->dimension == GPU_TEXTURE_DIMENSION_3D ? entry->z : entry->firstLayer;
+
+    for (mip = 0u; mip < textureInfo.mipLevelCount; mip++) {
+      width  = mip_extent(entry->width, mip);
+      height = mip_extent(entry->height, mip);
+      images = entry->dimension == GPU_TEXTURE_DIMENSION_3D
+                 ? mip_extent(entry->images, mip) : entry->images;
+
+      memset(actual, 0xa5, sizeof(actual));
+      if (GPUQueueWriteBuffer(queue, readback, 0u, actual, sizeof(actual)) != GPU_OK
+          || GPUAcquireCommandBuffer(queue, "texture-write-origins", &cmdb) != GPU_OK || !cmdb
+          || !(pass = GPUBeginTransferPass(cmdb, "texture-write-origins")))
+        goto cleanup;
+
+      memset(&copy, 0, sizeof(copy));
+      copy.bytesPerRow              = 256u;
+      copy.rowsPerImage             = height;
+      copy.texture.texture.mipLevel = mip;
+      copy.texture.width            = width;
+      copy.texture.height           = height;
+      copy.texture.depth            = entry->dimension == GPU_TEXTURE_DIMENSION_3D ? images : 1u;
+      copy.texture.layerCount       = entry->dimension == GPU_TEXTURE_DIMENSION_3D ? 1u : images;
+      GPUCopyTextureToBuffer(pass, texture, readback, &copy);
+      GPUEndTransferPass(pass);
+      pass = NULL;
+
+      ok = transfer_submit(device, queue, cmdb);
+      cmdb = NULL;
+
+      if (!ok || GPUQueueReadBuffer(queue, readback, 0u, actual, sizeof(actual)) != GPU_OK) {
+        ok = 0;
+        goto cleanup;
+      }
+      ok = 0;
+
+      for (image = 0u; image < images; image++) {
+        for (y = 0u; y < height; y++) {
+          for (x = 0u; x < width; x++) {
+            for (channel = 0u; channel < 4u; channel++) {
+              expected = 0x11u;
+              if (mip == entry->mip && image >= firstImage && image < firstImage + entry->imageCount
+                  && x >= entry->x && x < entry->x + entry->patchWidth
+                  && y >= entry->y && y < entry->y + entry->patchHeight) {
+                patchOffset = (image - firstImage) * 48u + (y - entry->y) * 16u
+                              + (x - entry->x) * 4u + channel;
+                expected = patch[patchOffset];
+              }
+
+              destination = (image * height + y) * 256u + x * 4u + channel;
+              if (actual[destination] != expected) {
+                fprintf(stderr, "texture write origin mismatch: shape=%u mip=%u image=%u x=%u y=%u\n",
+                        shape, mip, image, x, y);
+                ok = 0;
+                goto cleanup;
+              }
+              pixelChecks++;
+            }
+          }
+
+          for (x = width * 4u; x < 256u; x++) {
+            if (actual[(image * height + y) * 256u + x] != 0xa5u) {
+              ok = 0;
+              goto cleanup;
+            }
+            guardChecks++;
+          }
+        }
+      }
+
+      for (destination = images * height * 256u; destination < sizeof(actual); destination++) {
+        if (actual[destination] != 0xa5u) {
+          ok = 0;
+          goto cleanup;
+        }
+        guardChecks++;
+      }
+    }
+
+    GPUDestroyTexture(texture);
+    texture = NULL;
+    shapeChecks++;
+    ok = 0;
+  }
+
+  ok = 1;
+  printf("texture write origins: %u shapes, %u pixel bytes, %u padding/tail guards, %u unsupported checks passed\n",
+         shapeChecks, pixelChecks, guardChecks, unsupportedChecks);
+
+cleanup:
+  if (pass)
+    GPUEndTransferPass(pass);
+  if (cmdb)
+    (void)GPUDiscardCommandBuffer(cmdb);
+
+  GPUDestroyBuffer(readback);
+  GPUDestroyTexture(texture);
+  return ok;
+}
+
 int
 gpu_test_texture_transfer(GPUDevice *device) {
   return check_tight_texture_copies(device)
+         && check_texture_write_origins(device)
          && check_array_mip_transfers(device)
          && check_3d_texture_transfers(device)
          && check_same_texture_copies(device)

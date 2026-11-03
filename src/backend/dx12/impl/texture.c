@@ -1530,12 +1530,12 @@ dx12_destroyTextureView(GPUTextureView *__restrict view) {
 
 GPU_HIDE
 GPUResult
-dx12_writeTexture(GPUQueue                    *__restrict queue,
-                  GPUTexture                  *__restrict texture,
-                  const GPUTextureWriteRegion *__restrict region,
-                  const void                  *__restrict data,
-                  uint64_t                                sizeBytes) {
-  GPUFormatDataLayout                dataLayout;
+dx12_writeTexture(GPUQueue                        *__restrict queue,
+                  GPUTexture                      *__restrict texture,
+                  const GPUTextureWriteRegion     *__restrict region,
+                  const void                      *__restrict data,
+                  uint64_t                                    sizeBytes,
+                  const struct GPUFormatDataLayout           *validatedLayout) {
   D3D12_RESOURCE_DESC                textureDesc;
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {0};
   D3D12_BOX                          sourceBox = {0};
@@ -1582,16 +1582,7 @@ dx12_writeTexture(GPUQueue                    *__restrict queue,
 
   if (!dx12__textureWritePlane(texture->format,
                                region->aspect,
-                               &plane)
-      || !formatAspectDataLayout(texture->format,
-                                 region->aspect,
-                                 region->width,
-                                 region->height,
-                                 region->depth,
-                                 region->layerCount,
-                                 region->bytesPerRow,
-                                 region->rowsPerImage,
-                                 &dataLayout)) {
+                               &plane)) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -1600,7 +1591,7 @@ dx12_writeTexture(GPUQueue                    *__restrict queue,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  if (sizeBytes < dataLayout.requiredBytes) {
+  if (sizeBytes < validatedLayout->requiredBytes) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -1627,8 +1618,8 @@ dx12_writeTexture(GPUQueue                    *__restrict queue,
                                                        &layerSize);
 
   if (layerSize == 0u
-      || rowCount < dataLayout.blockRows
-      || rowSize < dataLayout.bytesInLastRow
+      || rowCount < validatedLayout->blockRows
+      || rowSize < validatedLayout->bytesInLastRow
       || footprint.Footprint.Depth < copyDepth
       || layerSize > UINT64_MAX -
                     (D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1u)) {
@@ -1683,8 +1674,8 @@ dx12_writeTexture(GPUQueue                    *__restrict queue,
                                                          &rowSize,
                                                          &packSize);
 
-    if (rowCount < dataLayout.blockRows
-        || rowSize < dataLayout.bytesInLastRow
+    if (rowCount < validatedLayout->blockRows
+        || rowSize < validatedLayout->bytesInLastRow
         || footprint.Footprint.Depth < copyDepth) {
       dx12_abortTransfer(queue);
       return GPU_ERROR_BACKEND_FAILURE;
@@ -1693,16 +1684,16 @@ dx12_writeTexture(GPUQueue                    *__restrict queue,
     for (slice = 0u; slice < copyDepth; slice++) {
       sourceImage = texture3D ? slice : packLayer;
 
-      for (row = 0u; row < dataLayout.blockRows; row++) {
+      for (row = 0u; row < validatedLayout->blockRows; row++) {
         destinationOffset = footprint.Offset +
                             (uint64_t)slice *
                               footprint.Footprint.RowPitch * rowCount +
                             (uint64_t)row * footprint.Footprint.RowPitch;
-        sourceOffset      = (uint64_t)sourceImage * dataLayout.bytesPerImage +
+        sourceOffset      = (uint64_t)sourceImage * validatedLayout->bytesPerImage +
                             (uint64_t)row * region->bytesPerRow;
         memcpy(mapped + (size_t)destinationOffset,
                (const uint8_t *)data + (size_t)sourceOffset,
-               dataLayout.bytesInLastRow);
+               validatedLayout->bytesInLastRow);
       }
     }
   }
@@ -1751,9 +1742,9 @@ dx12_writeTexture(GPUQueue                    *__restrict queue,
 
     commandList->lpVtbl->CopyTextureRegion(commandList,
                                            &destination,
-                                           0u,
-                                           0u,
-                                           0u,
+                                           region->x,
+                                           region->y,
+                                           region->z,
                                            &source,
                                            dx12__depthFormat(texture->format) ? NULL : &sourceBox);
   }

@@ -270,16 +270,18 @@ webgpu_destroyTextureView(GPUTextureView *__restrict view) {
 }
 
 static GPUResult
-webgpu_writeTexture(GPUQueue                    *__restrict queue,
-                    GPUTexture                  *__restrict texture,
-                    const GPUTextureWriteRegion *__restrict region,
-                    const void                  *__restrict data,
-                    uint64_t                                sizeBytes) {
+webgpu_writeTexture(GPUQueue                        *__restrict queue,
+                    GPUTexture                      *__restrict texture,
+                    const GPUTextureWriteRegion     *__restrict region,
+                    const void                      *__restrict data,
+                    uint64_t                                    sizeBytes,
+                    const struct GPUFormatDataLayout           *validatedLayout) {
   WGPUTexelCopyBufferLayout layout      = WGPU_TEXEL_COPY_BUFFER_LAYOUT_INIT;
   WGPUTexelCopyTextureInfo  destination = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
   WGPUExtent3D              extent      = WGPU_EXTENT_3D_INIT;
   GPUDeviceWebGPU          *native;
 
+  (void)validatedLayout;
   native = webgpuDevice(commandQueueDevice(queue));
 
   if (!native || !native->queue || !texture || !texture->_priv
@@ -296,8 +298,10 @@ webgpu_writeTexture(GPUQueue                    *__restrict queue,
   destination.texture  = texture->_priv;
   destination.mipLevel = region->mipLevel;
   destination.aspect   = webgpu_textureAspect(region->aspect);
+  destination.origin.x = region->x;
+  destination.origin.y = region->y;
   destination.origin.z = texture->dimension == GPU_TEXTURE_DIMENSION_3D
-                           ? 0u
+                           ? region->z
                            : region->baseArrayLayer;
 
   if (destination.aspect == WGPUTextureAspect_Undefined) {

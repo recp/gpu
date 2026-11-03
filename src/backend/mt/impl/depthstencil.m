@@ -151,7 +151,7 @@ mt_writeTextureBlit(GPUQueue                    *queue,
                toTexture:nativeTexture
         destinationSlice:0u
         destinationLevel:region->mipLevel
-       destinationOrigin:MTLOriginMake(0u, 0u, 0u)
+       destinationOrigin:MTLOriginMake(region->x, region->y, region->z)
                  options:option];
 
     return GPU_OK;
@@ -167,7 +167,7 @@ mt_writeTextureBlit(GPUQueue                    *queue,
                toTexture:nativeTexture
         destinationSlice:region->baseArrayLayer + i
         destinationLevel:region->mipLevel
-       destinationOrigin:MTLOriginMake(0u, 0u, 0u)
+       destinationOrigin:MTLOriginMake(region->x, region->y, region->z)
                  options:option];
   }
 
@@ -245,7 +245,7 @@ mt_writeSparseTexture4(GPUQueue                    *queue,
                     toTexture:nativeTexture
              destinationSlice:0u
              destinationLevel:region->mipLevel
-            destinationOrigin:MTLOriginMake(0u, 0u, 0u)
+            destinationOrigin:MTLOriginMake(region->x, region->y, region->z)
                       options:MTLBlitOptionNone];
     } else {
       for (i = 0u; i < region->layerCount; i++) {
@@ -259,7 +259,7 @@ mt_writeSparseTexture4(GPUQueue                    *queue,
                       toTexture:nativeTexture
                destinationSlice:region->baseArrayLayer + i
                destinationLevel:region->mipLevel
-              destinationOrigin:MTLOriginMake(0u, 0u, 0u)
+              destinationOrigin:MTLOriginMake(region->x, region->y, region->z)
                         options:MTLBlitOptionNone];
       }
     }
@@ -716,12 +716,12 @@ mt_destroyTextureView(GPUTextureView *__restrict view) {
 
 GPU_HIDE
 GPUResult
-mt_writeTexture(GPUQueue                    *__restrict queue,
-                GPUTexture                  *__restrict texture,
-                const GPUTextureWriteRegion *__restrict region,
-                const void                  *__restrict data,
-                uint64_t                                sizeBytes) {
-  GPUFormatDataLayout dataLayout;
+mt_writeTexture(GPUQueue                        *__restrict queue,
+                GPUTexture                      *__restrict texture,
+                const GPUTextureWriteRegion     *__restrict region,
+                const void                      *__restrict data,
+                uint64_t                                    sizeBytes,
+                const struct GPUFormatDataLayout           *validatedLayout) {
   MTLRegion           mtRegion;
   id<MTLTexture>      nativeTexture;
   const uint8_t      *bytes;
@@ -739,19 +739,9 @@ mt_writeTexture(GPUQueue                    *__restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!formatAspectDataLayout(texture->format,
-                              region->aspect,
-                              region->width,
-                              region->height,
-                              region->depth,
-                              region->layerCount,
-                              region->bytesPerRow,
-                              region->rowsPerImage,
-                              &dataLayout)
-      || sizeBytes < dataLayout.requiredBytes
-      || dataLayout.bytesPerImage > NSUIntegerMax) {
+  if (sizeBytes < validatedLayout->requiredBytes
+      || validatedLayout->bytesPerImage > NSUIntegerMax)
     return GPU_ERROR_INVALID_ARGUMENT;
-  }
 
   if (texture->format == GPU_FORMAT_DEPTH24_UNORM_STENCIL8
       || texture->format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8) {
@@ -765,7 +755,7 @@ mt_writeTexture(GPUQueue                    *__restrict queue,
                                texture,
                                region,
                                data,
-                               &dataLayout,
+                               validatedLayout,
                                option);
   }
 
@@ -778,14 +768,14 @@ mt_writeTexture(GPUQueue                    *__restrict queue,
                                     texture,
                                     region,
                                     data,
-                                    &dataLayout);
+                                    validatedLayout);
     }
 #endif
     return mt_writeTextureBlit(queue,
                                texture,
                                region,
                                data,
-                               &dataLayout,
+                               validatedLayout,
                                MTLBlitOptionNone);
   }
 
@@ -798,17 +788,18 @@ mt_writeTexture(GPUQueue                    *__restrict queue,
   bytes = data;
 
   if (nativeTexture.textureType == MTLTextureType3D) {
-    mtRegion = MTLRegionMake3D(0, 0, 0, region->width, region->height, region->depth);
+    mtRegion = MTLRegionMake3D(region->x, region->y, region->z,
+                                 region->width, region->height, region->depth);
     [nativeTexture replaceRegion:mtRegion
                      mipmapLevel:region->mipLevel
                            slice:0
                        withBytes:bytes
                      bytesPerRow:region->bytesPerRow
-                   bytesPerImage:(NSUInteger)dataLayout.bytesPerImage];
+                   bytesPerImage:(NSUInteger)validatedLayout->bytesPerImage];
     return GPU_OK;
   }
 
-  mtRegion = MTLRegionMake2D(0, 0, region->width, region->height);
+  mtRegion = MTLRegionMake2D(region->x, region->y, region->width, region->height);
 
   for (i = 0; i < region->layerCount; i++) {
     [nativeTexture replaceRegion:mtRegion
@@ -816,9 +807,9 @@ mt_writeTexture(GPUQueue                    *__restrict queue,
                            slice:region->baseArrayLayer + i
                        withBytes:bytes +
                                   ((NSUInteger)i *
-                                   (NSUInteger)dataLayout.bytesPerImage)
+                                   (NSUInteger)validatedLayout->bytesPerImage)
                      bytesPerRow:region->bytesPerRow
-                   bytesPerImage:(NSUInteger)dataLayout.bytesPerImage];
+                   bytesPerImage:(NSUInteger)validatedLayout->bytesPerImage];
   }
 
   return GPU_OK;

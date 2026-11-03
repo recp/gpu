@@ -780,6 +780,9 @@ vk__recordTextureWrite(VkCommandBuffer              command,
   copy.imageSubresource.mipLevel       = region->mipLevel;
   copy.imageSubresource.baseArrayLayer = region->baseArrayLayer;
   copy.imageSubresource.layerCount     = region->layerCount;
+  copy.imageOffset.x                  = (int32_t)region->x;
+  copy.imageOffset.y                  = (int32_t)region->y;
+  copy.imageOffset.z                  = (int32_t)region->z;
   copy.imageExtent.width               = region->width;
   copy.imageExtent.height              = region->height;
   copy.imageExtent.depth               = region->depth;
@@ -1589,17 +1592,19 @@ vk_destroyTextureView(GPUTextureView *__restrict view) {
 
 GPU_HIDE
 GPUResult
-vk_writeTexture(GPUQueue                    *__restrict queue,
-                GPUTexture                  *__restrict texture,
-                const GPUTextureWriteRegion *__restrict region,
-                const void                  *__restrict data,
-                uint64_t                                sizeBytes) {
+vk_writeTexture(GPUQueue                        *__restrict queue,
+                GPUTexture                      *__restrict texture,
+                const GPUTextureWriteRegion     *__restrict region,
+                const void                      *__restrict data,
+                uint64_t                                    sizeBytes,
+                const struct GPUFormatDataLayout           *validatedLayout) {
   VkCommandBuffer command;
   GPUBuffer      *staging;
   GPUBufferVk    *stagingVk;
   uint64_t        stagingOffset;
   GPUResult       result;
 
+  (void)validatedLayout;
   if (!queue || !texture || !texture->_ownsNative || !region || !data || sizeBytes == 0u || sizeBytes > SIZE_MAX) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }

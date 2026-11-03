@@ -23,6 +23,8 @@ extern "C" {
 #include <gpu/common.h>
 #include <gpu/gpu.h>
 
+struct GPUFormatDataLayout;
+
 typedef struct GPUTextureApi {
   GPUResult
   (*create)(GPUDevice                  *__restrict device,
@@ -38,12 +40,15 @@ typedef struct GPUTextureApi {
 
   void (*destroyView)(GPUTextureView *__restrict view);
 
+  /* the public boundary validates and computes this byte layout once. */
   GPUResult
-  (*write)(GPUQueue                    *__restrict queue,
-           GPUTexture                  *__restrict texture,
-           const GPUTextureWriteRegion *__restrict region,
-           const void                  *__restrict data,
-           uint64_t                                sizeBytes);
+  (*write)(GPUQueue                        *__restrict queue,
+           GPUTexture                      *__restrict texture,
+           const GPUTextureWriteRegion     *__restrict region,
+           const void                      *__restrict data,
+           uint64_t                                    sizeBytes,
+           const struct GPUFormatDataLayout           *layout);
+
 } GPUTextureApi;
 
 #ifdef __cplusplus

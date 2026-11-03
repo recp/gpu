@@ -415,11 +415,12 @@ read_scoped_buffer(GPUQueue  *__restrict queue,
 }
 
 static GPUResult
-write_scoped_texture(GPUQueue                    *__restrict queue,
-                     GPUTexture                  *__restrict texture,
-                     const GPUTextureWriteRegion *__restrict region,
-                     const void                  *__restrict data,
-                     uint64_t                                sizeBytes) {
+write_scoped_texture(GPUQueue                        *__restrict queue,
+                     GPUTexture                      *__restrict texture,
+                     const GPUTextureWriteRegion     *__restrict region,
+                     const void                      *__restrict data,
+                     uint64_t                                    sizeBytes,
+                     const struct GPUFormatDataLayout           *validatedLayout) {
   (void)queue;
   (void)texture;
   (void)region;
@@ -427,6 +428,7 @@ write_scoped_texture(GPUQueue                    *__restrict queue,
   (void)sizeBytes;
   gScopedTextureWriteCalls++;
 
+  (void)validatedLayout;
   return GPU_OK;
 }
 

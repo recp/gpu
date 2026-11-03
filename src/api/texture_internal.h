@@ -18,6 +18,7 @@
 #define gpu_texture_internal_h
 
 #include "../common.h"
+#include "format_internal.h"
 
 struct GPUTexture {
   void                        *_priv;
@@ -57,6 +58,11 @@ GPU_HIDE
 GPUResult
 validateTextureCreateInfo(const GPUDevice            *device,
                           const GPUTextureCreateInfo *info);
+
+GPU_HIDE
+bool
+textureWriteRegionValid(const GPUTexture *texture, const GPUTextureWriteRegion *region,
+                         uint64_t sizeBytes, GPUFormatDataLayout *layout);
 
 static inline float
 textureViewMinLOD(const GPUTextureViewCreateInfo *info) {

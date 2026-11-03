@@ -315,17 +315,19 @@ cuda_destroyTextureView(GPUTextureView *__restrict view) {
 }
 
 static GPUResult
-cuda_writeTexture(GPUQueue                    *__restrict queue,
-                  GPUTexture                  *__restrict texture,
-                  const GPUTextureWriteRegion *__restrict region,
-                  const void                  *__restrict data,
-                  uint64_t                                sizeBytes) {
+cuda_writeTexture(GPUQueue                        *__restrict queue,
+                  GPUTexture                      *__restrict texture,
+                  const GPUTextureWriteRegion     *__restrict region,
+                  const void                      *__restrict data,
+                  uint64_t                                    sizeBytes,
+                  const struct GPUFormatDataLayout           *validatedLayout) {
   CUDA_MEMCPY3D   copy = {0};
   GPUTextureCuda *native;
   GPUQueueCuda   *queueNative;
   size_t          widthBytes;
   CUresult        result;
 
+  (void)validatedLayout;
   native      = texture ? texture->_priv : NULL;
   queueNative = cuda_queue(queue);
 
@@ -334,7 +336,8 @@ cuda_writeTexture(GPUQueue                    *__restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (region->width > SIZE_MAX / native->format.bytesPerTexel) {
+  if (region->width > SIZE_MAX / native->format.bytesPerTexel
+      || region->x > SIZE_MAX / native->format.bytesPerTexel) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -345,7 +348,9 @@ cuda_writeTexture(GPUQueue                    *__restrict queue,
   copy.srcPitch      = region->bytesPerRow;
   copy.srcHeight     = region->rowsPerImage ? region->rowsPerImage : region->height;
   copy.dstMemoryType = CU_MEMORYTYPE_ARRAY;
-  copy.dstZ          = texture->dimension == GPU_TEXTURE_DIMENSION_3D ? 0u : region->baseArrayLayer;
+  copy.dstXInBytes   = (size_t)region->x * native->format.bytesPerTexel;
+  copy.dstY          = region->y;
+  copy.dstZ          = texture->dimension == GPU_TEXTURE_DIMENSION_3D ? region->z : region->baseArrayLayer;
   copy.WidthInBytes  = widthBytes;
   copy.Height        = texture->dimension == GPU_TEXTURE_DIMENSION_1D ? 1u : region->height;
   copy.Depth         = texture->dimension == GPU_TEXTURE_DIMENSION_3D ? region->depth : region->layerCount;

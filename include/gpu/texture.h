@@ -113,6 +113,7 @@ typedef struct GPUTextureWriteRegion {
   uint32_t         layerCount;
   uint32_t         bytesPerRow;
   uint32_t         rowsPerImage;
+  uint32_t         x, y, z;
 } GPUTextureWriteRegion;
 
 GPU_EXPORT

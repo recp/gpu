@@ -223,11 +223,11 @@ textureRegionInRange(const GPUTexture *texture,
 static bool
 textureWriteLayoutValid(const GPUTexture            *texture,
                         const GPUTextureWriteRegion *region,
-                        uint64_t                     sizeBytes) {
-  GPUFormatDataLayout layout;
-  GPUTextureAspect    aspect;
-  uint32_t            mipHeight;
-  uint32_t            mipWidth;
+                        uint64_t                     sizeBytes,
+                        GPUFormatDataLayout         *layout) {
+  GPUTextureAspect aspect;
+  uint32_t         mipHeight;
+  uint32_t         mipWidth;
 
   if (!texture || !region || sizeBytes == 0u
       || !formatResolveCopyAspect(texture->format,
@@ -240,14 +240,15 @@ textureWriteLayoutValid(const GPUTexture            *texture,
   mipHeight = gpuMipExtent(texture->height, region->mipLevel);
 
   if (aspect != GPU_TEXTURE_ASPECT_ALL
-      && (region->width != mipWidth || region->height != mipHeight
+      && (region->x != 0u || region->y != 0u || region->z != 0u
+          || region->width != mipWidth || region->height != mipHeight
           || region->depth != 1u)) {
     return false;
   }
 
   if (!formatCopyAligned(texture->format,
-                         0u,
-                         0u,
+                         region->x,
+                         region->y,
                          region->width,
                          region->height,
                          mipWidth,
@@ -263,8 +264,8 @@ textureWriteLayoutValid(const GPUTexture            *texture,
                                 region->layerCount,
                                 region->bytesPerRow,
                                 region->rowsPerImage,
-                                &layout)
-         && sizeBytes >= layout.requiredBytes;
+                                layout)
+         && sizeBytes >= layout->requiredBytes;
 }
 
 GPU_HIDE
@@ -528,6 +529,20 @@ GPUDestroyTextureView(GPUTextureView *__restrict view) {
   api->texture.destroyView(view);
 }
 
+GPU_HIDE
+bool
+textureWriteRegionValid(const GPUTexture *texture, const GPUTextureWriteRegion *region,
+                         uint64_t sizeBytes, GPUFormatDataLayout *layout) {
+  return texture && texture->sampleCount == 1u && region && sizeBytes
+         && (texture->usage & GPU_TEXTURE_USAGE_COPY_DST)
+         && region->width && region->height && region->depth
+         && region->layerCount && region->bytesPerRow
+         && textureRegionInRange(texture, region->mipLevel, region->x, region->y, region->z,
+                                  region->width, region->height, region->depth,
+                                  region->baseArrayLayer, region->layerCount)
+         && textureWriteLayoutValid(texture, region, sizeBytes, layout);
+}
+
 GPU_EXPORT
 GPUResult
 GPUQueueWriteTexture(GPUQueue                    *__restrict queue,
@@ -535,41 +550,16 @@ GPUQueueWriteTexture(GPUQueue                    *__restrict queue,
                      const GPUTextureWriteRegion *__restrict region,
                      const void                  *__restrict data,
                      uint64_t                                sizeBytes) {
-  GPUApi *api;
+  GPUFormatDataLayout layout;
+  GPUApi             *api;
 
-  if (!queue || !texture || texture->sampleCount > 1u
-      || queue->_device != texture->device
-      || !region || !data
-      || (texture->usage & GPU_TEXTURE_USAGE_COPY_DST) == 0
-      || region->width == 0
-      || region->height == 0
-      || region->depth == 0
-      || region->layerCount == 0
-      || region->bytesPerRow == 0
-      || sizeBytes == 0) {
+  if (!queue || !data || !textureWriteRegionValid(texture, region, sizeBytes, &layout)
+      || queue->_device != texture->device)
     return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  if (!textureRegionInRange(texture,
-                            region->mipLevel,
-                            0u,
-                            0u,
-                            0u,
-                            region->width,
-                            region->height,
-                            region->depth,
-                            region->baseArrayLayer,
-                            region->layerCount)) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  if (!textureWriteLayoutValid(texture, region, sizeBytes)) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
 
   if (!(api = deviceApi(texture->device)) || !api->texture.write) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  return api->texture.write(queue, texture, region, data, sizeBytes);
+  return api->texture.write(queue, texture, region, data, sizeBytes, &layout);
 }
