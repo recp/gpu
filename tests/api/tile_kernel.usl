@@ -98,3 +98,70 @@ ordinary_kernel(config: [uint] #buffer(3)) {
 kern kernel_readonly(block: imageblock<KernelMaster>, local: uint3 #local_id) {
   let value = block.read(ushort2(local.x, local.y))
 }
+
+@tile
+kern kernel_uniform(inout block: imageblock<KernelMaster>,
+                    local:       uint3 #local_id,
+                    group:       uint3 #workgroup_id) {
+  let width   = block.get_width()
+  let height  = block.get_height()
+  let samples = block.get_num_samples()
+  let xy      = ushort2(local.x, local.y)
+  let initial = float4(float(local.x) / 32.0, float(local.y) / 64.0,
+                       0.25, 0.5 + float(group.x + group.y * 2u) / 16.0)
+  let offset  = float4(0.125, 0.0625, 0.03125, 0.25)
+
+  block.write(KernelMaster { initial }, xy, ushort(0))
+  if (samples == 4u) {
+    block.write(KernelMaster { initial + float4(0.0, 0.0, 0.0625, 0.0) }, xy, ushort(1))
+    block.write(KernelMaster { initial + float4(0.0, 0.0, 0.125, 0.0) }, xy, ushort(2))
+    block.write(KernelMaster { initial + float4(0.0, 0.0, 0.1875, 0.0) }, xy, ushort(3))
+  }
+  imageblock_barrier()
+
+  /* adding 17 makes one 256-pixel cycle, crossing any smaller SIMD partition */
+  let next     = (local.y * width + local.x + 17u) % (width * height)
+  let neighbor = ushort2(next % width, next / width)
+
+  if (((group.x + group.y) & 1u) == 0u) {
+    var value0 = block.read(neighbor, ushort(0))
+    var value1 = value0
+    var value2 = value0
+    var value3 = value0
+    if (samples == 4u) {
+      value1 = block.read(neighbor, ushort(1))
+      value2 = block.read(neighbor, ushort(2))
+      value3 = block.read(neighbor, ushort(3))
+    }
+    imageblock_barrier()
+
+    block.write(KernelMaster { value0.rgba * 0.5 + offset }, xy, ushort(0))
+    if (samples == 4u) {
+      block.write(KernelMaster { value1.rgba * 0.5 + offset }, xy, ushort(1))
+      block.write(KernelMaster { value2.rgba * 0.5 + offset }, xy, ushort(2))
+      block.write(KernelMaster { value3.rgba * 0.5 + offset }, xy, ushort(3))
+    }
+    imageblock_barrier()
+  }
+
+  if (width == height) {
+    var value0 = block.read(neighbor, ushort(0))
+    var value1 = value0
+    var value2 = value0
+    var value3 = value0
+    if (samples == 4u) {
+      value1 = block.read(neighbor, ushort(1))
+      value2 = block.read(neighbor, ushort(2))
+      value3 = block.read(neighbor, ushort(3))
+    }
+    imageblock_barrier()
+
+    block.write(KernelMaster { value0.rgba * 0.5 + offset }, xy, ushort(0))
+    if (samples == 4u) {
+      block.write(KernelMaster { value1.rgba * 0.5 + offset }, xy, ushort(1))
+      block.write(KernelMaster { value2.rgba * 0.5 + offset }, xy, ushort(2))
+      block.write(KernelMaster { value3.rgba * 0.5 + offset }, xy, ushort(3))
+    }
+    imageblock_barrier()
+  }
+}
