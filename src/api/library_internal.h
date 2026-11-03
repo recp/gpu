@@ -181,6 +181,10 @@ getShaderLibraryEntryStage(const GPUShaderLibrary *library,
                            GPUShaderStageFlags    *outStage);
 
 GPU_HIDE
+bool
+shaderUsesImageblock(const GPUShaderLibrary *library, const char *entryPoint);
+
+GPU_HIDE
 uint32_t
 shaderFramebufferFetchMask(const GPUShaderLibrary *library,
                            const char             *entryPoint);

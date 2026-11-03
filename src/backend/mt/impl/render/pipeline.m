@@ -556,6 +556,11 @@ mt_newRenderState(GPUDevice         *__restrict device,
     return NULL;
   }
 
+  if (pipeline->_usesImageblock) {
+    if (@available(macOS 11.0, iOS 11.0, *))
+      pipeline->_imageblockSampleLength = (uint32_t)native->render.imageblockSampleLength;
+  }
+
   depthDesc                      = [MTLDepthStencilDescriptor new];
   depthDesc.depthCompareFunction = pipeline->_depthStencilState.depthTestEnable
                                    ? mt_compareFunction(pipeline->_depthStencilState.depthCompare)

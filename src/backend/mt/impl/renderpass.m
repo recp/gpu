@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "../impl.h"
 #include "../../../api/vrs_internal.h"
+#include "../../../api/tile_internal.h"
 #include "../../../api/pass/blit_internal.h"
 
 static MTLLoadAction
@@ -79,6 +80,10 @@ mt_stageMask(GPUPipelineStageMask stages) {
 
     if ((stages & GPU_STAGE_FRAGMENT) != 0u) {
       result |= MTLStageFragment;
+    }
+
+    if ((stages & GPU_STAGE_TILE) != 0u) {
+      result |= MTLStageTile;
     }
 
     if ((stages & GPU_STAGE_COMPUTE) != 0u) {
@@ -413,6 +418,7 @@ GPU_HIDE
 GPURenderPassDesc*
 mt_beginRenderPass(GPUCommandBuffer              *cmdb,
                    const GPURenderPassCreateInfo *info) {
+  const GPUTileRenderPassEXT                 *tile;
   const GPUShadingRateAttachmentEXT          *shadingRate;
   const GPURasterizationRateMapRenderPassEXT *rateMap;
   const GPURenderPassColorAttachment         *color;
@@ -453,6 +459,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
     return NULL;
 
   if (!renderPassVRSExtensions(info, &shadingRate, &rateMap)
+      || !tileRenderPassExtension(info, commandBufferDevice(cmdb), &tile)
       || shadingRate) {
     return NULL;
   }
@@ -497,6 +504,33 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   rpd4 = nativePass->modern;
 #endif
   mt_prepareRenderPass(nativePass, info->colorAttachmentCount);
+
+  if (tile || nativePass->tileWidth || nativePass->tileHeight
+      || nativePass->imageblockSampleLength || nativePass->threadgroupMemoryLength) {
+    if (@available(macOS 11.0, iOS 11.0, *)) {
+      nativePass->tileWidth               = tile ? tile->tileWidth : 0u;
+      nativePass->tileHeight              = tile ? tile->tileHeight : 0u;
+      nativePass->imageblockSampleLength  = tile ? tile->imageblockSampleLength : 0u;
+      nativePass->threadgroupMemoryLength = tile ? tile->threadgroupMemoryLength : 0u;
+      rpd.tileWidth               = nativePass->tileWidth;
+      rpd.tileHeight              = nativePass->tileHeight;
+      rpd.imageblockSampleLength  = nativePass->imageblockSampleLength;
+      rpd.threadgroupMemoryLength = nativePass->threadgroupMemoryLength;
+#if MT_HAS_METAL4
+      if (rpd4) {
+        if (@available(macOS 26.0, iOS 26.0, *)) {
+          MTL4RenderPassDescriptor *tileDescriptor;
+
+          tileDescriptor                         = rpd4;
+          tileDescriptor.tileWidth               = nativePass->tileWidth;
+          tileDescriptor.tileHeight              = nativePass->tileHeight;
+          tileDescriptor.imageblockSampleLength  = nativePass->imageblockSampleLength;
+          tileDescriptor.threadgroupMemoryLength = nativePass->threadgroupMemoryLength;
+        }
+      }
+#endif
+    }
+  }
 
   occlusion = info->occlusionQuerySet ? info->occlusionQuerySet->_priv : NULL;
 

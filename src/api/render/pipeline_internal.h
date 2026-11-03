@@ -36,6 +36,7 @@ struct GPURenderPipeline {
   GPUBlendState        _colorTargetBlends[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   GPUFormat            _depthStencilFormat;
   uint32_t             _sampleCount;
+  uint32_t             _imageblockSampleLength;
   GPUPrimitiveTopology _primitiveTopology;
   GPUCullMode          _cullMode;
   GPUFrontFace         _frontFace;
@@ -45,6 +46,7 @@ struct GPURenderPipeline {
   uint32_t             _taskWorkgroupSize[3];
   uint32_t             _meshWorkgroupSize[3];
   uint32_t             _payloadSizeBytes;
+  bool                 _usesImageblock;
   bool                 _alphaToCoverageEnable;
   bool                 _mesh;
   bool                 _task;

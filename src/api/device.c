@@ -138,7 +138,8 @@ static bool
 knownFeature(GPUFeature feature) {
   return (feature >= GPU_FEATURE_COMPUTE
           && feature <= GPU_FEATURE_BUFFER_HOST_MEMORY_EXT)
-         || feature == GPU_FEATURE_FRAMEBUFFER_FETCH;
+         || (feature >= GPU_FEATURE_FRAMEBUFFER_FETCH
+             && feature <= GPU_FEATURE_IMAGEBLOCKS);
 }
 
 static bool
@@ -268,7 +269,7 @@ adapterSupportsMask(const GPUAdapter *adapter, uint64_t requiredMask) {
   GPUFeature feature;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_FRAMEBUFFER_FETCH;
+       feature <= GPU_FEATURE_IMAGEBLOCKS;
        feature = (GPUFeature)(feature + 1)) {
     bit = featureBit(feature);
 
@@ -383,7 +384,7 @@ supportedFeatureMask(const GPUAdapter *adapter) {
   mask = 0;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_FRAMEBUFFER_FETCH;
+       feature <= GPU_FEATURE_IMAGEBLOCKS;
        feature = (GPUFeature)(feature + 1)) {
     if (adapterSupportsFeature(adapter, feature)) {
       mask |= featureBit(feature);
@@ -404,7 +405,7 @@ fillFeatureSet(uint64_t       mask,
   count = 0u;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_FRAMEBUFFER_FETCH
+       feature <= GPU_FEATURE_IMAGEBLOCKS
          && count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & featureBit(feature)) {

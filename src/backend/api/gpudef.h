@@ -48,6 +48,7 @@ extern "C" {
 #include "execution-graph.h"
 #include "sampler-feedback.h"
 #include "tensor.h"
+#include "tile.h"
 #include "ml.h"
 
 typedef struct GPUApi {
@@ -80,6 +81,7 @@ typedef struct GPUApi {
   GPUExecutionGraphApi  executionGraph;
   GPUSamplerFeedbackApi samplerFeedback;
   GPUTensorApi          tensor;
+  GPUTileApi            tile;
   GPUMLApi              ml;
   void                 *reserved;
 } GPUApi;

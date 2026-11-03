@@ -29,7 +29,8 @@ validStageMask(GPUPipelineStageMask stages) {
                             GPU_STAGE_COMPUTE |
                             GPU_STAGE_TRANSFER |
                             GPU_STAGE_BOTTOM |
-                            GPU_STAGE_ML_EXT;
+                            GPU_STAGE_ML_EXT |
+                            GPU_STAGE_TILE;
 
   return stages != 0u && (((uint32_t)stages & ~knownMask) == 0u);
 }
@@ -208,6 +209,8 @@ validBarrierBatch(GPUDevice *device, const GPUBarrierBatch *barriers) {
 
   if (!validStageMask(barriers->srcStages)
       || !validStageMask(barriers->dstStages)
+      || (((barriers->srcStages | barriers->dstStages) & GPU_STAGE_TILE) != 0u
+          && !GPUIsFeatureEnabled(device, GPU_FEATURE_TILE_SHADERS))
       || (((barriers->srcStages | barriers->dstStages) & GPU_STAGE_ML_EXT) != 0u
           && !GPUIsFeatureEnabled(device, GPU_FEATURE_ML_MODEL_EXT))) {
     return false;

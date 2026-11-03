@@ -987,6 +987,16 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
   }
 
   switch (feature) {
+    case GPU_FEATURE_TILE_SHADERS:
+    case GPU_FEATURE_IMAGEBLOCKS:
+#if TARGET_OS_SIMULATOR
+      return false;
+#else
+      if (@available(macOS 11.0, iOS 13.0, *))
+        return [adapterMT->device supportsFamily:MTLGPUFamilyApple4];
+
+      return false;
+#endif
     case GPU_FEATURE_FRAMEBUFFER_FETCH:
 #if TARGET_OS_SIMULATOR
       return false;

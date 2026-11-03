@@ -53,6 +53,7 @@ typedef struct ShaderEntryInfo {
   uint32_t nodeLaunch;
   uint32_t nameLength;
   bool     nodeProgramEntry;
+  bool     usesImageblock;
 } ShaderEntryInfo;
 
 typedef struct ShaderEntryInfoList {
@@ -642,8 +643,8 @@ shaderRequirementsEnabled(const GPUDevice     *device,
   const USLRuntimeCapabilityRequirement *requirement;
   const USLRuntimeCapabilityRequirement *previousRequirement;
   uint32_t                               flags;
-  uint32_t                               i;
-  uint32_t                               j;
+  uint32_t                              i;
+  uint32_t                              j;
   bool                                   descriptorIndexingEnabled;
   bool                                   groupRequiresIndexing;
   bool                                   clauseRequiresIndexing;
@@ -1768,6 +1769,28 @@ fillShaderPTXEntry(const GPUShaderLibrary *library,
   return 1;
 }
 
+static bool
+runtimeEntryUsesImageblock(const USRuntimeInfo        *runtime,
+                           const USLRuntimeEntryPoint *entry) {
+  const USLRuntimeCapabilityRequirement *requirement;
+  uint32_t                              i;
+  uint32_t                              j;
+
+  for (i = 0u; i < runtime->capability_requirement_count; i++) {
+    requirement = &runtime->capability_requirements[i];
+    if (requirement->function_index != entry->function_index)
+      continue;
+
+    for (j = 0u; j < requirement->atom_count; j++) {
+      if (requirement->atoms[j].family == USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE
+          && requirement->atoms[j].id == USL_SEMANTIC_FEATURE_ID_IMAGEBLOCK)
+        return true;
+    }
+  }
+
+  return false;
+}
+
 static int
 setShaderLibraryMetadata(GPUShaderLibrary   *library,
                          const USReflection *usReflection) {
@@ -2072,6 +2095,8 @@ setShaderLibraryMetadata(GPUShaderLibrary   *library,
     dst->nodeIndex             = sourceEntry->node_index;
     dst->nodeLaunch            = sourceEntry->node_launch;
     dst->nodeProgramEntry      = sourceEntry->node_is_program_entry != 0u;
+    dst->usesImageblock        = GPUIsFeatureEnabled(library->_device, GPU_FEATURE_IMAGEBLOCKS)
+                                && runtimeEntryUsesImageblock(runtimeInfo, sourceEntry);
 
     if (sourceEntry->push_constant_size_bytes > 0u) {
       if (sourceEntry->push_constant_size_bytes > pushConstantSizeBytes) {
@@ -2860,6 +2885,16 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
       }
     }
   } else if (api->backend == GPU_BACKEND_METAL) {
+    if (GPUIsFeatureEnabled(device, GPU_FEATURE_IMAGEBLOCKS)) {
+      if (us_cap_atom_init(&targetAtoms[targetAtomCount++],
+                           USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+                           USL_SEMANTIC_FEATURE_ID_IMAGEBLOCK,
+                           0u,
+                           0u) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_FRAMEBUFFER_FETCH)) {
       if (us_cap_atom_init(&targetAtoms[targetAtomCount++],
                            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
@@ -3552,6 +3587,16 @@ getShaderLibraryEntryStage(const GPUShaderLibrary *library,
   *outStage = entry->stage;
 
   return 1;
+}
+
+GPU_HIDE
+bool
+shaderUsesImageblock(const GPUShaderLibrary *library, const char *entryPoint) {
+  const ShaderEntryInfo *entry;
+
+  entry = findShaderEntry(library, entryPoint);
+
+  return entry && entry->usesImageblock;
 }
 
 GPU_HIDE

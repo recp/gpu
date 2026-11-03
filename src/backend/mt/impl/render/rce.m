@@ -251,7 +251,7 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
       nativeState->modern = [commandState->modern renderCommandEncoderWithDescriptor:nativePass->modern];
       mt_applyPendingBarrier(cmdb,
                              nativeState->modern,
-                             MT_ENCODER_STAGES(MTLStageVertex | MTLStageObject | MTLStageMesh | MTLStageFragment));
+                             MT_ENCODER_STAGES(MTLStageVertex | MTLStageObject | MTLStageMesh | MTLStageFragment | MTLStageTile));
 
       nativeState->vertexArguments   = &commandState->vertexArguments;
       nativeState->fragmentArguments = &commandState->fragmentArguments;
@@ -270,7 +270,7 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
 
     mt_applyPendingBarrier(cmdb,
                            nativeState->classic,
-                           MT_ENCODER_STAGES(MTLStageVertex | MTLStageObject | MTLStageMesh | MTLStageFragment));
+                           MT_ENCODER_STAGES(MTLStageVertex | MTLStageObject | MTLStageMesh | MTLStageFragment | MTLStageTile));
   }
 
   if (!nativeState->classic && !nativeState->modern) {

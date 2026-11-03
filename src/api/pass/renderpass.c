@@ -21,6 +21,7 @@
 #include "../query_internal.h"
 #include "../texture_internal.h"
 #include "../vrs_internal.h"
+#include "../tile_internal.h"
 
 #define GPU_RENDER_PASS_MAX_COLOR_ATTACHMENTS 8u
 
@@ -127,6 +128,11 @@ validIndirectTextureSubresource(const GPUIndirectTextureSubresourceEXT *subresou
          && subresource->layerCount <= layers - subresource->baseArrayLayer;
 }
 
+static uint32_t
+textureViewSampleCount(const GPUTextureView *view) {
+  return view && view->_texture ? view->_texture->sampleCount : 0u;
+}
+
 #if GPU_BUILD_WITH_VALIDATION
 static bool
 textureViewHasUsage(const GPUTextureView *view, GPUTextureUsageFlags usage) {
@@ -135,11 +141,6 @@ textureViewHasUsage(const GPUTextureView *view, GPUTextureUsageFlags usage) {
   texture = view ? view->_texture : NULL;
 
   return texture && (texture->usage & usage) == usage;
-}
-
-static uint32_t
-textureViewSampleCount(const GPUTextureView *view) {
-  return view && view->_texture ? view->_texture->sampleCount : 0u;
 }
 
 static uint32_t
@@ -379,11 +380,9 @@ validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
 static void
 setRenderPassEncoderInfo(GPURenderPassEncoder          *encoder,
                          const GPURenderPassCreateInfo *info) {
-#if GPU_BUILD_WITH_VALIDATION
   const GPURenderPassDepthStencilAttachment *depthStencil;
   const GPURenderPassColorAttachment        *color;
   uint32_t                                   i;
-#endif
 
   encoder->_occlusionQuerySet = info->occlusionQuerySet;
   encoder->_timestampQuerySet = info->timestampWrites
@@ -392,7 +391,10 @@ setRenderPassEncoderInfo(GPURenderPassEncoder          *encoder,
   encoder->_timestampEndIndex = info->timestampWrites
                                   ? info->timestampWrites->endIndex
                                   : 0u;
-#if GPU_BUILD_WITH_VALIDATION
+#if !GPU_BUILD_WITH_VALIDATION
+  if (!encoder->_tileConfigured)
+    return;
+#endif
   encoder->_colorAttachmentCount = info->colorAttachmentCount;
 
   for (i = 0; i < info->colorAttachmentCount; i++) {
@@ -412,7 +414,6 @@ setRenderPassEncoderInfo(GPURenderPassEncoder          *encoder,
     encoder->_depthStencilFormat      = GPU_FORMAT_UNDEFINED;
     encoder->_depthStencilSampleCount = 0u;
   }
-#endif
 }
 
 static uint32_t
@@ -540,6 +541,7 @@ gpu_destroyRenderPass(GPUApi *api, GPURenderPassDesc *pass) {
 GPU_EXPORT
 GPURenderPassEncoder*
 GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) {
+  const GPUTileRenderPassEXT *tile;
   GPURenderPassDesc    *desc;
   GPURenderPassEncoder *encoder;
   GPUDevice            *device;
@@ -549,7 +551,8 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
   device = commandBufferDevice(cmdb);
 
   if (!cmdb || cmdb->_submitted || cmdb->_activeEncoder
-      || !validRenderPassCreateInfo(info, device))
+      || !validRenderPassCreateInfo(info, device)
+      || !tileRenderPassExtension(info, device, &tile))
     return NULL;
 
   if (!(api = deviceApi(device)))
@@ -596,6 +599,10 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
     encoder->_stats             = device->runtimeConfig.enableStats
                                    ? &device->currentFrameStats
                                    : NULL;
+    encoder->_hasTilePipeline  = false;
+    encoder->_tileConfigured   = tile != NULL;
+    encoder->_tileExplicitSize = tile && tile->tileWidth != 0u;
+    encoder->_tileImageblockSampleLength = tile ? tile->imageblockSampleLength : 0u;
     setRenderPassEncoderInfo(encoder, info);
     cmdb->_activeEncoder = true;
   } else if (wroteBeginTimestamp) {

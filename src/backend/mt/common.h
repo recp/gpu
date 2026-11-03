@@ -235,6 +235,10 @@ typedef struct MTRenderPass {
   uint32_t                 width;
   uint32_t                 height;
   uint32_t                 colorAttachmentCount;
+  uint32_t                 tileWidth;
+  uint32_t                 tileHeight;
+  uint32_t                 imageblockSampleLength;
+  uint32_t                 threadgroupMemoryLength;
   bool                     depthAttachmentActive;
   bool                     stencilAttachmentActive;
 } MTRenderPass;

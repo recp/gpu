@@ -607,6 +607,11 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
     frameStatsRecordBindRequest(pass->_stats);
     return;
   }
+  if (pipeline->_imageblockSampleLength > pass->_tileImageblockSampleLength) {
+    renderValidationError(pass, "GPUBindRenderPipeline skipped: insufficient imageblock storage");
+    return;
+  }
+
 #if GPU_BUILD_WITH_VALIDATION
   if (!renderPipelineMatchesPass(pass, pipeline))
     return;
@@ -641,6 +646,7 @@ GPUBindRenderPipeline(GPURenderPassEncoder *pass, GPURenderPipeline *pipeline) {
                                   pipeline->_cullMode,
                                   pipeline->_frontFace);
   frameStatsRecordBindEmission(pass->_stats);
+  pass->_hasTilePipeline       = false;
   pass->_hasPipeline           = true;
   pass->_pipeline              = pipeline;
   pass->_requiredBindGroupMask = pipeline->_requiredBindGroupMask;

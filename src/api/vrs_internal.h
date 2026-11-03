@@ -31,6 +31,7 @@ renderPassVRSExtensions(const GPURenderPassCreateInfo               *info,
                         const GPUShadingRateAttachmentEXT          **outAttachment,
                         const GPURasterizationRateMapRenderPassEXT **outRateMap) {
   const GPUChainedStruct *chain;
+  bool                    tile = false;
 
   if (!info || !outAttachment || !outRateMap) {
     return false;
@@ -60,6 +61,12 @@ renderPassVRSExtensions(const GPURenderPassCreateInfo               *info,
         }
 
         *outRateMap = (const GPURasterizationRateMapRenderPassEXT *)chain;
+        break;
+
+      case GPU_STRUCTURE_TYPE_TILE_RENDER_PASS_EXT:
+        if (tile)
+          return false;
+        tile = true;
         break;
 
       default:

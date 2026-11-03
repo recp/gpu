@@ -219,6 +219,11 @@ GPUPollRenderPipelineCompile(GPUDevice                *__restrict device,
                              GPUPipelineCompileStatus *__restrict outStatus,
                              GPURenderPipeline       **__restrict outPipeline);
 
+/* native bytes per sample for a typed USL imageblock entry; zero without metadata. */
+GPU_EXPORT
+uint32_t
+GPUGetRenderPipelineImageblockSampleLength(const GPURenderPipeline *pipeline);
+
 GPU_EXPORT
 void
 GPUDestroyRenderPipeline(GPURenderPipeline *pipeline);

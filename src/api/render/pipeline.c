@@ -1002,8 +1002,9 @@ createRenderPipeline(GPUDevice                         *__restrict device,
       return GPU_ERROR_OUT_OF_MEMORY;
     }
 
-    pipeline->_api      = api;
-    pipeline->_refCount = 1u;
+    pipeline->_api            = api;
+    pipeline->_refCount       = 1u;
+    pipeline->_usesImageblock = shaderUsesImageblock(info->library, info->fragmentEntry);
     setMeshPipelineInfo(pipeline,
                         info->library,
                         mesh,
@@ -1049,8 +1050,9 @@ createRenderPipeline(GPUDevice                         *__restrict device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  pipeline->_api      = api;
-  pipeline->_refCount = 1u;
+  pipeline->_api            = api;
+  pipeline->_refCount       = 1u;
+  pipeline->_usesImageblock = shaderUsesImageblock(info->library, info->fragmentEntry);
   setMeshPipelineInfo(pipeline,
                       info->library,
                       mesh,
@@ -1168,6 +1170,12 @@ ready:
   *outPipeline = pipeline;
 
   return GPU_OK;
+}
+
+GPU_EXPORT
+uint32_t
+GPUGetRenderPipelineImageblockSampleLength(const GPURenderPipeline *pipeline) {
+  return pipeline ? pipeline->_imageblockSampleLength : 0u;
 }
 
 GPU_EXPORT

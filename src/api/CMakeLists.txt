@@ -28,6 +28,7 @@ target_sources(gpu PRIVATE
   swapchain.c
   texture.c
   tensor.c
+  tile.c
   ml.c
   vertex.c
   vrs.c

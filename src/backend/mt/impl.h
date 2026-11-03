@@ -63,6 +63,10 @@ mt_initTensor(GPUTensorApi *api);
 
 GPU_HIDE
 void
+mt_initTile(GPUTileApi *api);
+
+GPU_HIDE
+void
 mt_initML(GPUMLApi *api);
 
 GPU_HIDE
