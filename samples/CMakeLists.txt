@@ -155,6 +155,10 @@ set(galleryOptions_framebuffer_fetch
   METAL_ONLY
   CAPS framebuffer_fetch=framebuffer_fetch
 )
+set(galleryOptions_tile_shader
+  METAL_ONLY
+  CAPS tile=imageblock
+)
 set(galleryOptions_pbr_material
   USES_STDLIB
 )

@@ -1,0 +1,56 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+struct Scratch {
+  rgba: float4 #raster_order(0)
+}
+
+struct ScratchOutput {
+  data: Scratch #imageblock
+}
+
+struct Vertex {
+  position: float4 #position
+  tint:     float4 #attribute(0)
+}
+
+vert scene_vs(vertexId: uint #vertex_id) -> Vertex {
+  let corner = vertexId % 3u
+  let second = vertexId >= 3u
+  var point: float2
+  if (corner == 0u) { point = float2(0.0, 0.7) }
+  else if (corner == 1u) { point = float2(-0.65, -0.6) }
+  else { point = float2(0.65, -0.6) }
+  let offset = second ? float2(0.25, -0.12) : float2(-0.25, 0.12)
+  let tint   = second ? float4(0.125, 0.375, 0.625, 0.75)
+                      : float4(0.625, 0.125, 0.1875, 0.75)
+  return Vertex { float4(point + offset, 0.0, 1.0), tint }
+}
+
+frag init_tile() -> ScratchOutput {
+  return ScratchOutput { Scratch { float4(0.03125, 0.03125, 0.0625, 1.0) } }
+}
+
+frag scene_fs(input: Vertex  #stage_in,
+              data:  Scratch #imageblock) -> ScratchOutput {
+  return ScratchOutput { Scratch {
+    input.tint + data.rgba * (1.0 - input.tint.a)
+  } }
+}
+
+frag resolve_tile(data: Scratch #imageblock) -> float4 {
+  return data.rgba
+}

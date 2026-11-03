@@ -236,5 +236,12 @@
     "title": "Metal framebuffer fetch",
     "detail": "Ordered source-over compositing from the current color attachment.",
     "preview": "framebuffer-fetch.png"
+  },
+  {
+    "id": "tile-shader",
+    "category": "Render + Tile Memory",
+    "title": "Tile imageblock compositing",
+    "detail": "Initialize, composite and resolve explicit imageblock data in one Metal pass.",
+    "preview": "tile-shader.png"
   }
 ]
