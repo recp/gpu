@@ -36,6 +36,7 @@ typedef struct GPUTilePipelineCreateInfo {
   uint32_t          colorAttachmentCount;
   uint32_t          sampleCount;
   bool              threadgroupSizeMatchesTileSize;
+  GPUPipelineLayout *layout;
 } GPUTilePipelineCreateInfo;
 
 typedef struct GPUTilePipelineProperties {
@@ -53,8 +54,8 @@ typedef struct GPUTileRenderPassEXT {
   uint32_t         threadgroupMemoryLength;
 } GPUTileRenderPassEXT;
 
-/* the first slice accepts USL fragment entries without resources/push constants.
- * pipelines and their device outlive all recorded GPU work that uses them.
+/* typed USL fragment entries use their fragment-visible pipeline layout.
+ * pipelines, layouts, groups and resources outlive recorded GPU work using them.
  */
 GPU_EXPORT
 GPUResult
@@ -75,6 +76,25 @@ GPUGetTilePipelineProperties(const GPUTilePipeline     *pipeline,
 GPU_EXPORT
 GPUResult
 GPUBindTilePipeline(GPURenderPassEncoder *pass, GPUTilePipeline *pipeline);
+
+/* mutable-resource synchronization remains caller-owned; fragment tile dispatch
+ * is not a cross-pixel or global storage barrier.
+ */
+GPU_EXPORT
+GPUResult
+GPUBindTileGroup(GPURenderPassEncoder *pass,
+                 uint32_t              groupIndex,
+                 GPUBindGroup         *group,
+                 uint32_t              dynamicOffsetCount,
+                 const uint32_t       *pDynamicOffsets);
+
+/* a pipeline bind zeros the block; upload once before dispatch when required. */
+GPU_EXPORT
+GPUResult
+GPUSetTilePushConstants(GPURenderPassEncoder *pass,
+                        uint32_t              offset,
+                        uint32_t              sizeBytes,
+                        const void           *data);
 
 GPU_EXPORT
 GPUResult

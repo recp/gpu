@@ -62,6 +62,14 @@ void
 mt_initTensor(GPUTensorApi *api);
 
 GPU_HIDE
+GPUResult
+mt_bindTileGroup(GPURenderPassEncoder *pass,
+                  uint32_t              groupIndex,
+                  GPUBindGroup         *group,
+                  uint32_t              dynamicOffsetCount,
+                  const uint32_t       *dynamicOffsets);
+
+GPU_HIDE
 void
 mt_initTile(GPUTileApi *api);
 

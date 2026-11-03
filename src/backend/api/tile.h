@@ -25,6 +25,14 @@ typedef struct GPUTileApi {
                               GPUTilePipeline *pipeline);
   void (*destroyPipeline)(GPUTilePipeline *pipeline);
   GPUResult (*bindPipeline)(GPURenderPassEncoder *pass, GPUTilePipeline *pipeline);
+  GPUResult (*bindGroup)(GPURenderPassEncoder *pass,
+                          uint32_t groupIndex,
+                          GPUBindGroup *group,
+                          uint32_t dynamicOffsetCount,
+                          const uint32_t *dynamicOffsets);
+  GPUResult (*pushConstants)(GPURenderPassEncoder *pass,
+                              const void *data,
+                              uint32_t sizeBytes);
   void (*dispatch)(GPURenderPassEncoder *pass, uint32_t width, uint32_t height);
   void (*getSize)(const GPURenderPassEncoder *pass, uint32_t *width, uint32_t *height);
 } GPUTileApi;

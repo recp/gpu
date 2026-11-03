@@ -17,6 +17,24 @@
 #include "tile_internal.h"
 #include "device_internal.h"
 #include "library_internal.h"
+#include "descr/descriptor_internal.h"
+
+static GPUResult
+setPartialTilePushConstants(GPURenderPassEncoder *pass,
+                           uint32_t              offset,
+                           uint32_t              sizeBytes,
+                           const void           *data) {
+  uint8_t   previous[4096];
+  GPUResult result;
+
+  memcpy(previous, pass->_pushConstants + offset, sizeBytes);
+  memcpy(pass->_pushConstants + offset, data, sizeBytes);
+  result = pass->_api->tile.pushConstants(pass, pass->_pushConstants,
+                                         pass->_pushConstantSizeBytes);
+  if (result != GPU_OK)
+    memcpy(pass->_pushConstants + offset, previous, sizeBytes);
+  return result;
+}
 
 GPU_HIDE
 bool
@@ -68,6 +86,7 @@ GPUCreateTilePipeline(GPUDevice                       *device,
   GPUShaderStageFlags        stage;
   GPUResult                  result;
   uint32_t                   samples;
+  uint32_t                   requiredGroups = 0u;
   uint32_t                   i;
 
   if (!outPipeline)
@@ -79,6 +98,7 @@ GPUCreateTilePipeline(GPUDevice                       *device,
       || (info->chain.sType != GPU_STRUCTURE_TYPE_NONE
           && info->chain.sType != GPU_STRUCTURE_TYPE_TILE_PIPELINE_CREATE_INFO)
       || (info->chain.structSize && info->chain.structSize < sizeof(*info))
+      || (info->layout && info->layout->_device != device)
       || info->colorAttachmentCount > GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS
       || (info->colorAttachmentCount && !info->pColorFormats))
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -89,9 +109,24 @@ GPUCreateTilePipeline(GPUDevice                       *device,
     return GPU_ERROR_UNSUPPORTED;
 
   if (!shaderEntryView(info->library, info->entryPoint, &stage, &reflection)
-      || stage != GPU_SHADER_STAGE_FRAGMENT_BIT
-      || reflection.resourceCount || reflection.pushConstantSizeBytes)
+      || stage != GPU_SHADER_STAGE_FRAGMENT_BIT)
     return GPU_ERROR_UNSUPPORTED;
+
+  if ((reflection.resourceCount || reflection.pushConstantSizeBytes) && !info->layout)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  if (reflection.pushConstantSizeBytes > sizeof(((GPURenderPassEncoder *)0)->_pushConstants)
+      || (reflection.pushConstantSizeBytes & 3u))
+    return GPU_ERROR_UNSUPPORTED;
+
+  if (info->layout
+      && !pipelineLayoutMatchesShaderEntries(info->layout,
+                                             info->library,
+                                             &info->entryPoint,
+                                             1u,
+                                             GPU_SHADER_STAGE_FRAGMENT_BIT,
+                                             &requiredGroups))
+    return GPU_ERROR_INVALID_ARGUMENT;
 
   if (shaderFramebufferFetchMask(info->library, info->entryPoint)
       >> info->colorAttachmentCount)
@@ -117,6 +152,9 @@ GPUCreateTilePipeline(GPUDevice                       *device,
   pipeline->device      = device;
   pipeline->colorCount  = info->colorAttachmentCount;
   pipeline->sampleCount = samples;
+  pipeline->layout      = info->layout;
+  pipeline->requiredGroupMask = requiredGroups;
+  pipeline->pushConstantSize  = reflection.pushConstantSizeBytes;
   if (pipeline->colorCount)
     memcpy(pipeline->colorFormats, info->pColorFormats,
            pipeline->colorCount * sizeof(*pipeline->colorFormats));
@@ -205,6 +243,19 @@ GPUBindTilePipeline(GPURenderPassEncoder *pass, GPUTilePipeline *pipeline) {
   if (result != GPU_OK)
     return result;
 
+  /* ordinary rendering sees a layout change on the next explicit rebind. */
+  pass->_pipelineLayout = NULL;
+  pass->_tileLayout = pipeline->layout;
+  memset(pass->_boundGroups, 0, sizeof(pass->_boundGroups));
+  memset(pass->_boundGroupLayouts, 0, sizeof(pass->_boundGroupLayouts));
+  memset(pass->_boundDynamicOffsetCounts, 0, sizeof(pass->_boundDynamicOffsetCounts));
+  pass->_tileBoundGroupMask    = 0u;
+  pass->_requiredBindGroupMask = pipeline->requiredGroupMask;
+  pass->_pushConstantSizeBytes = pipeline->pushConstantSize;
+  pass->_pushConstantsEmitted  = false;
+  if (pipeline->pushConstantSize)
+    memset(pass->_pushConstants, 0, pipeline->pushConstantSize);
+
   pass->_tileWidth       = width;
   pass->_tileHeight      = height;
   pass->_tileMaxThreads  = pipeline->properties.maxThreadsPerThreadgroup;
@@ -218,6 +269,81 @@ GPUBindTilePipeline(GPURenderPassEncoder *pass, GPUTilePipeline *pipeline) {
 
 GPU_EXPORT
 GPUResult
+GPUBindTileGroup(GPURenderPassEncoder *pass,
+                 uint32_t              groupIndex,
+                 GPUBindGroup         *group,
+                 uint32_t              dynamicOffsetCount,
+                 const uint32_t       *pDynamicOffsets) {
+  GPUResult result;
+
+  if (!pass || pass->_ended || !pass->_hasTilePipeline || !pass->_tileLayout
+      || !group || groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS
+      || bindGroupGetDevice(group) != pass->_device
+      || !validateBindGroupDynamicOffsets(pass->_tileLayout, groupIndex, group,
+                                          dynamicOffsetCount, pDynamicOffsets))
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  frameStatsRecordBindRequest(pass->_stats);
+  if (bindGroupShadowMatches(pass->_boundGroups[groupIndex],
+                             pass->_boundDynamicOffsetCounts[groupIndex],
+                             pass->_boundDynamicOffsets[groupIndex],
+                             group, dynamicOffsetCount, pDynamicOffsets))
+    return GPU_OK;
+
+  result = pass->_api->tile.bindGroup(pass, groupIndex, group,
+                                     dynamicOffsetCount, pDynamicOffsets);
+  if (result != GPU_OK)
+    return result;
+
+  pass->_boundGroups[groupIndex]       = group;
+  pass->_boundGroupLayouts[groupIndex] = bindGroupGetLayout(group);
+  storeBindGroupShadow(&pass->_boundDynamicOffsetCounts[groupIndex],
+                       pass->_boundDynamicOffsets[groupIndex],
+                       dynamicOffsetCount, pDynamicOffsets);
+  pass->_tileBoundGroupMask |= 1u << groupIndex;
+  frameStatsRecordBindEmission(pass->_stats);
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUSetTilePushConstants(GPURenderPassEncoder *pass,
+                        uint32_t              offset,
+                        uint32_t              sizeBytes,
+                        const void           *data) {
+  GPUResult result;
+
+  if (!pass || pass->_ended || !pass->_hasTilePipeline
+      || offset > pass->_pushConstantSizeBytes
+      || sizeBytes > pass->_pushConstantSizeBytes - offset
+      || ((offset | sizeBytes) & 3u) || (sizeBytes && !data))
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  if (!sizeBytes)
+    return GPU_OK;
+
+  frameStatsRecordStateRequest(pass->_stats);
+  if (pass->_pushConstantsEmitted
+      && memcmp(pass->_pushConstants + offset, data, sizeBytes) == 0)
+    return GPU_OK;
+
+  if (offset == 0u && sizeBytes == pass->_pushConstantSizeBytes) {
+    result = pass->_api->tile.pushConstants(pass, data, sizeBytes);
+    if (result == GPU_OK)
+      memcpy(pass->_pushConstants, data, sizeBytes);
+  } else {
+    result = setPartialTilePushConstants(pass, offset, sizeBytes, data);
+  }
+  if (result != GPU_OK)
+    return result;
+
+  pass->_pushConstantsEmitted = true;
+  frameStatsRecordStateEmission(pass->_stats);
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
 GPUDispatchThreadsPerTile(GPURenderPassEncoder *pass,
                           uint32_t              width,
                           uint32_t              height) {
@@ -226,6 +352,10 @@ GPUDispatchThreadsPerTile(GPURenderPassEncoder *pass,
       || (uint64_t)width * height > pass->_tileMaxThreads
       || (pass->_tileMatchesSize
           && (width != pass->_tileWidth || height != pass->_tileHeight)))
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  if ((pass->_tileBoundGroupMask & pass->_requiredBindGroupMask) != pass->_requiredBindGroupMask
+      || (pass->_pushConstantSizeBytes && !pass->_pushConstantsEmitted))
     return GPU_ERROR_INVALID_ARGUMENT;
 
   if (width != height && !pass->_tileNonSquare)

@@ -22,11 +22,14 @@
 struct GPUTilePipeline {
   GPUApi                    *api;
   GPUDevice                 *device;
+  GPUPipelineLayout         *layout;
   void                      *native;
   GPUTilePipelineProperties  properties;
   GPUFormat                  colorFormats[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
   uint32_t                   colorCount;
   uint32_t                   sampleCount;
+  uint32_t                   requiredGroupMask;
+  uint32_t                   pushConstantSize;
   bool                       nonSquareDispatch;
 };
 

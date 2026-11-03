@@ -56,6 +56,17 @@ typedef struct MTBindContext {
   bool                     valid;
 } MTBindContext;
 
+typedef struct MTTileBindContext {
+  GPURenderPassEncoder *pass;
+  MTBindGroup          *group;
+  id<MTLBuffer>         upload;
+  uint64_t              offsets[MT_BIND_GROUP_BUFFER_COUNT];
+  uint64_t              uploadOffset;
+  uint64_t              size;
+  bool                  valid;
+  bool                  emit;
+} MTTileBindContext;
+
 typedef enum MTBindDynamicStatus {
   MT_BIND_DYNAMIC_FALLBACK = -1,
   MT_BIND_DYNAMIC_FAILED,
@@ -1170,6 +1181,166 @@ mt_bindComputeGroup(GPUComputePassEncoder *pass,
                                                    mt_bindComputeBinding,
                                                    &ctx)
          && ctx.valid;
+}
+
+static void
+mt_tileBuffer(GPURenderPassEncoder *pass, GPUBuffer *buffer,
+               uint64_t offset, uint32_t index) {
+  MTRenderEncoder *native;
+
+  native = pass->_priv;
+#if MT_HAS_METAL4
+  if (native->modern) {
+    mt_setArgumentBuffer(pass->_cmdb, native->tileArguments, buffer, offset, index);
+    return;
+  }
+#endif
+  if (@available(macOS 11.0, iOS 11.0, *))
+    [native->classic setTileBuffer:(id<MTLBuffer>)buffer->_priv offset:offset atIndex:index];
+}
+
+static void
+mt_tileBinding(void *context, const GPUBindGroupBindingView *binding) {
+  GPUBuffer                dynamicBuffer = {0};
+  MTTileBindContext        *ctx;
+  MTRenderEncoder          *native;
+  MTBufferDescriptorArray  *record;
+  uint64_t                 *addresses;
+  uint64_t                  bytes, offset;
+  uint32_t                  index, recordIndex;
+
+  ctx = context;
+  if (!ctx->valid || !(binding->visibility & GPU_SHADER_STAGE_FRAGMENT_BIT))
+    return;
+
+  native = ctx->pass->_priv;
+  index  = binding->binding + binding->arrayIndex;
+  record = mt_bufferDescriptorArray(ctx->group, binding->layoutEntryIndex);
+  if (!ctx->emit) {
+    switch (binding->kind) {
+      case GPUBindKindBuffer:
+        if (!binding->buffer || !binding->buffer->_priv
+            || binding->binding >= MT_BIND_GROUP_BUFFER_COUNT
+            || binding->arrayIndex >= (binding->arrayCount ? binding->arrayCount : 1u)) {
+          ctx->valid = false;
+          return;
+        }
+        if (binding->arrayCount > 1u) {
+          if (!record || record->arrayCount != binding->arrayCount
+              || !record->argumentBuffer._priv || !binding->buffer->_gpuAddress) {
+            ctx->valid = false;
+            return;
+          }
+          if (binding->hasDynamicOffset && binding->arrayIndex == 0u) {
+            recordIndex = (uint32_t)(record - ctx->group->arrays);
+            bytes = (uint64_t)record->arrayCount * sizeof(*addresses);
+            if (recordIndex >= MT_BIND_GROUP_BUFFER_COUNT || bytes > UINT64_MAX - ctx->size) {
+              ctx->valid = false;
+              return;
+            }
+            ctx->offsets[recordIndex] = ctx->size;
+            ctx->size += bytes;
+          }
+        }
+        break;
+      case GPUBindKindTexture:
+        if (!binding->textureView || !binding->textureView->_priv
+            || index >= MT_ARGUMENT_TEXTURE_COUNT)
+          ctx->valid = false;
+        break;
+      case GPUBindKindSampler:
+        if (!binding->sampler || !binding->sampler->_priv || index >= MT_ARGUMENT_SAMPLER_COUNT)
+          ctx->valid = false;
+        break;
+      default:
+        ctx->valid = false;
+        break;
+    }
+    return;
+  }
+
+  if (binding->kind == GPUBindKindBuffer) {
+    if (record) {
+      if (binding->hasDynamicOffset) {
+        recordIndex = (uint32_t)(record - ctx->group->arrays);
+        offset      = ctx->uploadOffset + ctx->offsets[recordIndex];
+        addresses   = (uint64_t *)((uint8_t *)ctx->upload.contents + offset);
+        addresses[binding->arrayIndex] = mt_bufferAddress(binding);
+        if (binding->arrayIndex == 0u) {
+          dynamicBuffer._priv     = ctx->upload;
+          dynamicBuffer.device    = binding->buffer->device;
+          dynamicBuffer.sizeBytes = ctx->upload.length;
+          if (@available(macOS 13.0, iOS 16.0, *))
+            dynamicBuffer._gpuAddress = ctx->upload.gpuAddress;
+          mt_tileBuffer(ctx->pass, &dynamicBuffer, offset, binding->binding);
+        }
+      } else if (binding->arrayIndex == 0u) {
+        mt_tileBuffer(ctx->pass, &record->argumentBuffer, 0u, binding->binding);
+      }
+#if MT_HAS_METAL4
+      if (native->modern) {
+        mt_useAllocation(ctx->pass->_cmdb, (id<MTLBuffer>)binding->buffer->_priv);
+      } else
+#endif
+      if (@available(macOS 12.0, iOS 15.0, *)) {
+        [native->classic useResource:(id<MTLBuffer>)binding->buffer->_priv
+                               usage:mt_resourceUsage(binding->bindingType)
+                              stages:MTLRenderStageTile];
+      }
+    } else {
+      mt_tileBuffer(ctx->pass, binding->buffer, binding->offset, index);
+    }
+  } else if (binding->kind == GPUBindKindTexture) {
+#if MT_HAS_METAL4
+    if (native->modern) {
+      mt_setArgumentTexture(ctx->pass->_cmdb, native->tileArguments, binding->textureView, index);
+      return;
+    }
+#endif
+    if (@available(macOS 11.0, iOS 11.0, *))
+      [native->classic setTileTexture:(id<MTLTexture>)binding->textureView->_priv atIndex:index];
+  } else if (binding->kind == GPUBindKindSampler) {
+#if MT_HAS_METAL4
+    if (native->modern) {
+      mt_setArgumentSampler(native->tileArguments, binding->sampler, index);
+      return;
+    }
+#endif
+    if (@available(macOS 11.0, iOS 11.0, *))
+      [native->classic setTileSamplerState:(id<MTLSamplerState>)binding->sampler->_priv atIndex:index];
+  }
+}
+
+GPU_HIDE
+GPUResult
+mt_bindTileGroup(GPURenderPassEncoder *pass,
+                  uint32_t              groupIndex,
+                  GPUBindGroup         *group,
+                  uint32_t              dynamicOffsetCount,
+                  const uint32_t       *dynamicOffsets) {
+  MTTileBindContext ctx = {0};
+
+  ctx.pass  = pass;
+  ctx.group = group->_native;
+  ctx.valid = true;
+  if (!forEachBindGroupBindingWithDynamicOffsets(pass->_tileLayout,
+                                                groupIndex, group,
+                                                dynamicOffsetCount, dynamicOffsets,
+                                                mt_tileBinding, &ctx)
+      || !ctx.valid)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  if (ctx.size
+      && (!mt_reserveUpload(pass->_cmdb, ctx.size, sizeof(uint64_t), &ctx.upload, &ctx.uploadOffset)
+          || !ctx.upload.contents))
+    return GPU_ERROR_OUT_OF_MEMORY;
+
+  ctx.emit = true;
+  return forEachBindGroupBindingWithDynamicOffsets(pass->_tileLayout,
+                                                   groupIndex, group,
+                                                   dynamicOffsetCount, dynamicOffsets,
+                                                   mt_tileBinding, &ctx)
+           ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 }
 
 GPU_HIDE

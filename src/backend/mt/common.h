@@ -248,6 +248,7 @@ typedef struct MTRenderEncoder {
   id                          modern;
   MTArgumentState            *vertexArguments;
   MTArgumentState            *fragmentArguments;
+  MTArgumentState            *tileArguments;
   MTArgumentState            *taskArguments;
   MTArgumentState            *meshArguments;
   id                          vertexIntersectionTables[MT_BIND_GROUP_BUFFER_COUNT];
@@ -322,6 +323,7 @@ struct MTCommandBuffer {
   id                                     residencyAllocations[MT_RESIDENCY_CACHE_SIZE];
   MTArgumentState                        vertexArguments;
   MTArgumentState                        fragmentArguments;
+  MTArgumentState                        tileArguments;
   MTArgumentState                        taskArguments;
   MTArgumentState                        meshArguments;
   MTArgumentState                        computeArguments;

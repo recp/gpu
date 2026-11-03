@@ -74,6 +74,7 @@ struct GPURenderPassEncoder {
   GPUQuerySet            *_timestampQuerySet;
   GPUBuffer              *_indexBuffer;
   GPUPipelineLayout      *_pipelineLayout;
+  GPUPipelineLayout      *_tileLayout;
   GPUDrawPrimitivesFn     _drawPrimitives;
   GPUDrawIndexedPrimsFn   _drawIndexedPrims;
   GPUVertexInputBufferFn  _vertexInputBuffer;
@@ -105,6 +106,7 @@ struct GPURenderPassEncoder {
   uint32_t                _tileWidth;
   uint32_t                _tileHeight;
   uint32_t                _tileMaxThreads;
+  uint32_t                _tileBoundGroupMask;
   uint32_t                _tileImageblockSampleLength;
   float                   _blendConstant[4];
   bool                    _colorAttachmentHasResolve[GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS];
