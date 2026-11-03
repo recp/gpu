@@ -584,7 +584,7 @@ cmdoncomplete(GPUCommandBuffer *__restrict cmdb,
     mt_reportCommandBufferError(cmdb, mtlCmdb.error);
   }
 
-  if (mtlCmdb) {
+  if (mtlCmdb && (cmdb->_recordsGPUFrameTime || cmdb->_frameFeedback)) {
     if (@available(macOS 10.15, iOS 10.3, *)) {
       start = mtlCmdb.GPUStartTime;
       end   = mtlCmdb.GPUEndTime;
@@ -632,9 +632,11 @@ cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
       mt_reportCommandBufferError(cmdb, error);
     }
 
-    start = modernFeedback.GPUStartTime;
-    end   = modernFeedback.GPUEndTime;
-    mt_recordGPUFrameTime(cmdb, start, end);
+    if (cmdb->_recordsGPUFrameTime || cmdb->_frameFeedback) {
+      start = modernFeedback.GPUStartTime;
+      end   = modernFeedback.GPUEndTime;
+      mt_recordGPUFrameTime(cmdb, start, end);
+    }
   }
 
   if (cmdb->_frameFeedback)
