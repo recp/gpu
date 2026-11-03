@@ -1,0 +1,90 @@
+/*
+ * Copyright (C) 2026 Recep Aslantas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+struct FetchPair {
+  first:  float4 #color(0)
+  second: float4 #color(1)
+}
+
+struct FetchSample {
+  position: float4 #position
+  value:    float  #attribute(0) #sample #noperspective
+}
+
+vert fetch_vs(vertexId: uint #vertex_id) -> float4 {
+  let x = float(vertexId & 1u) * 4.0 - 1.0
+  let y = float((vertexId >> 1u) & 1u) * 4.0 - 1.0
+  return float4(x, y, 0.0, 1.0)
+}
+
+frag fetch_single_fs(dst: float4 #color(0)) -> float4 {
+  return float4(dst.y * 0.5 + 0.125,
+                dst.z * 0.25 + 0.25,
+                dst.x * 0.5 + 0.0625,
+                dst.w * 0.5 + 0.25)
+}
+
+frag fetch_cross_fs(other: float4 #color(1)) -> float4 {
+  return other * 0.5 + float4(0.125, 0.25, 0.0625, 0.125)
+}
+
+frag fetch_uint_fs(other: float4 #color(1)) -> uint4 {
+  return uint4(other)
+}
+
+frag fetch_pair_a_fs(first:  float4 #color(0),
+                     second: float4 #color(1)) -> FetchPair {
+  return FetchPair {
+    float4(first.y * 0.5 + 0.125,
+           first.z * 0.25 + 0.25,
+           first.x * 0.5 + 0.0625,
+           first.w * 0.5 + 0.25),
+    float4(second.w * 0.5 + first.x * 0.25,
+           second.x * 0.5 + first.z * 0.25,
+           second.y * 0.5 + 0.125,
+           second.z * 0.25 + 0.5)
+  }
+}
+
+frag fetch_pair_b_fs(first:  float4 #color(0),
+                     second: float4 #color(1)) -> FetchPair {
+  return FetchPair {
+    float4(first.z * 0.25 + second.y * 0.5,
+           first.w * 0.5 + 0.0625,
+           first.y * 0.25 + 0.125,
+           first.x * 0.5 + 0.375),
+    float4(second.y * 0.5 + 0.0625,
+           second.z * 0.25 + first.w * 0.5,
+           second.w * 0.5 + 0.125,
+           second.x * 0.25 + 0.25)
+  }
+}
+
+vert fetch_sample_vs(vertexId: uint #vertex_id) -> FetchSample {
+  let x = float(vertexId & 1u)
+  let y = float((vertexId >> 1u) & 1u)
+  return FetchSample { float4(x * 4.0 - 1.0, y * 4.0 - 1.0, 0.0, 1.0),
+                       x * 32.0 }
+}
+
+frag fetch_seed_fs(input: FetchSample #stage_in) -> float4 {
+  let value = (floor(fract(input.value) * 4.0) + 1.0) * 0.125
+  return float4(value, value + 0.125, value * 0.5, 0.5)
+}
+
+frag fetch_square_fs(dst: float4 #color(0)) -> float4 {
+  return dst * dst + float4(0.0625, 0.125, 0.25, 0.125)
+}

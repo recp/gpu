@@ -1,3 +1,29 @@
+if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  set(GPU_USL_FIXTURE_TARGET_CAPS framebuffer_fetch)
+  gpu_add_usl_fixtures(GPU_FRAMEBUFFER_FETCH_FIXTURE metal api-framebuffer-fetch
+    "${CMAKE_CURRENT_SOURCE_DIR}/framebuffer_fetch.usl"
+  )
+  unset(GPU_USL_FIXTURE_TARGET_CAPS)
+
+  add_executable(gpu-metal-framebuffer-fetch-test
+    metal_framebuffer_fetch.m
+    ${GPU_FRAMEBUFFER_FETCH_FIXTURE}
+  )
+
+  target_link_libraries(gpu-metal-framebuffer-fetch-test PRIVATE gpu)
+  gpu_link_apple_framework(gpu-metal-framebuffer-fetch-test Metal "${GPU_FRAMEWORK_METAL}")
+  gpu_link_apple_framework(gpu-metal-framebuffer-fetch-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+
+  foreach(mode classic metal4)
+    add_test(NAME metal-framebuffer-fetch-${mode}
+      COMMAND gpu-metal-framebuffer-fetch-test ${GPU_FRAMEBUFFER_FETCH_FIXTURE})
+    set_tests_properties(metal-framebuffer-fetch-${mode} PROPERTIES
+      ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1"
+      SKIP_RETURN_CODE 77 LABELS "framebuffer-fetch" TIMEOUT 30 RUN_SERIAL TRUE)
+  endforeach()
+
+endif()
+
 add_executable(gpu-constant-lookup-test
   constants_lookup.c
   ${PROJECT_SOURCE_DIR}/src/api/constants.c
