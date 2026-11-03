@@ -231,6 +231,13 @@
     "preview": "blit.png"
   },
   {
+    "id": "frame-pacer",
+    "category": "Presentation + Transfer",
+    "title": "Native frame pacing",
+    "detail": "A ready drawable from the display link; one-frame latency.",
+    "preview": "frame-pacer.png"
+  },
+  {
     "id": "framebuffer-fetch",
     "category": "Render + Tile Memory",
     "title": "Metal framebuffer fetch",
