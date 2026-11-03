@@ -35,6 +35,15 @@ typedef struct Target {
   GPUTextureView *multisampleView;
 } Target;
 
+typedef enum KernelKind {
+  KERNEL_NEIGHBOR,
+  KERNEL_UNIFORM,
+  KERNEL_LOOP
+} KernelKind;
+
+static const char *kernelEntries[] = {"kernel_update", "kernel_uniform", "kernel_loop"};
+static const char *kernelLabels[]  = {"", " uniform", " loop"};
+
 static bool
 create_target(GPUDevice *device, uint32_t samples, Target *target) {
   GPUTextureCreateInfo     info = {0};
@@ -219,12 +228,37 @@ expected_uniform_pixel(uint32_t x, uint32_t y, uint32_t samples, float expected[
   }
 }
 
+static void
+expected_loop_pixel(uint32_t x, uint32_t y, uint32_t samples, float expected[4]) {
+  float    values[4];
+  uint32_t groupX, groupY, steps, source, sample, c;
+  float    scale, gain;
+
+  groupX = x / 16u;
+  groupY = y / 16u;
+  steps  = (groupX + groupY * 2u) & 3u;
+  source = (x % 16u + (y % 16u) * 16u + 17u * steps) % 256u;
+  scale  = 1.0f / (float)(1u << steps);
+  gain   = 2.0f * (1.0f - scale);
+
+  memset(expected, 0, 4u * sizeof(*expected));
+  for (sample = 0u; sample < samples; sample++) {
+    values[0] = (float)(source % 16u) / 32.0f * scale + 0.125f * gain;
+    values[1] = (float)(source / 16u) / 64.0f * scale + 0.0625f * gain;
+    values[2] = (0.25f + (float)sample / 16.0f) * scale + 0.03125f * gain;
+    values[3] = (0.5f + (float)(groupX + groupY * 2u) / 16.0f) * scale + 0.25f * gain;
+    for (c = 0u; c < 4u; c++) {
+      expected[c] += values[c] / (float)samples;
+    }
+  }
+}
+
 static bool
 check_kernel(GPUDevice        *device,
              GPUShaderLibrary *library,
              uint32_t          samples,
              uint32_t          threads,
-             bool              uniform) {
+             KernelKind        kind) {
   GPURenderPassColorAttachment color      = {0};
   GPURenderPassCreateInfo      passInfo   = {0};
   GPUTileRenderPassEXT         tilePass   = {0};
@@ -256,13 +290,13 @@ check_kernel(GPUDevice        *device,
 #define REQUIRE(expr) do { \
   if (!(expr)) { \
     fprintf(stderr, "tile kernel%s samples=%u threads=%u line=%u: %s\n", \
-            uniform ? " uniform" : "", samples, threads, __LINE__, #expr); \
+            kernelLabels[kind], samples, threads, __LINE__, #expr); \
     goto cleanup; \
   } \
 } while (0)
 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
-  REQUIRE(!uniform || threads == 16u);
+  REQUIRE(kind == KERNEL_NEIGHBOR || threads == 16u);
   REQUIRE(create_target(device, samples, &target));
   REQUIRE(GPUCreateShaderLayout(device, library, &layout) == GPU_OK);
   REQUIRE(layout->bindGroupLayoutCount == 1u);
@@ -277,8 +311,8 @@ check_kernel(GPUDevice        *device,
   tileInfo.chain.sType      = GPU_STRUCTURE_TYPE_TILE_PIPELINE_CREATE_INFO;
   tileInfo.chain.structSize = sizeof(tileInfo);
   tileInfo.library              = library;
-  tileInfo.layout               = uniform ? NULL : layout->pipelineLayout;
-  tileInfo.entryPoint           = uniform ? "kernel_uniform" : "kernel_update";
+  tileInfo.layout               = kind == KERNEL_NEIGHBOR ? layout->pipelineLayout : NULL;
+  tileInfo.entryPoint           = kernelEntries[kind];
   tileInfo.pColorFormats        = &format;
   tileInfo.colorAttachmentCount = 1u;
   tileInfo.sampleCount          = samples;
@@ -286,7 +320,7 @@ check_kernel(GPUDevice        *device,
   REQUIRE(GPUGetTilePipelineProperties(kernel, &properties) == GPU_OK);
   REQUIRE(properties.imageblockSampleLength && properties.maxThreadsPerThreadgroup >= threads * threads);
 
-  if (!uniform) {
+  if (kind == KERNEL_NEIGHBOR) {
     bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.chain.structSize = sizeof(bufferInfo);
     bufferInfo.sizeBytes        = 256u + sizeof(config);
@@ -307,7 +341,7 @@ check_kernel(GPUDevice        *device,
   }
 
   REQUIRE(GPUAcquireCommandBuffer(queue, "tile-kernel-neighbors", &command) == GPU_OK);
-  if (!uniform) {
+  if (kind == KERNEL_NEIGHBOR) {
     barrier.buffer    = buffer;
     barrier.srcAccess = GPU_ACCESS_TRANSFER_WRITE;
     barrier.dstAccess = GPU_ACCESS_SHADER_READ;
@@ -343,7 +377,7 @@ check_kernel(GPUDevice        *device,
   GPUBindRenderPipeline(pass, init);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   REQUIRE(GPUBindTilePipeline(pass, kernel) == GPU_OK);
-  if (!uniform) {
+  if (kind == KERNEL_NEIGHBOR) {
     REQUIRE(GPUDispatchThreadsPerTile(pass, threads, threads) == GPU_ERROR_INVALID_ARGUMENT);
     REQUIRE(GPUBindTileGroup(pass, 0u, group, 0u, NULL) == GPU_OK);
   }
@@ -359,7 +393,9 @@ check_kernel(GPUDevice        *device,
   ok = false;
   for (y = 0u; y < KERNEL_HEIGHT; y++) {
     for (x = 0u; x < KERNEL_WIDTH; x++) {
-      if (uniform)
+      if (kind == KERNEL_LOOP)
+        expected_loop_pixel(x, y, samples, expected);
+      else if (kind == KERNEL_UNIFORM)
         expected_uniform_pixel(x, y, samples, expected);
       else
         expected_pixel(x, y, samples, expected);
@@ -390,7 +426,7 @@ cleanup:
   GPUDestroyTextureView(target.view);
   GPUDestroyTexture(target.texture);
   printf("tile kernel%s samples=%u dispatch=%ux%u neighbor/barrier exact2356=%s\n",
-         uniform ? " uniform" : "", samples, threads, threads, ok ? "pass" : "fail");
+         kernelLabels[kind], samples, threads, threads, ok ? "pass" : "fail");
   return ok;
 #undef REQUIRE
 }
@@ -486,15 +522,17 @@ main(int argc, const char *argv[]) {
         || GPUCreateShaderLibraryFromUSL(device, data.bytes, data.length, &library) != GPU_OK)
       goto cleanup;
     ok = check_entry_contract(device, library);
-    ok = check_kernel(device, library, 1u, 16u, false) && ok;
-    ok = check_kernel(device, library, 1u, 8u, false) && ok;
-    ok = check_kernel(device, library, 1u, 16u, true) && ok;
+    ok = check_kernel(device, library, 1u, 16u, KERNEL_NEIGHBOR) && ok;
+    ok = check_kernel(device, library, 1u, 8u, KERNEL_NEIGHBOR) && ok;
+    ok = check_kernel(device, library, 1u, 16u, KERNEL_UNIFORM) && ok;
+    ok = check_kernel(device, library, 1u, 16u, KERNEL_LOOP) && ok;
     if (GPUGetFormatCapabilities(adapter, GPU_FORMAT_RGBA32_FLOAT, &caps) != GPU_OK) {
       ok = false;
     } else if (caps.supportedSampleCounts & 4u) {
-      ok = check_kernel(device, library, 4u, 16u, false) && ok;
-      ok = check_kernel(device, library, 4u, 8u, false) && ok;
-      ok = check_kernel(device, library, 4u, 16u, true) && ok;
+      ok = check_kernel(device, library, 4u, 16u, KERNEL_NEIGHBOR) && ok;
+      ok = check_kernel(device, library, 4u, 8u, KERNEL_NEIGHBOR) && ok;
+      ok = check_kernel(device, library, 4u, 16u, KERNEL_UNIFORM) && ok;
+      ok = check_kernel(device, library, 4u, 16u, KERNEL_LOOP) && ok;
     } else {
       printf("tile kernel4x MSAA: RGBA32_FLOAT unsupported, subcase skipped\n");
     }
