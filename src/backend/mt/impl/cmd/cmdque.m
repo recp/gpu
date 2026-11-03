@@ -15,12 +15,19 @@
  */
 
 #include "../../common.h"
+#include "../../../../api/frame_feedback_internal.h"
 
 enum {
   MT_TRANSFER_STAGING_CAPACITY = 4u * 1024u * 1024u,
   MT_SUBMIT_STACK_COUNT        = 64u,
   MT_TRANSFER_OFFSET_ALIGNMENT = 256u
 };
+
+@interface GPUFrameFeedbackTarget : NSObject {
+@public
+  GPUFrameFeedback *feedback;
+}
+@end
 
 static
 GPU_HIDE
@@ -55,6 +62,32 @@ GPUResult
 mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
                         uint32_t                            count,
                         GPUCommandBuffer *const *__restrict buffers);
+
+@implementation GPUFrameFeedbackTarget
+- (void)dealloc {
+  frameFeedbackRelease(feedback);
+  [super dealloc];
+}
+@end
+
+static void
+mt_observeFrameFeedback(GPUFrameFeedback *feedback, id<MTLDrawable> drawable) {
+  GPUFrameFeedbackTarget *target;
+
+  /* attach only at submission; abandoned presents can retain native handlers. */
+  if (@available(macOS 10.15.4, iOS 10.3, *)) {
+    if (drawable && (target = [GPUFrameFeedbackTarget new])) {
+      frameFeedbackRetain(feedback);
+      target->feedback = feedback;
+      [drawable addPresentedHandler:^(id<MTLDrawable> presented) {
+        frameFeedbackPresent(target->feedback, presented.presentedTime);
+      }];
+      [target release];
+      return;
+    }
+  }
+  frameFeedbackPresent(feedback, 0.0);
+}
 
 static uint64_t
 mt_transferCapacity(uint64_t sizeBytes) {
@@ -536,23 +569,33 @@ cmdoncomplete(GPUCommandBuffer *__restrict cmdb,
               MTCommandBuffer  *__restrict native,
               MTCommandQueue   *__restrict queue,
               id<MTLCommandBuffer>         mtlCmdb) {
+  CFTimeInterval start = 0.0, end = 0.0;
+  GPUResult      result;
+
   if (!cmdb || !native || !queue
       || !atomic_load_explicit(&native->completionReady,
                                memory_order_acquire)) {
     return;
   }
 
-  if (mtlCmdb && mtlCmdb.status == MTLCommandBufferStatusError) {
+  result = mtlCmdb && mtlCmdb.status != MTLCommandBufferStatusError
+             ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+  if (mtlCmdb && result != GPU_OK) {
     mt_reportCommandBufferError(cmdb, mtlCmdb.error);
   }
 
   if (mtlCmdb) {
     if (@available(macOS 10.15, iOS 10.3, *)) {
-      mt_recordGPUFrameTime(cmdb,
-                            mtlCmdb.GPUStartTime,
-                            mtlCmdb.GPUEndTime);
+      start = mtlCmdb.GPUStartTime;
+      end   = mtlCmdb.GPUEndTime;
+      mt_recordGPUFrameTime(cmdb, start, end);
     }
   }
+
+  if (cmdb->_frameFeedback)
+    frameFeedbackComplete(cmdb->_frameFeedback, result,
+                          result == GPU_OK ? start : 0.0,
+                          result == GPU_OK ? end : 0.0);
 
   finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
   dispatch_group_leave(queue->inFlightGroup);
@@ -568,6 +611,9 @@ cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
                id                           feedback) {
   GPUDevice             *device;
   id<MTL4CommitFeedback> modernFeedback;
+  NSError               *error;
+  CFTimeInterval         start = 0.0, end = 0.0;
+  GPUResult              result = GPU_ERROR_BACKEND_FAILURE;
 
   if (!cmdb || !native || !queue
       || !atomic_load_explicit(&native->completionReady,
@@ -579,15 +625,22 @@ cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
     modernFeedback = feedback;
+    error  = modernFeedback.error;
+    result = modernFeedback && !error ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 
-    if (modernFeedback.error && device) {
-      mt_reportCommandBufferError(cmdb, modernFeedback.error);
+    if (error && device) {
+      mt_reportCommandBufferError(cmdb, error);
     }
 
-    mt_recordGPUFrameTime(cmdb,
-                          modernFeedback.GPUStartTime,
-                          modernFeedback.GPUEndTime);
+    start = modernFeedback.GPUStartTime;
+    end   = modernFeedback.GPUEndTime;
+    mt_recordGPUFrameTime(cmdb, start, end);
   }
+
+  if (cmdb->_frameFeedback)
+    frameFeedbackComplete(cmdb->_frameFeedback, result,
+                          result == GPU_OK ? start : 0.0,
+                          result == GPU_OK ? end : 0.0);
 
   finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
   dispatch_group_leave(queue->inFlightGroup);
@@ -1131,6 +1184,9 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
       [options addFeedbackHandler:^(id<MTL4CommitFeedback> feedback) {
         cmdoncomplete4(cmdb, native, queue, feedback);
       }];
+      if (cmdb->_frameFeedback)
+        mt_observeFrameFeedback(cmdb->_frameFeedback, drawable);
+
       dispatch_group_enter(queue->inFlightGroup);
       atomic_store_explicit(&native->completionReady,
                             true,
@@ -1171,6 +1227,12 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
   [mcb addCompletedHandler:^(id<MTLCommandBuffer> _Nonnull buffer) {
     cmdoncomplete(cmdb, native, queue, buffer);
   }];
+  if (cmdb->_frameFeedback) {
+    mt_observeFrameFeedback(cmdb->_frameFeedback, native->feedbackDrawable);
+    [native->feedbackDrawable release];
+    native->feedbackDrawable = nil;
+  }
+
   dispatch_group_enter(queue->inFlightGroup);
   atomic_store_explicit(&native->completionReady,
                         true,

@@ -18,6 +18,7 @@
 #include "cmdqueue_internal.h"
 #include "device_internal.h"
 #include "frame_internal.h"
+#include "frame_feedback_internal.h"
 #include "swapchain_internal.h"
 #include "texture_internal.h"
 #include <math.h>
@@ -104,6 +105,9 @@ frameBegin(GPUSwapchain *swapchain, void *drawable) {
             : api->frame.beginFrame(api, swapchain);
 
   if (frame) {
+    frame->_feedback             = NULL;
+    frame->targetPresentTime     = 0.0;
+    frame->presentationScheduled = false;
     deviceActivateFrame(device, frameIndex);
 
     frame->device = device;
@@ -242,7 +246,9 @@ GPUFrameGetTargetView(GPUFrame *frame) {
 GPU_EXPORT
 void
 GPUEndFrame(GPUFrame *frame) {
-  GPUApi *api;
+  GPUFrameFeedback *feedback;
+  GPUApi           *api;
+  bool              scheduled;
 
   if (!frame)
     return;
@@ -253,6 +259,9 @@ GPUEndFrame(GPUFrame *frame) {
   if (!api->frame.endFrame)
     return;
 
+  feedback         = frame->_feedback;
+  scheduled        = frame->presentationScheduled;
+  frame->_feedback = NULL;
   frame->transientFrameActive = false;
 
   if (frame->device->runtimeConfig.enableStats) {
@@ -261,6 +270,13 @@ GPUEndFrame(GPUFrame *frame) {
 
   deviceEndFrame(frame->device);
   api->frame.endFrame(api, frame);
+
+  if (feedback) {
+    if (!scheduled)
+      frameFeedbackDiscard(feedback);
+
+    frameFeedbackRelease(feedback);
+  }
 }
 
 GPU_EXPORT

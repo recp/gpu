@@ -597,6 +597,9 @@ mt_destroyCommandBufferState(MTCommandBuffer *native) {
     return;
   }
 
+  if (native->commandBuffer._frameFeedback)
+    discardCommandBufferState(&native->commandBuffer, NULL);
+
   [native->vertexArguments.table release];
   [native->fragmentArguments.table release];
   [native->tileArguments.table release];
@@ -611,6 +614,7 @@ mt_destroyCommandBufferState(MTCommandBuffer *native) {
   [native->renderPassState.modern release];
   [native->classic release];
   [native->drawable release];
+  [native->feedbackDrawable release];
   [native->residency release];
   [native->allocator release];
   [native->modern release];
@@ -653,6 +657,10 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
   [native->classic release];
   native->classic = nil;
   [native->drawable release];
+  if (native->feedbackDrawable) {
+    [native->feedbackDrawable release];
+    native->feedbackDrawable = nil;
+  }
   native->drawable              = nil;
   native->pendingAfterStages    = 0u;
   native->pendingBeforeStages   = 0u;
@@ -714,6 +722,10 @@ mt_cmdBufDrawable(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   }
 #endif
 
+  if (frame->_feedback) {
+    [native->feedbackDrawable release];
+    native->feedbackDrawable = [(id<CAMetalDrawable>)frame->drawable retain];
+  }
   [native->classic presentDrawable:(id<CAMetalDrawable>)frame->drawable];
 
   return true;

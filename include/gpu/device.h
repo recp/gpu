@@ -157,7 +157,8 @@ typedef enum GPUFeature {
   GPU_FEATURE_THREADED_UPLOADS            = 35,
   GPU_FEATURE_FRAMEBUFFER_FETCH           = 40,
   GPU_FEATURE_TILE_SHADERS                = 41,
-  GPU_FEATURE_IMAGEBLOCKS                 = 42
+  GPU_FEATURE_IMAGEBLOCKS                 = 42,
+  GPU_FEATURE_FRAME_FEEDBACK              = 43
 } GPUFeature;
 
 /* GPUIsFeatureEnabled reads immutable device state and may run on any thread

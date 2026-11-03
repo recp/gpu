@@ -17,6 +17,7 @@
 #include "../../common.h"
 #include "../cmdqueue_internal.h"
 #include "../frame_internal.h"
+#include "../frame_feedback_internal.h"
 
 GPU_HIDE
 bool
@@ -31,11 +32,23 @@ schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   if (!(api = commandBufferApi(cmdb)))
     return false;
 
+  if (cmdb->_frameFeedback)
+    return cmdb->_frameFeedback == frame->_feedback && frame->presentationScheduled;
+
+  if (frame->_feedback && frame->presentationScheduled)
+    return false;
+
   if (!api->cmdbuf.presentDrawable)
     return false;
 
   if (!api->cmdbuf.presentDrawable(cmdb, frame)) {
     return false;
+  }
+
+  frame->presentationScheduled = true;
+  if (frame->_feedback) {
+    frameFeedbackRetain(frame->_feedback);
+    cmdb->_frameFeedback = frame->_feedback;
   }
 
   cmdb->_recordsGPUFrameTime = frame->device->runtimeConfig.enableStats;

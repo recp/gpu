@@ -1015,6 +1015,11 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
         return true;
 #endif
       return false;
+    case GPU_FEATURE_FRAME_FEEDBACK:
+      if (@available(macOS 10.15.4, iOS 10.3, *))
+        return true;
+
+      return false;
     case GPU_FEATURE_TENSOR_RESOURCES_EXT:
     case GPU_FEATURE_ML_MODEL_EXT:
 #if MT_HAS_METAL4

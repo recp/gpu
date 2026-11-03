@@ -11,6 +11,7 @@ target_sources(gpu PRIVATE
   sampler_feedback.c
   format.c
   frame.c
+  frame_feedback.c
   instance.c
   library.c
   memory.c

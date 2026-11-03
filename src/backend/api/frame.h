@@ -35,6 +35,7 @@ typedef struct GPUFrameApi {
   void (*pausePacer)(GPUFramePacer *pacer, bool paused);
   void (*destroyPacer)(GPUFramePacer *pacer);
   bool (*prepareWithPacer)(GPUFramePacer *pacer);
+  GPUResult (*observe)(GPUFrame *frame, GPUFrameFeedback *feedback);
 } GPUFrameApi;
 
 #ifdef __cplusplus

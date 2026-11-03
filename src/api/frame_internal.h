@@ -20,15 +20,18 @@
 #include "../common.h"
 
 struct GPUFrame {
-  GPUDevice      *device;
-  void           *_priv;
-  GPUTexture     *target;
-  GPUTextureView *targetView;
-  void           *drawable;
-  uint64_t        cpuEncodeStartTicks;
-  uint64_t        cpuEncodeFrequency;
-  uint32_t        transientFrameIndex;
-  bool            transientFrameActive;
+  GPUDevice        *device;
+  void             *_priv;
+  GPUTexture       *target;
+  GPUTextureView   *targetView;
+  void             *drawable;
+  GPUFrameFeedback *_feedback;
+  double            targetPresentTime;
+  uint64_t          cpuEncodeStartTicks;
+  uint64_t          cpuEncodeFrequency;
+  uint32_t          transientFrameIndex;
+  bool              transientFrameActive;
+  bool              presentationScheduled;
 };
 
 struct GPUFramePacer {

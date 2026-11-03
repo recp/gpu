@@ -16,6 +16,7 @@
 
 #include "../../common.h"
 #include "../cmdqueue_internal.h"
+#include "../frame_feedback_internal.h"
 
 #if !defined(_WIN32) && !defined(WIN32)
 #  include <pthread.h>
@@ -237,6 +238,7 @@ GPU_HIDE
 void
 finishCommandBuffer(GPUCommandBuffer         *cmdb,
                     GPUCommandBufferRecycleFn recycle) {
+  GPUFrameFeedback            *feedback;
   GPUFence                    *fence;
   GPUFence                    *transientFence;
   void                        *sender;
@@ -247,16 +249,24 @@ finishCommandBuffer(GPUCommandBuffer         *cmdb,
   }
 
   fence          = cmdb->_submitFence;
+  feedback       = cmdb->_frameFeedback;
   transientFence = cmdb->_transientFence;
   sender         = cmdb->_onCompleteSender;
   onComplete     = cmdb->_onComplete;
 
   cmdb->_submitFence      = NULL;
+  cmdb->_frameFeedback    = NULL;
   cmdb->_transientFence   = NULL;
   cmdb->_onCompleteSender = NULL;
   cmdb->_onComplete       = NULL;
 
   gpu_signalFence(transientFence);
+
+  if (feedback) {
+    /* native completion publishes its result first; this covers submit failure. */
+    frameFeedbackComplete(feedback, GPU_ERROR_BACKEND_FAILURE, 0.0, 0.0);
+    frameFeedbackRelease(feedback);
+  }
 
   if (onComplete) {
     onComplete(sender, cmdb);
@@ -273,6 +283,8 @@ GPU_HIDE
 void
 discardCommandBufferState(GPUCommandBuffer         *cmdb,
                           GPUCommandBufferRecycleFn recycle) {
+  GPUFrameFeedback *feedback;
+
   if (!cmdb) {
     return;
   }
@@ -281,6 +293,13 @@ discardCommandBufferState(GPUCommandBuffer         *cmdb,
   cmdb->_transientFence   = NULL;
   cmdb->_onCompleteSender = NULL;
   cmdb->_onComplete       = NULL;
+
+  feedback            = cmdb->_frameFeedback;
+  cmdb->_frameFeedback = NULL;
+  if (feedback) {
+    frameFeedbackDiscard(feedback);
+    frameFeedbackRelease(feedback);
+  }
 
   if (recycle) {
     recycle(cmdb);

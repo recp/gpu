@@ -38,6 +38,17 @@ API_AVAILABLE(macos(14.0), ios(17.0), tvos(17.0))
 
 #endif
 
+static GPUResult
+mt_observeFrame(GPUFrame *frame, GPUFrameFeedback *feedback) {
+  if (!frame || !frame->drawable || !feedback)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  if (@available(macOS 10.15.4, iOS 10.3, *))
+    return GPU_OK;
+
+  return GPU_ERROR_UNSUPPORTED;
+}
+
 static GPUFrame*
 mt_beginDrawableFrame(GPUApi *api, GPUSwapchain *swapchain, void *nativeDrawable) {
   GPUFrame           *frame;
@@ -181,6 +192,9 @@ mt_endFrame(GPUApi   *__restrict api,
   callback = pacer->callback;
   user     = pacer->user;
   frame    = frameBeginDrawable(pacer->swapchain, update.drawable);
+  if (frame)
+    frame->targetPresentTime = timing.targetPresentTime;
+
   callbackFrame = frame;
   callback(frame, &timing, user);
 
@@ -330,4 +344,5 @@ mt_initFrame(GPUFrameApi *api) {
   api->pausePacer    = mt_pauseFramePacer;
   api->destroyPacer  = mt_destroyFramePacer;
   api->prepareWithPacer = mt_prepareWithPacer;
+  api->observe = mt_observeFrame;
 }

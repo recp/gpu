@@ -23,9 +23,43 @@ extern "C" {
 #include "texture.h"
 #include "cmdqueue.h"
 
-typedef struct GPUSwapchain  GPUSwapchain;
-typedef struct GPUFrame      GPUFrame;
-typedef struct GPUFramePacer GPUFramePacer;
+typedef struct GPUSwapchain     GPUSwapchain;
+typedef struct GPUFrame         GPUFrame;
+typedef struct GPUFramePacer    GPUFramePacer;
+typedef struct GPUFrameFeedback GPUFrameFeedback;
+
+typedef enum GPUFrameEventKind {
+  GPU_FRAME_EVENT_GPU_COMPLETE            = 0,
+  GPU_FRAME_EVENT_PRESENTED               = 1,
+  GPU_FRAME_EVENT_PRESENTATION_UNAVAILABLE = 2,
+  GPU_FRAME_EVENT_DISCARDED                = 3
+} GPUFrameEventKind;
+
+typedef uint32_t GPUFrameEventFlags;
+enum {
+  GPU_FRAME_EVENT_TARGET_TIME_VALID = 1u << 0,
+  GPU_FRAME_EVENT_GPU_TIME_VALID    = 1u << 1
+};
+
+typedef struct GPUFrameEvent {
+  uint64_t           frameId;
+  double             targetPresentTime;
+  double             gpuStartTime;
+  double             gpuEndTime;
+  double             presentedTime;
+  GPUFrameEventKind  kind;
+  GPUFrameEventFlags flags;
+  GPUResult          result;
+} GPUFrameEvent;
+
+typedef void (*GPUFrameFeedbackFn)(const GPUFrameEvent *event, void *user);
+
+typedef struct GPUFrameFeedbackCreateInfo {
+  GPUChainedStruct   chain;
+  GPUFrameFeedbackFn callback;
+  void              *user;
+  uint64_t           frameId;
+} GPUFrameFeedbackCreateInfo;
 
 typedef struct GPUFrameTiming {
   /* monotonic display-clock seconds; refreshInterval is zero on the first tick. */
@@ -84,6 +118,32 @@ GPUDestroyFramePacer(GPUFramePacer *pacer);
 GPU_EXPORT
 GPUFrame*
 GPUBeginFrame(GPUSwapchain *swapchain);
+
+/* opt in once per acquired frame, before scheduling presentation. enable
+ * GPU_FEATURE_FRAME_FEEDBACK. frameId is an immutable caller-supplied cookie.
+ * callbacks receive borrowed event values on backend or calling threads,
+ * serialized per token. GPU completion and presentation have no guaranteed order.
+ * times are host-clock seconds; manual frames have no target time. GPU times
+ * cover the presenting command buffer, not separate uploads or other commands.
+ * presentation unavailable is not proof of a dropped frame; a drawable that is
+ * never shown may have no presentation event. cancel when no longer interested.
+ * callbacks may run before submission returns; keep them short, do not reenter
+ * the submitting queue or wait for GPU work, other callbacks or parent teardown.
+ */
+GPU_EXPORT
+GPUResult
+GPUCreateFrameFeedback(GPUFrame                         *frame,
+                        const GPUFrameFeedbackCreateInfo *info,
+                        GPUFrameFeedback                **outFeedback);
+
+/* cancels new delivery and drains callbacks already entered before returning.
+ * self-destruction from this token's callback is supported; that callback may
+ * finish, but no later callback starts. consumes the public token reference.
+ * the token does not keep the frame, swapchain or device alive.
+ */
+GPU_EXPORT
+void
+GPUDestroyFrameFeedback(GPUFrameFeedback *feedback);
 
 /* returns the acquired render target for this frame. */
 GPU_EXPORT

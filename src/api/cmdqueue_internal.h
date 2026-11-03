@@ -37,6 +37,7 @@ struct GPUCommandBuffer {
   GPUFence                     *_submitFence;
   GPUFence                     *_transientFence;
   GPUQuerySet                  *_pipelineStatsQuery;
+  GPUFrameFeedback             *_frameFeedback;
   void                         *_onCompleteSender;
   GPUCommandBufferCompletionFn  _onComplete;
   uint32_t                      _pipelineStatsQueryIndex;
