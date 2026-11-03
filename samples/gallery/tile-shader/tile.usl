@@ -51,6 +51,16 @@ frag scene_fs(input: Vertex  #stage_in,
   } }
 }
 
-frag resolve_tile(data: Scratch #imageblock) -> float4 {
-  return data.rgba
+struct Resolve {
+  gain: float4
+}
+
+struct Adjust {
+  bias: float4
+}
+
+frag resolve_tile(data:   Scratch #imageblock,
+                  config: Resolve #buffer(0) #group(0),
+                  adjust: Adjust  #push_constant) -> float4 {
+  return data.rgba * config.gain + adjust.bias
 }

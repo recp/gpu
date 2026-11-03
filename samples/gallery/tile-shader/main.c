@@ -27,6 +27,8 @@ typedef struct TileSample {
   GPURenderPipeline *draw;
   GPUTilePipeline   *initialize;
   GPUTilePipeline   *resolve;
+  GPUBuffer         *resolveBuffer;
+  GPUBindGroup      *resolveGroup;
   WebGPURequest      request;
   uint32_t           width;
   uint32_t           height;
@@ -40,10 +42,14 @@ prepare(TileSample *state, GPUDevice *device) {
   GPURenderPipelineCreateInfo render = {0};
   GPUTilePipelineCreateInfo   tile   = {0};
   GPUTilePipelineProperties   properties;
-  GPUColorTargetState        color  = {0};
-  GPUFormat                  format;
+  GPUBufferCreateInfo         buffer = {0};
+  GPUBindGroupCreateInfo      group  = {0};
+  GPUBindGroupEntry           entry  = {0};
+  GPUColorTargetState         color  = {0};
+  const float                gain[4] = {1.0f, 0.875f, 1.0f, 1.0f};
   void                      *artifact;
   uint64_t                   size;
+  GPUFormat                  format;
   uint32_t                   bytes;
   GPUResult                  result;
 
@@ -89,6 +95,7 @@ prepare(TileSample *state, GPUDevice *device) {
 
   state->imageblockBytes = properties.imageblockSampleLength;
   tile.entryPoint       = "resolve_tile";
+  tile.layout           = state->layout->pipelineLayout;
   if (GPUCreateTilePipeline(device, &tile, &state->resolve) != GPU_OK
       || GPUGetTilePipelineProperties(state->resolve, &properties) != GPU_OK)
     return 0;
@@ -98,7 +105,26 @@ prepare(TileSample *state, GPUDevice *device) {
     state->imageblockBytes = bytes;
   if (properties.imageblockSampleLength > state->imageblockBytes)
     state->imageblockBytes = properties.imageblockSampleLength;
-  return state->imageblockBytes != 0u;
+
+  buffer.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  buffer.chain.structSize = sizeof(buffer);
+  buffer.sizeBytes        = sizeof(gain);
+  buffer.usage            = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+  if (GPUCreateBuffer(device, &buffer, &state->resolveBuffer) != GPU_OK
+      || GPUQueueWriteBuffer(state->queue, state->resolveBuffer, 0u, gain, sizeof(gain)) != GPU_OK)
+    return 0;
+
+  entry.binding       = 0u;
+  entry.bindingType   = GPU_BINDING_UNIFORM_BUFFER;
+  entry.buffer.buffer = state->resolveBuffer;
+  entry.buffer.size   = sizeof(gain);
+  group.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  group.chain.structSize = sizeof(group);
+  group.layout           = state->layout->bindGroupLayouts[0];
+  group.pEntries         = &entry;
+  group.entryCount       = 1u;
+  return state->imageblockBytes != 0u
+         && GPUCreateBindGroup(device, &group, &state->resolveGroup) == GPU_OK;
 }
 
 static void
@@ -106,6 +132,7 @@ render(void *user) {
   GPURenderPassCreateInfo      info = {0};
   GPURenderPassColorAttachment color = {0};
   GPUTileRenderPassEXT         tile = {0};
+  const float                 bias[4] = {0.015625f, 0.0f, 0.03125f, 0.0f};
   TileSample                 *state;
   GPUFrame                   *frame;
   GPUCommandBuffer           *command;
@@ -149,6 +176,8 @@ render(void *user) {
     GPUBindRenderPipeline(pass, state->draw);
     GPUDraw(pass, 6u, 1u, 0u, 0u);
     ok = GPUBindTilePipeline(pass, state->resolve) == GPU_OK
+         && GPUBindTileGroup(pass, 0u, state->resolveGroup, 0u, NULL) == GPU_OK
+         && GPUSetTilePushConstants(pass, 0u, sizeof(bias), bias) == GPU_OK
          && GPUDispatchThreadsPerTile(pass, width, height) == GPU_OK;
   }
   GPUEndRenderPass(pass);
