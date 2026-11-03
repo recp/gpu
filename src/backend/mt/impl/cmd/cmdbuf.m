@@ -676,7 +676,13 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
       }
 
       [native->allocator reset];
-      [native->residency removeAllAllocations];
+
+      if (native->residencyAllocationCount != 0u) {
+        /* idle pooled commands must not retain completed resource allocations. */
+        [native->residency removeAllAllocations];
+        [native->residency commit];
+      }
+
       native->residencyAllocationCount    = 0u;
       native->lastResidencyAllocation     = nil;
       native->previousResidencyAllocation = nil;
