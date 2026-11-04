@@ -95,6 +95,81 @@ mt_resetArgumentState(MTArgumentState *state) {
 }
 #endif
 
+static void
+mt_clearRenderPassResources(MTRenderPass *pass) {
+  MTLRenderPassDescriptor *classic;
+  MTRenderPassColorState  *state;
+  uint32_t                i;
+
+  classic = pass->classic;
+
+  for (i = 0u; i < pass->colorAttachmentCount; i++) {
+    state = &pass->colorAttachments[i];
+
+    if (state->texture)
+      classic.colorAttachments[i].texture = nil;
+
+    if (state->resolveTexture)
+      classic.colorAttachments[i].resolveTexture = nil;
+  }
+
+  if (pass->depthAttachmentActive)
+    classic.depthAttachment.texture = nil;
+
+  if (pass->stencilAttachmentActive)
+    classic.stencilAttachment.texture = nil;
+
+  if (pass->visibilityResultBuffer)
+    classic.visibilityResultBuffer = nil;
+
+  if (pass->rasterizationRateMap)
+    classic.rasterizationRateMap = nil;
+
+#if MT_HAS_METAL4
+  if (pass->modern) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      MTL4RenderPassDescriptor *modern;
+
+      modern = pass->modern;
+
+      for (i = 0u; i < pass->colorAttachmentCount; i++) {
+        state = &pass->colorAttachments[i];
+
+        if (state->texture)
+          modern.colorAttachments[i].texture = nil;
+
+        if (state->resolveTexture)
+          modern.colorAttachments[i].resolveTexture = nil;
+      }
+
+      if (pass->depthAttachmentActive)
+        modern.depthAttachment.texture = nil;
+
+      if (pass->stencilAttachmentActive)
+        modern.stencilAttachment.texture = nil;
+
+      if (pass->visibilityResultBuffer)
+        modern.visibilityResultBuffer = nil;
+
+      if (pass->rasterizationRateMap)
+        modern.rasterizationRateMap = nil;
+    }
+  }
+#endif
+
+  /* keep scalar descriptor state cached; release completed resource ownership. */
+
+  for (i = 0u; i < pass->colorAttachmentCount; i++) {
+    pass->colorAttachments[i].texture        = nil;
+    pass->colorAttachments[i].resolveTexture = nil;
+  }
+  pass->depthAttachmentActive   = false;
+  pass->stencilAttachmentActive = false;
+  pass->visibilityResultBuffer  = nil;
+  pass->rasterizationRateMap    = nil;
+  pass->hasResources            = false;
+}
+
 static bool
 mt_counterApiAvailable(void) {
   if (@available(macOS 10.15, iOS 14.0, *)) {
@@ -656,6 +731,10 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
   native->rayQueryState.classic = nil;
   [native->classic release];
   native->classic = nil;
+
+  if (native->renderPassState.hasResources)
+    mt_clearRenderPassResources(&native->renderPassState);
+
   [native->drawable release];
   if (native->feedbackDrawable) {
     [native->feedbackDrawable release];

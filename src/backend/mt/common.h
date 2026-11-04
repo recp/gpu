@@ -241,6 +241,7 @@ typedef struct MTRenderPass {
   uint32_t                 threadgroupMemoryLength;
   bool                     depthAttachmentActive;
   bool                     stencilAttachmentActive;
+  bool                     hasResources;
 } MTRenderPass;
 
 typedef struct MTRenderEncoder {

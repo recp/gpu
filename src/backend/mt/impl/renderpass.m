@@ -504,6 +504,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
   rpd4 = nativePass->modern;
 #endif
   mt_prepareRenderPass(nativePass, info->colorAttachmentCount);
+  nativePass->hasResources = true;
 
   if (tile || nativePass->tileWidth || nativePass->tileHeight
       || nativePass->imageblockSampleLength || nativePass->threadgroupMemoryLength) {
