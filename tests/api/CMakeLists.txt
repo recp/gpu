@@ -259,6 +259,23 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
 endif()
 
 if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  add_executable(gpu-metal-renderpass-lifetime-test metal_renderpass_lifetime.m)
+
+  target_include_directories(gpu-metal-renderpass-lifetime-test PRIVATE ${PROJECT_SOURCE_DIR}/src)
+
+  target_link_libraries(gpu-metal-renderpass-lifetime-test PRIVATE gpu)
+  gpu_link_apple_framework(gpu-metal-renderpass-lifetime-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+  gpu_link_apple_framework(gpu-metal-renderpass-lifetime-test Metal "${GPU_FRAMEWORK_METAL}")
+
+  foreach(mode classic metal4)
+    add_test(NAME metal-renderpass-lifetime-${mode} COMMAND gpu-metal-renderpass-lifetime-test)
+    set_tests_properties(metal-renderpass-lifetime-${mode} PROPERTIES
+      ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1"
+      SKIP_RETURN_CODE 77 LABELS "renderpass;memory" TIMEOUT 20 RUN_SERIAL TRUE)
+  endforeach()
+endif()
+
+if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   add_executable(gpu-metal-residency-test metal_residency.m)
 
   target_link_libraries(gpu-metal-residency-test PRIVATE gpu)
