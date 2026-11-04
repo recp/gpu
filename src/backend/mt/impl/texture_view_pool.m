@@ -32,6 +32,15 @@ struct MTTextureViewPoolPage {
 
 static bool
 mt_prepareTextureViewPool(GPUDeviceMT            *device,
+                          MTTextureViewPoolPage **outPage) API_AVAILABLE(macos(26.0), ios(26.0));
+
+static bool
+mt_findTextureViewSlot(GPUDeviceMT            *device,
+                       MTTextureViewPoolPage **outPage,
+                       uint32_t               *outIndex) API_AVAILABLE(macos(26.0), ios(26.0));
+
+static bool
+mt_prepareTextureViewPool(GPUDeviceMT            *device,
                           MTTextureViewPoolPage **outPage) {
   MTLResourceViewPoolDescriptor *descriptor;
   MTTextureViewPoolPage         *page;

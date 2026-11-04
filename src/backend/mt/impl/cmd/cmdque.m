@@ -72,6 +72,7 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
 
 static void
 mt_observeFrameFeedback(GPUFrameFeedback *feedback, id<MTLDrawable> drawable) {
+#if !TARGET_OS_SIMULATOR
   GPUFrameFeedbackTarget *target;
 
   /* attach only at submission; abandoned presents can retain native handlers. */
@@ -86,6 +87,9 @@ mt_observeFrameFeedback(GPUFrameFeedback *feedback, id<MTLDrawable> drawable) {
       return;
     }
   }
+#else
+  GPU__UNUSED(drawable);
+#endif
   frameFeedbackPresent(feedback, 0.0);
 }
 
@@ -1153,7 +1157,6 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
   id<MTLCommandBuffer>  mcb;
 #if MT_HAS_METAL4
   id<CAMetalDrawable>   drawable;
-  MTL4CommitOptions    *options;
 #endif
 
   if (!cmdb) {
@@ -1176,6 +1179,8 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
 #if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
+      MTL4CommitOptions *options;
+
       drawable = native->drawable;
 
       if (drawable) {
@@ -1258,7 +1263,6 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   MTCommandBuffer      *natives[MT_SUBMIT_STACK_COUNT];
   id<MTL4CommandBuffer> modern[MT_SUBMIT_STACK_COUNT];
   MTCommandQueue       *queue;
-  MTL4CommitOptions    *options;
   GPUCommandBuffer     *cmdb;
   MTCommandBuffer      *native;
   uint32_t              validateIndex;
@@ -1296,6 +1300,8 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   }
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
+    MTL4CommitOptions *options;
+
     options = queue->commitOptions;
 
     for (submitIndex = 0u; submitIndex < count; submitIndex++) {
