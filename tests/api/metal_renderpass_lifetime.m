@@ -31,8 +31,9 @@ typedef struct Resources {
   GPURasterizationRateMapEXT *map;
 } Resources;
 
-static atomic_uint released;
-static char        releaseKey;
+static dispatch_semaphore_t releaseSignal;
+static atomic_uint          released;
+static char                 releaseKey;
 
 @interface ReleaseObserver : NSObject
 @end
@@ -40,6 +41,7 @@ static char        releaseKey;
 @implementation ReleaseObserver
 - (void)dealloc {
   atomic_fetch_add_explicit(&released, 1u, memory_order_release);
+  dispatch_semaphore_signal(releaseSignal);
   [super dealloc];
 }
 @end
@@ -51,6 +53,18 @@ observe(id allocation) {
   observer = [ReleaseObserver new];
   objc_setAssociatedObject(allocation, &releaseKey, observer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   [observer release];
+}
+
+static bool
+wait_releases(uint32_t expected) {
+  dispatch_time_t deadline;
+
+  deadline = dispatch_time(DISPATCH_TIME_NOW, INT64_C(1000000000));
+  while (atomic_load_explicit(&released, memory_order_acquire) < expected) {
+    if (dispatch_semaphore_wait(releaseSignal, deadline) != 0)
+      return false;
+  }
+  return atomic_load_explicit(&released, memory_order_acquire) == expected;
 }
 
 static bool
@@ -245,7 +259,7 @@ cleanup:
     }
     GPUDestroySemaphore(gate);
   }
-  ok = ok && atomic_load_explicit(&released, memory_order_acquire) - before == expected;
+  ok = wait_releases(before + expected) && ok;
   printf("renderpass lifetime: kind=%u submit=%u native releases=%u/%u %s\n", kind, submit,
          atomic_load_explicit(&released, memory_order_acquire) - before, expected, ok ? "pass" : "fail");
   return ok;
@@ -366,6 +380,7 @@ main(void) {
 
   requested = getenv("GPU_METAL_MODE");
   atomic_init(&released, 0u);
+  releaseSignal = dispatch_semaphore_create(0);
   @autoreleasepool {
     if (GPUCreateInstance(NULL, &instance) != GPU_OK
         || !(adapter = GPUGetAutoSelectedAdapter(instance)))
@@ -409,5 +424,6 @@ cleanup:
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
   }
+  dispatch_release(releaseSignal);
   return status;
 }
