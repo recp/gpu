@@ -1195,6 +1195,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
       ${PROJECT_SOURCE_DIR}/tests/api/copy.c
       ${PROJECT_SOURCE_DIR}/tests/api/mipmaps.c
       ${PROJECT_SOURCE_DIR}/tests/api/texture_transfer.c
+      "${GPU_VULKAN_RENDER_MRT_US}"
     )
     target_include_directories(gpu-vulkan-shader-test PRIVATE
       ${PROJECT_SOURCE_DIR}/src
