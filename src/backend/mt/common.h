@@ -292,6 +292,7 @@ typedef struct MTCommandQueue {
   id<MTLCommandQueue> classic;
   id<MTLCommandQueue> upload;
   id                  modern;
+  id                  commitOptions;
   dispatch_group_t    inFlightGroup;
   MTCommandBuffer    *commands;
   MTCommandBuffer    *freeCommands;

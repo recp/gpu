@@ -854,16 +854,17 @@ mt_newCommandQueue(GPUDevice *__restrict device) {
 
   native->poolLock   = OS_UNFAIR_LOCK_INIT;
   native->submitLock = OS_UNFAIR_LOCK_INIT;
-  native->mode     = deviceMT->commandMode;
+  native->mode       = deviceMT->commandMode;
 #if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       shaderValidation         = getenv("MTL_SHADER_VALIDATION");
       native->shaderValidation = shaderValidation && strcmp(shaderValidation, "1") == 0;
 
-      native->modern = [deviceMT->device newMTL4CommandQueue];
-      native->upload = [deviceMT->device newCommandQueue];
+      native->modern        = [deviceMT->device newMTL4CommandQueue];
+      native->upload        = [deviceMT->device newCommandQueue];
       native->transferEvent = [deviceMT->device newSharedEvent];
+      native->commitOptions = [MTL4CommitOptions new];
     }
   } else
 #endif
@@ -873,7 +874,9 @@ mt_newCommandQueue(GPUDevice *__restrict device) {
 
   native->inFlightGroup = dispatch_group_create();
 #if MT_HAS_METAL4
-  if ((!native->classic && (!native->modern || !native->upload || !native->transferEvent))
+  if ((!native->classic
+       && (!native->modern || !native->upload || !native->transferEvent
+           || !native->commitOptions))
       || !native->inFlightGroup) {
 #else
   if (!native->classic || !native->inFlightGroup) {
@@ -882,6 +885,7 @@ mt_newCommandQueue(GPUDevice *__restrict device) {
     [native->upload release];
     [native->modern release];
     [native->transferEvent release];
+    [native->commitOptions release];
 
     if (native->inFlightGroup) {
       dispatch_release(native->inFlightGroup);
@@ -927,6 +931,7 @@ mt_destroyCommandQueue(GPUQueue *__restrict queue) {
     [native->upload release];
     [native->modern release];
     [native->transferEvent release];
+    [native->commitOptions release];
 
     for (i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
       [native->transferSlots[i].blit release];
@@ -1182,7 +1187,8 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
       buffers[0]       = native->modern;
       native->drawable = nil;
 
-      options = [MTL4CommitOptions new];
+      /* serialized submission rearms the handlers consumed by each commit. */
+      options = queue->commitOptions;
       [options addFeedbackHandler:^(id<MTL4CommitFeedback> feedback) {
         cmdoncomplete4(cmdb, native, queue, feedback);
       }];
@@ -1210,7 +1216,6 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
         [drawable release];
       }
 
-      [options release];
       return GPU_OK;
     }
 
@@ -1291,9 +1296,7 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   }
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
-    if (!(options = [MTL4CommitOptions new])) {
-      return mt__commitCommandBuffers(count, buffers);
-    }
+    options = queue->commitOptions;
 
     for (submitIndex = 0u; submitIndex < count; submitIndex++) {
       cmdb   = buffers[submitIndex];
@@ -1312,7 +1315,6 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
     [queue->modern commit:modern count:count options:options];
     [queue->modern signalEvent:queue->transferEvent
                         value:++queue->transferValue];
-    [options release];
     return GPU_OK;
   }
 
