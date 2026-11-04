@@ -196,12 +196,18 @@ tick(GPUFrame *frame, const GPUFrameTiming *timing, void *user) {
 
 static void
 pump(double seconds) {
-  NSDate *deadline;
+  NSDate  *deadline;
+  NSEvent *event;
 
   deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
-  while ([deadline timeIntervalSinceNow] > 0.0) {
-    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                           beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.005]];
+  while (deadline.timeIntervalSinceNow > 0.0) {
+    event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                             untilDate:[NSDate dateWithTimeIntervalSinceNow:0.005]
+                                inMode:NSDefaultRunLoopMode
+                               dequeue:YES];
+    if (event)
+      [NSApp sendEvent:event];
+    [NSApp updateWindows];
   }
 }
 

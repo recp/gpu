@@ -199,12 +199,18 @@ attach(GPUFrame *frame, Observation *observation, bool nativeOracle) {
 
 static void
 pump(double seconds) {
-  NSDate *deadline;
+  NSDate  *deadline;
+  NSEvent *event;
 
   deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
   while (deadline.timeIntervalSinceNow > 0.0) {
-    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                           beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.003]];
+    event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                             untilDate:[NSDate dateWithTimeIntervalSinceNow:0.003]
+                                inMode:NSDefaultRunLoopMode
+                               dequeue:YES];
+    if (event)
+      [NSApp sendEvent:event];
+    [NSApp updateWindows];
   }
 }
 
