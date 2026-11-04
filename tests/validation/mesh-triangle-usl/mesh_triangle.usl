@@ -3,7 +3,7 @@ spec const PIPELINE_MARKER: bool = false
 
 struct MeshVertex {
   position: float4 #position
-  color:    float4 #color(0)
+  color:    float4 #attribute(0)
 }
 
 struct MeshPrimitive {
