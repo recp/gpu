@@ -63,11 +63,24 @@ discardCommandBufferState(GPUCommandBuffer         *cmdb,
 
 GPU_HIDE
 GPUResult
-submitUploadCommandBuffer(GPUCommandBuffer *cmdb, GPUFence *fence);
+submitUploadCommandBuffer(GPUCommandBuffer *cmdb, GPUFence *fence, uint64_t *progress);
 
 GPU_HIDE
 void
 retainFence(GPUFence *fence);
+
+typedef struct GPUFenceObserver {
+  GPUUploaderReadyFn ready;
+  void              *user;
+} GPUFenceObserver;
+
+GPU_HIDE
+GPUResult
+observeFenceCompletion(GPUFence *fence, GPUFenceObserver *observer);
+
+GPU_HIDE
+GPUResult
+observeFenceOnce(GPUFence *fence, GPUUploaderReadyFn callback, void *user);
 
 static inline void
 commandQueueLock(GPUQueue *queue, GPUApi *api) {

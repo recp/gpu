@@ -54,6 +54,14 @@ typedef struct GPUCommandQueueApi {
 
   GPUResult (*submitEx)(GPUQueue *queue, const GPUQueueSubmitExInfo *info);
 
+  uint64_t (*uploadProgress)(GPUQueue *queue, bool completed);
+
+  GPUResult (*observeUploadProgress)(GPUQueue           *queue,
+                                     uint64_t            value,
+                                     GPUFence           *fence,
+                                     GPUUploaderReadyFn callback,
+                                     void               *user);
+
   /* serialize native queue order without serializing command recording. */
   void (*lock)(GPUQueue *queue);
   void (*unlock)(GPUQueue *queue);

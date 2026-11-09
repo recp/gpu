@@ -1,3 +1,18 @@
+if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  add_executable(gpu-metal-uploader-ready-test metal_uploader_ready.m)
+  target_compile_options(gpu-metal-uploader-ready-test PRIVATE -UNDEBUG)
+  target_link_libraries(gpu-metal-uploader-ready-test PRIVATE gpu)
+  gpu_link_apple_framework(gpu-metal-uploader-ready-test Metal "${GPU_FRAMEWORK_METAL}")
+  gpu_link_apple_framework(gpu-metal-uploader-ready-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+
+  foreach(mode classic metal4)
+    add_test(NAME metal-uploader-ready-${mode} COMMAND gpu-metal-uploader-ready-test)
+    set_tests_properties(metal-uploader-ready-${mode} PROPERTIES
+      ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1"
+      SKIP_RETURN_CODE 77 LABELS "upload;ordering" TIMEOUT 30 RUN_SERIAL TRUE)
+  endforeach()
+endif()
+
 if(UNIX AND NOT EMSCRIPTEN)
   add_executable(gpu-frame-feedback-test
     frame_feedback.c

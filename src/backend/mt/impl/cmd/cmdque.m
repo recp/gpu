@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "../../../../api/cmdqueue_internal.h"
 #include "../../../../api/frame_feedback_internal.h"
 
 enum {
@@ -22,6 +23,20 @@ enum {
   MT_SUBMIT_STACK_COUNT        = 64u,
   MT_TRANSFER_OFFSET_ALIGNMENT = 256u
 };
+
+#if MT_HAS_METAL4
+@interface MTUploadReady : NSObject {
+@public
+  GPUFenceObserver completion;
+@private
+  GPUUploaderReadyFn _ready;
+  void              *_user;
+  os_unfair_lock     _lock;
+}
+- (instancetype)initWithCallback:(GPUUploaderReadyFn)ready user:(void *)user;
+- (void)notify;
+@end
+#endif
 
 @interface GPUFrameFeedbackTarget : NSObject {
 @public
@@ -1344,6 +1359,100 @@ mt_unlockQueue(GPUQueue *queue) {
   os_unfair_lock_unlock(&mt_commandQueue(queue)->submitLock);
 }
 
+#if MT_HAS_METAL4
+@implementation MTUploadReady
+
+- (instancetype)initWithCallback:(GPUUploaderReadyFn)ready user:(void *)user {
+  if ((self = [super init])) {
+    _ready = ready;
+    _user  = user;
+    _lock  = (os_unfair_lock)OS_UNFAIR_LOCK_INIT;
+  }
+
+  return self;
+}
+
+- (void)notify {
+  GPUUploaderReadyFn ready;
+  void              *user;
+
+  os_unfair_lock_lock(&_lock);
+  ready  = _ready;
+  user   = _user;
+  _ready = NULL;
+  _user  = NULL;
+  os_unfair_lock_unlock(&_lock);
+
+  if (ready)
+    ready(user);
+}
+
+@end
+
+static void
+uploadFenceReady(void *user) {
+  MTUploadReady *ready = user;
+
+  [ready notify];
+  [ready release];
+}
+
+static uint64_t
+mt_uploadProgress(GPUQueue *queue, bool completed) {
+  MTCommandQueue *native = mt_commandQueue(queue);
+
+  if (native->mode != MTCommandMode4)
+    return 0u;
+
+  return completed ? native->transferEvent.signaledValue : native->transferValue;
+}
+
+static GPUResult
+mt_observeUploadProgress(GPUQueue           *queue,
+                         uint64_t            value,
+                         GPUFence           *fence,
+                         GPUUploaderReadyFn callback,
+                         void               *user) {
+  MTCommandQueue         *native = mt_commandQueue(queue);
+  MTLSharedEventListener *listener;
+  MTUploadReady          *ready;
+  GPUResult               result;
+
+  if (native->mode != MTCommandMode4)
+    return GPU_ERROR_UNSUPPORTED;
+
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    if (native->transferEvent.signaledValue >= value) {
+      callback(user);
+      return GPU_OK;
+    }
+    if (!(listener = [MTLSharedEventListener sharedListener])
+        || !(ready = [[MTUploadReady alloc] initWithCallback:callback user:user]))
+      return GPU_ERROR_UNSUPPORTED;
+
+    /* completion also consumes the observer if a failed submit leaves the event behind */
+    ready->completion.ready = uploadFenceReady;
+    ready->completion.user  = ready;
+    [ready retain];
+    result = observeFenceCompletion(fence, &ready->completion);
+    if (result != GPU_OK) {
+      [ready release];
+    } else if (!GPUIsFenceSignaled(fence)) {
+      [native->transferEvent notifyListener:listener
+                                    atValue:value
+                                      block:^(id<MTLSharedEvent> event, uint64_t completed) {
+        GPU__UNUSED(event);
+        GPU__UNUSED(completed);
+        [ready notify];
+      }];
+    }
+    [ready release];
+    return result;
+  }
+  return GPU_ERROR_UNSUPPORTED;
+}
+#endif
+
 GPU_HIDE
 void
 mt_initCmdQue(GPUCommandQueueApi *api) {
@@ -1360,4 +1469,8 @@ mt_initCmdQue(GPUCommandQueueApi *api) {
   api->createSemaphore         = mt_createSemaphore;
   api->destroySemaphore        = mt_destroySemaphore;
   api->submitEx                = mt_submitEx;
+#if MT_HAS_METAL4
+  api->uploadProgress          = mt_uploadProgress;
+  api->observeUploadProgress   = mt_observeUploadProgress;
+#endif
 }

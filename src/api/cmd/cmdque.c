@@ -36,27 +36,114 @@ struct GPUFence {
   pthread_mutex_t mutex;
   pthread_cond_t  cond;
 #endif
-  uint32_t references;
-  bool     signaled;
+  GPUFenceObserver  *completion;
+  GPUUploaderReadyFn ready;
+  void              *readyUser;
+  uint32_t          references;
+  bool              signaled;
 };
 
 static void
 gpu_signalFence(GPUFence *fence) {
-  if (!fence) {
+  GPUFenceObserver  *completion;
+  GPUUploaderReadyFn ready;
+  void             *user;
+
+  if (!fence)
     return;
-  }
 
 #if defined(_WIN32) || defined(WIN32)
   EnterCriticalSection(&fence->lock);
+#else
+  pthread_mutex_lock(&fence->mutex);
+#endif
+
+  completion        = fence->completion;
+  fence->completion = NULL;
+  ready             = fence->ready;
+  user              = NULL;
+  if (ready) {
+    user             = fence->readyUser;
+    fence->ready     = NULL;
+    fence->readyUser = NULL;
+  }
   fence->signaled = true;
+
+#if defined(_WIN32) || defined(WIN32)
   WakeAllConditionVariable(&fence->cond);
   LeaveCriticalSection(&fence->lock);
 #else
-  pthread_mutex_lock(&fence->mutex);
-  fence->signaled = true;
   pthread_cond_broadcast(&fence->cond);
   pthread_mutex_unlock(&fence->mutex);
 #endif
+
+  if (completion)
+    completion->ready(completion->user);
+  if (ready)
+    ready(user);
+}
+
+GPU_HIDE
+GPUResult
+observeFenceCompletion(GPUFence *fence, GPUFenceObserver *observer) {
+  bool signaled, duplicate;
+
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(&fence->lock);
+#else
+  pthread_mutex_lock(&fence->mutex);
+#endif
+
+  signaled  = fence->signaled;
+  duplicate = fence->completion != NULL;
+  if (!signaled && !duplicate)
+    fence->completion = observer;
+
+#if defined(_WIN32) || defined(WIN32)
+  LeaveCriticalSection(&fence->lock);
+#else
+  pthread_mutex_unlock(&fence->mutex);
+#endif
+
+  if (duplicate)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  if (signaled)
+    observer->ready(observer->user);
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUResult
+observeFenceOnce(GPUFence *fence, GPUUploaderReadyFn callback, void *user) {
+  bool ready, duplicate;
+
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(&fence->lock);
+#else
+  pthread_mutex_lock(&fence->mutex);
+#endif
+
+  ready     = fence->signaled;
+  duplicate = fence->ready != NULL;
+  if (!ready && !duplicate) {
+    fence->ready     = callback;
+    fence->readyUser = user;
+  }
+
+#if defined(_WIN32) || defined(WIN32)
+  LeaveCriticalSection(&fence->lock);
+#else
+  pthread_mutex_unlock(&fence->mutex);
+#endif
+
+  if (duplicate)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  if (ready)
+    callback(user);
+
+  return GPU_OK;
 }
 
 static void
@@ -634,7 +721,7 @@ retainFence(GPUFence *fence) {
 
 GPU_HIDE
 GPUResult
-submitUploadCommandBuffer(GPUCommandBuffer *cmdb, GPUFence *fence) {
+submitUploadCommandBuffer(GPUCommandBuffer *cmdb, GPUFence *fence, uint64_t *progress) {
   GPUApi   *api;
   GPUQueue *queue;
   GPUResult result;
@@ -651,6 +738,9 @@ submitUploadCommandBuffer(GPUCommandBuffer *cmdb, GPUFence *fence) {
   commandQueueLock(queue, api);
   result = api->cmdque.commit(cmdb);
   /* completion may recycle cmdb before commit returns. */
+  if (progress) {
+    *progress = result == GPU_OK && api->cmdque.uploadProgress ? api->cmdque.uploadProgress(queue, false) : 0u;
+  }
   commandQueueUnlock(queue, api);
   return result;
 }

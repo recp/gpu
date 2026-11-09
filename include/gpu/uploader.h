@@ -23,7 +23,8 @@ extern "C" {
 #include "texture.h"
 #include "buffer.h"
 
-typedef struct GPUUploader GPUUploader;
+typedef struct GPUUploader      GPUUploader;
+typedef struct GPUUploaderReady GPUUploaderReady;
 
 typedef struct GPUUploaderCreateInfo {
   GPUChainedStruct chain;
@@ -32,11 +33,19 @@ typedef struct GPUUploaderCreateInfo {
   uint32_t         stagingBufferCount; /* zero selects three; at most eight */
 } GPUUploaderCreateInfo;
 
+typedef struct GPUUploaderOptions {
+  GPUChainedStruct chain;
+  bool             deferWhenBusy; /* return GPU_ERROR_TIMEOUT when the next slot is busy */
+} GPUUploaderOptions;
+
 /* one calling thread per uploader; different uploaders may share a queue.
  * enable GPU_FEATURE_THREADED_UPLOADS. the device/queue and destinations outlive
  * pending work. source bytes are copied before upload returns. full rings flush
- * and wait for their oldest slot; a single oversized upload returns insufficient
- * capacity. host writes and destination destruction still require completion.
+ * and wait for their oldest slot by default. With GPUUploaderOptions in pNext
+ * and deferWhenBusy enabled, an upload may submit an earlier batch and return
+ * GPU_ERROR_TIMEOUT without consuming the current input. Retry it after queue
+ * progress. A single oversized upload returns insufficient capacity. Host
+ * writes and destination destruction still require completion.
  */
 GPU_EXPORT
 GPUResult
@@ -61,6 +70,32 @@ GPUUploadBuffer(GPUUploader *uploader, GPUBuffer *buffer, uint64_t offset, const
 GPU_EXPORT
 GPUResult
 GPUFlushUploads(GPUUploader *uploader, GPUFence **outFence);
+
+typedef void (*GPUUploaderReadyFn)(void *user);
+
+/* requests one wake from an opted-in uploader and returns a caller-owned
+ * token. delivery may be inline, before outReady is set. a busy slot accepts
+ * one observer per submission, even if its token is canceled. a rejected
+ * registration never calls callback. the callback only notifies the owner;
+ * the owner serializes retry with its other uploader calls.
+ * device errors use GPUSetDeviceErrorCallback. a wake does not establish that
+ * a failed GPU copy wrote its destination.
+ */
+GPU_EXPORT
+GPUResult
+GPUUploaderNotifyReady(GPUUploader        *uploader,
+                       GPUUploaderReadyFn  callback,
+                       void               *user,
+                       GPUUploaderReady  **outReady);
+
+/* cancels delivery, drains an entered callback and consumes the token.
+ * self-destruction is supported and the current callback may finish.
+ * the caller can release user after destruction returns on another thread.
+ * this never waits for GPU work and does not cancel submitted uploads.
+ */
+GPU_EXPORT
+void
+GPUDestroyUploaderReady(GPUUploaderReady *ready);
 
 /* flushes pending uploads and waits for owned slots; may block. */
 GPU_EXPORT
