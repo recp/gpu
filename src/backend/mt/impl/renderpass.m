@@ -806,8 +806,9 @@ mt_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
 #if MT_HAS_METAL4
   if (commandState->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
-      native->modern = [commandState->modern computeCommandEncoder];
+      native->modern = [[commandState->modern computeCommandEncoder] retain];
       mt_applyPendingBarrier(cmdb, native->modern, MT_ENCODER_STAGES(MTLStageBlit));
+      commandState->refreshModern |= commandState->owner->shaderValidation;
       if (cmdb->_orderedUploads) {
         [native->modern barrierAfterQueueStages:MTLStageAll
                                   beforeStages:MTLStageBlit
@@ -1211,6 +1212,7 @@ mt_endTransferPass(GPUTransferPassEncoder *pass) {
                         visibilityOptions:MTL4VisibilityOptionDevice];
       }
       [native->modern endEncoding];
+      [native->modern release];
     }
   } else
 #endif
