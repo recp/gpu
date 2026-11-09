@@ -933,6 +933,10 @@ mt_copyBufferToTexture(GPUTransferPassEncoder           *pass,
       mt_useAllocation(pass->_cmdb, srcBuffer);
       mt_useAllocation(pass->_cmdb, dstTexture);
 
+      if (dst->_sparse && dst->_heap) {
+        mt_useAllocation(pass->_cmdb, ((GPUHeapMT *)dst->_heap->_priv)->heap);
+      }
+
       if (texture3D) {
         [mt_copyEncoder(pass)->modern copyFromBuffer:srcBuffer
                                         sourceOffset:(NSUInteger)region->bufferOffset
@@ -1138,6 +1142,10 @@ mt_copyTextureToTexture(GPUTransferPassEncoder              *pass,
     if (@available(macOS 26.0, iOS 26.0, *)) {
       mt_useAllocation(pass->_cmdb, srcTexture);
       mt_useAllocation(pass->_cmdb, dstTexture);
+
+      if (dst->_sparse && dst->_heap) {
+        mt_useAllocation(pass->_cmdb, ((GPUHeapMT *)dst->_heap->_priv)->heap);
+      }
 
       if (texture3D) {
         [mt_copyEncoder(pass)->modern copyFromTexture:srcTexture
