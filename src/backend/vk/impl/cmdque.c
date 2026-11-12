@@ -1235,6 +1235,23 @@ vk_waitDeviceIdle(GPUDevice *__restrict device) {
   return GPU_ERROR_BACKEND_FAILURE;
 }
 
+/* a slot with no upload in flight (none, or one the GPU has finished), looked for without waiting, the first ones
+ * first; with every one in flight, the next in turn (its upload waited for) */
+static GPUTransferSlotVk*
+vk__freeTransferSlot(GPUQueueVk *native, GPUDeviceVk *device) {
+  GPUTransferSlotVk *slot;
+  uint32_t           i;
+
+  for (i = 0u; i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
+    slot = &native->transferSlots[i];
+    if (!slot->pending || (slot->fence && vkGetFenceStatus(device->device, slot->fence) == VK_SUCCESS)) {
+      return slot;
+    }
+  }
+
+  return &native->transferSlots[native->nextTransferSlot];
+}
+
 GPU_HIDE
 GPUResult
 vk_beginTransfer(GPUQueue        *queue,
@@ -1299,7 +1316,7 @@ vk_beginTransfer(GPUQueue        *queue,
     }
   }
 
-  slot   = &native->transferSlots[native->nextTransferSlot];
+  slot   = vk__freeTransferSlot(native, device);
   result = vk__waitTransfer(queue, slot, true);
 
   if (result != GPU_OK) {
@@ -1326,7 +1343,7 @@ vk_beginTransfer(GPUQueue        *queue,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  native->activeTransferSlot = native->nextTransferSlot;
+  native->activeTransferSlot = (uint32_t)(slot - native->transferSlots);
   native->transferOpen       = true;
   native->transferUpload     = upload;
   slot->uploadUsed           = upload ? sizeBytes : 0u;

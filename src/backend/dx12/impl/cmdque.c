@@ -1342,6 +1342,26 @@ dx12_waitQueueFence(GPUQueueDX12 *queue,
   return finished;
 }
 
+/* a slot with no upload in flight (none, or one the GPU has finished), looked for without waiting, the first ones
+ * first; with every one in flight, the next in turn (its upload waited for) */
+static GPUTransferSlotDX12*
+dx12__freeTransferSlot(GPUQueueDX12 *native) {
+  GPUTransferSlotDX12 *slot;
+  UINT64               completed;
+  uint32_t             i;
+
+  /* UINT64_MAX: the device removed, reported by the wait */
+  completed = native->transferFence ? native->transferFence->lpVtbl->GetCompletedValue(native->transferFence) : 0u;
+  for (i = 0u; i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
+    slot = &native->transferSlots[i];
+    if (!slot->pending || (completed != UINT64_MAX && slot->fenceValue <= completed)) {
+      return slot;
+    }
+  }
+
+  return &native->transferSlots[native->nextTransferSlot];
+}
+
 GPU_HIDE
 GPUResult
 dx12_beginTransfer(GPUQueue                   *queue,
@@ -1412,7 +1432,7 @@ dx12_beginTransfer(GPUQueue                   *queue,
     }
   }
 
-  slot       = &native->transferSlots[native->nextTransferSlot];
+  slot       = dx12__freeTransferSlot(native);
   waitResult = dx12__waitTransfer(queue, slot, true);
 
   if (waitResult != GPU_OK) {
@@ -1445,7 +1465,7 @@ dx12_beginTransfer(GPUQueue                   *queue,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  native->activeTransferSlot = native->nextTransferSlot;
+  native->activeTransferSlot = (uint32_t)(slot - native->transferSlots);
   native->transferOpen       = true;
   native->transferUpload     = upload;
   slot->uploadUsed           = upload ? stagingBytes : 0u;
