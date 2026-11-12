@@ -377,10 +377,50 @@ GPUCreateTexture(GPUDevice                  *__restrict device,
 
 GPU_EXPORT
 void
+GPURetainTexture(GPUTexture *__restrict texture) {
+  if (!texture) {
+    return;
+  }
+
+#if defined(_WIN32) || defined(WIN32)
+  InterlockedIncrement((volatile LONG *)&texture->_extraRefs);
+#else
+  __atomic_add_fetch(&texture->_extraRefs, 1u, __ATOMIC_RELAXED);
+#endif
+}
+
+/* one holder fewer when others remain (true): the texture stays */
+static bool
+releaseTextureHolder(GPUTexture *texture) {
+#if defined(_WIN32) || defined(WIN32)
+  LONG refs = (LONG)texture->_extraRefs, seen;
+
+  while (refs > 0) {
+    seen = InterlockedCompareExchange((volatile LONG *)&texture->_extraRefs, refs - 1, refs);
+    if (seen == refs) {
+      return true;
+    }
+    refs = seen;
+  }
+#else
+  uint32_t refs = __atomic_load_n(&texture->_extraRefs, __ATOMIC_ACQUIRE);
+
+  while (refs) {
+    if (__atomic_compare_exchange_n(&texture->_extraRefs, &refs, refs - 1u, true, __ATOMIC_ACQ_REL,
+                                    __ATOMIC_ACQUIRE)) {
+      return true;
+    }
+  }
+#endif
+  return false;
+}
+
+GPU_EXPORT
+void
 GPUDestroyTexture(GPUTexture *__restrict texture) {
   GPUApi *api;
 
-  if (!texture) {
+  if (!texture || releaseTextureHolder(texture)) {
     return;
   }
 

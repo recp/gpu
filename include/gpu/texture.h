@@ -122,6 +122,13 @@ GPUCreateTexture(GPUDevice                  *__restrict device,
                  const GPUTextureCreateInfo *__restrict info,
                  GPUTexture                **__restrict outTexture);
 
+/* each holder of a texture releases it with GPUDestroyTexture: it is destroyed
+ * with the last. a texture starts with one holder; GPURetainTexture adds one.
+ * safe on any thread */
+GPU_EXPORT
+void
+GPURetainTexture(GPUTexture *__restrict texture);
+
 GPU_EXPORT
 void
 GPUDestroyTexture(GPUTexture *__restrict texture);

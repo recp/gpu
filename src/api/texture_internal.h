@@ -26,6 +26,7 @@ struct GPUTexture {
   GPUHeap                     *_heap;
   GPUTexture                  *_sharedPeer;
   void                        *_blitViews;
+  uint32_t                     _extraRefs; /* holders beyond the first (GPURetainTexture) */
   uint64_t                     _heapOffset;
   uint64_t                     _allocationSize;
   GPUSparseTextureRequirements _sparseRequirements;
