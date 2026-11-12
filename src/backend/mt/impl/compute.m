@@ -325,8 +325,11 @@ mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
   } else
 #endif
   {
+    /* concurrent, as on Metal 4: GPU-C orders work between passes (GPUEncodeBarriers), never inside one, and a
+       serial encoder makes each dispatch wait for the one before it */
     @autoreleasepool {
-      nativeState->classic = [[mt_classicCommandBuffer(cmdb) computeCommandEncoder] retain];
+      nativeState->classic = [[mt_classicCommandBuffer(cmdb)
+                                computeCommandEncoderWithDispatchType:MTLDispatchTypeConcurrent] retain];
     }
 
     mt_applyPendingBarrier(cmdb, nativeState->classic, MT_ENCODER_STAGES(MTLStageDispatch));
