@@ -668,6 +668,29 @@ cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
 }
 #endif
 
+/* a slot with no upload in flight (none, or one the GPU has finished), looked for without waiting, the first ones
+ * first; with every one in flight, the next in turn (its upload waited for) */
+static MTTransferSlot*
+mt_freeTransferSlot(MTCommandQueue *native) {
+  MTTransferSlot        *slot;
+  MTLCommandBufferStatus status;
+  uint32_t               i;
+
+  for (i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
+    slot = &native->transferSlots[i];
+    if (!slot->pending) {
+      return slot;
+    }
+
+    status = slot->command.status;
+    if (status == MTLCommandBufferStatusCompleted || status == MTLCommandBufferStatusError) {
+      return slot;
+    }
+  }
+
+  return &native->transferSlots[native->nextTransferSlot];
+}
+
 GPU_HIDE
 GPUResult
 mt_beginTransfer(GPUQueue                  *queue,
@@ -723,7 +746,7 @@ mt_beginTransfer(GPUQueue                  *queue,
     }
   }
 
-  slot   = &native->transferSlots[native->nextTransferSlot];
+  slot   = mt_freeTransferSlot(native);
   result = mt_waitTransfer(queue, slot, true);
 
   if (result != GPU_OK
@@ -753,7 +776,7 @@ mt_beginTransfer(GPUQueue                  *queue,
   }
 
   slot->used                 = sizeBytes;
-  native->activeTransferSlot = native->nextTransferSlot;
+  native->activeTransferSlot = (uint32_t)(slot - native->transferSlots);
   native->transferOpen       = true;
   *outBlit                   = slot->blit;
   *outStaging                = slot->staging;

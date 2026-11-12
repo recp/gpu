@@ -110,7 +110,7 @@ typedef struct GPUAdapterMT {
 } GPUAdapterMT;
 
 enum {
-  MT_TRANSFER_SLOT_COUNT  = 3u,
+  MT_TRANSFER_SLOT_COUNT  = 8u, /* staging made when first used: past the first few only in a burst */
   MT_RESIDENCY_CACHE_SIZE = 64u
 };
 
