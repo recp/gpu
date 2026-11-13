@@ -615,9 +615,12 @@ GPUQueueWriteTexture(GPUQueue                    *__restrict queue,
 
   commandQueueLock(queue, api);
   result = api->texture.write(queue, texture, region, data, sizeBytes, &layout);
-
-  if (result == GPU_OK)
-    imageBufferTextureWritten(texture, region->mipLevel);
   commandQueueUnlock(queue, api);
+
+  /* an emulated read-write texture's buffer takes the texels too, else the texture is newer */
+
+  if (result == GPU_OK && texture->_imageBuffer && !imageBufferTextureUploaded(queue, texture, region, data))
+    imageBufferTextureWritten(texture, region->mipLevel, region->baseArrayLayer, region->layerCount);
+
   return result;
 }

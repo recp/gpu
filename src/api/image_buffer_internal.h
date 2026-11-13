@@ -48,21 +48,26 @@ struct GPUBindGroup;
 /* a mip level's part of the buffer */
 
 typedef struct GPUImageBufferMip {
-  uint64_t base;       /* its first header row */
-  uint64_t layerBytes; /* a header row and 'height' rows */
-  uint32_t pitchBytes;
-  uint32_t width;
-  uint32_t height;
-  uint32_t count;      /* layers, or a 3d level's slices */
+  uint64_t  base;         /* its first header row */
+  uint64_t  layerBytes;   /* a header row and 'height' rows */
+  uint64_t *bufferNewer;  /* a bit a layer (one for a 3d level): read-write bindings wrote it last */
+  uint64_t *textureNewer; /* a bit a layer: something else wrote it last, or it was never copied */
+  uint32_t *layerCounts;  /* header word 3 of each layer now: the layers a binding there sees */
+  uint32_t  pitchBytes;
+  uint32_t  width;
+  uint32_t  height;
+  uint32_t  count;        /* layers, or a 3d level's slices */
+  uint32_t  units;        /* tracked apart: the layers, or 1 for a 3d level */
 } GPUImageBufferMip;
 
 typedef struct GPUImageBuffer {
   GPUBuffer             *buffer;
   GPUTexture            *texture;
   struct GPUImageBuffer *next;         /* the device's list */
-  uint32_t               bufferNewer;  /* mip levels read-write bindings wrote last */
-  uint32_t               textureNewer; /* mip levels something else wrote last (or never copied) */
-  uint32_t               renderMips;   /* mip levels bound read-write to vertex or fragment shaders */
+  void                  *tracking;     /* the levels' bits and layer counts */
+  uint32_t               bufferNewer;  /* levels with a layer read-write bindings wrote last */
+  uint32_t               textureNewer; /* levels with a layer something else wrote last */
+  uint32_t               renderMips;   /* levels bound read-write to vertex or fragment shaders */
   uint32_t               mipCount;
   bool                   headers;      /* the header rows are written */
   GPUImageBufferMip      mips[];
@@ -133,18 +138,19 @@ GPU_HIDE
 void
 imageBufferComputeWrote(struct GPUComputePassEncoder *pass);
 
-/* the texture of every buffer written last, before a render pass or a blit. */
+/* outside a pass: a texture's level as read-write bindings left it. */
 
 GPU_HIDE
 void
-imageBufferFlush(GPUCommandBuffer *cmdb);
+imageBufferFlushTexture(GPUCommandBuffer *cmdb, GPUTexture *texture, uint32_t mipLevel);
 
-/* before a render pass: also the buffer of textures bound read-write to
- * vertex or fragment shaders, where the texture was written last. */
+/* before a render pass: the textures it may read (its attachments, those
+ * vertex or fragment shaders read) as read-write bindings left them, and the
+ * buffers of textures it binds read-write as everything else left them. */
 
 GPU_HIDE
 void
-imageBufferRenderSync(GPUCommandBuffer *cmdb);
+imageBufferRenderSync(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info);
 
 /* a group bound in a render pass: its read-write bindings write the buffers. */
 
@@ -152,16 +158,50 @@ GPU_HIDE
 void
 imageBufferRenderBind(struct GPUBindGroup *group);
 
-/* inside a transfer pass: a texture read by a copy gets the buffer's texels first. */
+/* inside a transfer pass: a texture's level read by a copy gets the buffer's texels first. */
 
 GPU_HIDE
 void
-imageBufferTransferRead(GPUTransferPassEncoder *pass, GPUTexture *texture);
+imageBufferTransferRead(GPUTransferPassEncoder *pass, GPUTexture *texture, uint32_t mipLevel, uint32_t layer,
+                        uint32_t layerCount);
 
-/* a mip level of the texture written (UINT32_MAX: every level) */
+/* inside a transfer pass: a copy out of a texture whose buffer holds the
+ * newer texels of the level reads the buffer instead, touching neither;
+ * false when it can't (the caller syncs and copies the texture) */
+
+GPU_HIDE
+bool
+imageBufferCopyToTexture(GPUTransferPassEncoder              *pass,
+                         GPUTexture                          *src,
+                         GPUTexture                          *dst,
+                         const GPUTextureToTextureCopyRegion *region);
+
+GPU_HIDE
+bool
+imageBufferCopyToBuffer(GPUTransferPassEncoder           *pass,
+                        GPUTexture                       *src,
+                        GPUBuffer                        *dst,
+                        const GPUBufferTextureCopyRegion *region);
+
+/* a barrier batch with each emulated texture's buffer added as the texture
+ * (its reads and writes), in 'storage' when it fits; NULL when none */
+
+GPU_HIDE
+const GPUBarrierBatch *
+imageBufferBarriers(const GPUBarrierBatch *batch, GPUBarrierBatch *out, GPUBufferBarrier *storage, uint32_t capacity,
+                    GPUBufferBarrier **allocated);
+
+/* texels written to the texture on the queue, written to its buffer too in
+ * its layout (neither is then newer for them); false when they can't be */
+
+GPU_HIDE
+bool
+imageBufferTextureUploaded(GPUQueue *queue, GPUTexture *texture, const GPUTextureWriteRegion *region, const void *data);
+
+/* layers of a mip level of the texture written (mipLevel UINT32_MAX: all of it) */
 
 GPU_HIDE
 void
-imageBufferTextureWritten(GPUTexture *texture, uint32_t mipLevel);
+imageBufferTextureWritten(GPUTexture *texture, uint32_t mipLevel, uint32_t layer, uint32_t layerCount);
 
 #endif /* gpu_image_buffer_internal_h */

@@ -18,6 +18,7 @@
 #include "buffer_internal.h"
 #include "cmdqueue_internal.h"
 #include "device_internal.h"
+#include "image_buffer_internal.h"
 #include "memory_internal.h"
 #include "texture_internal.h"
 
@@ -276,6 +277,22 @@ gpu_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   if (!validBarrierBatch(device, barriers)
       || !(api = deviceApi(device))
       || !api->renderPass.encodeBarriers) {
+    return;
+  }
+
+  /* an emulated read-write texture's buffer holds its texels too */
+
+  if (device->_imageBuffers && barriers->textureBarrierCount) {
+    GPUBufferBarrier       storage[8];
+    GPUBufferBarrier      *allocated;
+    GPUBarrierBatch        extended;
+    const GPUBarrierBatch *batch;
+
+    allocated = NULL;
+    batch     = imageBufferBarriers(barriers, &extended, storage, GPU_ARRAY_LEN(storage), &allocated);
+
+    api->renderPass.encodeBarriers(cmdb, batch ? batch : barriers);
+    free(allocated);
     return;
   }
 

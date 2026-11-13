@@ -118,6 +118,7 @@ struct GPUDevice {
   struct GPUImageBuffer      *_imageBuffers;
   void                       *_imageBufferLock;
   uint32_t                    _imageBufferGeneration; /* buffers made so far; 0: none */
+  GPUBuffer                  *_imageBufferCounts;     /* 0, 1, 2...: layer counts copied into headers */
 };
 
 GPU_HIDE

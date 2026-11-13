@@ -813,8 +813,10 @@ GPUBlit(GPUCommandBuffer         *cmdb,
   /* emulated read-write textures: the source as read-write bindings left it */
 
   if (info->src->_imageBuffer || info->dst->_imageBuffer) {
-    imageBufferFlush(cmdb);
-    imageBufferTextureWritten(info->dst, info->dstRegion.texture.mipLevel);
+    imageBufferFlushTexture(cmdb, info->src, info->srcRegion.texture.mipLevel);
+    imageBufferFlushTexture(cmdb, info->dst, info->dstRegion.texture.mipLevel);
+    imageBufferTextureWritten(info->dst, info->dstRegion.texture.mipLevel, info->dstRegion.texture.baseArrayLayer,
+                              info->dstRegion.layerCount);
   }
 
   if (info->src->format == info->dst->format

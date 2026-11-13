@@ -548,14 +548,14 @@ renderPassImageBuffers(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *in
   const GPUTextureView *view;
   uint32_t              i;
 
-  imageBufferRenderSync(cmdb);
+  imageBufferRenderSync(cmdb, info);
 
   for (i = 0u; i < info->colorAttachmentCount; i++) {
     if ((view = info->pColorAttachments[i].view))
-      imageBufferTextureWritten(view->_texture, view->baseMipLevel);
+      imageBufferTextureWritten(view->_texture, view->baseMipLevel, view->baseArrayLayer, view->arrayLayerCount);
 
     if ((view = info->pColorAttachments[i].resolveView))
-      imageBufferTextureWritten(view->_texture, view->baseMipLevel);
+      imageBufferTextureWritten(view->_texture, view->baseMipLevel, view->baseArrayLayer, view->arrayLayerCount);
   }
 }
 
@@ -752,9 +752,11 @@ GPUCopyBufferToTexture(GPUTransferPassEncoder           *pass,
     return;
   }
 
-  imageBufferTransferRead(pass, dst);
+  imageBufferTransferRead(pass, dst, region->texture.texture.mipLevel, region->texture.texture.baseArrayLayer,
+                          region->texture.layerCount);
   api->renderPass.copyBufferToTexture(pass, src, dst, region);
-  imageBufferTextureWritten(dst, region->texture.texture.mipLevel);
+  imageBufferTextureWritten(dst, region->texture.texture.mipLevel, region->texture.texture.baseArrayLayer,
+                            region->texture.layerCount);
 }
 
 GPU_EXPORT
@@ -778,7 +780,13 @@ GPUCopyTextureToBuffer(GPUTransferPassEncoder           *pass,
     return;
   }
 
-  imageBufferTransferRead(pass, src);
+  /* an emulated texture whose buffer was written last copies from the buffer */
+
+  if (imageBufferCopyToBuffer(pass, src, dst, region))
+    return;
+
+  imageBufferTransferRead(pass, src, region->texture.texture.mipLevel, region->texture.texture.baseArrayLayer,
+                          region->texture.layerCount);
   api->renderPass.copyTextureToBuffer(pass, src, dst, region);
 }
 
@@ -837,10 +845,14 @@ GPUCopyTextureToTexture(GPUTransferPassEncoder              *pass,
     return;
   }
 
-  imageBufferTransferRead(pass, src);
-  imageBufferTransferRead(pass, dst);
-  api->renderPass.copyTextureToTexture(pass, src, dst, region);
-  imageBufferTextureWritten(dst, region->dst.mipLevel);
+  imageBufferTransferRead(pass, dst, region->dst.mipLevel, region->dst.baseArrayLayer, region->layerCount);
+
+  if (!imageBufferCopyToTexture(pass, src, dst, region)) {
+    imageBufferTransferRead(pass, src, region->src.mipLevel, region->src.baseArrayLayer, region->layerCount);
+    api->renderPass.copyTextureToTexture(pass, src, dst, region);
+  }
+
+  imageBufferTextureWritten(dst, region->dst.mipLevel, region->dst.baseArrayLayer, region->layerCount);
 }
 
 GPU_EXPORT
