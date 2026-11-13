@@ -573,6 +573,7 @@ struct GPUQueueDX12 {
   UINT64                  transferFenceValue;
   UINT64                  timestampFrequency;
   uint64_t                readbackCapacity;
+  uint32_t                transfersSinceLarge; /* transfer batches begun since one needed large staging */
   D3D12_COMMAND_LIST_TYPE type;
   uint32_t                inFlightCount;
   uint32_t                activeTransferSlot;

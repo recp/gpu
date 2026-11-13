@@ -578,9 +578,25 @@ dx12__endFrameTime(GPUCommandBufferDX12 *native) {
                                                 0u);
 }
 
+/* staging grows by doubling up to DX12_TRANSFER_STAGING_KEEP; a larger
+ * transfer gets staging of about its own size, kept while such transfers
+ * keep coming and given back once DX12_TRANSFER_LARGE_IDLE batches went by
+ * without one (as on Metal and Vulkan, where a 125 MB page image otherwise
+ * pinned 128 MB for good, and making it again took 8-20 ms) */
+enum {
+  DX12_TRANSFER_STAGING_KEEP  = 16u * 1024u * 1024u,
+  DX12_TRANSFER_STAGING_LARGE = 1024u * 1024u, /* large staging rounds up to this */
+  DX12_TRANSFER_LARGE_IDLE    = 32u
+};
+
 static uint64_t
 dx12__transferCapacity(uint64_t sizeBytes, uint64_t minimumCapacity) {
   uint64_t capacity;
+
+  if (sizeBytes > DX12_TRANSFER_STAGING_KEEP && sizeBytes >= minimumCapacity) {
+    capacity = (sizeBytes + DX12_TRANSFER_STAGING_LARGE - 1u) & ~(uint64_t)(DX12_TRANSFER_STAGING_LARGE - 1u);
+    return capacity >= sizeBytes ? capacity : sizeBytes;
+  }
 
   capacity = minimumCapacity;
 
@@ -1380,6 +1396,45 @@ dx12__freeTransferSlot(GPUQueueDX12 *native) {
   return &native->transferSlots[native->nextTransferSlot];
 }
 
+/* large staging the GPU is done with goes back: upload slots whose copies
+ * finished, and the readback staging (each readback waits for its copy) */
+static void
+dx12__trimTransferStaging(GPUQueue *queue, GPUQueueDX12 *native) {
+  GPUTransferSlotDX12 *slot;
+  UINT64               completed;
+  uint32_t             i;
+
+  completed = native->transferFence ? native->transferFence->lpVtbl->GetCompletedValue(native->transferFence) : 0u;
+
+  for (i = 0u; i < GPU_DX12_TRANSFER_SLOT_COUNT; i++) {
+    slot = &native->transferSlots[i];
+
+    if (!slot->uploadStaging || slot->uploadCapacity <= DX12_TRANSFER_STAGING_KEEP
+        || (native->transferOpen && native->activeTransferSlot == i))
+      continue;
+
+    if (slot->pending) {
+      if (completed == UINT64_MAX || slot->fenceValue > completed)
+        continue;
+      (void)dx12__waitTransfer(queue, slot, false);
+    }
+
+    slot->uploadStaging->lpVtbl->Unmap(slot->uploadStaging, 0u, NULL);
+    slot->uploadStaging->lpVtbl->Release(slot->uploadStaging);
+    slot->uploadStaging  = NULL;
+    slot->uploadMapped   = NULL;
+    slot->uploadCapacity = 0u;
+    slot->uploadUsed     = 0u;
+  }
+
+  if (native->readbackStaging && native->readbackCapacity > DX12_TRANSFER_STAGING_KEEP
+      && !(native->transferOpen && !native->transferUpload)) {
+    native->readbackStaging->lpVtbl->Release(native->readbackStaging);
+    native->readbackStaging  = NULL;
+    native->readbackCapacity = 0u;
+  }
+}
+
 GPU_HIDE
 GPUResult
 dx12_beginTransfer(GPUQueue                   *queue,
@@ -1416,6 +1471,9 @@ dx12_beginTransfer(GPUQueue                   *queue,
       || (!upload && heapType != D3D12_HEAP_TYPE_READBACK)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
+  if (stagingBytes > DX12_TRANSFER_STAGING_KEEP)
+    native->transfersSinceLarge = 0u;
 
   if (native->transferOpen) {
     if (!native->transferUpload) {
@@ -1456,6 +1514,13 @@ dx12_beginTransfer(GPUQueue                   *queue,
   if (waitResult != GPU_OK) {
     return waitResult;
   }
+
+  /* a batch: past DX12_TRANSFER_LARGE_IDLE without large staging, the large
+   * staging left goes, this slot's too (done with: it's set up small below) */
+  if (stagingBytes <= DX12_TRANSFER_STAGING_KEEP && native->transfersSinceLarge < DX12_TRANSFER_LARGE_IDLE)
+    native->transfersSinceLarge++;
+  if (native->transfersSinceLarge >= DX12_TRANSFER_LARGE_IDLE)
+    dx12__trimTransferStaging(queue, native);
 
   if (!dx12__ensureTransferContext(native, device, slot)
       || !dx12__ensureTransferStaging(native,
@@ -1787,6 +1852,9 @@ dx12_waitCommandQueueIdle(GPUQueueDX12 *queue) {
     for (slot = 0u; slot < GPU_DX12_TRANSFER_SLOT_COUNT; slot++) {
       queue->transferSlots[slot].pending = false;
     }
+
+    if (queue->transfersSinceLarge >= DX12_TRANSFER_LARGE_IDLE)
+      dx12__trimTransferStaging(queue->queue, queue);
 
     return true;
   }
