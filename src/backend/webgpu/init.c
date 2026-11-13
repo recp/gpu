@@ -42,6 +42,10 @@ backend_webgpu(void) {
     webgpu_initCompute(&webgpu.compute);
     webgpu_initRenderPass(&webgpu.renderPass);
     webgpu_initRenderEncoder(&webgpu.rce);
+#if !GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+    /* Dawn's device and a browser's are called from one thread only */
+    webgpu.callerThreadPipelines = true;
+#endif
     webgpu.initialized = true;
   }
 

@@ -61,7 +61,9 @@ GPUDestroyComputePipeline(GPUComputePipeline *pipeline);
  * its compile, running it there if no thread started it yet. destroying the
  * pipeline, or the shader library or pipeline layout it was made from, waits
  * too. a compile that fails shows at GPUWaitComputePipeline, and a bind of
- * it is skipped. */
+ * it is skipped. WebGPU through Dawn or a browser, whose device only one
+ * thread may call, starts no threads: its own async pipeline creation
+ * compiles them in the background, waited for the same way. */
 GPU_EXPORT
 GPUResult
 GPUSetPipelineCompileThreads(GPUDevice *device, uint32_t threadCount);

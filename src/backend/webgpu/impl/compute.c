@@ -16,9 +16,80 @@
 
 #include "../common.h"
 #include "../impl.h"
+#include "../../../api/compile_pool_internal.h"
 #include "constants.h"
 
 static const uint8_t webgpu_zeroPushConstants[GPU_WEBGPU_PUSH_CONSTANT_ALIGNMENT];
+
+/* background compiles on Dawn (GPUSetPipelineCompileThreads): its device
+ * only one thread may call, so WebGPU's own async creation compiles them
+ * (on Dawn's workers) and the pipeline is waited for at its first bind,
+ * GPUWaitComputePipeline or destroy. a browser's pipelines already compile
+ * outside the calling thread. */
+#if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
+#  define GPU_WEBGPU_ASYNC_COMPUTE 1
+
+typedef struct GPUComputePipelineWebGPUAsync {
+  GPUComputePipelineWebGPU      state; /* first: what the rest of the backend sees */
+  GPUComputePipeline           *owner;
+  WGPUInstance                  instance;
+  WGPUFuture                    future;
+  WGPUComputePipeline           created;
+  WGPUCreatePipelineAsyncStatus status;
+  bool                          pending;
+} GPUComputePipelineWebGPUAsync;
+
+#  define GPU_WEBGPU_COMPUTE_STATE_SIZE sizeof(GPUComputePipelineWebGPUAsync)
+
+/* runs inside the wait for its future (WaitAnyOnly) */
+static void
+webgpu_computeCreated(WGPUCreatePipelineAsyncStatus status,
+                      WGPUComputePipeline           created,
+                      WGPUStringView                message,
+                      void                         *userData,
+                      void                         *unused) {
+  GPUComputePipelineWebGPUAsync *async;
+
+  GPU__UNUSED(message);
+  GPU__UNUSED(unused);
+  async          = userData;
+  async->status  = status;
+  async->created = created;
+}
+
+static void
+webgpu_computeResolve(GPUComputePipelineWebGPU *state) {
+  GPUComputePipelineWebGPUAsync *async;
+  WGPUFutureWaitInfo             wait = WGPU_FUTURE_WAIT_INFO_INIT;
+
+  async = (GPUComputePipelineWebGPUAsync *)state;
+
+  if (!async->pending)
+    return;
+
+  wait.future = async->future;
+
+  /* not completed: its callback may still come, so the state stays */
+  if (wgpuInstanceWaitAny(async->instance, 1u, &wait, UINT64_MAX) != WGPUWaitStatus_Success
+      || !wait.completed)
+    return;
+
+  async->pending = false;
+
+  if (async->status == WGPUCreatePipelineAsyncStatus_Success && async->created) {
+    state->pipeline      = async->created;
+    state->base._priv    = async->created;
+    async->owner->_priv  = async->created;
+  } else if (async->created) {
+    wgpuComputePipelineRelease(async->created);
+  }
+
+  async->created = NULL;
+}
+#else
+#  define GPU_WEBGPU_ASYNC_COMPUTE 0
+#  define GPU_WEBGPU_COMPUTE_STATE_SIZE sizeof(GPUComputePipelineWebGPU)
+#endif
 
 static GPUCommandWebGPU*
 webgpu_computeCommand(GPUComputePassEncoder *encoder) {
@@ -37,6 +108,11 @@ webgpu_createComputePipeline(GPUDevice                          *device,
 #endif
   GPUComputePipelineWebGPU     *state;
   GPUDeviceWebGPU              *native;
+#if GPU_WEBGPU_ASYNC_COMPUTE
+  WGPUCreateComputePipelineAsyncCallbackInfo callbackInfo = WGPU_CREATE_COMPUTE_PIPELINE_ASYNC_CALLBACK_INFO_INIT;
+  GPUComputePipelineWebGPUAsync             *async;
+  GPUInstanceWebGPU                         *instance;
+#endif
   uint64_t                      entryMask;
   uint32_t                      automaticGroupMask;
   GPUResult                     result;
@@ -49,7 +125,7 @@ webgpu_createComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (!(state = calloc(1, sizeof(*state)))) {
+  if (!(state = calloc(1, GPU_WEBGPU_COMPUTE_STATE_SIZE))) {
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
@@ -84,6 +160,29 @@ webgpu_createComputePipeline(GPUDevice                          *device,
   descriptor.compute.constantCount = webgpu_pipelineConstants(info->chain.pNext, constantEntries, constantIDs);
   descriptor.compute.constants     = descriptor.compute.constantCount ? constantEntries : NULL;
 
+  state->base.workgroupSize[0] = 1u;
+  state->base.workgroupSize[1] = 1u;
+  state->base.workgroupSize[2] = 1u;
+
+#if GPU_WEBGPU_ASYNC_COMPUTE
+  if (compilePoolActive(device)
+      && (instance = webgpuInstance(device->inst)) && instance->instance && instance->timedWaitAny) {
+    async                  = (GPUComputePipelineWebGPUAsync *)state;
+    async->owner           = pipeline;
+    async->instance        = instance->instance;
+    callbackInfo.mode      = WGPUCallbackMode_WaitAnyOnly;
+    callbackInfo.callback  = webgpu_computeCreated;
+    callbackInfo.userdata1 = async;
+    async->future          = wgpuDeviceCreateComputePipelineAsync(native->device, &descriptor, callbackInfo);
+
+    if (async->future.id) {
+      async->pending   = true;
+      pipeline->_state = &state->base;
+      return GPU_OK;
+    }
+  }
+#endif
+
   result = GPU_OK;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
   webgpuBeginPipelineError(device, &error);
@@ -102,14 +201,25 @@ webgpu_createComputePipeline(GPUDevice                          *device,
     return result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE;
   }
 
-  state->base._priv            = state->pipeline;
-  state->base.workgroupSize[0] = 1u;
-  state->base.workgroupSize[1] = 1u;
-  state->base.workgroupSize[2] = 1u;
-  pipeline->_priv              = state->pipeline;
-  pipeline->_state             = &state->base;
+  state->base._priv = state->pipeline;
+  pipeline->_priv   = state->pipeline;
+  pipeline->_state  = &state->base;
 
   return GPU_OK;
+}
+
+static GPUResult
+webgpu_waitComputePipeline(GPUComputePipeline *pipeline) {
+  GPUComputePipelineWebGPU *state;
+
+  if (!pipeline || !(state = (GPUComputePipelineWebGPU *)pipeline->_state))
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+#if GPU_WEBGPU_ASYNC_COMPUTE
+  webgpu_computeResolve(state);
+#endif
+
+  return state->pipeline ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 }
 
 static void
@@ -120,14 +230,24 @@ webgpu_destroyComputePipeline(GPUComputePipeline *pipeline) {
     return;
   }
 
-  state = pipeline->_state;
+  state = (GPUComputePipelineWebGPU *)pipeline->_state;
 
   if (state) {
+#if GPU_WEBGPU_ASYNC_COMPUTE
+    webgpu_computeResolve(state);
+#endif
+
     if (state->pipeline) {
       wgpuComputePipelineRelease(state->pipeline);
     }
 
     webgpuDestroyPipelineLayout(&state->layout);
+
+#if GPU_WEBGPU_ASYNC_COMPUTE
+    /* a wait that failed: its callback may still write here */
+    if (((GPUComputePipelineWebGPUAsync *)state)->pending)
+      state = NULL;
+#endif
   }
 
   free(state);
@@ -204,6 +324,11 @@ webgpu_setComputePipeline(GPUComputePassEncoder   *encoder,
   command     = webgpu_computeCommand(encoder);
   nativeState = (GPUComputePipelineWebGPU *)state;
 
+#if GPU_WEBGPU_ASYNC_COMPUTE
+  if (nativeState)
+    webgpu_computeResolve(nativeState);
+#endif
+
   if (!command || !command->computeEncoder || !nativeState
       || !nativeState->pipeline) {
     return;
@@ -272,6 +397,7 @@ void
 webgpu_initCompute(GPUComputeApi *api) {
   api->createPipeline          = webgpu_createComputePipeline;
   api->destroyComputePipeline  = webgpu_destroyComputePipeline;
+  api->waitPipeline            = webgpu_waitComputePipeline;
   api->computeCommandEncoder   = webgpu_computeCommandEncoder;
   api->setComputePipelineState = webgpu_setComputePipeline;
   api->pushConstants           = webgpu_computePushConstants;
