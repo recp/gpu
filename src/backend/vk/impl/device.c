@@ -3126,6 +3126,11 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
 
   coreFeatures.independentBlend  = adapterVk->features.independentBlend;
   coreFeatures.shaderFloat64     = adapterVk->features.shaderFloat64;
+
+  /* storage writes from render stages, and storage images of every format SPIR-V names */
+  coreFeatures.fragmentStoresAndAtomics          = adapterVk->features.fragmentStoresAndAtomics;
+  coreFeatures.vertexPipelineStoresAndAtomics    = adapterVk->features.vertexPipelineStoresAndAtomics;
+  coreFeatures.shaderStorageImageExtendedFormats = adapterVk->features.shaderStorageImageExtendedFormats;
   coreFeatures.imageCubeArray    = adapterVk->features.imageCubeArray;
   coreFeatures.samplerAnisotropy = adapterVk->features.samplerAnisotropy;
   coreFeatures.sampleRateShading = adapterVk->features.sampleRateShading;
