@@ -40,6 +40,20 @@ dx12__queueLock(GPUQueueDX12 *queue) {
   EnterCriticalSection(&queue->poolLock);
 }
 
+/* GPU_FEATURE_THREADED_UPLOADS: command allocators are per command buffer and
+ * D3D12 queues free-threaded, so the queue operations GPU-C serializes take
+ * this lock alone */
+
+static void
+dx12_lockQueue(GPUQueue *queue) {
+  EnterCriticalSection(&((GPUQueueDX12 *)queue->_priv)->submitLock);
+}
+
+static void
+dx12_unlockQueue(GPUQueue *queue) {
+  LeaveCriticalSection(&((GPUQueueDX12 *)queue->_priv)->submitLock);
+}
+
 static void
 dx12__queueUnlock(GPUQueueDX12 *queue) {
   LeaveCriticalSection(&queue->poolLock);
@@ -355,11 +369,13 @@ dx12__completionMain(LPVOID context) {
 
 static bool
 dx12__startWorker(GPUQueueDX12 *queue) {
+  InitializeCriticalSection(&queue->submitLock);
   InitializeCriticalSection(&queue->poolLock);
   InitializeConditionVariable(&queue->pendingCondition);
 
   if (!(queue->completionEvent = CreateEventW(NULL, FALSE, FALSE, NULL))) {
     DeleteCriticalSection(&queue->poolLock);
+    DeleteCriticalSection(&queue->submitLock);
     return false;
   }
 
@@ -375,6 +391,7 @@ dx12__startWorker(GPUQueueDX12 *queue) {
     CloseHandle(queue->completionEvent);
     queue->completionEvent = NULL;
     DeleteCriticalSection(&queue->poolLock);
+    DeleteCriticalSection(&queue->submitLock);
   }
 
   return queue->workerStarted;
@@ -395,6 +412,7 @@ dx12__stopWorker(GPUQueueDX12 *queue) {
   CloseHandle(queue->worker);
   CloseHandle(queue->completionEvent);
   DeleteCriticalSection(&queue->poolLock);
+  DeleteCriticalSection(&queue->submitLock);
   queue->worker          = NULL;
   queue->completionEvent = NULL;
   queue->workerStarted   = false;
@@ -2167,4 +2185,6 @@ dx12_initCmdQue(GPUCommandQueueApi *api) {
   api->createSemaphore         = dx12_createSemaphore;
   api->destroySemaphore        = dx12_destroySemaphore;
   api->submitEx                = dx12_submitEx;
+  api->lock                    = dx12_lockQueue;
+  api->unlock                  = dx12_unlockQueue;
 }

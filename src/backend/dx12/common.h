@@ -568,6 +568,7 @@ struct GPUQueueDX12 {
   bool                    transferOpen;
   bool                    transferUpload;
   CRITICAL_SECTION        poolLock;
+  CRITICAL_SECTION        submitLock;  /* the public queue lock (GPU_FEATURE_THREADED_UPLOADS), recursive */
   CONDITION_VARIABLE      pendingCondition;
 };
 

@@ -1339,6 +1339,7 @@ dx12_supportsFeature(const GPUAdapter *__restrict adapter,
 
   switch (feature) {
     case GPU_FEATURE_COMPUTE:
+    case GPU_FEATURE_THREADED_UPLOADS: /* allocators per command buffer, queues free-threaded */
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_MULTI_DRAW:
     case GPU_FEATURE_PLACED_RESOURCES:
