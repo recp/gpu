@@ -345,6 +345,8 @@ typedef struct GPUBufferVk {
   bool           coherent;
   bool           ownsMemory;
   bool           sparse;
+  bool           deviceMapped; /* device-local memory mapped too: queue writes there keep the queue's order */
+  bool           stagedReads;  /* device-local memory the host maps uncached: reads copy to cached staging */
 } GPUBufferVk;
 
 typedef struct GPUHeapVk {

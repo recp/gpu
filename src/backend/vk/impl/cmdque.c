@@ -603,7 +603,8 @@ vk__ensureTransferBuffer(GPUQueueVk        *queue,
                                  : GPU_BUFFER_USAGE_COPY_DST;
   staging               = NULL;
 
-  if (vk_createHostBuffer(queue->queue->_device, &info, &staging) != GPU_OK
+  if ((upload ? vk_createHostBuffer(queue->queue->_device, &info, &staging)
+              : vk_createReadbackBuffer(queue->queue->_device, &info, &staging)) != GPU_OK
       || !staging) {
     return false;
   }
@@ -2082,6 +2083,31 @@ vk_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   vk__queueUnlock(queue);
 
   return GPU_OK;
+}
+
+GPU_HIDE
+bool
+vk_queueIdle(GPUQueue *queue) {
+  GPUQueueVk  *native;
+  GPUDeviceVk *deviceVk;
+  uint32_t     i;
+  bool         idle;
+
+  if (!queue || !(native = queue->_priv) || !queue->_device || !(deviceVk = queue->_device->_priv)
+      || native->transferOpen)
+    return false;
+
+  vk__queueLock(native);
+  idle = native->inFlightCount == 0u;
+  vk__queueUnlock(native);
+
+  for (i = 0u; idle && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
+    if (native->transferSlots[i].pending
+        && vkGetFenceStatus(deviceVk->device, native->transferSlots[i].fence) != VK_SUCCESS)
+      idle = false;
+  }
+
+  return idle;
 }
 
 /* GPUQueueWaitIdle: queue writes' transfers, then every command buffer GPU-C

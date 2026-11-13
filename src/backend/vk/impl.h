@@ -189,6 +189,18 @@ vk_createHostBuffer(GPUDevice                 *__restrict device,
                     const GPUBufferCreateInfo *__restrict info,
                     GPUBuffer                **__restrict outBuffer);
 
+/* host memory the host reads back: cached (and coherent) where offered */
+GPU_HIDE
+GPUResult
+vk_createReadbackBuffer(GPUDevice                 *__restrict device,
+                        const GPUBufferCreateInfo *__restrict info,
+                        GPUBuffer                **__restrict outBuffer);
+
+/* nothing the queue was given still runs, and no transfer waits to be sent */
+GPU_HIDE
+bool
+vk_queueIdle(GPUQueue *queue);
+
 GPU_HIDE
 GPUResult
 vk_getBufferMemoryRequirements(GPUDevice                 *device,

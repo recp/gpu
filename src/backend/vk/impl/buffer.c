@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "../impl.h"
 #include "../../../api/buffer_internal.h"
+#include "../../../api/suballoc_internal.h"
 
 static void
 vk__destroyBufferState(GPUBufferVk *native);
@@ -117,10 +118,21 @@ vk__destroyBufferState(GPUBufferVk *native) {
   }
 }
 
+/* where a buffer lives: device-local memory (mapped as well when it's
+ * host-visible anyway, as on most phones: queue writes and cached reads then
+ * skip staging), host memory written by the host (coherent where offered),
+ * or host memory read back (cached where offered: uncached reads are slow) */
+
+typedef enum VKBufferMemory {
+  VK_BUFFER_DEVICE     = 0,
+  VK_BUFFER_HOST_WRITE = 1,
+  VK_BUFFER_HOST_READ  = 2
+} VKBufferMemory;
+
 static GPUResult
 vk__createBuffer(GPUDevice                 *__restrict device,
                  const GPUBufferCreateInfo *__restrict info,
-                 bool                                  hostVisible,
+                 VKBufferMemory                        memory,
                  GPUBuffer                **__restrict outBuffer) {
   GPUBufferVk               state           = {0};
   VkBufferCreateInfo        bufferInfo      = {0};
@@ -132,6 +144,7 @@ vk__createBuffer(GPUDevice                 *__restrict device,
   VkMemoryPropertyFlags     preferredFlags;
   VkMemoryPropertyFlags     requiredFlags;
   uint32_t                  memoryTypeIndex;
+  bool                      hostVisible, mapped;
 
   if (!device || !device->_priv || !info || !outBuffer
       || info->sizeBytes == 0u) {
@@ -155,19 +168,31 @@ vk__createBuffer(GPUDevice                 *__restrict device,
   }
 
   vkGetBufferMemoryRequirements(state.device, state.buffer, &requirements);
+  hostVisible    = memory != VK_BUFFER_DEVICE;
   requiredFlags  = hostVisible ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
                                : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
   preferredFlags = hostVisible ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0u;
 
-  if (!vk_findMemoryType(device,
-                         requirements.memoryTypeBits,
-                         requiredFlags,
-                         preferredFlags,
-                         &memoryTypeIndex,
-                         &memoryFlags)) {
+  if (!(memory == VK_BUFFER_HOST_READ
+        && vk_findMemoryType(device,
+                             requirements.memoryTypeBits,
+                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                             &memoryTypeIndex,
+                             &memoryFlags))
+      && !vk_findMemoryType(device,
+                            requirements.memoryTypeBits,
+                            requiredFlags,
+                            preferredFlags,
+                            &memoryTypeIndex,
+                            &memoryFlags)) {
     vk__destroyBufferState(&state);
     return GPU_ERROR_UNSUPPORTED;
   }
+
+  mapped             = hostVisible || (memoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u;
+  state.deviceMapped = !hostVisible && mapped;
+  state.stagedReads  = state.deviceMapped && (memoryFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) == 0u;
 
   allocationInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   allocationInfo.allocationSize  = requirements.size;
@@ -186,9 +211,9 @@ vk__createBuffer(GPUDevice                 *__restrict device,
   }
 
   if (vk_poolBindBuffer(deviceVk, state.buffer, memoryTypeIndex, memoryFlags,
-                        (bufferInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0u, hostVisible,
+                        (bufferInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0u, mapped,
                         &state.memory, &state.mapped, &state.allocationSize, &state.poolRange)) {
-    state.coherent = hostVisible && (memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0u;
+    state.coherent = mapped && (memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0u;
     return vk_wrapBuffer(device, info, &bufferInfo, &state, outBuffer);
   }
 
@@ -204,7 +229,7 @@ vk__createBuffer(GPUDevice                 *__restrict device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  if (hostVisible
+  if (mapped
       && vkMapMemory(state.device,
                      state.memory,
                      0u,
@@ -216,7 +241,7 @@ vk__createBuffer(GPUDevice                 *__restrict device,
   }
 
   state.allocationSize = requirements.size;
-  state.coherent       = hostVisible
+  state.coherent       = mapped
                          && (memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0u;
   state.ownsMemory     = true;
 
@@ -704,10 +729,10 @@ vk_createBuffer(GPUDevice                 *__restrict device,
   bool                      hostVisible;
 
   hostVisible = info && (info->usage & deviceLocal) == 0u;
-  result      = vk__createBuffer(device, info, hostVisible, outBuffer);
+  result      = vk__createBuffer(device, info, hostVisible ? VK_BUFFER_HOST_WRITE : VK_BUFFER_DEVICE, outBuffer);
 
   if (result == GPU_ERROR_UNSUPPORTED && !hostVisible) {
-    result = vk__createBuffer(device, info, true, outBuffer);
+    result = vk__createBuffer(device, info, VK_BUFFER_HOST_WRITE, outBuffer);
   }
 
   return result;
@@ -718,7 +743,15 @@ GPUResult
 vk_createHostBuffer(GPUDevice                 *__restrict device,
                     const GPUBufferCreateInfo *__restrict info,
                     GPUBuffer                **__restrict outBuffer) {
-  return vk__createBuffer(device, info, true, outBuffer);
+  return vk__createBuffer(device, info, VK_BUFFER_HOST_WRITE, outBuffer);
+}
+
+GPU_HIDE
+GPUResult
+vk_createReadbackBuffer(GPUDevice                 *__restrict device,
+                        const GPUBufferCreateInfo *__restrict info,
+                        GPUBuffer                **__restrict outBuffer) {
+  return vk__createBuffer(device, info, VK_BUFFER_HOST_READ, outBuffer);
 }
 
 GPU_HIDE
@@ -730,6 +763,35 @@ vk_destroyBuffer(GPUBuffer *__restrict buffer) {
 
   vk__destroyBufferState(buffer->_priv);
   free(buffer);
+}
+
+/* [offset, offset + size) of a mapped buffer as a range of its memory for
+ * flushes and invalidations: rounded out to nonCoherentAtomSize, never the
+ * whole memory (a pooled buffer's memory is a block of many) */
+
+static void
+vk__mappedRange(GPUDevice           *device,
+                const GPUBufferVk   *native,
+                uint64_t             offset,
+                uint64_t             size,
+                VkMappedMemoryRange *range) {
+  GPUAdapterVk *adapterVk;
+  uint64_t      atom, start, end, limit;
+
+  adapterVk = device && device->adapter ? device->adapter->_priv : NULL;
+  atom      = adapterVk && adapterVk->props.limits.nonCoherentAtomSize ? adapterVk->props.limits.nonCoherentAtomSize
+                                                                         : 1u;
+  start     = (native->poolRange.block ? native->poolRange.offset : 0u) + offset;
+  end       = start + size;
+  limit     = native->poolRange.block ? native->poolRange.block->size : native->allocationSize;
+  start    -= start % atom;
+  end       = end % atom ? end + (atom - end % atom) : end;
+
+  memset(range, 0, sizeof(*range));
+  range->sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+  range->memory = native->memory;
+  range->offset = start;
+  range->size   = end > limit ? VK_WHOLE_SIZE : end - start;
 }
 
 GPU_HIDE
@@ -756,13 +818,14 @@ vk_writeBuffer(GPUQueue   *__restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (native->mapped) {
+  /* host memory is written now (its users order their own writes); mapped
+   * device-local memory too while nothing the queue was given still runs or
+   * waits, which keeps the queue's order without a staging copy */
+  if (native->mapped && (!native->deviceMapped || vk_queueIdle(queue))) {
     memmove((uint8_t *)native->mapped + dstOffset, data, (size_t)sizeBytes);
 
     if (!native->coherent) {
-      range.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-      range.memory = native->memory;
-      range.size   = VK_WHOLE_SIZE;
+      vk__mappedRange(queue->_device, native, dstOffset, sizeBytes, &range);
 
       if (vkFlushMappedMemoryRanges(native->device, 1u, &range) != VK_SUCCESS) {
         return GPU_ERROR_BACKEND_FAILURE;
@@ -796,9 +859,7 @@ vk_writeBuffer(GPUQueue   *__restrict queue,
          (size_t)sizeBytes);
 
   if (!stagingVk->coherent) {
-    range.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    range.memory = stagingVk->memory;
-    range.size   = VK_WHOLE_SIZE;
+    vk__mappedRange(queue->_device, stagingVk, stagingOffset, sizeBytes, &range);
 
     if (vkFlushMappedMemoryRanges(stagingVk->device,
                                   1u,
@@ -860,7 +921,9 @@ vk_readBuffer(GPUQueue  *__restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (native->mapped) {
+  /* device-local memory mapped uncached reads slower than a copy into
+   * cached staging */
+  if (native->mapped && !native->stagedReads) {
     result = vk_waitCommandQueueIdle(queue);
 
     if (result != GPU_OK) {
@@ -868,9 +931,7 @@ vk_readBuffer(GPUQueue  *__restrict queue,
     }
 
     if (!native->coherent) {
-      range.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-      range.memory = native->memory;
-      range.size   = VK_WHOLE_SIZE;
+      vk__mappedRange(queue->_device, native, srcOffset, sizeBytes, &range);
 
       if (vkInvalidateMappedMemoryRanges(native->device,
                                          1u,
@@ -936,9 +997,7 @@ vk_readBuffer(GPUQueue  *__restrict queue,
   }
 
   if (!stagingVk->coherent) {
-    range.sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    range.memory = stagingVk->memory;
-    range.size   = VK_WHOLE_SIZE;
+    vk__mappedRange(queue->_device, stagingVk, stagingOffset, sizeBytes, &range);
 
     if (vkInvalidateMappedMemoryRanges(stagingVk->device,
                                        1u,
