@@ -237,8 +237,10 @@ mt_poolTexture(GPUDeviceMT *deviceMT, MTLTextureDescriptor *desc) {
     return nil;
 
   storageMode = original = desc.storageMode;
+#if TARGET_OS_OSX
   if (storageMode == MTLStorageModeManaged)
     storageMode = MTLStorageModeShared;
+#endif
 
   if (storageMode != MTLStorageModeShared && storageMode != MTLStorageModePrivate)
     return nil;
