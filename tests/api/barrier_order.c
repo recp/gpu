@@ -23,7 +23,9 @@
  *   same:     one command buffer, SHADER_WRITE -> SHADER_READ between
  * each submitted without a CPU wait between. any texel the reader saw before
  * the writer wrote it reads 0. 'unordered' (no barrier) is reported, not
- * checked: it shows whether this device would race at all.
+ * checked: it shows whether this device would race at all. then
+ * GPUQueueWaitIdle and GPUDeviceWaitIdle, each after a slow write: its fence
+ * is signaled when they return.
  *   barrier_order <write.us> <read.us> [rounds]
  */
 
@@ -227,6 +229,66 @@ bo_run(BOTest *t, BOOrder order) {
   return ok ? missing : UINT32_MAX;
 }
 
+/* a slow write submitted, then the wait: its fence signaled once it returns */
+
+static bool
+bo_waitIdle(BOTest *t, bool device) {
+  GPUTextureCreateInfo     textureInfo = {0};
+  GPUTextureViewCreateInfo viewInfo    = {0};
+  GPUTexture              *texture = NULL;
+  GPUTextureView          *view    = NULL;
+  GPUBindGroup            *group   = NULL;
+  GPUCommandBuffer        *writer  = NULL;
+  GPUFence                *fence   = NULL;
+  bool                     ok;
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_R32_UINT;
+  textureInfo.width            = BO_SIZE;
+  textureInfo.height           = BO_SIZE;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_STORAGE;
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format           = GPU_FORMAT_R32_UINT;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.arrayLayerCount  = 1u;
+
+  ok = GPUCreateTexture(t->device, &textureInfo, &texture) == GPU_OK
+       && GPUCreateTextureView(texture, &viewInfo, &view) == GPU_OK
+       && (group = bo_group(t, 0u, GPU_BINDING_STORAGE_TEXTURE, view, GPU_BINDING_READ_ONLY_STORAGE_BUFFER, t->work,
+                            16u))
+       && GPUCreateFence(t->device, NULL, &fence) == GPU_OK
+       && GPUAcquireCommandBuffer(t->queue, "barrier-order-wait-idle", &writer) == GPU_OK && writer;
+
+  if (ok) {
+    GPUTransitionTexture(writer, texture, GPU_ACCESS_NONE, GPU_ACCESS_SHADER_WRITE);
+    bo_dispatch(writer, t->write, group);
+    ok = bo_submit(t, writer, fence) == GPU_OK
+         && (device ? GPUDeviceWaitIdle(t->device) : GPUQueueWaitIdle(t->queue)) == GPU_OK
+         && GPUIsFenceSignaled(fence);
+  }
+
+  if (!ok)
+    fprintf(stderr, "barrier order: %s returned before the queue was idle\n",
+            device ? "GPUDeviceWaitIdle" : "GPUQueueWaitIdle");
+
+  if (fence)
+    (void)GPUWaitFence(fence, UINT64_MAX);
+
+  GPUDestroyFence(fence);
+  GPUDestroyBindGroup(group);
+  GPUDestroyTextureView(view);
+  GPUDestroyTexture(texture);
+
+  return ok;
+}
+
 int
 main(int argc, char **argv) {
   GPUBufferCreateInfo bufferInfo = {0};
@@ -284,6 +346,9 @@ main(int argc, char **argv) {
 
     for (order = BO_CHAIN; order <= BO_SAME; order++)
       ok = ok && raced[order] == 0u;
+
+    ok = bo_waitIdle(&t, false) && ok;
+    ok = bo_waitIdle(&t, true) && ok;
   }
 
   printf("barrier order (%u rounds; unordered raced %u, chain %u, direct %u, same %u): %s\n", rounds,
