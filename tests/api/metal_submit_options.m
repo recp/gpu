@@ -68,7 +68,7 @@ observe_options(id type, SEL selector) {
   return options;
 }
 
-static void
+__attribute__((noreturn)) static void
 fail(const char *message) {
   fprintf(stderr, "submit options: %s\n", message);
   _Exit(1);
