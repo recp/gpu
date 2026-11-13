@@ -306,6 +306,14 @@ typedef struct MTCommandQueue {
   bool                pendingSparseBarrier;
   bool                shaderValidation;
 
+  /* barriers chain as in Vulkan: per MTLStage bit, the stages earlier barriers
+   * made that stage wait on, added to a later barrier's source stages; and a
+   * barrier a command buffer left pending at commit, for the next encoder */
+  uint64_t            stageChains[64];
+  uint64_t            carriedAfterStages;
+  uint64_t            carriedBeforeStages;
+  uint64_t            carriedVisibility;
+
   id<MTLSharedEvent>   transferEvent;
   uint64_t            transferValue;
 } MTCommandQueue;
@@ -527,6 +535,19 @@ void
 mt_applyPendingBarrier(GPUCommandBuffer *cmdb,
                        id                encoder,
                        uint64_t          encoderStages);
+
+/* a barrier's source stages with what the queue's earlier barriers chained
+ * onto them; records what its destination stages now wait on */
+
+GPU_HIDE
+uint64_t
+mt_chainBarrierStages(MTCommandQueue *queue, uint64_t afterStages, uint64_t beforeStages);
+
+/* at commit: a barrier still pending goes to the queue's next encoder */
+
+GPU_HIDE
+void
+mt_carryPendingBarrier(GPUCommandBuffer *cmdb);
 
 GPU_HIDE
 void

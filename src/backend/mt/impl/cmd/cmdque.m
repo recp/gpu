@@ -1214,6 +1214,9 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  /* a barrier with no encoder after it here waits on the queue's next */
+  mt_carryPendingBarrier(cmdb);
+
 #if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {

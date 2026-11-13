@@ -575,20 +575,64 @@ mt_uploadConstants(GPUCommandBuffer *cmdb,
 }
 
 GPU_HIDE
+uint64_t
+mt_chainBarrierStages(MTCommandQueue *queue, uint64_t afterStages, uint64_t beforeStages) {
+  uint64_t widened, bits;
+
+  if (!queue || !afterStages || !beforeStages)
+    return afterStages;
+
+  widened = afterStages;
+
+  os_unfair_lock_lock(&queue->poolLock);
+
+  for (bits = afterStages & (uint64_t)INT64_MAX; bits; bits &= bits - 1u)
+    widened |= queue->stageChains[__builtin_ctzll(bits)];
+
+  for (bits = beforeStages & (uint64_t)INT64_MAX; bits; bits &= bits - 1u)
+    queue->stageChains[__builtin_ctzll(bits)] |= widened;
+
+  os_unfair_lock_unlock(&queue->poolLock);
+
+  return widened;
+}
+
+GPU_HIDE
+void
+mt_carryPendingBarrier(GPUCommandBuffer *cmdb) {
+  MTCommandBuffer *native;
+  MTCommandQueue  *queue;
+
+  if (!cmdb || !(native = mt_commandBuffer(cmdb)) || !(queue = native->owner)
+      || !native->pendingAfterStages || !native->pendingBeforeStages)
+    return;
+
+  os_unfair_lock_lock(&queue->poolLock);
+  queue->carriedAfterStages  |= native->pendingAfterStages;
+  queue->carriedBeforeStages |= native->pendingBeforeStages;
+  queue->carriedVisibility   |= native->pendingVisibility;
+  os_unfair_lock_unlock(&queue->poolLock);
+
+  native->pendingAfterStages  = 0u;
+  native->pendingBeforeStages = 0u;
+  native->pendingVisibility   = 0u;
+}
+
+GPU_HIDE
 void
 mt_applyPendingBarrier(GPUCommandBuffer *cmdb,
                        id                encoder,
                        uint64_t          encoderStages) {
 #if MT_HAS_COMMAND_BARRIERS
   MTCommandBuffer *native;
+  MTCommandQueue  *owner;
+  uint64_t         applyStages;
 #if MT_HAS_METAL4
   MTCommandQueue  *queue;
   uint64_t         destinationStages;
   bool             sparseBarrier;
 #endif
 #endif
-
-  GPU__UNUSED(encoderStages);
 
 #if MT_HAS_COMMAND_BARRIERS
   native = mt_commandBuffer(cmdb);
@@ -633,16 +677,37 @@ mt_applyPendingBarrier(GPUCommandBuffer *cmdb,
     }
   }
 #endif
+  /* a barrier an earlier command buffer on this queue left pending at commit */
+
+  if ((owner = native->owner) && owner->carriedBeforeStages) {
+    os_unfair_lock_lock(&owner->poolLock);
+    native->pendingAfterStages  |= owner->carriedAfterStages;
+    native->pendingBeforeStages |= owner->carriedBeforeStages;
+    native->pendingVisibility   |= owner->carriedVisibility;
+    owner->carriedAfterStages    = 0u;
+    owner->carriedBeforeStages   = 0u;
+    owner->carriedVisibility     = 0u;
+    os_unfair_lock_unlock(&owner->poolLock);
+  }
+
   if (native->pendingAfterStages == 0 || native->pendingBeforeStages == 0) {
     return;
   }
+
+  /* the stages this encoder runs wait here; the rest wait for an encoder
+   * that runs them (or the next command buffer's) */
+
+  applyStages = encoderStages ? native->pendingBeforeStages & encoderStages : native->pendingBeforeStages;
+
+  if (!applyStages)
+    return;
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
 #if MT_HAS_METAL4
     if (native->mode == MTCommandMode4) {
       [(id<MTL4CommandEncoder>)encoder
         barrierAfterQueueStages:native->pendingAfterStages
-                   beforeStages:native->pendingBeforeStages
+                   beforeStages:applyStages
               visibilityOptions:native->pendingVisibility];
     } else
 #endif
@@ -651,14 +716,17 @@ mt_applyPendingBarrier(GPUCommandBuffer *cmdb,
       /* the Simulator's encoders say they have queue barriers and throw; classic resources are tracked */
       [(id<MTLCommandEncoder>)encoder
         barrierAfterQueueStages:native->pendingAfterStages
-                   beforeStages:native->pendingBeforeStages];
+                   beforeStages:applyStages];
 #endif
     }
   }
 
-  native->pendingAfterStages  = 0;
-  native->pendingBeforeStages = 0;
-  native->pendingVisibility   = 0u;
+  native->pendingBeforeStages &= ~applyStages;
+
+  if (native->pendingBeforeStages == 0u) {
+    native->pendingAfterStages = 0u;
+    native->pendingVisibility  = 0u;
+  }
 #else
   GPU__UNUSED(cmdb);
   GPU__UNUSED(encoder);

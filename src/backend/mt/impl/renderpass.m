@@ -1311,6 +1311,12 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
         }
       }
 
+      /* what earlier barriers chained onto these source stages (Vulkan's
+       * dependency chains: SHADER_WRITE -> TRANSFER then TRANSFER -> SHADER_READ
+       * makes the reader wait for the shader) */
+
+      afterStages = mt_chainBarrierStages(native->owner, afterStages, beforeStages);
+
       if (((barriers->srcStages | barriers->dstStages) & GPU_STAGE_ML_EXT) != 0u) {
         /* apply the queue dependency on its actual destination encoder. */
         native->pendingMLAfterStages  |= afterStages;
@@ -1331,7 +1337,8 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
       return;
     }
 #endif
-    native->pendingAfterStages  |= mt_stageMask(barriers->srcStages);
+    native->pendingAfterStages  |= mt_chainBarrierStages(native->owner, mt_stageMask(barriers->srcStages),
+                                                         mt_stageMask(barriers->dstStages));
     native->pendingBeforeStages |= mt_stageMask(barriers->dstStages);
   }
 #else
