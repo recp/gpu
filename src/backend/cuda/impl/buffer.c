@@ -58,6 +58,13 @@ cuda_createBuffer(GPUDevice                 *__restrict device,
 
   native->driver = deviceNative->driver;
 
+  if (cuda_poolAllocate(deviceNative, info->sizeBytes, native)) {
+    buffer->_priv       = native;
+    buffer->_gpuAddress = native->address;
+    *outBuffer          = buffer;
+    return GPU_OK;
+  }
+
   if (cuda_push(native->driver, deviceNative->context) != GPU_OK) {
     free(native);
     free(buffer);
@@ -88,6 +95,13 @@ cuda_destroyBuffer(GPUBuffer *__restrict buffer) {
 
   native = buffer ? buffer->_priv : NULL;
   device = buffer ? cuda_device(buffer->device) : NULL;
+
+  if (native && device && native->poolBlock) {
+    cuda_poolRelease(device, native);
+    free(native);
+    free(buffer);
+    return;
+  }
 
   if (native && device
       && cuda_push(native->driver, device->context) == GPU_OK) {

@@ -730,6 +730,7 @@ cuda_createDevice(GPUAdapter   *__restrict adapter,
   }
 
   cuda_pop(native->driver);
+  cuda_initResourcePool(native);
 
   return device;
 }
@@ -781,6 +782,10 @@ cuda_waitIdle(GPUDevice *__restrict device) {
     cuda_queueUnlock(queue);
   }
 
+  /* idle: pooled blocks nothing lives in go back */
+  if (result == GPU_OK)
+    cuda_trimResourcePool(native);
+
   return result;
 }
 
@@ -795,6 +800,8 @@ cuda_destroyDevice(GPUDevice *__restrict device) {
     free(device);
     return;
   }
+
+  cuda_destroyResourcePool(native);
 
   for (i = 0u; i < native->queueCount; i++) {
     cuda__destroyQueue(&native->queues[i]);

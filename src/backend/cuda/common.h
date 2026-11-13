@@ -63,9 +63,12 @@ typedef struct GPUAdapterCuda {
 } GPUAdapterCuda;
 
 typedef struct GPUBufferCuda {
-  GPUCUDA         *driver;
-  CUexternalMemory externalMemory;
-  CUdeviceptr      address;
+  GPUCUDA            *driver;
+  CUexternalMemory    externalMemory;
+  CUdeviceptr         address;
+  struct GPUSubBlock *poolBlock; /* NULL: its own cuMemAlloc */
+  uint64_t            poolOffset;
+  uint64_t            poolSize;
 } GPUBufferCuda;
 
 typedef struct GPUTextureCuda {
@@ -197,15 +200,28 @@ struct GPUCommandCuda {
 };
 
 typedef struct GPUDeviceCuda {
-  GPUCUDA      *driver;
-  CUdevice      cudaDevice;
-  CUcontext     context;
-  GPUQueueCuda *queues;
+  GPUCUDA                *driver;
+  CUdevice                cudaDevice;
+  CUcontext               context;
+  GPUQueueCuda           *queues;
+  struct GPUSubAllocator *resourcePool; /* NULL: every buffer its own memory */
   uint32_t      maxBlockDim[3];
   uint32_t      maxGridDim[3];
   uint32_t      queueCount;
   uint32_t      maxThreadsPerBlock;
 } GPUDeviceCuda;
+
+/* small buffers in pooled cuMemAlloc blocks (impl/pool.c) */
+void
+cuda_initResourcePool(GPUDeviceCuda *native);
+void
+cuda_destroyResourcePool(GPUDeviceCuda *native);
+void
+cuda_trimResourcePool(GPUDeviceCuda *native);
+bool
+cuda_poolAllocate(GPUDeviceCuda *native, uint64_t size, GPUBufferCuda *buffer);
+void
+cuda_poolRelease(GPUDeviceCuda *native, GPUBufferCuda *buffer);
 
 GPUResult
 cuda_push(GPUCUDA *driver, CUcontext context);
