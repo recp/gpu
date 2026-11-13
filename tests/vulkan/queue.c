@@ -33,7 +33,9 @@ enum {
                                     VULKAN_TRANSFER_TEST_BYTES,
   VULKAN_TEXTURE_UPLOADS_PER_SLOT = GPU_VK_TEXTURE_TRANSFER_CAPACITY /
                                     VULKAN_TRANSFER_TEST_BYTES,
-  VULKAN_WARM_ITERATIONS          = 256u
+  VULKAN_WARM_ITERATIONS          = 256u,
+  VULKAN_STAGING_KEEP             = 16u * 1024u * 1024u, /* cmdque.c's VK_TRANSFER_STAGING_KEEP */
+  VULKAN_LARGE_TRANSFER_BYTES     = 24u * 1024u * 1024u
 };
 
 typedef struct CompletionProbe {
@@ -685,7 +687,8 @@ buffer_transfers_reuse(GPUDevice *device,
     slots[i] = native->transferSlots[i];
     upload   = slots[i].uploadStaging ? slots[i].uploadStaging->_priv : NULL;
 
-    if (!slots[i].command && !slots[i].uploadStaging) {
+    /* set up for uploads (a readback's slot has a command, its staging is the queue's) */
+    if (!slots[i].uploadStaging) {
       continue;
     }
 
@@ -751,7 +754,7 @@ buffer_transfers_reuse(GPUDevice *device,
   for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
     GPUTransferSlotVk *slot;
 
-    if (!slots[i].command && !slots[i].uploadStaging) {
+    if (!slots[i].uploadStaging) {
       continue;
     }
 
@@ -760,6 +763,69 @@ buffer_transfers_reuse(GPUDevice *device,
            && slot->fence == slots[i].fence
            && slot->uploadStaging == slots[i].uploadStaging
            && slot->uploadCapacity == slots[i].uploadCapacity;
+  }
+
+  ok = wait_queue(queue, fence) && ok;
+  GPUDestroyBuffer(buffer);
+  return ok;
+}
+
+/* a large write and read leave large staging behind, given back after the
+ * small transfers that follow (cmdque.c: VK_TRANSFER_LARGE_IDLE batches) */
+static int
+large_staging_goes_back(GPUDevice *device,
+                        GPUQueue  *queue,
+                        GPUFence  *fence) {
+  GPUBufferCreateInfo info = {0};
+  GPUQueueVk         *native;
+  GPUBuffer          *buffer;
+  uint8_t            *bytes;
+  uint32_t            value, copied, i;
+  int                 large, ok;
+
+  native = queue ? queue->_priv : NULL;
+  buffer = NULL;
+
+  if (!native || !(bytes = malloc(VULKAN_LARGE_TRANSFER_BYTES))) {
+    return 0;
+  }
+
+  memset(bytes, 7, VULKAN_LARGE_TRANSFER_BYTES);
+  info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.label            = "vulkan-large-staging";
+  info.sizeBytes        = VULKAN_LARGE_TRANSFER_BYTES;
+  info.usage            = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
+
+  ok = GPUCreateBuffer(device, &info, &buffer) == GPU_OK && buffer
+       && GPUQueueWriteBuffer(queue, buffer, 0u, bytes, VULKAN_LARGE_TRANSFER_BYTES) == GPU_OK
+       && GPUQueueReadBuffer(queue, buffer, 0u, bytes, VULKAN_LARGE_TRANSFER_BYTES) == GPU_OK
+       && bytes[VULKAN_LARGE_TRANSFER_BYTES - 1u] == 7u;
+  free(bytes);
+
+  /* a mapped buffer (host-visible device memory) takes neither path */
+  if (ok && ((GPUBufferVk *)buffer->_priv)->mapped) {
+    GPUDestroyBuffer(buffer);
+    return wait_queue(queue, fence);
+  }
+
+  large = native->readbackCapacity > VULKAN_STAGING_KEEP;
+  for (i = 0u; i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
+    large |= native->transferSlots[i].uploadCapacity > VULKAN_STAGING_KEEP;
+  }
+  ok = ok && large;
+
+  for (i = 0u; ok && i < 40u; i++) {
+    value  = 0x5a000000u + i;
+    copied = 0u;
+    ok     = GPUQueueWriteBuffer(queue, buffer, 0u, &value, sizeof(value)) == GPU_OK
+             && GPUQueueReadBuffer(queue, buffer, 0u, &copied, sizeof(copied)) == GPU_OK
+             && copied == value;
+  }
+
+  ok = ok && native->readbackCapacity <= VULKAN_STAGING_KEEP;
+  for (i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
+    ok = native->transferSlots[i].uploadCapacity <= VULKAN_STAGING_KEEP;
   }
 
   ok = wait_queue(queue, fence) && ok;
@@ -826,16 +892,21 @@ texture_uploads_reuse(GPUDevice *device,
 
   ok = ok && wait_queue(queue, fence);
 
-  /* uploads take finished slots first: each set up slot is whole, and
-   * at least one is */
-  ok = ok && (native->transferSlots[0].command || native->transferSlots[0].uploadStaging);
+  /* uploads take finished slots first: each slot set up for uploads is
+   * whole, and one is at least */
+  {
+    int any = 0;
+    for (uint32_t i = 0u; i < GPU_VK_TRANSFER_SLOT_COUNT; i++)
+      any |= native->transferSlots[i].uploadStaging != NULL;
+    ok = ok && any;
+  }
 
   for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
     GPUBufferVk *upload;
 
     slots[i] = native->transferSlots[i];
     upload   = slots[i].uploadStaging ? slots[i].uploadStaging->_priv : NULL;
-    ok       = (!slots[i].command && !slots[i].uploadStaging)
+    ok       = !slots[i].uploadStaging
                || (slots[i].command && slots[i].fence && upload && upload->buffer
                    && upload->memory && upload->mapped
                    && slots[i].uploadCapacity >= sizeof(kTextureUpload));
@@ -861,7 +932,7 @@ texture_uploads_reuse(GPUDevice *device,
   for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
     GPUTransferSlotVk *slot;
 
-    if (!slots[i].command && !slots[i].uploadStaging) {
+    if (!slots[i].uploadStaging) {
       continue;
     }
 
@@ -1553,6 +1624,8 @@ main(void) {
                buffer_transfers_reuse(device, graphics, fence));
   VULKAN_CHECK("texture upload reuse",
                texture_uploads_reuse(device, graphics, fence));
+  VULKAN_CHECK("large staging goes back",
+               large_staging_goes_back(device, graphics, fence));
   VULKAN_CHECK("timestamp roundtrip",
                timestamp_roundtrip(device, graphics, fence));
   VULKAN_CHECK("frame time roundtrip",
