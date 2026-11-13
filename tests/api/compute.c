@@ -263,7 +263,13 @@ check_compute_disk_cache(GPUDevice                    *device,
 
   ok          = 0;
   pipeline    = NULL;
-  info->cache = cache;
+  info->cache = NULL;
+
+  /* through the device's default cache, its file written before destroy */
+  if (GPUSetDefaultPipelineCache(device, cache) != GPU_OK || GPUGetDefaultPipelineCache(device) != cache) {
+    fprintf(stderr, "default pipeline cache not set\n");
+    goto cleanup;
+  }
 
   if (GPUCreateComputePipeline(device, info, &pipeline) != GPU_OK || !pipeline) {
     fprintf(stderr, "native cached compute pipeline create failed\n");
@@ -271,10 +277,21 @@ check_compute_disk_cache(GPUDevice                    *device,
   }
 
   GPUDestroyComputePipeline(pipeline);
-  pipeline    = NULL;
-  info->cache = NULL;
+  pipeline = NULL;
+
+  if (GPUFlushPipelineCache(cache) != GPU_OK || !(file = fopen(path, "rb"))) {
+    fprintf(stderr, "native compute pipeline cache file was not written by a flush\n");
+    goto cleanup;
+  }
+
+  fclose(file);
   GPUDestroyPipelineCache(cache);
   cache = NULL;
+
+  if (GPUGetDefaultPipelineCache(device)) {
+    fprintf(stderr, "a destroyed pipeline cache stayed the default\n");
+    goto cleanup;
+  }
 
   if (!(file = fopen(path, "rb"))) {
     fprintf(stderr, "native compute pipeline cache file was not written\n");

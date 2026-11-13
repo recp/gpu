@@ -1121,6 +1121,7 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
   const char                       **entries;
   GPUApi                            *api;
   GPURayTracingPipelineCreateInfoEXT resolvedInfo;
+  GPURayTracingPipelineCreateInfoEXT withCache;
   GPUPipelineCacheKey                cacheKey;
   uint32_t                           entryCount;
   uint32_t                           entryIndex;
@@ -1131,6 +1132,13 @@ GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
   uint32_t                           i;
   uint32_t                           j;
   bool                               hasRayGeneration;
+
+  /* the device's default cache when the info names none */
+  if (device && info && !info->cache && device->_defaultPipelineCache) {
+    withCache       = *info;
+    withCache.cache = device->_defaultPipelineCache;
+    info            = &withCache;
+  }
 
   if (!outPipeline) {
     return GPU_ERROR_INVALID_ARGUMENT;

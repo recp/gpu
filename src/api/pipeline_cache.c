@@ -1566,6 +1566,9 @@ GPUDestroyPipelineCache(GPUPipelineCache *cache) {
     }
   }
 
+  if (cache->device->_defaultPipelineCache == cache)
+    cache->device->_defaultPipelineCache = NULL;
+
   deviceCacheUnlock(cache->device);
 
   pipelineCacheLock(cache);
@@ -1629,6 +1632,44 @@ GPUDestroyPipelineCache(GPUPipelineCache *cache) {
 
 GPU_EXPORT
 GPUResult
+GPUSetDefaultPipelineCache(GPUDevice *__restrict device, GPUPipelineCache *cache) {
+  if (!device || (cache && cache->device != device)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  deviceCacheLock(device);
+  device->_defaultPipelineCache = cache;
+  deviceCacheUnlock(device);
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUPipelineCache*
+GPUGetDefaultPipelineCache(GPUDevice *__restrict device) {
+  return device ? device->_defaultPipelineCache : NULL;
+}
+
+GPU_EXPORT
+GPUResult
+GPUFlushPipelineCache(GPUPipelineCache *cache) {
+  GPUApi *api;
+
+  if (!cache || !cache->device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!cache->_priv) {
+    return GPU_OK;
+  }
+
+  api = deviceApi(cache->device);
+
+  return api && api->pipelineCache.flush ? api->pipelineCache.flush(cache) : GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
 GPUPrewarmRenderPipelines(GPUDevice                         *__restrict device,
                           GPUPipelineCache                  *__restrict cache,
                           uint32_t                                      count,
@@ -1637,6 +1678,9 @@ GPUPrewarmRenderPipelines(GPUDevice                         *__restrict device,
   GPURenderPipeline          *pipeline;
   uint32_t                    i;
   GPUResult                   result;
+
+  if (device && !cache)
+    cache = device->_defaultPipelineCache;
 
   if (!device || !cache || cache->device != device || (count > 0u && !infos)) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -1751,6 +1795,8 @@ GPUCompileRenderPipelineAsync(GPUDevice                         *device,
 
   snapshot             = *info;
   snapshot.chain.pNext = prepared.chain;
+  if (device && !cache)
+    cache = device->_defaultPipelineCache;
   result               = compileRenderPipelineAsync(device, cache, &snapshot, outHandle);
   free(prepared.values);
 

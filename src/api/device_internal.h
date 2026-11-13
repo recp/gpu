@@ -69,6 +69,7 @@ struct GPUDevice {
   GPUTransientChunk          *transientChunks;
   GPUFence                  **transientFrameFences;
   GPUPipelineCache           *_pipelineCaches;
+  GPUPipelineCache           *_defaultPipelineCache;
   void                       *_pipelineCacheLock;
   void                       *_bindGroupCache;
   void                       *_blitContext;

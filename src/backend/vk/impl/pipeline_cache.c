@@ -323,7 +323,7 @@ vk__mergeStoredCache(VKPipelineCache *native) {
   free(data);
 }
 
-static void
+static bool
 vk__storeCache(VKPipelineCache *native) {
   GPUCacheFileGuard guard;
   void             *data;
@@ -334,11 +334,11 @@ vk__storeCache(VKPipelineCache *native) {
   bool              written;
 
   if (!native || !native->used) {
-    return;
+    return false;
   }
 
   if (!cacheFileBegin(native->path, &guard)) {
-    return;
+    return false;
   }
 
   vk__mergeStoredCache(native);
@@ -350,12 +350,12 @@ vk__storeCache(VKPipelineCache *native) {
 
   if (result != VK_SUCCESS || dataSize == 0u) {
     cacheFileEnd(&guard);
-    return;
+    return false;
   }
 
   if (!(data = malloc(dataSize))) {
     cacheFileEnd(&guard);
-    return;
+    return false;
   }
 
   result = vkGetPipelineCacheData(native->device,
@@ -366,13 +366,13 @@ vk__storeCache(VKPipelineCache *native) {
   if (result != VK_SUCCESS) {
     free(data);
     cacheFileEnd(&guard);
-    return;
+    return false;
   }
 
   if (!(temporaryPath = cacheFileTemporaryPath(native->path, native))) {
     cacheFileEnd(&guard);
     free(data);
-    return;
+    return false;
   }
 
   file    = fopen(temporaryPath, "wb");
@@ -393,6 +393,34 @@ vk__storeCache(VKPipelineCache *native) {
   free(temporaryPath);
   free(data);
   cacheFileEnd(&guard);
+
+  return written;
+}
+
+/* the merged cache written, and nothing more until a pipeline uses it */
+
+static GPUResult
+vk_flushCache(GPUPipelineCache *cache) {
+  VKPipelineCache *native;
+
+  if (!(native = vk__nativeCache(cache))) {
+    return GPU_OK;
+  }
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(&native->lock);
+#else
+  pthread_mutex_lock(&native->lock);
+#endif
+  if (native->used && vk__storeCache(native)) {
+    native->used = false;
+  }
+#if defined(_WIN32) || defined(WIN32)
+  LeaveCriticalSection(&native->lock);
+#else
+  pthread_mutex_unlock(&native->lock);
+#endif
+
+  return GPU_OK;
 }
 
 static void
@@ -1314,4 +1342,5 @@ void
 vk_initPipelineCache(GPUPipelineCacheApi *api) {
   api->create  = vk_createCache;
   api->destroy = vk_destroyCache;
+  api->flush   = vk_flushCache;
 }

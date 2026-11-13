@@ -243,6 +243,7 @@ GPUResult
 GPUCreateExecutionGraphEXT(GPUDevice                            *device,
                            const GPUExecutionGraphCreateInfoEXT *info,
                            GPUExecutionGraphEXT                **outGraph) {
+  GPUExecutionGraphCreateInfoEXT withCache;
   GPUPipelineCacheKey   cacheKey;
   const char           *entryPoints[USL_RUNTIME_MAX_ENTRY_POINTS];
   GPUExecutionGraphEXT *graph;
@@ -251,6 +252,13 @@ GPUCreateExecutionGraphEXT(GPUDevice                            *device,
   uint32_t              entryCount;
   uint32_t              i;
   GPUResult             result;
+
+  /* the device's default cache when the info names none */
+  if (device && info && !info->cache && device->_defaultPipelineCache) {
+    withCache       = *info;
+    withCache.cache = device->_defaultPipelineCache;
+    info            = &withCache;
+  }
 
   if (!outGraph) {
     return GPU_ERROR_INVALID_ARGUMENT;

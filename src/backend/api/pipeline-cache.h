@@ -26,6 +26,9 @@ typedef struct GPUPipelineCacheApi {
   GPUResult (*create)(GPUDevice *device, const GPUPipelineCacheCreateInfo *info, GPUPipelineCache *cache);
 
   void (*destroy)(GPUPipelineCache *cache);
+
+  /* the disk cache written now (optional) */
+  GPUResult (*flush)(GPUPipelineCache *cache);
 } GPUPipelineCacheApi;
 
 #ifdef __cplusplus

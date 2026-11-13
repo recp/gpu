@@ -1226,6 +1226,8 @@ GPUCreateRenderPipeline(GPUDevice                         *device,
 
   snapshot             = *info;
   snapshot.chain.pNext = prepared.chain;
+  if (!snapshot.cache && device)
+    snapshot.cache = device->_defaultPipelineCache;
   result               = createRenderPipeline(device, &snapshot, outPipeline);
   free(prepared.values);
 

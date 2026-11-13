@@ -518,6 +518,25 @@ mt_storeCache(MTPipelineCache *native) {
   cacheFileEnd(&guard);
 }
 
+/* the archive written while no pipeline is added to it */
+
+static GPUResult
+mt_flushCache(GPUPipelineCache *cache) {
+  MTPipelineCache *native;
+
+  if (!(native = mt_nativeCache(cache))) {
+    return GPU_OK;
+  }
+
+  if (@available(macOS 11.0, iOS 14.0, *)) {
+    os_unfair_lock_lock(&native->lock);
+    mt_storeCache(native);
+    os_unfair_lock_unlock(&native->lock);
+  }
+
+  return GPU_OK;
+}
+
 static void
 mt_destroyCache(GPUPipelineCache *cache) {
   MTPipelineCache *native;
@@ -832,4 +851,5 @@ void
 mt_initPipelineCache(GPUPipelineCacheApi *api) {
   api->create  = mt_createCache;
   api->destroy = mt_destroyCache;
+  api->flush   = mt_flushCache;
 }

@@ -198,6 +198,25 @@ GPU_EXPORT
 void
 GPUDestroyPipelineCache(GPUPipelineCache *cache);
 
+/* the cache a device's pipelines use when their create info names none:
+ * compute, render, ray tracing and execution graph pipelines, async compiles
+ * and prewarming. NULL clears it; destroying the cache clears it too. set it
+ * before other threads create pipelines. */
+GPU_EXPORT
+GPUResult
+GPUSetDefaultPipelineCache(GPUDevice *__restrict device, GPUPipelineCache *cache);
+
+GPU_EXPORT
+GPUPipelineCache*
+GPUGetDefaultPipelineCache(GPUDevice *__restrict device);
+
+/* writes a disk cache (enableDiskCache) now, not only at destroy: an app can
+ * be ended without destroying it. nothing is written when nothing changed
+ * since the last write; GPU_OK for a cache without a disk cache. */
+GPU_EXPORT
+GPUResult
+GPUFlushPipelineCache(GPUPipelineCache *cache);
+
 GPU_EXPORT
 GPUResult
 GPUPrewarmRenderPipelines(GPUDevice                         *__restrict device,

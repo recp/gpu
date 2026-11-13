@@ -713,6 +713,17 @@ dx12__storeCache(DX12PipelineCache *native) {
   cacheFileEnd(&guard);
 }
 
+static GPUResult
+dx12_flushCache(GPUPipelineCache *cache) {
+  DX12PipelineCache *native;
+
+  if ((native = dx12__nativeCache(cache))) {
+    dx12__storeCache(native);
+  }
+
+  return GPU_OK;
+}
+
 static void
 dx12_destroyCache(GPUPipelineCache *cache) {
   DX12PipelineCache *native;
@@ -1316,4 +1327,5 @@ void
 dx12_initPipelineCache(GPUPipelineCacheApi *api) {
   api->create  = dx12_createCache;
   api->destroy = dx12_destroyCache;
+  api->flush   = dx12_flushCache;
 }
