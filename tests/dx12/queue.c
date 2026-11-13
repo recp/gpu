@@ -368,7 +368,12 @@ buffer_transfers_reuse(GPUQueue  *queue,
 
   /* uploads take finished slots first, so only some may be set up (all
    * of them only while the GPU lags behind); each set up one is whole */
-  if (!native->transferSlots[0].allocator && !native->transferSlots[0].uploadStaging) {
+  for (snapshotIndex = 0u; snapshotIndex < GPU_DX12_TRANSFER_SLOT_COUNT; snapshotIndex++) {
+    if (native->transferSlots[snapshotIndex].uploadStaging)
+      break;
+  }
+
+  if (snapshotIndex == GPU_DX12_TRANSFER_SLOT_COUNT) {
     (void)wait_queue(queue, queueFence);
     GPUDestroyBuffer(buffer);
     return false;
@@ -377,7 +382,8 @@ buffer_transfers_reuse(GPUQueue  *queue,
   for (snapshotIndex = 0u; snapshotIndex < GPU_DX12_TRANSFER_SLOT_COUNT; snapshotIndex++) {
     slots[snapshotIndex] = native->transferSlots[snapshotIndex];
 
-    if (!slots[snapshotIndex].allocator && !slots[snapshotIndex].uploadStaging) {
+    /* set up for uploads (a readback's slot has a command list, its staging is the queue's) */
+    if (!slots[snapshotIndex].uploadStaging) {
       continue;
     }
 
@@ -422,7 +428,7 @@ buffer_transfers_reuse(GPUQueue  *queue,
 
   /* set up slots are reused as they are; unused ones may be set up since */
   for (verifyIndex = 0u; ok && verifyIndex < GPU_DX12_TRANSFER_SLOT_COUNT; verifyIndex++) {
-    if (!slots[verifyIndex].allocator && !slots[verifyIndex].uploadStaging) {
+    if (!slots[verifyIndex].uploadStaging) {
       continue;
     }
 
@@ -519,13 +525,18 @@ texture_transfers_reuse(GPUQueue  *queue,
 
   ok = ok && wait_queue(queue, queueFence);
 
-  /* uploads take finished slots first: each set up slot is whole, and
-   * at least one is */
-  ok = ok && (native->transferSlots[0].allocator || native->transferSlots[0].uploadStaging);
+  /* uploads take finished slots first: each slot set up for uploads is
+   * whole, and one is at least */
+  for (snapshotIndex = 0u; ok && snapshotIndex < GPU_DX12_TRANSFER_SLOT_COUNT; snapshotIndex++) {
+    if (native->transferSlots[snapshotIndex].uploadStaging)
+      break;
+  }
+
+  ok = ok && snapshotIndex < GPU_DX12_TRANSFER_SLOT_COUNT;
 
   for (snapshotIndex = 0u; ok && snapshotIndex < GPU_DX12_TRANSFER_SLOT_COUNT; snapshotIndex++) {
     slots[snapshotIndex] = native->transferSlots[snapshotIndex];
-    ok                   = (!slots[snapshotIndex].allocator && !slots[snapshotIndex].uploadStaging)
+    ok                   = !slots[snapshotIndex].uploadStaging
                            || (slots[snapshotIndex].allocator && slots[snapshotIndex].commandList
                                && slots[snapshotIndex].uploadStaging && slots[snapshotIndex].uploadMapped
                                && slots[snapshotIndex].uploadCapacity >= GPU_DX12_TEXTURE_TRANSFER_CAPACITY);
@@ -555,7 +566,7 @@ texture_transfers_reuse(GPUQueue  *queue,
 
   /* set up slots are reused as they are; unused ones may be set up since */
   for (verifyIndex = 0u; ok && verifyIndex < GPU_DX12_TRANSFER_SLOT_COUNT; verifyIndex++) {
-    if (!slots[verifyIndex].allocator && !slots[verifyIndex].uploadStaging) {
+    if (!slots[verifyIndex].uploadStaging) {
       continue;
     }
 
