@@ -309,7 +309,7 @@ webgpu_writeTexture(GPUQueue                        *__restrict queue,
   }
 
   layout.bytesPerRow        = region->bytesPerRow;
-  layout.rowsPerImage       = region->rowsPerImage;
+  layout.rowsPerImage       = region->rowsPerImage ? region->rowsPerImage : region->height; /* 0: tightly packed */
   extent.width              = region->width;
   extent.height             = region->height;
   extent.depthOrArrayLayers = texture->dimension == GPU_TEXTURE_DIMENSION_3D
