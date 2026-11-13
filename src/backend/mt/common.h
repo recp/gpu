@@ -123,16 +123,28 @@ typedef struct GPUSwapchainMetal {
   bool           frameActive;
 } GPUSwapchainMetal;
 
+typedef struct MTResourcePool MTResourcePool;
+
 typedef struct GPUDeviceMT {
   id<MTLDevice>          device;
   id                     compiler;
   id                     textureViewPlaceholder;
   MTTextureViewPoolPage *textureViewPools;
   GPUQueue             **createdQueues;
+  MTResourcePool        *resourcePool; /* NULL: every resource its own allocation */
   os_unfair_lock         textureViewPoolLock;
   uint32_t               nCreatedQueues;
   MTCommandMode          commandMode;
 } GPUDeviceMT;
+
+/* small buffers and textures placed in pooled heaps (impl/pool.m); nil: the
+ * caller makes its own allocation */
+
+GPU_HIDE void           mt_initResourcePool(GPUDeviceMT *deviceMT);
+GPU_HIDE void           mt_trimResourcePool(GPUDeviceMT *deviceMT);
+GPU_HIDE void           mt_destroyResourcePool(GPUDeviceMT *deviceMT);
+GPU_HIDE id<MTLBuffer>  mt_poolBuffer(GPUDeviceMT *deviceMT, NSUInteger length);
+GPU_HIDE id<MTLTexture> mt_poolTexture(GPUDeviceMT *deviceMT, MTLTextureDescriptor *desc);
 
 typedef struct MTShaderFunction {
   id<MTLFunction>           function;

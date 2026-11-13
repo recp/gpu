@@ -96,7 +96,7 @@ mt_createBuffer(GPUDevice                 *__restrict device,
                                                  length:(NSUInteger)host->allocationSize
                                                 options:MTLResourceStorageModeShared
                                             deallocator:nil];
-  } else {
+  } else if (!(buffer = mt_poolBuffer(deviceMT, (NSUInteger)info->sizeBytes))) {
     buffer = [deviceMT->device newBufferWithLength:(NSUInteger)info->sizeBytes
                                            options:MTLResourceStorageModeShared];
   }

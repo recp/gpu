@@ -507,7 +507,9 @@ mt_createTexture(GPUDevice                  *__restrict device,
     return result;
   }
 
-  nativeTexture = [deviceMT->device newTextureWithDescriptor:desc];
+  nativeTexture = storageMode != MTLStorageModeMemoryless ? mt_poolTexture(deviceMT, desc) : nil;
+  if (!nativeTexture)
+    nativeTexture = [deviceMT->device newTextureWithDescriptor:desc];
   [desc release];
 
   if (!nativeTexture) {

@@ -832,6 +832,9 @@ mt_waitDeviceIdle(GPUDevice *__restrict device) {
     }
   }
 
+  /* idle: pooled heaps nothing lives in go back */
+  mt_trimResourcePool(deviceMT);
+
   return GPU_OK;
 }
 
@@ -1270,6 +1273,7 @@ mt_createDevice(GPUAdapter   *__restrict adapter,
   deviceMT->device              = adapterMT->device;
   deviceMT->commandMode         = commandMode;
   deviceMT->textureViewPoolLock = OS_UNFAIR_LOCK_INIT;
+  mt_initResourcePool(deviceMT);
 
   if (mt_initPipelineCompiler(deviceMT) != GPU_OK) {
     free(deviceMT);
@@ -1385,6 +1389,7 @@ mt_destroyDevice(GPUDevice *__restrict device) {
 
     mt_destroyTextureViewPools(deviceMT);
     mt_destroyPipelineCompiler(deviceMT);
+    mt_destroyResourcePool(deviceMT);
     free(deviceMT);
   }
 

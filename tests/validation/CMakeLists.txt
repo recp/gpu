@@ -50,6 +50,7 @@ if(GPU_BUILD_TESTS)
 
     add_executable(gpu-metal-sparse-support-contract
       ${PROJECT_SOURCE_DIR}/src/backend/mt/impl/device.m
+      ${PROJECT_SOURCE_DIR}/src/backend/mt/impl/pool.m
       ${PROJECT_SOURCE_DIR}/tests/validation/metal-sparse-support/main.m
     )
     target_include_directories(gpu-metal-sparse-support-contract PRIVATE
