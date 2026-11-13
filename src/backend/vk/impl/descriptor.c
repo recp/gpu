@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "../../../api/buffer_internal.h"
 #include "../../../api/descr/descriptor_internal.h"
+#include "../../../api/image_buffer_internal.h"
 #include "../../../api/ray_internal.h"
 #include "../../../api/sampler_internal.h"
 #include "../../../api/texture_internal.h"
@@ -115,6 +116,19 @@ vk__descriptorType(GPUBindingType    type,
   }
 
   return false;
+}
+
+/* a layout entry's binding type: a read-write storage texture the device
+ * emulates binds its buffer (image_buffer_internal.h) */
+
+static GPUBindingType
+vk__layoutBindingType(const GPUDevice *device, const GPUBindGroupLayoutEntry *entry) {
+  if (entry->bindingType == GPU_BINDING_STORAGE_TEXTURE
+      && entry->storageTexture.access == GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE
+      && deviceEmulatesReadWrite(device, entry->storageTexture.format))
+    return GPU_BINDING_STORAGE_BUFFER;
+
+  return entry->bindingType;
 }
 
 #ifdef VK_EXT_descriptor_buffer
@@ -1514,7 +1528,7 @@ vk_createBindGroupLayout(GPUDevice          *device,
     stages = vk__descriptorStages(entries[bindingIndex].visibility);
 
     if (entries[bindingIndex].arrayCount == 0u || stages == 0u
-        || !vk__descriptorType(entries[bindingIndex].bindingType,
+        || !vk__descriptorType(vk__layoutBindingType(device, &entries[bindingIndex]),
                                entries[bindingIndex].hasDynamicOffset,
                                &type)
         || !vk__addPoolSize(native->poolSizes,
