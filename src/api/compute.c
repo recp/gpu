@@ -16,6 +16,7 @@
 
 #include "constants_internal.h"
 #include "../common.h"
+#include "compile_pool_internal.h"
 #include "buffer_internal.h"
 #include "cmdqueue_internal.h"
 #include "compute_internal.h"
@@ -283,6 +284,56 @@ setComputeAccelerationStructure(GPUComputePassEncoder       *pass,
   api->compute.accelerationStructure(pass, structure, index);
 }
 
+/* what can be told before compiling */
+
+static GPUResult
+computePipelineChecks(GPUDevice                                 *device,
+                      const GPUComputePipelineCreateInfo        *info,
+                      const GPUIntersectionFunctionPipelineEXT **outIntersection) {
+  GPUShaderExecutionGraphEntryInfo graphEntry;
+  GPUShaderStageFlags              stage;
+  uint32_t                         executionFlags;
+  GPUResult                        result;
+
+  if (!device || !info || !info->layout || !info->library || !info->entryPoint
+      || info->layout->_device != device || info->library->_device != device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (info->cache && info->cache->device != device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE
+      && info->chain.sType != GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = computePipelineExtensions(device, info, outIntersection);
+
+  if (result != GPU_OK) {
+    return result;
+  }
+
+  if (shaderEntryView(info->library, info->entryPoint, &stage, NULL, &executionFlags)
+      && (stage != GPU_SHADER_STAGE_COMPUTE_BIT
+          || (executionFlags & GPUShaderEntryExecutionTileBit))) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (getShaderLibraryExecutionGraphEntry(info->library,
+                                          info->entryPoint,
+                                          &graphEntry)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  return GPU_OK;
+}
+
 static GPUResult
 createComputePipeline(GPUDevice                          *__restrict device,
                          const GPUComputePipelineCreateInfo *__restrict info,
@@ -305,46 +356,8 @@ createComputePipeline(GPUDevice                          *__restrict device,
   *outPipeline = NULL;
   memset(&cacheKey, 0, sizeof(cacheKey));
 
-  if (!device || !info || !info->layout || !info->library || !info->entryPoint
-      || info->layout->_device != device || info->library->_device != device) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  if (info->cache && info->cache->device != device) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  if (info->chain.sType != GPU_STRUCTURE_TYPE_NONE
-      && info->chain.sType != GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  if (info->chain.structSize != 0 && info->chain.structSize < sizeof(*info)) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  result = computePipelineExtensions(device, info, &intersection);
-
-  if (result != GPU_OK) {
+  if ((result = computePipelineChecks(device, info, &intersection)) != GPU_OK) {
     return result;
-  }
-
-  {
-    GPUShaderExecutionGraphEntryInfo graphEntry;
-    GPUShaderStageFlags              stage;
-    uint32_t                         executionFlags;
-
-    if (shaderEntryView(info->library, info->entryPoint, &stage, NULL, &executionFlags)
-        && (stage != GPU_SHADER_STAGE_COMPUTE_BIT
-            || (executionFlags & GPUShaderEntryExecutionTileBit))) {
-      return GPU_ERROR_INVALID_ARGUMENT;
-    }
-
-    if (getShaderLibraryExecutionGraphEntry(info->library,
-                                            info->entryPoint,
-                                            &graphEntry)) {
-      return GPU_ERROR_INVALID_ARGUMENT;
-    }
   }
 
   if (info->cache && !intersection) {
@@ -489,12 +502,162 @@ createComputePipeline(GPUDevice                          *__restrict device,
   return GPU_OK;
 }
 
+/* a compute pipeline compiled on the device's threads: the caller gets a
+ * placeholder at once, whose compiled pipeline its uses wait for */
+
+typedef struct ComputeCompileJob {
+  GPUCompileTask               task;
+  GPUComputePipelineCreateInfo info;
+  GPUPreparedConstants         prepared;
+  GPUDevice                   *device;
+  GPUComputePipeline          *result;
+  char                        *entryPoint;
+  char                        *label;
+  GPUResult                    status;
+} ComputeCompileJob;
+
+static void
+computeCompileRun(GPUCompileTask *task) {
+  ComputeCompileJob *job;
+
+  job         = (ComputeCompileJob *)task;
+  job->status = createComputePipeline(job->device, &job->info, &job->result);
+}
+
+static void
+computeCompileFree(ComputeCompileJob *job) {
+  free(job->prepared.values);
+  free(job->entryPoint);
+  free(job->label);
+  free(job);
+}
+
+static char*
+computeCompileString(const char *value) {
+  char  *copy;
+  size_t length;
+
+  if (!value)
+    return NULL;
+
+  length = strlen(value) + 1u;
+  if ((copy = malloc(length)))
+    memcpy(copy, value, length);
+
+  return copy;
+}
+
+/* info: constants prepared, cache resolved; NULL placeholder: compile here */
+
+static GPUResult
+computeCompileDeferred(GPUDevice                          *device,
+                       const GPUComputePipelineCreateInfo *info,
+                       GPUComputePipeline                **outPipeline) {
+  const GPUIntersectionFunctionPipelineEXT *intersection;
+  const char                               *entries[1];
+  GPUComputePipeline                       *shell;
+  ComputeCompileJob                        *job;
+  GPUResult                                 result;
+  uint32_t                                  requiredBindGroupMask;
+
+  if ((result = computePipelineChecks(device, info, &intersection)) != GPU_OK)
+    return result;
+
+  /* intersection functions keep caller memory: compiled here */
+  if (intersection)
+    return createComputePipeline(device, info, outPipeline);
+
+  entries[0] = info->entryPoint;
+  if (!pipelineLayoutMatchesShaderEntries(info->layout, info->library, entries, 1u,
+                                          GPU_SHADER_STAGE_COMPUTE_BIT, &requiredBindGroupMask))
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  if (!(job = calloc(1u, sizeof(*job))) || !(shell = calloc(1u, sizeof(*shell)))) {
+    free(job);
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  if ((result = prepareConstants(info->library, info->chain.pNext, true, &job->prepared)) != GPU_OK
+      || !(job->entryPoint = computeCompileString(info->entryPoint))
+      || (info->label && !(job->label = computeCompileString(info->label)))) {
+    computeCompileFree(job);
+    free(shell);
+    return result != GPU_OK ? result : GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  job->info             = *info;
+  job->info.chain.pNext = job->prepared.chain;
+  job->info.entryPoint  = job->entryPoint;
+  job->info.label       = job->label;
+  job->device           = device;
+  job->task.run         = computeCompileRun;
+
+  shell->_api                   = deviceApi(device);
+  shell->_device                = device;
+  shell->_layout                = info->layout;
+  shell->_requiredBindGroupMask = requiredBindGroupMask;
+  shell->_refCount              = 1u;
+  shell->_compile               = job;
+
+  compilePoolSubmit(device, &job->task);
+  *outPipeline = shell;
+
+  return GPU_OK;
+}
+
+GPU_HIDE
+GPUComputePipeline*
+computePipelineResolve(GPUComputePipeline *pipeline) {
+  ComputeCompileJob *job;
+
+  if (!pipeline || !(job = pipeline->_compile))
+    return pipeline;
+
+  compilePoolWait(pipeline->_device, &job->task);
+
+  return job->status == GPU_OK ? job->result : NULL;
+}
+
+GPU_EXPORT
+GPUResult
+GPUSetPipelineCompileThreads(GPUDevice *device, uint32_t threadCount) {
+  return device ? compilePoolConfigure(device, threadCount) : GPU_ERROR_INVALID_ARGUMENT;
+}
+
+GPU_EXPORT
+GPUResult
+GPUWaitComputePipeline(GPUComputePipeline *pipeline) {
+  if (!pipeline)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  if (!pipeline->_compile)
+    return GPU_OK;
+
+  (void)computePipelineResolve(pipeline);
+
+  return pipeline->_compile->status;
+}
+
 GPU_EXPORT
 void
 GPUDestroyComputePipeline(GPUComputePipeline *pipeline) {
-  GPUApi *api;
+  ComputeCompileJob *job;
+  GPUApi            *api;
 
   if (!pipeline) {
+    return;
+  }
+
+  if ((job = pipeline->_compile)) {
+    if (!releaseComputePipeline(pipeline))
+      return;
+
+    /* the compile finished (or run here), then what it made goes */
+    (void)computePipelineResolve(pipeline);
+    if (job->status == GPU_OK)
+      GPUDestroyComputePipeline(job->result);
+    computeCompileFree(job);
+    free(pipeline);
     return;
   }
 
@@ -586,6 +749,12 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
                        GPUComputePipeline    *pipeline) {
   GPUComputePipelineState *state;
   GPUApi                  *api;
+
+  if (pipeline && pipeline->_compile && !(pipeline = computePipelineResolve(pipeline))) {
+    if (pass)
+      computeValidationError(pass, "GPUBindComputePipeline skipped: its background compile failed");
+    return;
+  }
 
   if (!pass || pass->_ended || !pipeline || !pipeline->_state) {
     return;
@@ -1077,7 +1246,9 @@ GPUCreateComputePipeline(GPUDevice                          *device,
   snapshot.chain.pNext = prepared.chain;
   if (!snapshot.cache && device)
     snapshot.cache = device->_defaultPipelineCache;
-  result               = createComputePipeline(device, &snapshot, outPipeline);
+  result               = compilePoolActive(device)
+                         ? computeCompileDeferred(device, &snapshot, outPipeline)
+                         : createComputePipeline(device, &snapshot, outPipeline);
   free(prepared.values);
 
   return result;

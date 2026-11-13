@@ -35,7 +35,14 @@ struct GPUComputePipeline {
   uint32_t             _pushConstantSizeBytes;
   GPUShaderStageFlags  _pushConstantStages;
   uint32_t             _refCount;
+  struct ComputeCompileJob *_compile; /* set once: compiled on the device's threads */
 };
+
+/* the compiled pipeline behind one made for a background compile (waits
+ * for it); NULL when that compile failed. others return as they are. */
+GPU_HIDE
+GPUComputePipeline*
+computePipelineResolve(GPUComputePipeline *pipeline);
 
 GPU_HIDE
 void

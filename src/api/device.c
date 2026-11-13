@@ -19,6 +19,7 @@
 #include "cmdqueue_internal.h"
 #include "descr/descriptor_internal.h"
 #include "device_internal.h"
+#include "compile_pool_internal.h"
 #include "image_buffer_internal.h"
 #include "pass/blit_internal.h"
 #include "pipeline_cache_internal.h"
@@ -2695,6 +2696,7 @@ GPUDestroyDevice(GPUDevice *__restrict device) {
     (void)api->device.waitIdle(device);
   }
 
+  compilePoolDestroy(device);
   destroyTransientAllocator(device);
   destroyBlitDevice(device);
   destroyBindGroupCacheDevice(device);

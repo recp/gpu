@@ -1230,6 +1230,18 @@ gpu_test_compute(GPUDevice *device, const char *bytecodePath) {
                           && check_compute_dispatch_validation_calls(device)
                           && check_compute_push_constant_shadowing_calls(device)
                           && check_compute_readback(device, bytecodePath);
+
+  /* again with pipelines compiled on background threads: binds wait for them */
+  if (ok) {
+    ok = GPUSetPipelineCompileThreads(device, 3u) == GPU_OK
+         && GPUWaitComputePipeline(NULL) == GPU_ERROR_INVALID_ARGUMENT
+         && check_compute_pipeline_validation(device, bytecodePath)
+         && check_compute_readback(device, bytecodePath);
+    (void)GPUSetPipelineCompileThreads(device, 0u);
+    if (!ok)
+      fprintf(stderr, "compute: background pipeline compiles failed\n");
+  }
+
   device->runtimeConfig = savedConfig;
   return ok;
 }

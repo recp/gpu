@@ -21,6 +21,7 @@
 #include "execution_graph_internal.h"
 #include "library_internal.h"
 #include "pipeline_cache_internal.h"
+#include "compile_pool_internal.h"
 #include "ray_internal.h"
 #include "render/pipeline_internal.h"
 
@@ -1556,6 +1557,8 @@ GPUDestroyPipelineCache(GPUPipelineCache *cache) {
     return;
   }
 
+  /* background compiles may use it */
+  compilePoolDrain(cache->device);
   sync = pipelineCacheSync(cache);
   deviceCacheLock(cache->device);
 

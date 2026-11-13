@@ -18,6 +18,7 @@
 #include "../../backend/mt/binding_limits.h"
 #include "../buffer_internal.h"
 #include "../device_internal.h"
+#include "../compile_pool_internal.h"
 #include "../library_internal.h"
 #include "../render/rce_internal.h"
 #include "../ray_internal.h"
@@ -3998,6 +3999,8 @@ GPUDestroyPipelineLayout(GPUPipelineLayout *layout) {
     return;
   }
 
+  /* background compiles read it */
+  compilePoolDrain(layout->_device);
   api = deviceApi(layout->_device);
 
   if (api && api->descriptor.destroyPipelineLayout) {

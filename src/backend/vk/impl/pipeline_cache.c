@@ -96,8 +96,10 @@ typedef struct VKPipelineCache {
   VkPipelineCache        cache;
 #if defined(_WIN32) || defined(WIN32)
   CRITICAL_SECTION       lock;
+  SRWLOCK                compileLock;
 #else
   pthread_mutex_t        lock;
+  pthread_rwlock_t       compileLock;
 #endif
   bool                   used;
 #ifdef VK_KHR_pipeline_binary
@@ -113,6 +115,49 @@ static const char vk_hexDigits[] = "0123456789abcdef";
 static VKPipelineCache*
 vk__nativeCache(GPUPipelineCache *cache) {
   return cache ? cache->_priv : NULL;
+}
+
+/* compiles share the cache, which Vulkan synchronizes inside (it is not
+ * made externally synchronized); merging into it (storing) excludes them */
+
+static void
+vk__compileShared(VKPipelineCache *native, bool begin) {
+#if defined(_WIN32) || defined(WIN32)
+  if (begin)
+    AcquireSRWLockShared(&native->compileLock);
+  else
+    ReleaseSRWLockShared(&native->compileLock);
+#else
+  if (begin)
+    pthread_rwlock_rdlock(&native->compileLock);
+  else
+    pthread_rwlock_unlock(&native->compileLock);
+#endif
+}
+
+/* the native cache marked used, then held for a compile */
+
+static VkPipelineCache
+vk_beginCompile(GPUPipelineCache *cache) {
+  VKPipelineCache *native;
+  VkPipelineCache  nativeCache;
+
+  if (!(native = vk__nativeCache(cache)))
+    return VK_NULL_HANDLE;
+
+  nativeCache = vk_lockCache(cache);
+  vk_unlockCache(cache);
+  vk__compileShared(native, true);
+
+  return nativeCache;
+}
+
+static void
+vk_endCompile(GPUPipelineCache *cache) {
+  VKPipelineCache *native;
+
+  if ((native = vk__nativeCache(cache)))
+    vk__compileShared(native, false);
 }
 
 static void*
@@ -217,8 +262,16 @@ vk_createCache(GPUDevice                        *device,
   }
 #if defined(_WIN32) || defined(WIN32)
   InitializeCriticalSection(&native->lock);
+  InitializeSRWLock(&native->compileLock);
 #else
   if (pthread_mutex_init(&native->lock, NULL) != 0) {
+    free(native->path);
+    free(native);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if (pthread_rwlock_init(&native->compileLock, NULL) != 0) {
+    pthread_mutex_destroy(&native->lock);
     free(native->path);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
@@ -277,6 +330,7 @@ vk_createCache(GPUDevice                        *device,
 #if defined(_WIN32) || defined(WIN32)
     DeleteCriticalSection(&native->lock);
 #else
+    pthread_rwlock_destroy(&native->compileLock);
     pthread_mutex_destroy(&native->lock);
 #endif
 #ifdef VK_KHR_pipeline_binary
@@ -406,9 +460,12 @@ vk_flushCache(GPUPipelineCache *cache) {
   if (!(native = vk__nativeCache(cache))) {
     return GPU_OK;
   }
+  /* merging into the cache is exclusive of compiles using it */
 #if defined(_WIN32) || defined(WIN32)
+  AcquireSRWLockExclusive(&native->compileLock);
   EnterCriticalSection(&native->lock);
 #else
+  pthread_rwlock_wrlock(&native->compileLock);
   pthread_mutex_lock(&native->lock);
 #endif
   if (native->used && vk__storeCache(native)) {
@@ -416,8 +473,10 @@ vk_flushCache(GPUPipelineCache *cache) {
   }
 #if defined(_WIN32) || defined(WIN32)
   LeaveCriticalSection(&native->lock);
+  ReleaseSRWLockExclusive(&native->compileLock);
 #else
   pthread_mutex_unlock(&native->lock);
+  pthread_rwlock_unlock(&native->compileLock);
 #endif
 
   return GPU_OK;
@@ -438,6 +497,7 @@ vk_destroyCache(GPUPipelineCache *cache) {
 #if defined(_WIN32) || defined(WIN32)
   DeleteCriticalSection(&native->lock);
 #else
+  pthread_rwlock_destroy(&native->compileLock);
   pthread_mutex_destroy(&native->lock);
 #endif
 #ifdef VK_KHR_pipeline_binary
@@ -1193,6 +1253,8 @@ vk__createPipelineCached(GPUDeviceVk      *device,
   }
 
   cacheFileEnd(&binaryGuard);
+  vk_unlockCache(cache);
+  vk__compileShared(native, true);
   result = vk__createNativePipeline(device,
                                     kind,
                                     classicCache,
@@ -1201,7 +1263,7 @@ vk__createPipelineCached(GPUDeviceVk      *device,
                                     false,
                                     false,
                                     pipeline);
-  vk_unlockCache(cache);
+  vk__compileShared(native, false);
 
   return result;
 }
@@ -1261,14 +1323,14 @@ vk_createGraphicsPipelineCached(GPUDeviceVk                        *device,
   VkPipelineCache nativeCache;
   VkResult        result;
 
-  nativeCache = vk_lockCache(cache);
+  nativeCache = vk_beginCompile(cache);
   result      = vkCreateGraphicsPipelines(device->device,
                                           nativeCache,
                                           1u,
                                           info,
                                           NULL,
                                           pipeline);
-  vk_unlockCache(cache);
+  vk_endCompile(cache);
 
   return result;
 #endif
@@ -1290,14 +1352,14 @@ vk_createComputePipelineCached(GPUDeviceVk                       *device,
   VkPipelineCache nativeCache;
   VkResult        result;
 
-  nativeCache = vk_lockCache(cache);
+  nativeCache = vk_beginCompile(cache);
   result      = vkCreateComputePipelines(device->device,
                                          nativeCache,
                                          1u,
                                          info,
                                          NULL,
                                          pipeline);
-  vk_unlockCache(cache);
+  vk_endCompile(cache);
 
   return result;
 #endif
@@ -1321,7 +1383,7 @@ vk_createRayPipelineCached(GPUDeviceVk                             *device,
   VkPipelineCache nativeCache;
   VkResult        result;
 
-  nativeCache = vk_lockCache(cache);
+  nativeCache = vk_beginCompile(cache);
   result      = device->createRayTracingPipelines(device->device,
                                                   VK_NULL_HANDLE,
                                                   nativeCache,
@@ -1329,7 +1391,7 @@ vk_createRayPipelineCached(GPUDeviceVk                             *device,
                                                   info,
                                                   NULL,
                                                   pipeline);
-  vk_unlockCache(cache);
+  vk_endCompile(cache);
 
   return result;
 #endif

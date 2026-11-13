@@ -3,6 +3,7 @@ target_sources(gpu PRIVATE
   buffer.c
   cmd/cmdbuf.c
   cmd/cmdque.c
+  compile_pool.c
   compute.c
   constants.c
   descr/descriptor.c

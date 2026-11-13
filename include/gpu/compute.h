@@ -55,6 +55,22 @@ GPU_EXPORT
 void
 GPUDestroyComputePipeline(GPUComputePipeline *pipeline);
 
+/* compute pipelines compiled on threadCount background threads (at most
+ * 16; 0, the default, compiles on the creating thread): GPUCreateComputePipeline
+ * checks its info and returns at once, and binding the pipeline waits for
+ * its compile, running it there if no thread started it yet. destroying the
+ * pipeline, or the shader library or pipeline layout it was made from, waits
+ * too. a compile that fails shows at GPUWaitComputePipeline, and a bind of
+ * it is skipped. */
+GPU_EXPORT
+GPUResult
+GPUSetPipelineCompileThreads(GPUDevice *device, uint32_t threadCount);
+
+/* GPU_OK once the pipeline's compile is done and it can be bound */
+GPU_EXPORT
+GPUResult
+GPUWaitComputePipeline(GPUComputePipeline *pipeline);
+
 GPU_EXPORT
 GPUComputePassEncoder*
 GPUBeginComputePass(GPUCommandBuffer *cmdb, const char *label);

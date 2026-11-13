@@ -17,6 +17,7 @@
 #include "../common.h"
 #include "constants_internal.h"
 #include "device_internal.h"
+#include "compile_pool_internal.h"
 #include "library_internal.h"
 #include "usl_target.h"
 
@@ -4087,6 +4088,8 @@ GPUDestroyShaderLibrary(GPUShaderLibrary *library) {
   if (!library)
     return;
 
+  /* background compiles read it */
+  compilePoolDrain(library->_device);
   clearShaderUSLSource(library);
   clearShaderMetadata(library);
 

@@ -70,6 +70,7 @@ struct GPUDevice {
   GPUFence                  **transientFrameFences;
   GPUPipelineCache           *_pipelineCaches;
   GPUPipelineCache           *_defaultPipelineCache;
+  void                       *_compilePool;
   void                       *_pipelineCacheLock;
   void                       *_bindGroupCache;
   void                       *_blitContext;

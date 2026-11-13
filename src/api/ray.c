@@ -957,6 +957,7 @@ GPUCreateIntersectionFunctionTableEXT(GPUDevice                                 
                                       GPUIntersectionFunctionTableEXT                **outTable) {
   GPUIntersectionFunctionTableEXT *table;
   GPUDevice                       *pipelineDevice;
+  GPUIntersectionFunctionTableCreateInfoEXT resolvedInfo;
   GPUApi                          *api;
   GPUResult                        result;
   bool                             compute;
@@ -973,6 +974,15 @@ GPUCreateIntersectionFunctionTableEXT(GPUDevice                                 
                         sizeof(*info))
       || (info->computePipeline == NULL) == (info->renderPipeline == NULL)) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  /* the compiled pipeline behind one compiled in the background */
+  if (info->computePipeline && info->computePipeline->_compile) {
+    resolvedInfo                 = *info;
+    resolvedInfo.computePipeline = computePipelineResolve(info->computePipeline);
+    if (!resolvedInfo.computePipeline)
+      return GPU_ERROR_INVALID_ARGUMENT;
+    info = &resolvedInfo;
   }
 
   compute = info->computePipeline != NULL;

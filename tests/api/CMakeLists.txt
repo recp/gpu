@@ -157,6 +157,7 @@ add_test(NAME api-constant-lookup COMMAND gpu-constant-lookup-test)
 
 add_executable(gpu-pipeline-key-test
   pipeline_key.c
+  ${PROJECT_SOURCE_DIR}/src/api/compile_pool.c
   ${PROJECT_SOURCE_DIR}/src/api/constants.c
   ${PROJECT_SOURCE_DIR}/src/api/pipeline_cache.c
 )
