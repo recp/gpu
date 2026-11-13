@@ -591,6 +591,7 @@ struct GPUCommandBufferVk {
 #ifdef __APPLE__
   GPUTransferChunkVk                    *transferChunks;
 #endif
+  VkCommandPool                          pool;    /* its own: threads record command buffers at once */
   VkCommandBuffer                        command;
   VkFence                                fence;
   VkFence                                submitFence;
@@ -647,10 +648,12 @@ struct GPUQueueVk {
 #if defined(_WIN32) || defined(WIN32)
   HANDLE              worker;
   CRITICAL_SECTION    poolLock;
+  CRITICAL_SECTION    submitLock;       /* every VkQueue call (recursive: the public queue lock too) */
   CONDITION_VARIABLE  pendingCondition;
 #else
   pthread_t           worker;
   pthread_mutex_t     poolLock;
+  pthread_mutex_t     submitLock;       /* every VkQueue call (recursive: the public queue lock too) */
   pthread_cond_t      pendingCondition;
 #endif
   uint32_t            familyIndex;
@@ -936,6 +939,17 @@ vk_presentSwapchain(GPUSwapchainVk *swapchain,
                     VkQueue         queue,
                     VkSemaphore     waitSemaphore,
                     uint32_t        imageIndex);
+
+/* a VkQueue is used by one thread at a time: submits, presents and sparse
+ * binds hold its queue's submit lock (recursive) */
+
+GPU_HIDE
+void
+vk_queueSubmitLock(GPUQueueVk *queue);
+
+GPU_HIDE
+void
+vk_queueSubmitUnlock(GPUQueueVk *queue);
 
 GPU_HIDE
 GPUResult

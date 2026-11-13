@@ -391,10 +391,9 @@ vk_submitSparse(GPUQueue                       *queueHandle,
   bindInfo.pImageBinds                   = imageInfos;
   bindInfo.signalSemaphoreCount          = info->signalCount;
   bindInfo.pSignalSemaphores             = signals;
-  result                                 = vkQueueBindSparse(queue->queRaw,
-                                                             1u,
-                                                             &bindInfo,
-                                                             VK_NULL_HANDLE);
+  vk_queueSubmitLock(queue);
+  result = vkQueueBindSparse(queue->queRaw, 1u, &bindInfo, VK_NULL_HANDLE);
+  vk_queueSubmitUnlock(queue);
   free(storage);
 
   return result == VK_SUCCESS ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;

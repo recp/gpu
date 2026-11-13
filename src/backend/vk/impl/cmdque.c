@@ -47,6 +47,60 @@ vk__queueUnlock(GPUQueueVk *queue) {
 #endif
 }
 
+GPU_HIDE
+void
+vk_queueSubmitLock(GPUQueueVk *queue) {
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(&queue->submitLock);
+#else
+  pthread_mutex_lock(&queue->submitLock);
+#endif
+}
+
+GPU_HIDE
+void
+vk_queueSubmitUnlock(GPUQueueVk *queue) {
+#if defined(_WIN32) || defined(WIN32)
+  LeaveCriticalSection(&queue->submitLock);
+#else
+  pthread_mutex_unlock(&queue->submitLock);
+#endif
+}
+
+static VkResult
+vk__queueSubmit(GPUQueueVk *queue, const VkSubmitInfo *info, VkFence fence) {
+  VkResult result;
+
+  vk_queueSubmitLock(queue);
+  result = vkQueueSubmit(queue->queRaw, 1u, info, fence);
+  vk_queueSubmitUnlock(queue);
+
+  return result;
+}
+
+static VkResult
+vk__queuePresent(GPUQueueVk *queue, GPUSwapchainVk *swapchain, VkSemaphore wait, uint32_t imageIndex) {
+  VkResult result;
+
+  vk_queueSubmitLock(queue);
+  result = vk_presentSwapchain(swapchain, queue->queRaw, wait, imageIndex);
+  vk_queueSubmitUnlock(queue);
+
+  return result;
+}
+
+/* GPU_FEATURE_THREADED_UPLOADS: the queue operations GPU-C serializes */
+
+static void
+vk_lockQueue(GPUQueue *queue) {
+  vk_queueSubmitLock(queue->_priv);
+}
+
+static void
+vk_unlockQueue(GPUQueue *queue) {
+  vk_queueSubmitUnlock(queue->_priv);
+}
+
 static void
 vk__queueSignal(GPUQueueVk *queue) {
 #if defined(_WIN32) || defined(WIN32)
@@ -364,6 +418,7 @@ vk__completionMain(void *context) {
 static bool
 vk__startWorker(GPUQueueVk *queue) {
 #if defined(_WIN32) || defined(WIN32)
+  InitializeCriticalSection(&queue->submitLock); /* recursive */
   InitializeCriticalSection(&queue->poolLock);
   InitializeConditionVariable(&queue->pendingCondition);
   queue->worker        = CreateThread(NULL,
@@ -376,14 +431,30 @@ vk__startWorker(GPUQueueVk *queue) {
 
   if (!queue->workerStarted) {
     DeleteCriticalSection(&queue->poolLock);
+    DeleteCriticalSection(&queue->submitLock);
   }
 #else
+  pthread_mutexattr_t recursive;
+
+  if (pthread_mutexattr_init(&recursive) != 0)
+    return false;
+
+  if (pthread_mutexattr_settype(&recursive, PTHREAD_MUTEX_RECURSIVE) != 0
+      || pthread_mutex_init(&queue->submitLock, &recursive) != 0) {
+    pthread_mutexattr_destroy(&recursive);
+    return false;
+  }
+
+  pthread_mutexattr_destroy(&recursive);
+
   if (pthread_mutex_init(&queue->poolLock, NULL) != 0) {
+    pthread_mutex_destroy(&queue->submitLock);
     return false;
   }
 
   if (pthread_cond_init(&queue->pendingCondition, NULL) != 0) {
     pthread_mutex_destroy(&queue->poolLock);
+    pthread_mutex_destroy(&queue->submitLock);
     return false;
   }
 
@@ -395,6 +466,7 @@ vk__startWorker(GPUQueueVk *queue) {
   if (!queue->workerStarted) {
     pthread_cond_destroy(&queue->pendingCondition);
     pthread_mutex_destroy(&queue->poolLock);
+    pthread_mutex_destroy(&queue->submitLock);
   }
 #endif
 
@@ -416,10 +488,12 @@ vk__stopWorker(GPUQueueVk *queue) {
   WaitForSingleObject(queue->worker, INFINITE);
   CloseHandle(queue->worker);
   DeleteCriticalSection(&queue->poolLock);
+  DeleteCriticalSection(&queue->submitLock);
 #else
   pthread_join(queue->worker, NULL);
   pthread_cond_destroy(&queue->pendingCondition);
   pthread_mutex_destroy(&queue->poolLock);
+  pthread_mutex_destroy(&queue->submitLock);
 #endif
   queue->workerStarted = false;
 }
@@ -632,7 +706,7 @@ vk__flushTransfers(GPUQueue *queue, bool wait) {
     submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1u;
     submitInfo.pCommandBuffers    = &slot->command;
-    result                        = vkQueueSubmit(native->queRaw, 1u, &submitInfo, slot->fence);
+    result                        = vk__queueSubmit(native, &submitInfo, slot->fence);
 
     if (result != VK_SUCCESS) {
       return GPU_ERROR_BACKEND_FAILURE;
@@ -658,6 +732,7 @@ vk__flushTransfers(GPUQueue *queue, bool wait) {
 static GPUCommandBufferVk*
 vk__createCommandBufferState(GPUQueue *queue) {
   VkCommandBufferAllocateInfo allocInfo = {0};
+  VkCommandPoolCreateInfo     poolInfo  = {0};
   VkFenceCreateInfo           fenceInfo = {0};
   GPUQueueVk                 *queueVk;
   GPUCommandBufferVk         *native;
@@ -673,14 +748,28 @@ vk__createCommandBufferState(GPUQueue *queue) {
 
   deviceRecordHotPathAlloc(queue->_device, sizeof(*native));
 
+  /* a pool of its own: command pools take one thread at a time, and command
+   * buffers are recorded on any thread (kept with the state when recycled) */
+
+  poolInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  poolInfo.flags            = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  poolInfo.queueFamilyIndex = queueVk->familyIndex;
+
+  if (vkCreateCommandPool(deviceVk->device, &poolInfo, NULL, &native->pool) != VK_SUCCESS) {
+    deviceRecordHotPathFree(queue->_device, sizeof(*native));
+    free(native);
+    return NULL;
+  }
+
   allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  allocInfo.commandPool        = queueVk->commandPool;
+  allocInfo.commandPool        = native->pool;
   allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   allocInfo.commandBufferCount = 1u;
 
   if (vkAllocateCommandBuffers(deviceVk->device,
                                &allocInfo,
                                &native->command) != VK_SUCCESS) {
+    vkDestroyCommandPool(deviceVk->device, native->pool, NULL);
     deviceRecordHotPathFree(queue->_device, sizeof(*native));
     free(native);
     return NULL;
@@ -692,10 +781,7 @@ vk__createCommandBufferState(GPUQueue *queue) {
                     &fenceInfo,
                     NULL,
                     &native->fence) != VK_SUCCESS) {
-    vkFreeCommandBuffers(deviceVk->device,
-                         queueVk->commandPool,
-                         1u,
-                         &native->command);
+    vkDestroyCommandPool(deviceVk->device, native->pool, NULL);
     deviceRecordHotPathFree(queue->_device, sizeof(*native));
     free(native);
     return NULL;
@@ -1054,7 +1140,7 @@ vk_submitEx(GPUQueue                   *queueHandle,
     submitInfo.pCommandBuffers      = commands;
     submitInfo.signalSemaphoreCount = signalCount;
     submitInfo.pSignalSemaphores    = signals;
-    result                          = vkQueueSubmit(queue->queRaw, 1u, &submitInfo, submitFence);
+    result                          = vk__queueSubmit(queue, &submitInfo, submitFence);
   }
 
   if (result != VK_SUCCESS) {
@@ -1077,10 +1163,7 @@ vk_submitEx(GPUQueue                   *queueHandle,
 
   if (swapchain) {
     swapchain->frameSubmitted = true;
-    presentResult             = vk_presentSwapchain(swapchain,
-                                                    queue->queRaw,
-                                                    renderFinished,
-                                                    presentNative->presentImageIndex);
+    presentResult             = vk__queuePresent(queue, swapchain, renderFinished, presentNative->presentImageIndex);
 
     if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR) {
       vk__reportQueueError(info->ppCommandBuffers[0],
@@ -1544,6 +1627,10 @@ vk_destroyCommandQueue(GPUQueue *queue) {
         vkDestroyFence(deviceVk->device, command->fence, NULL);
       }
 
+      if (deviceVk && command->pool) {
+        vkDestroyCommandPool(deviceVk->device, command->pool, NULL);
+      }
+
       if (deviceVk && command->frameTimeQueries) {
         vkDestroyQueryPool(deviceVk->device,
                            command->frameTimeQueries,
@@ -1846,10 +1933,7 @@ vk_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
       submitInfo.pSignalSemaphores    = &renderFinished;
     }
 
-    result = vkQueueSubmit(queue->queRaw,
-                           1u,
-                           &submitInfo,
-                           submitFence);
+    result = vk__queueSubmit(queue, &submitInfo, submitFence);
   }
 
   if (result != VK_SUCCESS) {
@@ -1870,10 +1954,7 @@ vk_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
   if (swapchain) {
     swapchain->frameSubmitted = true;
 
-    presentResult = vk_presentSwapchain(swapchain,
-                                        queue->queRaw,
-                                        renderFinished,
-                                        native->presentImageIndex);
+    presentResult = vk__queuePresent(queue, swapchain, renderFinished, native->presentImageIndex);
 
     if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR) {
       vk__reportQueueError(cmdb, "present", presentResult);
@@ -1966,7 +2047,7 @@ vk_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
     submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = count;
     submitInfo.pCommandBuffers    = commands;
-    result                        = vkQueueSubmit(queue->queRaw, 1u, &submitInfo, submitFence);
+    result                        = vk__queueSubmit(queue, &submitInfo, submitFence);
   }
 
   if (result != VK_SUCCESS) {
@@ -2015,4 +2096,6 @@ vk_initCmdQue(GPUCommandQueueApi *apiQue) {
   apiQue->createSemaphore         = vk_createSemaphore;
   apiQue->destroySemaphore        = vk_destroySemaphore;
   apiQue->submitEx                = vk_submitEx;
+  apiQue->lock                    = vk_lockQueue;
+  apiQue->unlock                  = vk_unlockQueue;
 }

@@ -2556,6 +2556,9 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
   switch (feature) {
     case GPU_FEATURE_COMPUTE:
       return vk_hasQueueCapability(adapterVk, VK_QUEUE_COMPUTE_BIT);
+    case GPU_FEATURE_THREADED_UPLOADS:
+      /* a pool per command buffer, every VkQueue call under its queue's submit lock */
+      return true;
     case GPU_FEATURE_TIMESTAMPS:
       return vk_hasTimestampCapability(adapterVk);
     case GPU_FEATURE_PIPELINE_STATISTICS:

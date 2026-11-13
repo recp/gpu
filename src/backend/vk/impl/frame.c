@@ -40,12 +40,11 @@ vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
   submitInfo.pWaitDstStageMask    = &waitStage;
   submitInfo.signalSemaphoreCount = 1u;
   submitInfo.pSignalSemaphores    = &renderFinished;
-  result                          = vkQueueSubmit(swapchain->queue->queRaw,
-                                                  1u,
-                                                  &submitInfo,
-                                                  sync->fence);
+  vk_queueSubmitLock(swapchain->queue);
+  result = vkQueueSubmit(swapchain->queue->queRaw, 1u, &submitInfo, sync->fence);
 
   if (result != VK_SUCCESS) {
+    vk_queueSubmitUnlock(swapchain->queue);
     vk_setSwapchainStatus(swapchain, result);
     (void)vk_restoreFrameFence(swapchain, sync);
     return false;
@@ -55,6 +54,7 @@ vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
                                swapchain->queue->queRaw,
                                renderFinished,
                                swapchain->acquiredImageIndex);
+  vk_queueSubmitUnlock(swapchain->queue);
 
   return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
 }
