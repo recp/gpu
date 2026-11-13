@@ -19,6 +19,7 @@
 #include "cmdqueue_internal.h"
 #include "descr/descriptor_internal.h"
 #include "device_internal.h"
+#include "image_buffer_internal.h"
 #include "pass/blit_internal.h"
 #include "pipeline_cache_internal.h"
 #include <stddef.h>
@@ -1267,6 +1268,7 @@ finalizeDevice(GPUAdapter *adapter,
                  device->enabledFeatureStorage,
                  (uint32_t)GPU_ARRAY_LEN(device->enabledFeatureStorage),
                  &device->enabledFeatures);
+  initImageBufferDevice(device);
 
   return GPU_OK;
 }
@@ -1824,9 +1826,14 @@ GPUGetFormatCapabilities(const GPUAdapter      *adapter,
     }
   }
 
+  /* read-write wherever storage is, unless a backend knows less */
+  outCaps->storageReadWrite = true;
+
   if ((api = adapterApi(adapter)) && api->device.getFormatCapabilities) {
     api->device.getFormatCapabilities(adapter, format, outCaps);
   }
+
+  outCaps->storageReadWrite = outCaps->storageReadWrite && outCaps->storage;
 
   if (outCaps->colorAttachment || outCaps->depthStencil) {
     outCaps->supportedSampleCounts &= knownSampleCounts;
@@ -2691,6 +2698,7 @@ GPUDestroyDevice(GPUDevice *__restrict device) {
   destroyBlitDevice(device);
   destroyBindGroupCacheDevice(device);
   destroyPipelineCacheDevice(device);
+  destroyImageBufferDevice(device);
 
   if (api->device.destroyDevice) {
     api->device.destroyDevice(device);

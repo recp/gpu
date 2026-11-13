@@ -3022,6 +3022,21 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
     }
   }
 
+  /* read-write images of formats the device has no read-write texture for: storage buffers */
+
+  if (device->imageBufferFormats) {
+    char imageBuffers[USL_CAPABILITY_ATOM_TEXT_MAX];
+
+    snprintf(imageBuffers,
+             sizeof(imageBuffers),
+             USL_IMAGE_BUFFER_ATOM_PREFIX "%llx",
+             (unsigned long long)device->imageBufferFormats);
+
+    if (us_cap_atom_text(&targetAtoms[targetAtomCount++], imageBuffers) != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+  }
+
   if (GPUIsFeatureEnabled(device, GPU_FEATURE_DESCRIPTOR_INDEXING)) {
     atomResult = device->uslBoundedDescriptorIndexing
                    ? us_cap_atom_text(&targetAtoms[targetAtomCount++],

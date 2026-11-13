@@ -40,6 +40,7 @@ struct GPUTexture {
   GPUTextureUsageFlags         usage;
   bool                         _sparse;
   bool                         _ownsNative;
+  struct GPUImageBuffer       *_imageBuffer; /* read-write bindings, when the device emulates them */
 };
 
 struct GPUTextureView {

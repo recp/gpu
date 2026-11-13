@@ -85,7 +85,9 @@ typedef struct GPUBindGroupPriv {
   uint32_t                 count;
   uint32_t                 dynamicOffsetCount;
   GPUShaderStageFlags      singleBufferStages;
+  uint32_t                 imageBufferGeneration; /* the device's when imageBuffers was found */
   bool                     bindless;
+  bool                     imageBuffers; /* binds emulated read-write textures (image_buffer_internal.h) */
 } GPUBindGroupPriv;
 
 typedef struct GPUPipelineLayoutPriv {
@@ -190,6 +192,8 @@ pipelineLayoutAcceptsBindGroup(GPUPipelineLayout *pipelineLayout,
 GPU_HIDE
 GPUBindGroupLayout*
 bindGroupGetLayout(GPUBindGroup *group);
+
+
 
 GPU_HIDE
 GPUDevice*

@@ -19,6 +19,7 @@
 #include "device_internal.h"
 #include "pass/blit_internal.h"
 #include "texture_internal.h"
+#include "image_buffer_internal.h"
 
 #include <math.h>
 
@@ -341,8 +342,9 @@ GPUResult
 GPUCreateTexture(GPUDevice                  *__restrict device,
                  const GPUTextureCreateInfo *__restrict info,
                  GPUTexture                **__restrict outTexture) {
-  GPUApi   *api;
-  GPUResult result;
+  GPUTextureCreateInfo emulated;
+  GPUApi              *api;
+  GPUResult            result;
 
   if (!outTexture) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -358,6 +360,14 @@ GPUCreateTexture(GPUDevice                  *__restrict device,
 
   if (!(api = deviceApi(device)) || !api->texture.create) {
     return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  /* a texture whose read-write bindings are a buffer is copied to and from it */
+
+  if (device->imageBufferFormats && imageBufferTextureUsage(device, info) != info->usage) {
+    emulated       = *info;
+    emulated.usage = imageBufferTextureUsage(device, info);
+    info           = &emulated;
   }
 
   result = api->texture.create(device, info, outTexture);
@@ -435,6 +445,7 @@ GPUDestroyTexture(GPUTexture *__restrict texture) {
   }
 
   destroyTextureBlitViews(texture);
+  destroyImageBuffer(texture);
   api->texture.destroy(texture);
 }
 
@@ -604,6 +615,9 @@ GPUQueueWriteTexture(GPUQueue                    *__restrict queue,
 
   commandQueueLock(queue, api);
   result = api->texture.write(queue, texture, region, data, sizeBytes, &layout);
+
+  if (result == GPU_OK)
+    imageBufferTextureWritten(texture);
   commandQueueUnlock(queue, api);
   return result;
 }

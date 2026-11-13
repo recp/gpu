@@ -45,6 +45,7 @@ struct GPUComputePassEncoder {
   uint32_t                _boundDynamicOffsetCounts[GPU_ENCODER_MAX_BIND_GROUPS];
   uint32_t                _workgroupSize[3];
   uint32_t                _requiredBindGroupMask;
+  uint32_t                _imageBufferGroups; /* bound groups that hold emulated read-write textures */
   uint32_t                _pushConstantSizeBytes;
   uint32_t                _timestampEndIndex;
   GPUShaderStageFlags     _pushConstantStages;

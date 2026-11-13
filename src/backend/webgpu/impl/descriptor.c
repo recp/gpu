@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "../impl.h"
+#include "../../../api/image_buffer_internal.h"
 
 typedef struct WebGPUBindGroupWrite {
   WGPUBindGroupEntry            *entries;
@@ -132,7 +133,8 @@ webgpu_samplerBindingType(GPUSamplerBindingType type) {
 }
 
 static bool
-webgpu_initLayoutEntry(WGPUBindGroupLayoutEntry      *entry,
+webgpu_initLayoutEntry(const GPUDevice               *device,
+                       WGPUBindGroupLayoutEntry      *entry,
                        const GPUBindGroupLayoutEntry *source,
                        uint32_t                       binding) {
   if (!entry || !source) {
@@ -173,6 +175,14 @@ webgpu_initLayoutEntry(WGPUBindGroupLayoutEntry      *entry,
       return entry->texture.sampleType != WGPUTextureSampleType_Undefined
              && entry->texture.viewDimension != WGPUTextureViewDimension_Undefined;
     case GPU_BINDING_STORAGE_TEXTURE:
+      /* a read-write texture the device emulates binds its buffer (image_buffer_internal.h) */
+      if (source->storageTexture.access == GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE
+          && deviceEmulatesReadWrite(device, source->storageTexture.format)) {
+        entry->buffer      = (WGPUBufferBindingLayout) WGPU_BUFFER_BINDING_LAYOUT_INIT;
+        entry->buffer.type = WGPUBufferBindingType_Storage;
+        return true;
+      }
+
       entry->storageTexture               = (WGPUStorageTextureBindingLayout) WGPU_STORAGE_TEXTURE_BINDING_LAYOUT_INIT;
       entry->storageTexture.access        = webgpu_storageTextureAccess(source->storageTexture.access);
       entry->storageTexture.format        = webgpuFormat(source->storageTexture.format);
@@ -246,6 +256,7 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
     if (entries[countIndex].bindingType == GPU_BINDING_STORAGE_TEXTURE
         && entries[countIndex].storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_WRITE_ONLY
+        && !deviceEmulatesReadWrite(device, entries[countIndex].storageTexture.format)
         && !wgpuDeviceHasFeature(native->device,
                                   (WGPUFeatureName)WGPUNativeFeature_TextureAdapterSpecificFormatFeatures)) {
       return GPU_ERROR_UNSUPPORTED;
@@ -296,7 +307,8 @@ webgpu_createBindGroupLayout(GPUDevice          *device,
 
       nativeBinding = backendBindings[entryIndex] + ai;
 
-      if (!webgpu_initLayoutEntry(&nativeEntries[nativeCount++],
+      if (!webgpu_initLayoutEntry(device,
+                                  &nativeEntries[nativeCount++],
                                   &entries[entryIndex],
                                   nativeBinding)) {
         goto unsupported;

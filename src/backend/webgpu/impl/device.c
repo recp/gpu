@@ -420,6 +420,31 @@ webgpu_supportsMultisampling(GPUFormat format, bool coreFeatures) {
   }
 }
 
+/* read-write storage with texture-formats-tier2 */
+static bool
+webgpu_hasTier2ReadWrite(GPUFormat format) {
+  switch (format) {
+    case GPU_FORMAT_R8_UNORM:
+    case GPU_FORMAT_R8_UINT:
+    case GPU_FORMAT_R8_SINT:
+    case GPU_FORMAT_R16_UINT:
+    case GPU_FORMAT_R16_SINT:
+    case GPU_FORMAT_R16_FLOAT:
+    case GPU_FORMAT_RGBA8_UNORM:
+    case GPU_FORMAT_RGBA8_UINT:
+    case GPU_FORMAT_RGBA8_SINT:
+    case GPU_FORMAT_RGBA16_UINT:
+    case GPU_FORMAT_RGBA16_SINT:
+    case GPU_FORMAT_RGBA16_FLOAT:
+    case GPU_FORMAT_RGBA32_UINT:
+    case GPU_FORMAT_RGBA32_SINT:
+    case GPU_FORMAT_RGBA32_FLOAT:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static bool
 webgpu_hasCoreStorage(GPUFormat format) {
   switch (format) {
@@ -635,6 +660,13 @@ webgpu_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
     outCaps->storage = webgpu_hasAdapterFeature(adapter,
                                                 WGPUFeatureName_BGRA8UnormStorage);
   }
+
+  /* read-write bindings: r32 in core, more with texture-formats-tier2; GPU-C emulates the rest */
+  outCaps->storageReadWrite =
+    outCaps->storage
+    && (format == GPU_FORMAT_R32_UINT || format == GPU_FORMAT_R32_SINT || format == GPU_FORMAT_R32_FLOAT
+        || (webgpu_hasAdapterFeature(adapter, WGPUFeatureName_TextureFormatsTier2)
+            && webgpu_hasTier2ReadWrite(format)));
 
   if (outCaps->colorAttachment) {
     outCaps->supportedSampleCounts = GPU_SAMPLE_COUNT_1_BIT;

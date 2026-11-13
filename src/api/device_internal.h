@@ -114,6 +114,10 @@ struct GPUDevice {
   bool                        uslBoundedDescriptorIndexing;
   bool                        uslUntypedPointers;
   GPUFeature                  enabledFeatureStorage[GPU_FEATURE_FRAME_FEEDBACK + 1u];
+  uint64_t                    imageBufferFormats; /* USL texel formats whose read-write images are buffers */
+  struct GPUImageBuffer      *_imageBuffers;
+  void                       *_imageBufferLock;
+  uint32_t                    _imageBufferGeneration; /* buffers made so far; 0: none */
 };
 
 GPU_HIDE

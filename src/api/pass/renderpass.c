@@ -18,6 +18,7 @@
 #include "../buffer_internal.h"
 #include "../cmdqueue_internal.h"
 #include "../device_internal.h"
+#include "../image_buffer_internal.h"
 #include "../query_internal.h"
 #include "../texture_internal.h"
 #include "../vrs_internal.h"
@@ -538,6 +539,24 @@ gpu_destroyRenderPass(GPUApi *api, GPURenderPassDesc *pass) {
   free(pass);
 }
 
+/* emulated read-write textures (image_buffer_internal.h): a render pass sees
+ * the texels read-write bindings wrote, and its attachments are newer after */
+
+static void
+renderPassImageBuffers(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) {
+  uint32_t i;
+
+  imageBufferFlush(cmdb);
+
+  for (i = 0u; i < info->colorAttachmentCount; i++) {
+    if (info->pColorAttachments[i].view)
+      imageBufferTextureWritten(info->pColorAttachments[i].view->_texture);
+
+    if (info->pColorAttachments[i].resolveView)
+      imageBufferTextureWritten(info->pColorAttachments[i].resolveView->_texture);
+  }
+}
+
 GPU_EXPORT
 GPURenderPassEncoder*
 GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) {
@@ -560,6 +579,9 @@ GPUBeginRenderPass(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) 
 
   if (!api->renderPass.beginRenderPass || !api->rce.renderCommandEncoder)
     return NULL;
+
+  if (device->_imageBuffers)
+    renderPassImageBuffers(cmdb, info);
 
   wroteBeginTimestamp = false;
 
@@ -728,7 +750,9 @@ GPUCopyBufferToTexture(GPUTransferPassEncoder           *pass,
     return;
   }
 
+  imageBufferTransferRead(pass, dst);
   api->renderPass.copyBufferToTexture(pass, src, dst, region);
+  imageBufferTextureWritten(dst);
 }
 
 GPU_EXPORT
@@ -752,6 +776,7 @@ GPUCopyTextureToBuffer(GPUTransferPassEncoder           *pass,
     return;
   }
 
+  imageBufferTransferRead(pass, src);
   api->renderPass.copyTextureToBuffer(pass, src, dst, region);
 }
 
@@ -810,7 +835,10 @@ GPUCopyTextureToTexture(GPUTransferPassEncoder              *pass,
     return;
   }
 
+  imageBufferTransferRead(pass, src);
+  imageBufferTransferRead(pass, dst);
   api->renderPass.copyTextureToTexture(pass, src, dst, region);
+  imageBufferTextureWritten(dst);
 }
 
 GPU_EXPORT

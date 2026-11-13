@@ -21,6 +21,7 @@
 #include "compute_internal.h"
 #include "descr/descriptor_internal.h"
 #include "device_internal.h"
+#include "image_buffer_internal.h"
 #include "library_internal.h"
 #include "pipeline_cache_internal.h"
 #include "query_internal.h"
@@ -614,6 +615,7 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
     memset(pass->_boundDynamicOffsetCounts,
            0,
            sizeof(pass->_boundDynamicOffsetCounts));
+    pass->_imageBufferGroups = 0u;
   }
 
   pass->_pipelineLayout = pipeline->_layout;
@@ -634,6 +636,109 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
   if (pass->_pushConstantSizeBytes > 0u) {
     memset(pass->_pushConstants, 0, pass->_pushConstantSizeBytes);
   }
+}
+
+/* groups holding emulated read-write textures (image_buffer_internal.h): a
+ * device that never made one's buffer answers at once, a group keeps what it
+ * found until another is made */
+
+static inline bool
+computeGroupImageBuffers(GPUComputePassEncoder *pass, GPUBindGroup *group) {
+  const GPUBindGroupPriv *priv;
+
+  if (!pass->_device || !pass->_device->_imageBufferGeneration || !(priv = group->_priv))
+    return false;
+
+  return priv->imageBufferGeneration == pass->_device->_imageBufferGeneration ? priv->imageBuffers
+                                                                              : bindGroupImageBuffersFind(group);
+}
+
+static inline void
+computeNoteImageBuffers(GPUComputePassEncoder *pass, uint32_t groupIndex, GPUBindGroup *group) {
+  if (computeGroupImageBuffers(pass, group))
+    pass->_imageBufferGroups |= 1u << groupIndex;
+  else
+    pass->_imageBufferGroups &= ~(1u << groupIndex);
+}
+
+static void
+rebindComputeGroup(GPUComputePassEncoder *pass, GPUApi *api, uint32_t groupIndex) {
+  BindComputeContext ctx;
+
+  if (api->descriptor.bindComputeGroup) {
+    (void)api->descriptor.bindComputeGroup(pass,
+                                           pass->_pipelineLayout,
+                                           groupIndex,
+                                           pass->_boundGroups[groupIndex],
+                                           pass->_boundDynamicOffsetCounts[groupIndex],
+                                           pass->_boundDynamicOffsets[groupIndex]);
+    return;
+  }
+
+  ctx.pass = pass;
+  (void)forEachBindGroupBindingWithDynamicOffsets(pass->_pipelineLayout,
+                                                  groupIndex,
+                                                  pass->_boundGroups[groupIndex],
+                                                  pass->_boundDynamicOffsetCounts[groupIndex],
+                                                  pass->_boundDynamicOffsets[groupIndex],
+                                                  bindComputeBinding,
+                                                  &ctx);
+}
+
+/* a dispatch whose emulated textures need a copy first: the pass ends, the
+ * copies go, and the pass goes on in a new encoder with the same state */
+
+static void
+computeImageBuffers(GPUComputePassEncoder *pass, GPUApi *api) {
+  GPUComputePassCreateInfo info;
+  GPUComputePassEncoder    saved;
+  GPUComputePipeline      *pipeline;
+  GPUCommandBuffer        *cmdb;
+  void                    *priv;
+  uint32_t                 group;
+
+  cmdb = pass->_cmdb;
+
+  if (!cmdb || !api->compute.endEncoding || !api->compute.computeCommandEncoder
+      || !imageBufferComputeNeedsSync(pass)) {
+    imageBufferComputeWrote(pass);
+    return;
+  }
+
+  saved = *pass;
+  api->compute.endEncoding(pass);
+  cmdb->_activeEncoder = false;
+
+  imageBufferComputeSync(&saved, cmdb);
+
+  memset(&info, 0, sizeof(info));
+  info.label = "gpu image buffer";
+
+  /* backends keep one compute encoder per command buffer: the same one comes back */
+
+  if (api->compute.computeCommandEncoder(cmdb, &info) != pass) {
+    *pass        = saved;
+    pass->_ended = true;
+    return;
+  }
+
+  priv        = pass->_priv;
+  *pass       = saved;
+  pass->_priv = priv;
+  cmdb->_activeEncoder = true;
+
+  if ((pipeline = pass->_pipeline) && pipeline->_state && api->compute.setComputePipelineState)
+    api->compute.setComputePipelineState(pass, pipeline->_state);
+
+  for (group = 0u; group < GPU_ENCODER_MAX_BIND_GROUPS; group++) {
+    if (pass->_boundGroups[group])
+      rebindComputeGroup(pass, api, group);
+  }
+
+  if (pass->_pushConstantsEmitted && api->compute.pushConstants)
+    api->compute.pushConstants(pass, pass->_pushConstants, pass->_pushConstantSizeBytes);
+
+  imageBufferComputeWrote(pass);
 }
 
 GPU_EXPORT
@@ -692,6 +797,7 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
                                          pDynamicOffsets)) {
       if (pass->_boundGroups[groupIndex] != bindGroup) {
         pass->_boundGroupLayouts[groupIndex] = bindGroupGetLayout(bindGroup);
+        computeNoteImageBuffers(pass, groupIndex, bindGroup);
       }
 
       pass->_boundGroups[groupIndex] = bindGroup;
@@ -716,6 +822,7 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
                                                 &ctx)) {
     if (pass->_boundGroups[groupIndex] != bindGroup) {
       pass->_boundGroupLayouts[groupIndex] = bindGroupGetLayout(bindGroup);
+      computeNoteImageBuffers(pass, groupIndex, bindGroup);
     }
 
     pass->_boundGroups[groupIndex] = bindGroup;
@@ -802,6 +909,10 @@ GPUDispatch(GPUComputePassEncoder *pass,
     return;
   }
 
+  if (pass->_imageBufferGroups & pass->_requiredBindGroupMask) {
+    computeImageBuffers(pass, api);
+  }
+
   api->compute.dispatch(pass, x, y, z);
 }
 
@@ -835,6 +946,10 @@ GPUDispatchIndirect(GPUComputePassEncoder *pass,
 
   if (!(api = computePassApi(pass)) || !api->compute.dispatchIndirect) {
     return;
+  }
+
+  if (pass->_imageBufferGroups & pass->_requiredBindGroupMask) {
+    computeImageBuffers(pass, api);
   }
 
   api->compute.dispatchIndirect(pass, argsBuffer, argsOffset);
@@ -878,6 +993,10 @@ GPUMultiDispatchIndirect(GPUComputePassEncoder *pass,
 
   if (!(api = computePassApi(pass))) {
     return;
+  }
+
+  if (pass->_imageBufferGroups & pass->_requiredBindGroupMask) {
+    computeImageBuffers(pass, api);
   }
 
   if (api->compute.multiDispatchIndirect

@@ -17,6 +17,7 @@
 #include "../../common.h"
 #include "../cmdqueue_internal.h"
 #include "../device_internal.h"
+#include "../image_buffer_internal.h"
 #include "../library_internal.h"
 #include "../texture_internal.h"
 #include "blit_internal.h"
@@ -807,6 +808,13 @@ GPUBlit(GPUCommandBuffer         *cmdb,
 
   if (!blitInfoValid(cmdb, info, &srcCaps)) {
     return;
+  }
+
+  /* emulated read-write textures: the source as read-write bindings left it */
+
+  if (info->src->_imageBuffer || info->dst->_imageBuffer) {
+    imageBufferFlush(cmdb);
+    imageBufferTextureWritten(info->dst);
   }
 
   if (info->src->format == info->dst->format

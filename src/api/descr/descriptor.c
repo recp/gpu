@@ -24,8 +24,10 @@
 #include "../sampler_internal.h"
 #include "../sampler_feedback_internal.h"
 #include "../texture_internal.h"
+#include "../image_buffer_internal.h"
 #include "descriptor_internal.h"
 
+#include <us/compiler.h>
 #include <limits.h>
 
 #if !defined(_WIN32) && !defined(WIN32)
@@ -33,6 +35,14 @@
 #endif
 
 #define GPU_PUSH_CONSTANT_MAX_SIZE_BYTES 4096u
+
+/* a read-write storage texture the device emulates binds its buffer (image_buffer_internal.h) */
+
+static inline bool
+bindingViewResolve(GPUBindGroupBindingView *view) {
+  return view->bindingType != GPU_BINDING_STORAGE_TEXTURE || view->kind != GPUBindKindTexture
+         || imageBufferBindingView(view);
+}
 
 #define GPU_BIND_GROUP_HASH(HASH, VALUE) \
   bindGroupHashBytes((HASH), &(VALUE), sizeof(VALUE))
@@ -2779,6 +2789,10 @@ bindGroupEachStatic(GPUPipelineLayoutPriv  *pipeline,
     view.kind             = binding->kind;
     view.hasDynamicOffset = false;
 
+    if (!bindingViewResolve(&view)) {
+      return 0;
+    }
+
     fn(ctx, &view);
   }
 
@@ -3142,6 +3156,10 @@ bindGroupEachDynamic(GPUPipelineLayout    *pipelineLayout,
     view.kind             = binding->kind;
     view.hasDynamicOffset = layoutEntry->hasDynamicOffset;
 
+    if (!bindingViewResolve(&view)) {
+      return 0;
+    }
+
     fn(ctx, &view);
   }
 
@@ -3220,6 +3238,36 @@ getPipelineLayoutGroups(GPUPipelineLayout *layout, uint32_t *outCount) {
   }
 
   return priv ? priv->bindGroupLayouts : NULL;
+}
+
+/* metal: a read-write image whose texture slot was counted here is USL's
+ * buffer at USL_IMAGE_BUFFER_METAL_SLOT minus that slot (reflected layouts
+ * already carry it). */
+
+static void
+mapImageBufferSlots(GPUPipelineLayoutPriv *priv, const GPUDevice *device) {
+  const GPUBindGroupLayoutEntry *entry;
+  GPUBindGroupLayoutPriv        *layout;
+  uint32_t                      *slot;
+  uint32_t                       group;
+  uint32_t                       i;
+
+  for (group = 0u; group < priv->bindGroupLayoutCount; group++) {
+    layout = gpu_layoutPriv(priv->bindGroupLayouts[group]);
+
+    if (!layout || layout->hasBackendBindings || !priv->backendBindings[group])
+      continue;
+
+    for (i = 0u; i < layout->count; i++) {
+      entry = &layout->entries[i];
+      slot  = &priv->backendBindings[group][i];
+
+      if (entry->bindingType == GPU_BINDING_STORAGE_TEXTURE
+          && entry->storageTexture.access == GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE
+          && deviceEmulatesReadWrite(device, entry->storageTexture.format) && *slot <= USL_IMAGE_BUFFER_METAL_SLOT)
+        *slot = USL_IMAGE_BUFFER_METAL_SLOT - *slot;
+    }
+  }
 }
 
 GPU_HIDE
@@ -3585,6 +3633,10 @@ forEachBindGroupBinding(GPUBindGroup         *group,
     view.kind             = binding->kind;
     view.hasDynamicOffset = layoutEntry->hasDynamicOffset;
 
+    if (!bindingViewResolve(&view)) {
+      return 0;
+    }
+
     fn(ctx, &view);
   }
 
@@ -3660,6 +3712,10 @@ forEachBindGroupEntry(GPUBindGroup            *group,
     view.kindIndex        = binding->kindIndex;
     view.kind             = binding->kind;
     view.hasDynamicOffset = false;
+
+    if (!bindingViewResolve(&view)) {
+      return 0;
+    }
 
     fn(ctx, &view);
   }
@@ -3901,6 +3957,10 @@ GPUCreatePipelineLayout(GPUDevice                         *device,
   api                        = deviceApi(device);
   result = compilePipelineBindings(priv,
                                    api ? api->backend : GPU_BACKEND_DEFAULT);
+
+  if (result == GPU_OK && device->imageBufferFormats && api && api->backend == GPU_BACKEND_METAL) {
+    mapImageBufferSlots(priv, device);
+  }
 
   if (result != GPU_OK) {
     free(priv->bindGroupLayouts);
@@ -4540,6 +4600,9 @@ GPUUpdateBindGroupEXT(GPUBindGroup            *group,
         return GPU_ERROR_BACKEND_FAILURE;
     }
   }
+
+  /* found again at its next bind */
+  ((GPUBindGroupPriv *)group->_priv)->imageBufferGeneration = 0u;
 
   return GPU_OK;
 }

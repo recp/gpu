@@ -240,10 +240,11 @@ typedef struct GPUFormatCapabilities {
   GPUSampleCountFlags supportedSampleCounts;
   bool                sampled;
   bool                filterable;
-  bool                storage;
+  bool                storage;          /* storage texture usage: read-only and write-only bindings */
   bool                colorAttachment;
   bool                blendable;
   bool                depthStencil;
+  bool                storageReadWrite; /* native read-write bindings; GPU-C emulates the rest it can */
 } GPUFormatCapabilities;
 
 typedef struct GPUCacheStats {

@@ -12,6 +12,7 @@ target_sources(gpu PRIVATE
   format.c
   frame.c
   frame_feedback.c
+  image_buffer.c
   instance.c
   library.c
   memory.c
