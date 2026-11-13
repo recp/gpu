@@ -350,3 +350,33 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
       SKIP_RETURN_CODE 77 LABELS "frame-feedback;timing" TIMEOUT 30 RUN_SERIAL TRUE)
   endforeach()
 endif()
+
+if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  gpu_add_usl_fixtures(GPU_IMAGE_BUFFER_FIXTURES metal api-image-buffer
+    "${CMAKE_CURRENT_SOURCE_DIR}/image_buffer.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/image_buffer_sample.usl")
+
+  add_executable(gpu-image-buffer-test image_buffer.c runner.c ${GPU_IMAGE_BUFFER_FIXTURES})
+
+  set_target_properties(gpu-image-buffer-test PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+  target_compile_options(gpu-image-buffer-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+
+  target_link_libraries(gpu-image-buffer-test PRIVATE gpu)
+
+  foreach(mode classic metal4)
+    foreach(path native emulated)
+      if(path STREQUAL "emulated")
+        set(imageBuffers 1)
+      else()
+        set(imageBuffers 0)
+      endif()
+
+      add_test(NAME image-buffer-${path}-${mode}
+        COMMAND gpu-image-buffer-test ${GPU_IMAGE_BUFFER_FIXTURES})
+      set_tests_properties(image-buffer-${path}-${mode} PROPERTIES
+        ENVIRONMENT "GPU_METAL_MODE=${mode};GPU_IMAGE_BUFFERS=${imageBuffers};MTL_DEBUG_LAYER=1"
+        SKIP_RETURN_CODE 77 LABELS "storage;image-buffer" TIMEOUT 30 RUN_SERIAL TRUE)
+    endforeach()
+  endforeach()
+endif()

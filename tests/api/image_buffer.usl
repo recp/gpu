@@ -1,0 +1,25 @@
+kern(8, 8) image_buffer_update_cs(
+  target:     image2d<rgba32float, read_write>        #texture(0),
+  layers:     image2d_array<rgba8unorm, read_write>   #texture(1),
+  inout sizes: [uint]                                 #buffer(2),
+  pixel:      uint2                                   #global_id
+) {
+  if (pixel.x == 0u && pixel.y == 0u) {
+    sizes[0] = target.get_width()
+    sizes[1] = target.get_height()
+    sizes[2] = layers.get_width()
+    sizes[3] = layers.get_array_size()
+  }
+
+  if (pixel.x < target.get_width() && pixel.y < target.get_height()) {
+    let color = target.read(pixel)
+    target.write(color * 2.0 + float4(float(pixel.x), float(pixel.y), 0.5, 1.0), pixel)
+  }
+
+  if (pixel.x < layers.get_width() && pixel.y < layers.get_height()) {
+    for (var layer: uint = 0u; layer < layers.get_array_size(); layer += 1u) {
+      let texel = layers.read(uint3(pixel, layer))
+      layers.write(texel.yzwx, uint3(pixel, layer))
+    }
+  }
+}
