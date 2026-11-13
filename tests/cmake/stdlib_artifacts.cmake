@@ -47,7 +47,7 @@ file(MAKE_DIRECTORY "${inputs}/stdlib/std" "${inputs}/package"
   "${inputs}/stdlib/cache/v2/1.0.0/std")
 file(WRITE "${inputs}/stdlib/STDLIB_VERSION" "1.0.0\n")
 file(WRITE "${inputs}/probe.usl"
-  "import <std/probe>\nkern(1, 1, 1) probe(inout out: [float] #buffer(0)) { out[0] = probe_value() }\n")
+  "import <std/probe>\nkern(1, 1, 1) probe_cs(inout out: [float] #buffer(0)) { out[0] = probe_value() }\n")
 file(WRITE "${inputs}/plain.usl"
   "kern(1, 1, 1) plain(inout out: [float] #buffer(0)) { out[0] = 7.0 }\n")
 
@@ -55,7 +55,7 @@ foreach(value 1 2)
   file(WRITE "${inputs}/package/probe.usl"
     "pub fn probe_value() -> float { return ${value}.0 }\n")
   run("${CMAKE_COMMAND}" -E env USL_EMIT_BYTECODE=1 USL_ARTIFACT_ONLY=1
-    USL_BYTECODE_EMBED_SOURCE=1 USL_STRICT_IEEE=1 USL_NO_BACKEND_SIDECAR=1
+    USL_BYTECODE_EMBED_SOURCE=1 USL_STDLIB_INDEX=1 USL_STRICT_IEEE=1 USL_NO_BACKEND_SIDECAR=1
     "${GPU_TEST_FIXTURE}" dx12 "${inputs}/package/probe.usl")
   configure_file("${inputs}/package/probe.us"
     "${inputs}/package/probe-${value}.ustd" COPYONLY)
