@@ -65,6 +65,10 @@ typedef struct GPUCommandQueueApi {
   /* serialize native queue order without serializing command recording. */
   void (*lock)(GPUQueue *queue);
   void (*unlock)(GPUQueue *queue);
+
+  /* everything submitted so far done and its completions run (optional:
+   * GPUQueueWaitIdle otherwise waits on an empty submission's fence) */
+  GPUResult (*waitIdle)(GPUQueue *queue);
 } GPUCommandQueueApi;
 
 #ifdef __cplusplus

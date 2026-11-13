@@ -2171,6 +2171,23 @@ dx12_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   return GPU_OK;
 }
 
+/* GPUQueueWaitIdle: the queue's fence, then its completions */
+
+static GPUResult
+dx12_waitQueueIdle(GPUQueue *queue) {
+  GPUQueueDX12 *native;
+  bool          idle;
+
+  if (!queue || !(native = queue->_priv)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  idle = dx12_waitCommandQueueIdle(native);
+  dx12__waitForCompletions(native);
+
+  return idle ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+}
+
 GPU_HIDE
 void
 dx12_initCmdQue(GPUCommandQueueApi *api) {
@@ -2187,4 +2204,5 @@ dx12_initCmdQue(GPUCommandQueueApi *api) {
   api->submitEx                = dx12_submitEx;
   api->lock                    = dx12_lockQueue;
   api->unlock                  = dx12_unlockQueue;
+  api->waitIdle                = dx12_waitQueueIdle;
 }

@@ -434,6 +434,11 @@ GPU_EXPORT
 void
 GPUDestroyDevice(GPUDevice *__restrict device);
 
+/* GPUQueueWaitIdle on every queue of the device. */
+GPU_EXPORT
+GPUResult
+GPUDeviceWaitIdle(GPUDevice *__restrict device);
+
 #ifdef __cplusplus
 }
 #endif

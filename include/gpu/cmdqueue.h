@@ -131,6 +131,13 @@ GPUResult
 GPUQueueSubmitEx(GPUQueue                   *__restrict cmdq,
                  const GPUQueueSubmitExInfo *__restrict info);
 
+/* waits until everything submitted to the queue so far (command buffers and
+ * queue writes) has finished and its completion callbacks have run. work
+ * other threads submit meanwhile may or may not be included. */
+GPU_EXPORT
+GPUResult
+GPUQueueWaitIdle(GPUQueue *__restrict cmdq);
+
 GPU_EXPORT
 GPUResult
 GPUCreateFence(struct GPUDevice         *__restrict device,

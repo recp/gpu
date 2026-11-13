@@ -2082,6 +2082,24 @@ vk_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   return GPU_OK;
 }
 
+/* GPUQueueWaitIdle: queue writes' transfers, then every command buffer GPU-C
+ * tracks in flight (no vkQueueWaitIdle: other threads keep submitting) */
+
+static GPUResult
+vk_waitQueueIdle(GPUQueue *queue) {
+  GPUQueueVk *native;
+  GPUResult   result;
+
+  if (!queue || !(native = queue->_priv)) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  result = vk__flushTransfers(queue, true);
+  vk__waitQueueIdle(native);
+
+  return result;
+}
+
 GPU_HIDE
 void
 vk_initCmdQue(GPUCommandQueueApi *apiQue) {
@@ -2098,4 +2116,5 @@ vk_initCmdQue(GPUCommandQueueApi *apiQue) {
   apiQue->submitEx                = vk_submitEx;
   apiQue->lock                    = vk_lockQueue;
   apiQue->unlock                  = vk_unlockQueue;
+  apiQue->waitIdle                = vk_waitQueueIdle;
 }

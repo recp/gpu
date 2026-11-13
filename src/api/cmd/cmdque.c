@@ -653,6 +653,98 @@ GPUQueueSubmitEx(GPUQueue                   *__restrict cmdq,
 
 GPU_EXPORT
 GPUResult
+GPUQueueWaitIdle(GPUQueue *__restrict cmdq) {
+  GPUQueueSubmitInfo submit = {0};
+  GPUCommandBuffer  *cmdb;
+  GPUFence          *fence;
+  GPUApi            *api;
+  GPUResult          result;
+
+  if (!cmdq) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!(api = commandQueueApi(cmdq))) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if (api->cmdque.waitIdle) {
+    return api->cmdque.waitIdle(cmdq);
+  }
+
+  /* an empty submission's fence: queues finish their submissions in order */
+
+  cmdb  = NULL;
+  fence = NULL;
+
+  if ((result = GPUCreateFence(commandQueueDevice(cmdq), NULL, &fence)) != GPU_OK) {
+    return result;
+  }
+
+  if ((result = GPUAcquireCommandBuffer(cmdq, "gpu queue wait idle", &cmdb)) == GPU_OK) {
+    submit.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+    submit.chain.structSize   = sizeof(submit);
+    submit.commandBufferCount = 1u;
+    submit.ppCommandBuffers   = &cmdb;
+    submit.fence              = fence;
+
+    if ((result = GPUQueueSubmit(cmdq, &submit)) == GPU_OK) {
+      result = GPUWaitFence(fence, UINT64_MAX);
+    }
+  }
+
+  GPUDestroyFence(fence);
+
+  return result;
+}
+
+GPU_EXPORT
+GPUResult
+GPUDeviceWaitIdle(GPUDevice *__restrict device) {
+  static const GPUQueueFlagBits types[] = {GPU_QUEUE_GRAPHICS_BIT, GPU_QUEUE_COMPUTE_BIT, GPU_QUEUE_TRANSFER_BIT};
+  GPUQueue                     *queues[3];
+  GPUApi                       *api;
+  GPUResult                     result, queueResult;
+  uint32_t                      i, j, count;
+
+  if (!device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!(api = deviceApi(device))) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if (api->device.waitIdle) {
+    return api->device.waitIdle(device);
+  }
+
+  /* each distinct queue the device hands out */
+
+  result = GPU_OK;
+  count  = 0u;
+
+  for (i = 0u; i < sizeof(types) / sizeof(types[0]); i++) {
+    GPUQueue *queue = (GPUGetAvailableQueueBits(device) & types[i]) ? GPUGetQueue(device, types[i], 0u) : NULL;
+
+    for (j = 0u; queue && j < count && queues[j] != queue; j++) {}
+
+    if (!queue || j < count) {
+      continue;
+    }
+
+    queues[count++] = queue;
+
+    if ((queueResult = GPUQueueWaitIdle(queue)) != GPU_OK && result == GPU_OK) {
+      result = queueResult;
+    }
+  }
+
+  return result;
+}
+
+GPU_EXPORT
+GPUResult
 GPUCreateFence(GPUDevice                *__restrict device,
                const GPUFenceCreateInfo *__restrict info,
                GPUFence                **__restrict outFence) {

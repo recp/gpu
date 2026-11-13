@@ -1484,6 +1484,7 @@ void
 mt_initCmdQue(GPUCommandQueueApi *api) {
   api->lock                    = mt_lockQueue;
   api->unlock                  = mt_unlockQueue;
+  api->waitIdle                = mt_waitCommandQueueIdle;
   api->newCommandQueue         = mt_newCommandQueue;
   api->getCommandQueue         = mt_getCommandQueue;
   api->getTimestampPeriod      = mt_getTimestampPeriod;
