@@ -379,4 +379,38 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
         SKIP_RETURN_CODE 77 LABELS "storage;image-buffer" TIMEOUT 30 RUN_SERIAL TRUE)
     endforeach()
   endforeach()
+
+  # every shape and format a buffer stands in for: as the device has them
+  # (formats without read-write textures emulated) and all emulated
+
+  gpu_add_usl_fixtures(GPU_IMAGE_BUFFER_FORMAT_FIXTURES metal api-image-buffer-formats
+    "${CMAKE_CURRENT_SOURCE_DIR}/image_buffer_formats.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/image_buffer_volume.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/image_buffer_level.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/image_buffer_line.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/image_buffer_render.usl")
+
+  add_executable(gpu-image-buffer-formats-test image_buffer_formats.c runner.c ${GPU_IMAGE_BUFFER_FORMAT_FIXTURES})
+
+  set_target_properties(gpu-image-buffer-formats-test PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+  target_compile_options(gpu-image-buffer-formats-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+
+  target_link_libraries(gpu-image-buffer-formats-test PRIVATE gpu)
+
+  foreach(mode classic metal4)
+    foreach(path device emulated)
+      if(path STREQUAL "emulated")
+        set(imageBuffers 1)
+      else()
+        set(imageBuffers "")
+      endif()
+
+      add_test(NAME image-buffer-formats-${path}-${mode}
+        COMMAND gpu-image-buffer-formats-test ${GPU_IMAGE_BUFFER_FORMAT_FIXTURES})
+      set_tests_properties(image-buffer-formats-${path}-${mode} PROPERTIES
+        ENVIRONMENT "GPU_METAL_MODE=${mode};GPU_IMAGE_BUFFERS=${imageBuffers};MTL_DEBUG_LAYER=1"
+        SKIP_RETURN_CODE 77 LABELS "storage;image-buffer" TIMEOUT 30 RUN_SERIAL TRUE)
+    endforeach()
+  endforeach()
 endif()

@@ -1,0 +1,18 @@
+/* a read-write 3d image and its size */
+
+kern(4, 4, 4) image_buffer_volume_cs(
+  volume:      image3d<r32float, read_write> #texture(0),
+  inout sizes: [uint]                        #buffer(1),
+  id:          uint3                         #global_id
+) {
+  if (id.x == 0u && id.y == 0u && id.z == 0u) {
+    sizes[0] = volume.get_width()
+    sizes[1] = volume.get_height()
+    sizes[2] = volume.get_depth()
+  }
+
+  if (id.x < volume.get_width() && id.y < volume.get_height() && id.z < volume.get_depth()) {
+    let v = volume.read(id)
+    volume.write(float4(v.x * 2.0 + float(id.z), 0.0, 0.0, 0.0), id)
+  }
+}

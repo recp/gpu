@@ -1,0 +1,16 @@
+/* a read-write 1d image and 1d array */
+
+kern(16, 4) image_buffer_line_cs(
+  line:  image1d<rgba8uint, read_write>      #texture(0),
+  lines: image1d_array<r32uint, read_write>  #texture(1),
+  id:    uint2                               #global_id
+) {
+  if (id.y == 0u && id.x < line.get_width()) {
+    line.write(line.read(id.x).wzyx, id.x)
+  }
+
+  if (id.x < lines.get_width() && id.y < lines.get_array_size()) {
+    let t = lines.read(id)
+    lines.write(uint4(t.x * 3u + id.y, 0u, 0u, 0u), id)
+  }
+}

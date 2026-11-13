@@ -1,0 +1,26 @@
+/* formats a buffer stands in for: texels under 4 bytes (neighbours written
+ * by neighbouring threads share words), float16 and rg11b10 channels */
+
+kern(8, 8) image_buffer_formats_cs(
+  bytes:  image2d<r8unorm, read_write>       #texture(0),
+  halves: image2d<rgba16float, read_write>   #texture(1),
+  ones:   image2d<r16float, read_write>      #texture(2),
+  packed: image2d<rg11b10ufloat, read_write> #texture(3),
+  shorts: image2d<rg8snorm, read_write>      #texture(4),
+  words:  image2d<r16sint, read_write>       #texture(5),
+  pixel:  uint2                              #global_id
+) {
+  if (pixel.x >= bytes.get_width() || pixel.y >= bytes.get_height()) { return }
+
+  let b = bytes.read(pixel)
+  bytes.write(float4(1.0 - b.x, 0.0, 0.0, 0.0), pixel)
+  halves.write(halves.read(pixel) * 2.0, pixel)
+  let o = ones.read(pixel)
+  ones.write(float4(-o.x, 0.0, 0.0, 0.0), pixel)
+  let k = packed.read(pixel)
+  packed.write(float4(k.z, k.x, k.y, 1.0), pixel)
+  let s = shorts.read(pixel)
+  shorts.write(float4(s.y, s.x, 0.0, 0.0), pixel)
+  let w = words.read(pixel)
+  words.write(int4(3 - w.x, 0, 0, 0), pixel)
+}

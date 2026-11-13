@@ -1,0 +1,17 @@
+/* a fragment shader reading and writing a read-write image */
+
+vert image_buffer_render_vs(vertexId: uint #vertex_id) -> float4 {
+  let x = float(vertexId & 1u) * 4.0 - 1.0
+  let y = float((vertexId >> 1u) & 1u) * 4.0 - 1.0
+  return float4(x, y, 0.0, 1.0)
+}
+
+frag image_buffer_render_fs(
+  position: float4                      #position,
+  counts:   image2d<r32float, read_write> #texture(0)
+) -> float4 {
+  let p = uint2(position.xy)
+  let v = counts.read(p)
+  counts.write(float4(v.x * 2.0 + 1.0, 0.0, 0.0, 0.0), p)
+  return float4(0.0, 0.0, 0.0, 1.0)
+}

@@ -1,0 +1,16 @@
+/* a read-write view of one mip level and its size */
+
+kern(8, 8) image_buffer_level_cs(
+  level:       image2d<rgba8unorm, read_write> #texture(0),
+  inout sizes: [uint]                          #buffer(1),
+  pixel:       uint2                           #global_id
+) {
+  if (pixel.x == 0u && pixel.y == 0u) {
+    sizes[0] = level.get_width()
+    sizes[1] = level.get_height()
+  }
+
+  if (pixel.x < level.get_width() && pixel.y < level.get_height()) {
+    level.write(level.read(pixel).yzwx, pixel)
+  }
+}
