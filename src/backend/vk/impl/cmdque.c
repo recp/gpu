@@ -498,9 +498,25 @@ vk__stopWorker(GPUQueueVk *queue) {
   queue->workerStarted = false;
 }
 
+/* staging grows by doubling up to VK_TRANSFER_STAGING_KEEP; a larger
+ * transfer gets staging of about its own size, kept while such transfers
+ * keep coming and given back once VK_TRANSFER_LARGE_IDLE batches went by
+ * without one (as on Metal, where a 125 MB page image otherwise pinned
+ * 128 MB for good, and making it again took 8-20 ms) */
+enum {
+  VK_TRANSFER_STAGING_KEEP  = 16u * 1024u * 1024u,
+  VK_TRANSFER_STAGING_LARGE = 1024u * 1024u, /* large staging rounds up to this */
+  VK_TRANSFER_LARGE_IDLE    = 32u
+};
+
 static uint64_t
 vk__transferCapacity(uint64_t sizeBytes, uint64_t minimumCapacity) {
   uint64_t capacity;
+
+  if (sizeBytes > VK_TRANSFER_STAGING_KEEP && sizeBytes >= minimumCapacity) {
+    capacity = (sizeBytes + VK_TRANSFER_STAGING_LARGE - 1u) & ~(uint64_t)(VK_TRANSFER_STAGING_LARGE - 1u);
+    return capacity >= sizeBytes ? capacity : sizeBytes;
+  }
 
   capacity = minimumCapacity > GPU_VK_BUFFER_TRANSFER_CAPACITY
                ? minimumCapacity
@@ -1338,6 +1354,40 @@ vk__freeTransferSlot(GPUQueueVk *native, GPUDeviceVk *device) {
   return &native->transferSlots[native->nextTransferSlot];
 }
 
+/* large staging the GPU is done with goes back: upload slots whose copies
+ * finished, and the readback staging (each readback waits for its copy) */
+static void
+vk__trimTransferStaging(GPUQueue *queue, GPUQueueVk *native, GPUDeviceVk *device) {
+  GPUTransferSlotVk *slot;
+  uint32_t           i;
+
+  for (i = 0u; i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
+    slot = &native->transferSlots[i];
+
+    if (!slot->uploadStaging || slot->uploadCapacity <= VK_TRANSFER_STAGING_KEEP
+        || (native->transferOpen && native->activeTransferSlot == i))
+      continue;
+
+    if (slot->pending) {
+      if (!slot->fence || vkGetFenceStatus(device->device, slot->fence) != VK_SUCCESS)
+        continue;
+      (void)vk__waitTransfer(queue, slot, false);
+    }
+
+    vk_destroyBuffer(slot->uploadStaging);
+    slot->uploadStaging  = NULL;
+    slot->uploadCapacity = 0u;
+    slot->uploadUsed     = 0u;
+  }
+
+  if (native->readbackStaging && native->readbackCapacity > VK_TRANSFER_STAGING_KEEP
+      && !(native->transferOpen && !native->transferUpload)) {
+    vk_destroyBuffer(native->readbackStaging);
+    native->readbackStaging  = NULL;
+    native->readbackCapacity = 0u;
+  }
+}
+
 GPU_HIDE
 GPUResult
 vk_beginTransfer(GPUQueue        *queue,
@@ -1368,6 +1418,9 @@ vk_beginTransfer(GPUQueue        *queue,
   if (!native || !device || !device->device || !native->queRaw) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
+  if (sizeBytes > VK_TRANSFER_STAGING_KEEP)
+    native->transfersSinceLarge = 0u;
 
   if (native->transferOpen) {
     if (!native->transferUpload) {
@@ -1408,6 +1461,13 @@ vk_beginTransfer(GPUQueue        *queue,
   if (result != GPU_OK) {
     return result;
   }
+
+  /* a batch: past VK_TRANSFER_LARGE_IDLE without large staging, the large
+   * staging left goes, this slot's too (done with: it's set up small below) */
+  if (sizeBytes <= VK_TRANSFER_STAGING_KEEP && native->transfersSinceLarge < VK_TRANSFER_LARGE_IDLE)
+    native->transfersSinceLarge++;
+  if (native->transfersSinceLarge >= VK_TRANSFER_LARGE_IDLE)
+    vk__trimTransferStaging(queue, native, device);
 
   if (!vk__ensureTransferContext(native, device, slot)
       || !vk__ensureTransferBuffer(native,
@@ -1466,6 +1526,8 @@ vk_waitCommandQueueIdle(GPUQueue *queue) {
   }
 
   vk__waitQueueIdle(native);
+  if (native->transfersSinceLarge >= VK_TRANSFER_LARGE_IDLE && queue->_device && queue->_device->_priv)
+    vk__trimTransferStaging(queue, native, queue->_device->_priv);
 
   return GPU_OK;
 }

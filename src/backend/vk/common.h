@@ -677,6 +677,7 @@ struct GPUQueueVk {
   uint32_t            activeTransferSlot;
   uint32_t            nextTransferSlot;
   uint64_t            readbackCapacity;
+  uint32_t            transfersSinceLarge; /* transfer batches begun since one needed large staging */
   double              timestampPeriodNs;
   bool                stopping;
   bool                workerStarted;
