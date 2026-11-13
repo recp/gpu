@@ -54,6 +54,10 @@ extern "C" {
 typedef struct GPUApi {
   GPUBackend            backend;
   bool                  initialized;
+  /* pipelines are made only on the thread that asks for them (the device
+   * isn't thread-safe): no compile threads, the backend compiles in the
+   * background itself where it can */
+  bool                  callerThreadPipelines;
   GPUDeviceApi          device;
   GPURenderApi          render;
   GPURCEApi             rce;

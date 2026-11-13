@@ -59,10 +59,16 @@ GPU_HIDE
 GPUResult
 compilePoolConfigure(GPUDevice *device, uint32_t threadCount);
 
-/* false: the device compiles on the creating thread */
+/* background compiles asked for (GPUSetPipelineCompileThreads) */
 GPU_HIDE
 bool
 compilePoolActive(GPUDevice *device);
+
+/* false: the device compiles on the creating thread, or in the background
+ * by its backend's own means (callerThreadPipelines) */
+GPU_HIDE
+bool
+compilePoolThreaded(GPUDevice *device);
 
 GPU_HIDE
 void

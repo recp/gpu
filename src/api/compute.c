@@ -631,7 +631,9 @@ GPUWaitComputePipeline(GPUComputePipeline *pipeline) {
     return GPU_ERROR_INVALID_ARGUMENT;
 
   if (!pipeline->_compile)
-    return GPU_OK;
+    return pipeline->_api && pipeline->_api->compute.waitPipeline
+           ? pipeline->_api->compute.waitPipeline(pipeline)
+           : GPU_OK;
 
   (void)computePipelineResolve(pipeline);
 
@@ -1246,7 +1248,7 @@ GPUCreateComputePipeline(GPUDevice                          *device,
   snapshot.chain.pNext = prepared.chain;
   if (!snapshot.cache && device)
     snapshot.cache = device->_defaultPipelineCache;
-  result               = compilePoolActive(device)
+  result               = compilePoolThreaded(device)
                          ? computeCompileDeferred(device, &snapshot, outPipeline)
                          : createComputePipeline(device, &snapshot, outPipeline);
   free(prepared.values);

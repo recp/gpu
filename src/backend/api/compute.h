@@ -75,6 +75,9 @@ typedef struct GPUComputeApi {
 
   void (*destroyComputePipeline)(GPUComputePipeline *pipeline);
 
+  /* optional: a pipeline the backend compiles in the background finished; its result */
+  GPUResult (*waitPipeline)(GPUComputePipeline *pipeline);
+
   GPUComputePassEncoder * (*computeCommandEncoder)(GPUCommandBuffer *cmdb, const GPUComputePassCreateInfo *info);
 
   void (*setComputePipelineState)(GPUComputePassEncoder *enc, GPUComputePipelineState *state);

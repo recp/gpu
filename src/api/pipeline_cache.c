@@ -1369,6 +1369,9 @@ compileRenderPipelineAsync(GPUDevice                         *__restrict device,
                               const GPURenderPipelineCreateInfo *__restrict info,
                               GPUPipelineCompileHandle          *__restrict outHandle) {
   GPUPipelineCompileJob *job;
+  GPURenderPipeline     *pipeline;
+  GPUApi                *api;
+  bool                   callerThread;
 
   if (!outHandle) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -1384,6 +1387,14 @@ compileRenderPipelineAsync(GPUDevice                         *__restrict device,
 
   if (!(job = createPipelineJob(cache, info))) {
     return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  /* a device only the asking thread may call: compiled here, ready at once */
+  if ((callerThread = (api = deviceApi(device)) && api->callerThreadPipelines)) {
+    pipeline      = NULL;
+    job->state    = createRenderPipeline(device, &job->info, &pipeline) == GPU_OK
+                    ? GPU_PIPELINE_JOB_READY : GPU_PIPELINE_JOB_FAILED;
+    job->pipeline = pipeline;
   }
 
   deviceCacheLock(device);
@@ -1402,7 +1413,7 @@ compileRenderPipelineAsync(GPUDevice                         *__restrict device,
     return GPU_ERROR_INSUFFICIENT_CAPACITY;
   }
 
-  if (!pipelineCacheStartWorker(cache)) {
+  if (!callerThread && !pipelineCacheStartWorker(cache)) {
     pipelineCacheUnlock(cache);
     deviceCacheUnlock(device);
     destroyPipelineJob(job);
@@ -1412,13 +1423,16 @@ compileRenderPipelineAsync(GPUDevice                         *__restrict device,
   job->allNext = cache->jobs;
   cache->jobs  = job;
 
-  if (cache->queueTail) {
-    cache->queueTail->queueNext = job;
-  } else {
-    cache->queueHead = job;
+  if (!callerThread) {
+    if (cache->queueTail) {
+      cache->queueTail->queueNext = job;
+    } else {
+      cache->queueHead = job;
+    }
+
+    cache->queueTail = job;
   }
 
-  cache->queueTail  = job;
   cache->jobCount++;
   outHandle->id = job->id;
   pipelineCacheSignal(cache);

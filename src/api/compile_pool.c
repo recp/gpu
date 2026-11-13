@@ -154,7 +154,9 @@ GPU_HIDE
 GPUResult
 compilePoolConfigure(GPUDevice *device, uint32_t threadCount) {
   GPUCompilePool *pool;
+  GPUApi         *api;
   uint32_t        i;
+  bool            threaded;
 
   if (!device)
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -170,6 +172,10 @@ compilePoolConfigure(GPUDevice *device, uint32_t threadCount) {
 
   if (threadCount > GPU_COMPILE_POOL_MAX_THREADS)
     threadCount = GPU_COMPILE_POOL_MAX_THREADS;
+
+  /* a device only its creating thread may call: background compiles are
+   * the backend's own (a pool without threads marks them asked for) */
+  threaded = !(api = deviceApi(device)) || !api->callerThreadPipelines;
 
   if (!(pool = calloc(1u, sizeof(*pool))))
     return GPU_ERROR_OUT_OF_MEMORY;
@@ -196,7 +202,7 @@ compilePoolConfigure(GPUDevice *device, uint32_t threadCount) {
   }
 #endif
 
-  for (i = 0u; i < threadCount; i++) {
+  for (i = 0u; threaded && i < threadCount; i++) {
 #if defined(_WIN32) || defined(WIN32)
     if (!(pool->threads[i] = CreateThread(NULL, 0u, compilePool__worker, pool, 0u, NULL)))
       break;
@@ -207,7 +213,7 @@ compilePoolConfigure(GPUDevice *device, uint32_t threadCount) {
     pool->threadCount++;
   }
 
-  if (pool->threadCount == 0u) {
+  if (threaded && pool->threadCount == 0u) {
     compilePool__stop(pool);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -224,6 +230,14 @@ compilePoolActive(GPUDevice *device) {
 }
 
 GPU_HIDE
+bool
+compilePoolThreaded(GPUDevice *device) {
+  GPUCompilePool *pool;
+
+  return device && (pool = device->_compilePool) && pool->threadCount;
+}
+
+GPU_HIDE
 void
 compilePoolSubmit(GPUDevice *device, GPUCompileTask *task) {
   GPUCompilePool *pool;
@@ -235,7 +249,7 @@ compilePoolSubmit(GPUDevice *device, GPUCompileTask *task) {
   task->started = false;
   task->done    = 0u;
 
-  if (!device || !(pool = device->_compilePool)) {
+  if (!device || !(pool = device->_compilePool) || !pool->threadCount) {
     task->started = true;
     task->run(task);
     compileTaskFinish(task);
