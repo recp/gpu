@@ -1,0 +1,16 @@
+/* a slow writer: each texel after 'work' rounds of arithmetic the result
+ * depends on, so a reader not ordered after it sees zeros */
+
+kern(8, 8) barrier_order_write_cs(
+  target:     image2d<r32uint, write> #texture(0),
+  work:       [uint]                  #buffer(1),
+  pixel:      uint2                   #global_id
+) {
+  var acc: uint = pixel.x * 73856093u ^ pixel.y * 19349663u
+
+  for (var i: uint = 0u; i < work[0]; i += 1u) {
+    acc = acc * 1664525u + 1013904223u
+  }
+
+  target.write(uint4(acc == 0xffffffffu ? 2u : 1u, 0u, 0u, 0u), pixel)
+}

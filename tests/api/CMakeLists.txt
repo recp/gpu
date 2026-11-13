@@ -443,3 +443,32 @@ if(NOT EMSCRIPTEN)
       SKIP_RETURN_CODE 77 LABELS "upload;threading" TIMEOUT 60 RUN_SERIAL TRUE)
   endif()
 endif()
+
+# barriers order work across command buffers on one queue (any backend)
+
+gpu_add_usl_fixtures(GPU_BARRIER_ORDER_FIXTURES metal api-barrier-order
+  "${CMAKE_CURRENT_SOURCE_DIR}/barrier_order_write.usl"
+  "${CMAKE_CURRENT_SOURCE_DIR}/barrier_order_read.usl")
+
+add_executable(gpu-barrier-order-test barrier_order.c runner.c ${GPU_BARRIER_ORDER_FIXTURES})
+
+set_target_properties(gpu-barrier-order-test PROPERTIES
+  C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(NOT MSVC)
+  target_compile_options(gpu-barrier-order-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+endif()
+
+target_link_libraries(gpu-barrier-order-test PRIVATE gpu)
+
+if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  foreach(mode classic metal4)
+    add_test(NAME barrier-order-${mode} COMMAND gpu-barrier-order-test ${GPU_BARRIER_ORDER_FIXTURES} 16)
+    set_tests_properties(barrier-order-${mode} PROPERTIES
+      ENVIRONMENT "GPU_METAL_MODE=${mode}"
+      SKIP_RETURN_CODE 77 LABELS "barrier;ordering" TIMEOUT 120 RUN_SERIAL TRUE)
+  endforeach()
+else()
+  add_test(NAME barrier-order COMMAND gpu-barrier-order-test ${GPU_BARRIER_ORDER_FIXTURES} 16)
+  set_tests_properties(barrier-order PROPERTIES
+    SKIP_RETURN_CODE 77 LABELS "barrier;ordering" TIMEOUT 120 RUN_SERIAL TRUE)
+endif()

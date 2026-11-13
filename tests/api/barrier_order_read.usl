@@ -1,0 +1,11 @@
+/* a fast reader: each texel into a buffer */
+
+kern(8, 8) barrier_order_read_cs(
+  source:     texture2d<uint> #texture(0),
+  inout out:  [uint]          #buffer(1),
+  pixel:      uint2           #global_id
+) {
+  if (pixel.x < source.get_width() && pixel.y < source.get_height()) {
+    out[pixel.y * source.get_width() + pixel.x] = source.read(pixel).x
+  }
+}
