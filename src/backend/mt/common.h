@@ -314,6 +314,7 @@ typedef struct MTCommandQueue {
   MTCommandMode       mode;
   uint32_t            activeTransferSlot;
   uint32_t            nextTransferSlot;
+  uint32_t            transfersSinceLarge; /* transfer batches begun since one needed large staging */
   bool                transferOpen;
   bool                pendingSparseBarrier;
   bool                shaderValidation;
