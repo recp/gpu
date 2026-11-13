@@ -200,6 +200,38 @@ mt_placeResource(GPUDeviceMT          *deviceMT,
   return resource;
 }
 
+/* a texture surely under MT_POOL_MAX_RESOURCE: 16 bytes a texel (the widest
+ * uncompressed format) and a third more for its mip levels. asking its size
+ * builds a whole texture in the driver (a third of a pooled create), so
+ * these skip it and go straight into the newest heap; nil: not that small,
+ * no heap yet, or the newest is full (then sizes are asked, every heap tried) */
+
+static id<MTLTexture>
+mt_tryNewest(GPUDeviceMT *deviceMT, uint32_t kind, MTLTextureDescriptor *desc) {
+  MTResourcePool *pool;
+  id<MTLTexture>  texture;
+  uint64_t        texels;
+
+  texels = (uint64_t)desc.width * desc.height * desc.depth * desc.arrayLength * desc.sampleCount;
+  if (desc.textureType == MTLTextureTypeCube || desc.textureType == MTLTextureTypeCubeArray)
+    texels *= 6u;
+  if (desc.mipmapLevelCount > 1u)
+    texels += texels / 3u + 1u;
+
+  if (!texels || texels > MT_POOL_MAX_RESOURCE / 16u)
+    return nil;
+
+  pool    = deviceMT->resourcePool;
+  texture = nil;
+
+  os_unfair_lock_lock(&pool->lock);
+  if (pool->count[kind])
+    texture = [pool->heaps[kind][pool->count[kind] - 1u] newTextureWithDescriptor:desc];
+  os_unfair_lock_unlock(&pool->lock);
+
+  return texture;
+}
+
 GPU_HIDE
 id<MTLBuffer>
 mt_poolBuffer(GPUDeviceMT *deviceMT, NSUInteger length) {
@@ -242,6 +274,7 @@ mt_poolTexture(GPUDeviceMT *deviceMT, MTLTextureDescriptor *desc) {
   MTLSizeAndAlign sizeAndAlign;
   MTLStorageMode  storageMode, original;
   id<MTLTexture>  texture;
+  uint32_t        kind;
 
   if (!deviceMT || !deviceMT->resourcePool || !desc
       || (deviceMT->commandMode != MTCommandMode4
@@ -258,11 +291,14 @@ mt_poolTexture(GPUDeviceMT *deviceMT, MTLTextureDescriptor *desc) {
     return nil;
 
   desc.storageMode = storageMode;
-  sizeAndAlign     = [deviceMT->device heapTextureSizeAndAlignWithDescriptor:desc];
-  texture          = mt_placeResource(deviceMT,
-                                      storageMode == MTLStorageModeShared ? MT_POOL_SHARED_TEXTURES
-                                                                          : MT_POOL_PRIVATE_TEXTURES,
-                                      storageMode, sizeAndAlign, desc, 0u);
+  kind             = storageMode == MTLStorageModeShared ? MT_POOL_SHARED_TEXTURES : MT_POOL_PRIVATE_TEXTURES;
+
+  /* surely small: straight into the newest heap, which says when it's full */
+  if ((texture = mt_tryNewest(deviceMT, kind, desc)))
+    return texture;
+
+  sizeAndAlign = [deviceMT->device heapTextureSizeAndAlignWithDescriptor:desc];
+  texture      = mt_placeResource(deviceMT, kind, storageMode, sizeAndAlign, desc, 0u);
 
   if (!texture)
     desc.storageMode = original;
