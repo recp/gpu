@@ -30,7 +30,7 @@
 #  include <pthread.h>
 #endif
 
-/* the formats USL lowers: whole 32-bit words per texel (image_buffer.h there). */
+/* the formats USL lowers (image_buffer.h there); texels under 4 bytes share words. */
 
 typedef struct GPUImageBufferFormat {
   GPUFormat format;
@@ -39,6 +39,19 @@ typedef struct GPUImageBufferFormat {
 } GPUImageBufferFormat;
 
 static const GPUImageBufferFormat gpu_imageBufferFormats[] = {
+  {GPU_FORMAT_R8_UNORM,       USL_RUNTIME_TEXEL_FORMAT_R8_UNORM,      1u},
+  {GPU_FORMAT_R8_SNORM,       USL_RUNTIME_TEXEL_FORMAT_R8_SNORM,      1u},
+  {GPU_FORMAT_R8_UINT,        USL_RUNTIME_TEXEL_FORMAT_R8_UINT,       1u},
+  {GPU_FORMAT_R8_SINT,        USL_RUNTIME_TEXEL_FORMAT_R8_SINT,       1u},
+  {GPU_FORMAT_R16_UNORM,      USL_RUNTIME_TEXEL_FORMAT_R16_UNORM,     2u},
+  {GPU_FORMAT_R16_SNORM,      USL_RUNTIME_TEXEL_FORMAT_R16_SNORM,     2u},
+  {GPU_FORMAT_R16_UINT,       USL_RUNTIME_TEXEL_FORMAT_R16_UINT,      2u},
+  {GPU_FORMAT_R16_SINT,       USL_RUNTIME_TEXEL_FORMAT_R16_SINT,      2u},
+  {GPU_FORMAT_R16_FLOAT,      USL_RUNTIME_TEXEL_FORMAT_R16_FLOAT,     2u},
+  {GPU_FORMAT_RG8_UNORM,      USL_RUNTIME_TEXEL_FORMAT_RG8_UNORM,     2u},
+  {GPU_FORMAT_RG8_SNORM,      USL_RUNTIME_TEXEL_FORMAT_RG8_SNORM,     2u},
+  {GPU_FORMAT_RG8_UINT,       USL_RUNTIME_TEXEL_FORMAT_RG8_UINT,      2u},
+  {GPU_FORMAT_RG8_SINT,       USL_RUNTIME_TEXEL_FORMAT_RG8_SINT,      2u},
   {GPU_FORMAT_R32_UINT,       USL_RUNTIME_TEXEL_FORMAT_R32_UINT,      4u},
   {GPU_FORMAT_R32_SINT,       USL_RUNTIME_TEXEL_FORMAT_R32_SINT,      4u},
   {GPU_FORMAT_R32_FLOAT,      USL_RUNTIME_TEXEL_FORMAT_R32_FLOAT,     4u},
@@ -46,6 +59,7 @@ static const GPUImageBufferFormat gpu_imageBufferFormats[] = {
   {GPU_FORMAT_RG16_SNORM,     USL_RUNTIME_TEXEL_FORMAT_RG16_SNORM,    4u},
   {GPU_FORMAT_RG16_UINT,      USL_RUNTIME_TEXEL_FORMAT_RG16_UINT,     4u},
   {GPU_FORMAT_RG16_SINT,      USL_RUNTIME_TEXEL_FORMAT_RG16_SINT,     4u},
+  {GPU_FORMAT_RG16_FLOAT,     USL_RUNTIME_TEXEL_FORMAT_RG16_FLOAT,    4u},
   {GPU_FORMAT_RG32_UINT,      USL_RUNTIME_TEXEL_FORMAT_RG32_UINT,     8u},
   {GPU_FORMAT_RG32_SINT,      USL_RUNTIME_TEXEL_FORMAT_RG32_SINT,     8u},
   {GPU_FORMAT_RG32_FLOAT,     USL_RUNTIME_TEXEL_FORMAT_RG32_FLOAT,    8u},
@@ -56,10 +70,12 @@ static const GPUImageBufferFormat gpu_imageBufferFormats[] = {
   {GPU_FORMAT_BGRA8_UNORM,    USL_RUNTIME_TEXEL_FORMAT_BGRA8_UNORM,   4u},
   {GPU_FORMAT_RGB10A2_UNORM,  USL_RUNTIME_TEXEL_FORMAT_RGB10A2_UNORM, 4u},
   {GPU_FORMAT_RGB10A2_UINT,   USL_RUNTIME_TEXEL_FORMAT_RGB10A2_UINT,  4u},
+  {GPU_FORMAT_RG11B10_UFLOAT, USL_RUNTIME_TEXEL_FORMAT_RG11B10_UFLOAT, 4u},
   {GPU_FORMAT_RGBA16_UNORM,   USL_RUNTIME_TEXEL_FORMAT_RGBA16_UNORM,  8u},
   {GPU_FORMAT_RGBA16_SNORM,   USL_RUNTIME_TEXEL_FORMAT_RGBA16_SNORM,  8u},
   {GPU_FORMAT_RGBA16_UINT,    USL_RUNTIME_TEXEL_FORMAT_RGBA16_UINT,   8u},
   {GPU_FORMAT_RGBA16_SINT,    USL_RUNTIME_TEXEL_FORMAT_RGBA16_SINT,   8u},
+  {GPU_FORMAT_RGBA16_FLOAT,   USL_RUNTIME_TEXEL_FORMAT_RGBA16_FLOAT,  8u},
   {GPU_FORMAT_RGBA32_UINT,    USL_RUNTIME_TEXEL_FORMAT_RGBA32_UINT,   16u},
   {GPU_FORMAT_RGBA32_SINT,    USL_RUNTIME_TEXEL_FORMAT_RGBA32_SINT,   16u},
   {GPU_FORMAT_RGBA32_FLOAT,   USL_RUNTIME_TEXEL_FORMAT_RGBA32_FLOAT,  16u}
@@ -68,8 +84,31 @@ static const GPUImageBufferFormat gpu_imageBufferFormats[] = {
 /* rows start on 256 bytes: buffer-texture copies and storage offsets everywhere take that. */
 
 enum {
-  GPU_IMAGE_BUFFER_ROW_ALIGN = 256u
+  GPU_IMAGE_BUFFER_ROW_ALIGN = 256u,
+  GPU_IMAGE_BUFFER_MAX_MIPS  = 32u   /* a level is a bit of the masks */
 };
+
+static uint32_t
+ib_extent(uint32_t extent, uint32_t mip) {
+  return extent >> mip ? extent >> mip : 1u;
+}
+
+/* the levels [base, base + count) as bits, within the buffer's */
+
+static uint32_t
+ib_mipMask(const GPUImageBuffer *ib, uint32_t base, uint32_t count) {
+  uint32_t all;
+
+  all = ib->mipCount >= 32u ? UINT32_MAX : (1u << ib->mipCount) - 1u;
+
+  if (base >= ib->mipCount)
+    return 0u;
+
+  if (count == 0u || count >= 32u)
+    return all & (UINT32_MAX << base);
+
+  return all & (((1u << count) - 1u) << base);
+}
 
 static const GPUImageBufferFormat*
 ib_format(GPUFormat format) {
@@ -183,52 +222,52 @@ destroyImageBufferDevice(GPUDevice *device) {
 }
 
 static bool
-ib_eligible(const GPUDevice *device, GPUFormat format, GPUTextureDimension dimension,
-            GPUTextureUsageFlags usage, uint32_t mips, uint32_t samples) {
-  return (usage & GPU_TEXTURE_USAGE_STORAGE) && dimension == GPU_TEXTURE_DIMENSION_2D && mips <= 1u
-         && samples <= 1u && deviceEmulatesReadWrite(device, format);
+ib_eligible(const GPUDevice *device, GPUFormat format, GPUTextureUsageFlags usage, uint32_t mips, uint32_t samples) {
+  return (usage & GPU_TEXTURE_USAGE_STORAGE) && mips <= GPU_IMAGE_BUFFER_MAX_MIPS && samples <= 1u
+         && deviceEmulatesReadWrite(device, format);
 }
 
 GPU_HIDE
 GPUTextureUsageFlags
 imageBufferTextureUsage(const GPUDevice *device, const GPUTextureCreateInfo *info) {
-  if (!info || !ib_eligible(device, info->format, info->dimension, info->usage, info->mipLevelCount, info->sampleCount))
+  if (!info || !ib_eligible(device, info->format, info->usage, info->mipLevelCount, info->sampleCount))
     return info ? info->usage : 0u;
 
   return info->usage | GPU_TEXTURE_USAGE_COPY_SRC | GPU_TEXTURE_USAGE_COPY_DST;
 }
 
-/* a header row's first texels: width, height, pitch in texels, layers from here on */
-
-static void
-ib_header(const GPUImageBuffer *ib, uint32_t layer, uint32_t out[4]) {
-  const GPUTexture *t = ib->texture;
-
-  out[0] = t->width;
-  out[1] = t->height;
-  out[2] = ib->pitchBytes / ib_format(t->format)->bytes;
-  out[3] = t->depthOrLayers - layer;
-}
+/* a header row's first texels: width, height, pitch in texels, layers (or
+ * slices) from here on */
 
 static void
 ib_writeHeaders(GPUImageBuffer *ib, GPUQueue *queue) {
-  uint32_t header[4];
-  uint32_t layer;
-  uint8_t *host;
+  const GPUImageBufferMip *m;
+  uint64_t                 offset;
+  uint32_t                 header[4];
+  uint32_t                 mip, layer, bytes;
+  uint8_t                 *host;
 
   if (ib->headers)
     return;
 
-  host = GPUGetBufferHostAddress(ib->buffer);
+  host  = GPUGetBufferHostAddress(ib->buffer);
+  bytes = ib_format(ib->texture->format)->bytes;
 
-  for (layer = 0u; layer < ib->texture->depthOrLayers; layer++) {
-    ib_header(ib, layer, header);
+  for (mip = 0u; mip < ib->mipCount; mip++) {
+    m = &ib->mips[mip];
 
-    if (host)
-      memcpy(host + (uint64_t)layer * ib->layerBytes, header, sizeof(header));
-    else if (!queue || GPUQueueWriteBuffer(queue, ib->buffer, (uint64_t)layer * ib->layerBytes, header,
-                                           sizeof(header)) != GPU_OK)
-      return;
+    for (layer = 0u; layer < m->count; layer++) {
+      offset    = m->base + (uint64_t)layer * m->layerBytes;
+      header[0] = m->width;
+      header[1] = m->height;
+      header[2] = m->pitchBytes / bytes;
+      header[3] = m->count - layer;
+
+      if (host)
+        memcpy(host + offset, header, sizeof(header));
+      else if (!queue || GPUQueueWriteBuffer(queue, ib->buffer, offset, header, sizeof(header)) != GPU_OK)
+        return;
+    }
   }
 
   ib->headers = true;
@@ -237,19 +276,58 @@ ib_writeHeaders(GPUImageBuffer *ib, GPUQueue *queue) {
 /* a texture's buffer, made with its first read-write binding: under the
  * device's lock, the texels still in the texture (copied over before use) */
 
+/* each mip level's layers (a 3d level's slices) one after another, a level
+ * after the one before; rows and so levels start on GPU_IMAGE_BUFFER_ROW_ALIGN */
+
+static bool
+ib_layout(GPUImageBuffer *ib, const GPUTexture *texture, uint64_t *outSize) {
+  GPUImageBufferMip *m;
+  uint64_t           pitch, total, bytes;
+  uint32_t           mip;
+
+  total = 0u;
+
+  for (mip = 0u; mip < ib->mipCount; mip++) {
+    m         = &ib->mips[mip];
+    m->width  = ib_extent(texture->width, mip);
+    m->height = texture->dimension == GPU_TEXTURE_DIMENSION_1D ? 1u : ib_extent(texture->height, mip);
+    m->count  = texture->dimension == GPU_TEXTURE_DIMENSION_3D ? ib_extent(texture->depthOrLayers, mip)
+                                                               : texture->depthOrLayers;
+
+    pitch = (uint64_t)m->width * ib_format(texture->format)->bytes;
+    pitch = pitch < USL_IMAGE_BUFFER_HEADER_BYTES ? USL_IMAGE_BUFFER_HEADER_BYTES : pitch;
+    pitch = (pitch + GPU_IMAGE_BUFFER_ROW_ALIGN - 1u) & ~(uint64_t)(GPU_IMAGE_BUFFER_ROW_ALIGN - 1u);
+
+    if (pitch > UINT32_MAX)
+      return false;
+
+    m->pitchBytes = (uint32_t)pitch;
+    m->layerBytes = pitch * ((uint64_t)m->height + 1u);
+    m->base       = total;
+
+    if (m->layerBytes > UINT64_MAX / m->count || (bytes = m->layerBytes * m->count) > UINT64_MAX - total)
+      return false;
+
+    total += bytes;
+  }
+
+  *outSize = total;
+
+  return true;
+}
+
 static GPUImageBuffer*
 ib_create(GPUTexture *texture) {
-  const GPUImageBufferFormat *f;
-  GPUBufferCreateInfo         info;
-  GPUImageBuffer             *ib;
-  GPUDevice                  *device;
-  uint64_t                    pitch;
-  uint64_t                    layerBytes;
+  GPUBufferCreateInfo info;
+  GPUImageBuffer     *ib;
+  GPUDevice          *device;
+  uint64_t            size;
+  uint32_t            mips;
 
   device = texture->device;
+  mips   = texture->mipLevelCount ? texture->mipLevelCount : 1u;
 
-  if (!ib_eligible(device, texture->format, texture->dimension, texture->usage, texture->mipLevelCount,
-                   texture->sampleCount)
+  if (!ib_eligible(device, texture->format, texture->usage, mips, texture->sampleCount)
       || !(texture->usage & GPU_TEXTURE_USAGE_COPY_SRC) || !(texture->usage & GPU_TEXTURE_USAGE_COPY_DST))
     return NULL;
 
@@ -260,21 +338,22 @@ ib_create(GPUTexture *texture) {
     return ib;
   }
 
-  f     = ib_format(texture->format);
-  pitch = (uint64_t)texture->width * f->bytes;
-  pitch = pitch < USL_IMAGE_BUFFER_HEADER_BYTES ? USL_IMAGE_BUFFER_HEADER_BYTES : pitch;
-  pitch = (pitch + GPU_IMAGE_BUFFER_ROW_ALIGN - 1u) & ~(uint64_t)(GPU_IMAGE_BUFFER_ROW_ALIGN - 1u);
-
-  layerBytes = pitch * ((uint64_t)texture->height + 1u);
-
-  if (pitch > UINT32_MAX || layerBytes > UINT64_MAX / texture->depthOrLayers || !(ib = calloc(1, sizeof(*ib)))) {
+  if (!(ib = calloc(1, sizeof(*ib) + mips * sizeof(ib->mips[0])))) {
     ib_unlock(device);
+    return NULL;
+  }
+
+  ib->mipCount = mips;
+
+  if (!ib_layout(ib, texture, &size)) {
+    ib_unlock(device);
+    free(ib);
     return NULL;
   }
 
   memset(&info, 0, sizeof(info));
   info.label     = "gpu image buffer";
-  info.sizeBytes = layerBytes * texture->depthOrLayers;
+  info.sizeBytes = size;
   info.usage     = GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
 
   if (GPUCreateBuffer(device, &info, &ib->buffer) != GPU_OK) {
@@ -283,10 +362,8 @@ ib_create(GPUTexture *texture) {
     return NULL;
   }
 
-  ib->texture    = texture;
-  ib->pitchBytes = (uint32_t)pitch;
-  ib->layerBytes = layerBytes;
-  ib->newer      = GPU_IMAGE_BUFFER_TEXTURE;
+  ib->texture      = texture;
+  ib->textureNewer = ib_mipMask(ib, 0u, mips);
 
   ib_writeHeaders(ib, NULL);
 
@@ -335,9 +412,11 @@ destroyImageBuffer(GPUTexture *texture) {
 GPU_HIDE
 bool
 imageBufferBindingView(GPUBindGroupBindingView *view) {
-  GPUTextureView *textureView;
-  GPUImageBuffer *ib;
-  uint64_t        offset;
+  const GPUImageBufferMip *m;
+  GPUTextureView          *textureView;
+  GPUImageBuffer          *ib;
+  uint64_t                 offset, end;
+  uint32_t                 bytes;
 
   if (!view || view->kind != GPUBindKindTexture || view->bindingType != GPU_BINDING_STORAGE_TEXTURE
       || view->storageTextureAccess != GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE || !(textureView = view->textureView)
@@ -352,24 +431,38 @@ imageBufferBindingView(GPUBindGroupBindingView *view) {
       return false;
   }
 
-  if (textureView->baseMipLevel != 0u || textureView->baseArrayLayer >= textureView->_texture->depthOrLayers)
+  /* the view's level, from its layer on (a 3d view holds every slice) */
+
+  if (textureView->baseMipLevel >= ib->mipCount
+      || textureView->baseArrayLayer >= (m = &ib->mips[textureView->baseMipLevel])->count)
     return false;
 
-  offset = (uint64_t)textureView->baseArrayLayer * ib->layerBytes;
+  offset = m->base + (uint64_t)textureView->baseArrayLayer * m->layerBytes;
+  end    = m->base + m->layerBytes * m->count;
+  bytes  = ib_format(textureView->_texture->format)->bytes;
 
   view->buffer                    = ib->buffer;
   view->offset                    = offset;
-  view->size                      = ib->buffer->sizeBytes - offset;
+  view->size                      = end - offset;
   view->kind                      = GPUBindKindBuffer;
   view->bindingType               = GPU_BINDING_STORAGE_BUFFER;
-  view->bufferLayout.strideBytes  = ib_format(textureView->_texture->format)->bytes;
+  view->bufferLayout.strideBytes  = bytes < 4u ? 4u : bytes;
   view->bufferLayout.byteAddress  = false;
   view->bufferLayout.minBindingSize = 0u;
 
   return true;
 }
 
-typedef bool (*GPUImageBufferVisitFn)(void *ctx, GPUImageBuffer *ib, bool readWrite, bool writes);
+/* how a group binds an emulated texture */
+
+typedef struct GPUImageBufferUse {
+  uint32_t mips;      /* the levels it sees */
+  bool     readWrite; /* the buffer, at its base level */
+  bool     writes;    /* write-only storage: the texture */
+  bool     render;    /* visible to vertex or fragment shaders */
+} GPUImageBufferUse;
+
+typedef bool (*GPUImageBufferVisitFn)(void *ctx, GPUImageBuffer *ib, const GPUImageBufferUse *use);
 
 /* every emulated texture a group binds, read-write (its buffer) or otherwise */
 
@@ -380,6 +473,8 @@ ib_visitGroup(GPUBindGroup *group, GPUImageBufferVisitFn fn, void *ctx) {
   GPUBindGroupBindingPriv       *binding;
   GPUBindGroupPriv              *priv;
   GPUTextureView                *view;
+  GPUImageBufferUse              use;
+  GPUImageBuffer                *ib;
   uint32_t                       i;
   bool                           storage;
 
@@ -393,25 +488,64 @@ ib_visitGroup(GPUBindGroup *group, GPUImageBufferVisitFn fn, void *ctx) {
         || !view->_texture->_imageBuffer || binding->layoutEntryIndex >= layout->count)
       continue;
 
-    entry   = &layout->entries[binding->layoutEntryIndex];
-    storage = entry->bindingType == GPU_BINDING_STORAGE_TEXTURE;
+    ib            = view->_texture->_imageBuffer;
+    entry         = &layout->entries[binding->layoutEntryIndex];
+    storage       = entry->bindingType == GPU_BINDING_STORAGE_TEXTURE;
+    use.readWrite = storage && entry->storageTexture.access == GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE;
+    use.writes    = storage && entry->storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_READ_ONLY;
+    use.render    = (entry->visibility & (GPU_SHADER_STAGE_VERTEX_BIT | GPU_SHADER_STAGE_FRAGMENT_BIT)) != 0u;
+    use.mips      = ib_mipMask(ib, view->baseMipLevel, use.readWrite ? 1u : view->mipLevelCount);
 
-    if (!fn(ctx,
-            view->_texture->_imageBuffer,
-            storage && entry->storageTexture.access == GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE,
-            storage && entry->storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_READ_ONLY))
+    if (!fn(ctx, ib, &use))
       return false;
   }
 
   return true;
 }
 
+/* a group made or updated: the levels it binds read-write to vertex or
+ * fragment shaders, which render passes copy into the buffer before they begin */
+
+GPU_HIDE
+void
+imageBufferGroupCreated(GPUBindGroup *group) {
+  const GPUBindGroupLayoutEntry *entry;
+  GPUBindGroupLayoutPriv        *layout;
+  GPUBindGroupBindingPriv       *binding;
+  GPUBindGroupPriv              *priv;
+  GPUTextureView                *view;
+  GPUImageBuffer                *ib;
+  uint32_t                       i;
+
+  if (!group || !(priv = group->_priv) || !priv->layout || !(layout = priv->layout->_priv))
+    return;
+
+  for (i = 0u; i < priv->count; i++) {
+    binding = &priv->bindings[i];
+
+    if (binding->kind != GPUBindKindTexture || !(view = binding->textureView) || !view->_texture
+        || binding->layoutEntryIndex >= layout->count)
+      continue;
+
+    entry = &layout->entries[binding->layoutEntryIndex];
+
+    if (entry->bindingType != GPU_BINDING_STORAGE_TEXTURE
+        || entry->storageTexture.access != GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE
+        || !(entry->visibility & (GPU_SHADER_STAGE_VERTEX_BIT | GPU_SHADER_STAGE_FRAGMENT_BIT))
+        || !deviceEmulatesReadWrite(view->_texture->device, view->format))
+      continue;
+
+    if ((ib = view->_texture->_imageBuffer ? view->_texture->_imageBuffer : ib_create(view->_texture))
+        && view->baseMipLevel < ib->mipCount)
+      ib->renderMips |= 1u << view->baseMipLevel;
+  }
+}
+
 static bool
-ib_found(void *ctx, GPUImageBuffer *ib, bool readWrite, bool writes) {
+ib_found(void *ctx, GPUImageBuffer *ib, const GPUImageBufferUse *use) {
   GPU__UNUSED(ctx);
   GPU__UNUSED(ib);
-  GPU__UNUSED(readWrite);
-  GPU__UNUSED(writes);
+  GPU__UNUSED(use);
 
   return false;
 }
@@ -458,8 +592,31 @@ ib_textureAccess(const GPUTexture *texture, uint32_t access) {
   return (GPUAccessMask)access;
 }
 
+/* a level's copy region: every layer (or slice) from its first row */
+
 static void
-ib_copy(GPUCommandBuffer *cmdb, GPUImageBuffer *ib, bool toTexture) {
+ib_region(const GPUImageBuffer *ib, uint32_t mip, GPUBufferTextureCopyRegion *region) {
+  const GPUImageBufferMip *m;
+  bool                     volume;
+
+  m      = &ib->mips[mip];
+  volume = ib->texture->dimension == GPU_TEXTURE_DIMENSION_3D;
+
+  memset(region, 0, sizeof(*region));
+  region->texture.texture.mipLevel = mip;
+  region->texture.width            = m->width;
+  region->texture.height           = m->height;
+  region->texture.depth            = volume ? m->count : 1u;
+  region->texture.layerCount       = volume ? 1u : m->count;
+  region->bufferOffset             = m->base + m->pitchBytes; /* past the first header row */
+  region->bytesPerRow              = m->pitchBytes;
+  region->rowsPerImage             = m->height + 1u;          /* and every later one */
+}
+
+/* the levels in 'mips' copied one way, between barriers over the texture */
+
+static void
+ib_copy(GPUCommandBuffer *cmdb, GPUImageBuffer *ib, bool toTexture, uint32_t mips) {
   GPUBufferTextureCopyRegion region;
   GPUTransferPassEncoder    *pass;
   GPUTextureBarrier          texture;
@@ -467,12 +624,12 @@ ib_copy(GPUCommandBuffer *cmdb, GPUImageBuffer *ib, bool toTexture) {
   GPUBarrierBatch            batch;
   GPUTexture                *t;
   GPUApi                    *api;
+  uint32_t                   mip;
 
   t = ib->texture;
 
-  if (!(api = commandBufferApi(cmdb)))
+  if (!mips || !(api = commandBufferApi(cmdb)))
     return;
-
 
   ib_writeHeaders(ib, cmdb->_queue);
 
@@ -487,8 +644,8 @@ ib_copy(GPUCommandBuffer *cmdb, GPUImageBuffer *ib, bool toTexture) {
   texture.srcAccess   = ib_textureAccess(t, GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE | GPU_ACCESS_COLOR_WRITE
                                             | GPU_ACCESS_TRANSFER_WRITE);
   texture.dstAccess   = toTexture ? GPU_ACCESS_TRANSFER_WRITE : GPU_ACCESS_TRANSFER_READ;
-  texture.mipCount    = 1u;
-  texture.layerCount  = t->depthOrLayers;
+  texture.mipCount    = ib->mipCount;
+  texture.layerCount  = t->dimension == GPU_TEXTURE_DIMENSION_3D ? 1u : t->depthOrLayers;
   batch.pBufferBarriers     = &buffer;
   batch.pTextureBarriers    = &texture;
   batch.bufferBarrierCount  = 1u;
@@ -497,22 +654,20 @@ ib_copy(GPUCommandBuffer *cmdb, GPUImageBuffer *ib, bool toTexture) {
   batch.dstStages           = GPU_STAGE_TRANSFER;
   GPUEncodeBarriers(cmdb, &batch);
 
-  memset(&region, 0, sizeof(region));
-  region.texture.width      = t->width;
-  region.texture.height     = t->height;
-  region.texture.depth      = 1u;
-  region.texture.layerCount = t->depthOrLayers;
-  region.bufferOffset       = ib->pitchBytes; /* past the first header row */
-  region.bytesPerRow        = ib->pitchBytes;
-  region.rowsPerImage       = t->height + 1u; /* and every later one */
-
   /* the backend's copies: the public ones would sync this texture again */
 
   if ((pass = GPUBeginTransferPass(cmdb, "gpu image buffer"))) {
-    if (toTexture && api->renderPass.copyBufferToTexture)
-      api->renderPass.copyBufferToTexture(pass, ib->buffer, t, &region);
-    else if (!toTexture && api->renderPass.copyTextureToBuffer)
-      api->renderPass.copyTextureToBuffer(pass, t, ib->buffer, &region);
+    for (mip = 0u; mip < ib->mipCount; mip++) {
+      if (!(mips & (1u << mip)))
+        continue;
+
+      ib_region(ib, mip, &region);
+
+      if (toTexture && api->renderPass.copyBufferToTexture)
+        api->renderPass.copyBufferToTexture(pass, ib->buffer, t, &region);
+      else if (!toTexture && api->renderPass.copyTextureToBuffer)
+        api->renderPass.copyTextureToBuffer(pass, t, ib->buffer, &region);
+    }
 
     GPUEndTransferPass(pass);
   }
@@ -525,7 +680,10 @@ ib_copy(GPUCommandBuffer *cmdb, GPUImageBuffer *ib, bool toTexture) {
   batch.dstStages   = GPU_STAGE_COMPUTE | GPU_STAGE_FRAGMENT | GPU_STAGE_TRANSFER;
   GPUEncodeBarriers(cmdb, &batch);
 
-  ib->newer = GPU_IMAGE_BUFFER_SYNCED;
+  if (toTexture)
+    ib->bufferNewer &= ~mips;
+  else
+    ib->textureNewer &= ~mips;
 }
 
 typedef struct GPUImageBufferSync {
@@ -533,41 +691,52 @@ typedef struct GPUImageBufferSync {
   bool              needed;
 } GPUImageBufferSync;
 
-static bool
-ib_needs(void *ctx, GPUImageBuffer *ib, bool readWrite, bool writes) {
-  GPUImageBufferSync *sync = ctx;
+/* the levels a use needs copied first: into the buffer for a read-write one,
+ * into the texture for any other */
 
-  GPU__UNUSED(writes);
+static uint32_t
+ib_stale(const GPUImageBuffer *ib, const GPUImageBufferUse *use) {
+  return use->mips & (use->readWrite ? ib->textureNewer : ib->bufferNewer);
+}
+
+static bool
+ib_needs(void *ctx, GPUImageBuffer *ib, const GPUImageBufferUse *use) {
+  GPUImageBufferSync *sync = ctx;
 
   if (!ib->headers)
     ib_writeHeaders(ib, sync->cmdb ? sync->cmdb->_queue : NULL);
 
-  if (readWrite ? ib->newer == GPU_IMAGE_BUFFER_TEXTURE : ib->newer == GPU_IMAGE_BUFFER_BUFFER)
+  if (ib_stale(ib, use))
     sync->needed = true;
 
   return true;
 }
 
 static bool
-ib_sync(void *ctx, GPUImageBuffer *ib, bool readWrite, bool writes) {
+ib_sync(void *ctx, GPUImageBuffer *ib, const GPUImageBufferUse *use) {
   GPUImageBufferSync *sync = ctx;
 
-  GPU__UNUSED(writes);
-
-  if (readWrite ? ib->newer == GPU_IMAGE_BUFFER_TEXTURE : ib->newer == GPU_IMAGE_BUFFER_BUFFER)
-    ib_copy(sync->cmdb, ib, !readWrite);
+  ib_copy(sync->cmdb, ib, !use->readWrite, ib_stale(ib, use));
 
   return true;
 }
 
+static void
+ib_written(GPUImageBuffer *ib, const GPUImageBufferUse *use) {
+  if (use->readWrite) {
+    ib->bufferNewer  |= use->mips;
+    ib->textureNewer &= ~use->mips;
+  } else if (use->writes) {
+    ib->textureNewer |= use->mips;
+    ib->bufferNewer  &= ~use->mips;
+  }
+}
+
 static bool
-ib_wrote(void *ctx, GPUImageBuffer *ib, bool readWrite, bool writes) {
+ib_wrote(void *ctx, GPUImageBuffer *ib, const GPUImageBufferUse *use) {
   GPU__UNUSED(ctx);
 
-  if (readWrite)
-    ib->newer = GPU_IMAGE_BUFFER_BUFFER;
-  else if (writes)
-    ib->newer = GPU_IMAGE_BUFFER_TEXTURE;
+  ib_written(ib, use);
 
   return true;
 }
@@ -609,9 +778,8 @@ imageBufferComputeWrote(GPUComputePassEncoder *pass) {
   ib_visitPass(pass, ib_wrote, NULL);
 }
 
-GPU_HIDE
-void
-imageBufferFlush(GPUCommandBuffer *cmdb) {
+static void
+ib_flush(GPUCommandBuffer *cmdb, bool render) {
   GPUImageBuffer *ib;
   GPUDevice      *device;
 
@@ -621,11 +789,48 @@ imageBufferFlush(GPUCommandBuffer *cmdb) {
   ib_lock(device);
 
   for (ib = device->_imageBuffers; ib; ib = ib->next) {
-    if (ib->newer == GPU_IMAGE_BUFFER_BUFFER)
-      ib_copy(cmdb, ib, true);
+    ib_copy(cmdb, ib, true, ib->bufferNewer);
+
+    if (render)
+      ib_copy(cmdb, ib, false, ib->textureNewer & ib->renderMips);
   }
 
   ib_unlock(device);
+}
+
+GPU_HIDE
+void
+imageBufferFlush(GPUCommandBuffer *cmdb) {
+  ib_flush(cmdb, false);
+}
+
+GPU_HIDE
+void
+imageBufferRenderSync(GPUCommandBuffer *cmdb) {
+  ib_flush(cmdb, true);
+}
+
+static bool
+ib_renderWrote(void *ctx, GPUImageBuffer *ib, const GPUImageBufferUse *use) {
+  GPU__UNUSED(ctx);
+
+  if (use->readWrite && use->render)
+    ib_written(ib, use);
+
+  return true;
+}
+
+GPU_HIDE
+void
+imageBufferRenderBind(GPUBindGroup *group) {
+  const GPUBindGroupPriv *priv;
+
+  if (!group || !group->_device || !(priv = group->_priv))
+    return;
+
+  if (priv->imageBufferGeneration == group->_device->_imageBufferGeneration ? priv->imageBuffers
+                                                                            : bindGroupImageBuffersFind(group))
+    (void)ib_visitGroup(group, ib_renderWrote, NULL);
 }
 
 GPU_HIDE
@@ -634,29 +839,35 @@ imageBufferTransferRead(GPUTransferPassEncoder *pass, GPUTexture *texture) {
   GPUBufferTextureCopyRegion region;
   GPUImageBuffer            *ib;
   GPUApi                    *api;
+  uint32_t                   mip;
 
-  if (!pass || !texture || !(ib = texture->_imageBuffer) || ib->newer != GPU_IMAGE_BUFFER_BUFFER
+  if (!pass || !texture || !(ib = texture->_imageBuffer) || !ib->bufferNewer
       || !(api = commandBufferApi(pass->_cmdb)) || !api->renderPass.copyBufferToTexture)
     return;
 
-  /* already inside a transfer pass: the copy goes first in it */
+  /* already inside a transfer pass: the copies go first in it */
 
-  memset(&region, 0, sizeof(region));
-  region.texture.width      = texture->width;
-  region.texture.height     = texture->height;
-  region.texture.depth      = 1u;
-  region.texture.layerCount = texture->depthOrLayers;
-  region.bufferOffset       = ib->pitchBytes;
-  region.bytesPerRow        = ib->pitchBytes;
-  region.rowsPerImage       = texture->height + 1u;
+  for (mip = 0u; mip < ib->mipCount; mip++) {
+    if (ib->bufferNewer & (1u << mip)) {
+      ib_region(ib, mip, &region);
+      api->renderPass.copyBufferToTexture(pass, ib->buffer, texture, &region);
+    }
+  }
 
-  api->renderPass.copyBufferToTexture(pass, ib->buffer, texture, &region);
-  ib->newer = GPU_IMAGE_BUFFER_SYNCED;
+  ib->bufferNewer = 0u;
 }
 
 GPU_HIDE
 void
-imageBufferTextureWritten(GPUTexture *texture) {
-  if (texture && texture->_imageBuffer)
-    texture->_imageBuffer->newer = GPU_IMAGE_BUFFER_TEXTURE;
+imageBufferTextureWritten(GPUTexture *texture, uint32_t mipLevel) {
+  GPUImageBuffer *ib;
+  uint32_t        mips;
+
+  if (!texture || !(ib = texture->_imageBuffer))
+    return;
+
+  mips = mipLevel == UINT32_MAX ? ib_mipMask(ib, 0u, 0u) : ib_mipMask(ib, mipLevel, 1u);
+
+  ib->textureNewer |= mips;
+  ib->bufferNewer  &= ~mips;
 }

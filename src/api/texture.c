@@ -617,7 +617,7 @@ GPUQueueWriteTexture(GPUQueue                    *__restrict queue,
   result = api->texture.write(queue, texture, region, data, sizeBytes, &layout);
 
   if (result == GPU_OK)
-    imageBufferTextureWritten(texture);
+    imageBufferTextureWritten(texture, region->mipLevel);
   commandQueueUnlock(queue, api);
   return result;
 }

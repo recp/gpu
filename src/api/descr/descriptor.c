@@ -4503,6 +4503,9 @@ GPUCreateBindGroup(GPUDevice                    *device,
   group->_priv     = priv;
   group->_refCount = 1u;
 
+  if (device->imageBufferFormats)
+    imageBufferGroupCreated(group);
+
   api = deviceApi(device);
 
   if (api && api->descriptor.createBindGroup) {
@@ -4604,6 +4607,9 @@ GPUUpdateBindGroupEXT(GPUBindGroup            *group,
   /* found again at its next bind */
   ((GPUBindGroupPriv *)group->_priv)->imageBufferGeneration = 0u;
 
+  if (group->_device && group->_device->imageBufferFormats)
+    imageBufferGroupCreated(group);
+
   return GPU_OK;
 }
 
@@ -4640,6 +4646,11 @@ GPUBindRenderGroup(GPURenderPassEncoder *pass,
       || groupIndex >= GPU_ENCODER_MAX_BIND_GROUPS) {
     return;
   }
+
+  /* emulated read-write textures: the pass writes their buffers */
+
+  if (pass->_device && pass->_device->_imageBufferGeneration)
+    imageBufferRenderBind(group);
 
   if (dynamicOffsetCount == 0u) {
     bindRenderGroupStatic(pass, groupIndex, group);

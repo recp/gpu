@@ -21,17 +21,19 @@
  * (GPUFormatCapabilities.storageReadWrite) has its read-write bindings
  * emulated: USL lowers those images to storage buffers (its image_buffer
  * atom), and every storage texture of such a format keeps a buffer beside
- * it, laid out as USL reads it: per layer a header row, then the rows.
+ * it, laid out as USL reads it: per mip level and layer (or 3d slice) a
+ * header row, then the rows; a view binds at its level's and layer's header.
  *
  * a read-write binding binds the buffer instead of the texture (made at the
  * texture's first read-write binding, so a texture never bound so costs
- * nothing). every other
- * use (sampled, read-only or write-only storage, copies, attachments) sees
- * the texture. the two are copied into each other only when one was written
- * and the other is used next, in command order: before a compute dispatch
- * (its pass is split around the copy), before a render pass, around transfer
- * copies and blits. devices with read-write access to every format, or
- * without a texture bound read-write that has none, pay a zero test.
+ * nothing). every other use (sampled, read-only or write-only storage,
+ * copies, attachments) sees the texture. a mip level is copied from one to
+ * the other only when it was written there and is used here next, in
+ * command order: before a compute dispatch (its pass is split around the
+ * copy), before a render pass (also into the buffer for read-write render
+ * bindings), around transfer copies and blits. devices with read-write
+ * access to every format, or without a texture bound read-write that has
+ * none, pay a zero test.
  */
 
 #ifndef gpu_image_buffer_internal_h
@@ -43,20 +45,27 @@ struct GPUBindGroupBindingView;
 struct GPUComputePassEncoder;
 struct GPUBindGroup;
 
-typedef enum GPUImageBufferNewer {
-  GPU_IMAGE_BUFFER_SYNCED  = 0, /* both hold the same texels (or neither was written) */
-  GPU_IMAGE_BUFFER_BUFFER  = 1, /* read-write bindings wrote the buffer */
-  GPU_IMAGE_BUFFER_TEXTURE = 2  /* something else wrote the texture */
-} GPUImageBufferNewer;
+/* a mip level's part of the buffer */
+
+typedef struct GPUImageBufferMip {
+  uint64_t base;       /* its first header row */
+  uint64_t layerBytes; /* a header row and 'height' rows */
+  uint32_t pitchBytes;
+  uint32_t width;
+  uint32_t height;
+  uint32_t count;      /* layers, or a 3d level's slices */
+} GPUImageBufferMip;
 
 typedef struct GPUImageBuffer {
   GPUBuffer             *buffer;
   GPUTexture            *texture;
-  struct GPUImageBuffer *next;       /* the device's list */
-  uint64_t               layerBytes; /* a header row and 'height' rows */
-  uint32_t               pitchBytes;
-  uint8_t                newer;      /* GPUImageBufferNewer */
-  bool                   headers;    /* the header rows are written */
+  struct GPUImageBuffer *next;         /* the device's list */
+  uint32_t               bufferNewer;  /* mip levels read-write bindings wrote last */
+  uint32_t               textureNewer; /* mip levels something else wrote last (or never copied) */
+  uint32_t               renderMips;   /* mip levels bound read-write to vertex or fragment shaders */
+  uint32_t               mipCount;
+  bool                   headers;      /* the header rows are written */
+  GPUImageBufferMip      mips[];
 } GPUImageBuffer;
 
 /* the read-write formats this device emulates, as USL texel format bits (0: none). */
@@ -96,6 +105,12 @@ GPU_HIDE
 bool
 imageBufferBindingView(struct GPUBindGroupBindingView *view);
 
+/* a group made or updated (with emulated formats on the device) */
+
+GPU_HIDE
+void
+imageBufferGroupCreated(struct GPUBindGroup *group);
+
 /* whether a group binds emulated textures, kept with the device's generation of buffers */
 
 GPU_HIDE
@@ -124,14 +139,29 @@ GPU_HIDE
 void
 imageBufferFlush(GPUCommandBuffer *cmdb);
 
+/* before a render pass: also the buffer of textures bound read-write to
+ * vertex or fragment shaders, where the texture was written last. */
+
+GPU_HIDE
+void
+imageBufferRenderSync(GPUCommandBuffer *cmdb);
+
+/* a group bound in a render pass: its read-write bindings write the buffers. */
+
+GPU_HIDE
+void
+imageBufferRenderBind(struct GPUBindGroup *group);
+
 /* inside a transfer pass: a texture read by a copy gets the buffer's texels first. */
 
 GPU_HIDE
 void
 imageBufferTransferRead(GPUTransferPassEncoder *pass, GPUTexture *texture);
 
+/* a mip level of the texture written (UINT32_MAX: every level) */
+
 GPU_HIDE
 void
-imageBufferTextureWritten(GPUTexture *texture);
+imageBufferTextureWritten(GPUTexture *texture, uint32_t mipLevel);
 
 #endif /* gpu_image_buffer_internal_h */

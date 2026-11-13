@@ -1127,8 +1127,10 @@ mt_bindRenderGroup(GPURenderPassEncoder *pass,
 
   priv = group ? group->_priv : NULL;
 
+  /* a group with emulated read-write textures binds their buffers: resolved below */
+
   if (dynamicOffsetCount == 0u && priv && priv->dynamicOffsetCount == 0u
-      && !priv->bindless
+      && !priv->bindless && !priv->imageBuffers
       && (!group->_native || ((MTBindGroup *)group->_native)->arrayCount == 0u)) {
     return mt_bindRenderGroupStatic(pass, pipelineLayout, groupIndex, group);
   }

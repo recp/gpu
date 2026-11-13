@@ -540,20 +540,22 @@ gpu_destroyRenderPass(GPUApi *api, GPURenderPassDesc *pass) {
 }
 
 /* emulated read-write textures (image_buffer_internal.h): a render pass sees
- * the texels read-write bindings wrote, and its attachments are newer after */
+ * the texels read-write bindings wrote, its own read-write bindings the
+ * texels written elsewhere, and its attachments are newer after */
 
 static void
 renderPassImageBuffers(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *info) {
-  uint32_t i;
+  const GPUTextureView *view;
+  uint32_t              i;
 
-  imageBufferFlush(cmdb);
+  imageBufferRenderSync(cmdb);
 
   for (i = 0u; i < info->colorAttachmentCount; i++) {
-    if (info->pColorAttachments[i].view)
-      imageBufferTextureWritten(info->pColorAttachments[i].view->_texture);
+    if ((view = info->pColorAttachments[i].view))
+      imageBufferTextureWritten(view->_texture, view->baseMipLevel);
 
-    if (info->pColorAttachments[i].resolveView)
-      imageBufferTextureWritten(info->pColorAttachments[i].resolveView->_texture);
+    if ((view = info->pColorAttachments[i].resolveView))
+      imageBufferTextureWritten(view->_texture, view->baseMipLevel);
   }
 }
 
@@ -752,7 +754,7 @@ GPUCopyBufferToTexture(GPUTransferPassEncoder           *pass,
 
   imageBufferTransferRead(pass, dst);
   api->renderPass.copyBufferToTexture(pass, src, dst, region);
-  imageBufferTextureWritten(dst);
+  imageBufferTextureWritten(dst, region->texture.texture.mipLevel);
 }
 
 GPU_EXPORT
@@ -838,7 +840,7 @@ GPUCopyTextureToTexture(GPUTransferPassEncoder              *pass,
   imageBufferTransferRead(pass, src);
   imageBufferTransferRead(pass, dst);
   api->renderPass.copyTextureToTexture(pass, src, dst, region);
-  imageBufferTextureWritten(dst);
+  imageBufferTextureWritten(dst, region->dst.mipLevel);
 }
 
 GPU_EXPORT

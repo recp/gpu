@@ -814,7 +814,7 @@ GPUBlit(GPUCommandBuffer         *cmdb,
 
   if (info->src->_imageBuffer || info->dst->_imageBuffer) {
     imageBufferFlush(cmdb);
-    imageBufferTextureWritten(info->dst);
+    imageBufferTextureWritten(info->dst, info->dstRegion.texture.mipLevel);
   }
 
   if (info->src->format == info->dst->format
