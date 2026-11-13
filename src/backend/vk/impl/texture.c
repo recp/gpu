@@ -556,6 +556,8 @@ vk__destroyTextureState(GPUTextureVk *native) {
     vkDestroyImage(native->device, native->image, NULL);
   }
 
+  vk_poolRelease(&native->poolRange);
+
   if (native->ownsMemory && native->memory) {
     vkFreeMemory(native->device, native->memory, NULL);
   }
@@ -1405,7 +1407,9 @@ vk_createTexture(GPUDevice                  *__restrict device,
     return GPU_ERROR_UNSUPPORTED;
   }
 
-  GPU__UNUSED(memoryFlags);
+  if (vk_poolBindImage(deviceVk, state.image, imageInfo.tiling, memoryTypeIndex, memoryFlags,
+                       &state.memory, &state.poolRange))
+    goto bound;
 
   allocationInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   allocationInfo.allocationSize  = requirements.size;
@@ -1424,6 +1428,7 @@ vk_createTexture(GPUDevice                  *__restrict device,
   }
 
   state.ownsMemory = true;
+bound:
 
   return vk_finishTexture(device, info, &imageInfo, &state, outTexture);
 }

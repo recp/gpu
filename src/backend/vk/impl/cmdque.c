@@ -1307,6 +1307,8 @@ vk_waitDeviceIdle(GPUDevice *__restrict device) {
   }
 
   if (result == VK_SUCCESS) {
+    /* idle: pooled memory blocks nothing lives in go back */
+    vk_trimResourcePool(deviceVk);
     return GPU_OK;
   }
 

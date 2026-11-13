@@ -12,6 +12,25 @@ if(GPU_BUILD_SAMPLES AND GPU_BUILD_METAL)
 endif()
 
 if(GPU_BUILD_TESTS)
+  find_package(Threads REQUIRED)
+  add_executable(gpu-suballoc-test
+    ${PROJECT_SOURCE_DIR}/src/api/suballoc.c
+    ${PROJECT_SOURCE_DIR}/tests/validation/suballoc/main.c
+  )
+  target_include_directories(gpu-suballoc-test PRIVATE
+    $<TARGET_PROPERTY:gpu,INCLUDE_DIRECTORIES>
+  )
+  target_compile_definitions(gpu-suballoc-test PRIVATE
+    $<TARGET_PROPERTY:gpu,COMPILE_DEFINITIONS>
+  )
+  target_link_libraries(gpu-suballoc-test PRIVATE Threads::Threads)
+  add_test(NAME suballoc COMMAND gpu-suballoc-test)
+  set_tests_properties(suballoc PROPERTIES
+    PASS_REGULAR_EXPRESSION "all ranges apart and coalesced"
+    LABELS "memory"
+    TIMEOUT 60
+  )
+
   if(GPU_BUILD_METAL AND CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     add_executable(gpu-native-host-lifecycle
       ${PROJECT_SOURCE_DIR}/tests/validation/native-host/main.m

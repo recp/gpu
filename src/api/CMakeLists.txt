@@ -27,6 +27,7 @@ target_sources(gpu PRIVATE
   sampler.c
   surface.c
   subgroup.c
+  suballoc.c
   swapchain.c
   texture.c
   uploader.c

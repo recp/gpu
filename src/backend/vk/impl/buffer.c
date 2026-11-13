@@ -110,6 +110,8 @@ vk__destroyBufferState(GPUBufferVk *native) {
     vkDestroyBuffer(native->device, native->buffer, NULL);
   }
 
+  vk_poolRelease(&native->poolRange);
+
   if (native->ownsMemory && native->memory) {
     vkFreeMemory(native->device, native->memory, NULL);
   }
@@ -181,6 +183,13 @@ vk__createBuffer(GPUDevice                 *__restrict device,
     allocationFlags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
     allocationFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
     allocationInfo.pNext  = &allocationFlags;
+  }
+
+  if (vk_poolBindBuffer(deviceVk, state.buffer, memoryTypeIndex, memoryFlags,
+                        (bufferInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0u, hostVisible,
+                        &state.memory, &state.mapped, &state.allocationSize, &state.poolRange)) {
+    state.coherent = hostVisible && (memoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0u;
+    return vk_wrapBuffer(device, info, &bufferInfo, &state, outBuffer);
   }
 
   if (vkAllocateMemory(state.device,

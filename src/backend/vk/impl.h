@@ -274,4 +274,46 @@ vk_writeBuffer(GPUQueue   *__restrict queue,
                const void *__restrict data,
                uint64_t               sizeBytes);
 
+/* small resources in pooled memory blocks (impl/pool.c); false: the caller
+ * allocates their memory itself */
+
+GPU_HIDE
+void
+vk_initResourcePool(GPUDeviceVk *deviceVk);
+
+GPU_HIDE
+void
+vk_destroyResourcePool(GPUDeviceVk *deviceVk);
+
+GPU_HIDE
+void
+vk_trimResourcePool(GPUDeviceVk *deviceVk);
+
+GPU_HIDE
+bool
+vk_poolBindBuffer(GPUDeviceVk          *deviceVk,
+                  VkBuffer              buffer,
+                  uint32_t              memoryTypeIndex,
+                  VkMemoryPropertyFlags memoryFlags,
+                  bool                  deviceAddress,
+                  bool                  mapped,
+                  VkDeviceMemory       *outMemory,
+                  void                **outMapped,
+                  VkDeviceSize         *outSize,
+                  VKPoolRange          *outRange);
+
+GPU_HIDE
+bool
+vk_poolBindImage(GPUDeviceVk          *deviceVk,
+                 VkImage               image,
+                 VkImageTiling         tiling,
+                 uint32_t              memoryTypeIndex,
+                 VkMemoryPropertyFlags memoryFlags,
+                 VkDeviceMemory       *outMemory,
+                 VKPoolRange          *outRange);
+
+GPU_HIDE
+void
+vk_poolRelease(VKPoolRange *range);
+
 #endif /* vk_apis_h */

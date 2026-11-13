@@ -215,7 +215,16 @@ typedef struct GPUAdapterVk {
   bool                                                  negativeViewport;
 } GPUAdapterVk;
 
+/* a buffer's or image's range of a pooled memory block (impl/pool.c) */
+typedef struct VKPoolRange {
+  struct GPUSubAllocator *pool; /* NULL: not pooled */
+  struct GPUSubBlock     *block;
+  uint64_t                offset;
+  uint64_t                size;
+} VKPoolRange;
+
 typedef struct GPUDeviceVk {
+  struct GPUSubAllocator                        *resourcePool; /* NULL: every resource its own memory */
   struct GPUClassicRenderPassVk                 *classicRenderPasses;
   struct GPUClassicFramebufferVk                *classicFramebuffers;
   GPUQueue                                     **createdQueues;
@@ -332,6 +341,7 @@ typedef struct GPUBufferVk {
   VkBuffer       buffer;
   VkDeviceMemory memory;
   VkDeviceSize   allocationSize;
+  VKPoolRange    poolRange;
   bool           coherent;
   bool           ownsMemory;
   bool           sparse;
@@ -383,6 +393,7 @@ typedef struct GPUTextureVk {
   VkDevice                        device;
   VkImage                         image;
   VkDeviceMemory                  memory;
+  VKPoolRange                     poolRange;
   VkRenderPass                    renderPasses[3][2];
   VkSparseImageMemoryRequirements sparseRequirements;
   VkImageLayout                   layout;

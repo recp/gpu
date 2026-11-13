@@ -3743,6 +3743,8 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
     goto err;
   }
 
+  vk_initResourcePool(deviceVk);
+
   if (!(deviceVk->createdQueues = calloc(totalQueueCount,
                                          sizeof(*deviceVk->createdQueues)))) {
     goto err;
@@ -3787,6 +3789,7 @@ err:
 
     if (deviceVk->device) {
       vk_destroyClassicRenderTargets(deviceVk);
+      vk_destroyResourcePool(deviceVk);
       vkDestroyDevice(deviceVk->device, NULL);
     }
 
@@ -3833,6 +3836,7 @@ vk_destroyDevice(GPUDevice * __restrict device) {
 
     if (deviceVk->device) {
       vk_destroyClassicRenderTargets(deviceVk);
+      vk_destroyResourcePool(deviceVk);
       vkDestroyDevice(deviceVk->device, NULL);
     }
 

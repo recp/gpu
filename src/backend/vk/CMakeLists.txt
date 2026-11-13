@@ -50,6 +50,7 @@ target_sources(gpu PRIVATE
   impl/library.c
   impl/memory.c
   impl/multigpu.c
+  impl/pool.c
   impl/pipeline.c
   impl/pipeline_cache.c
   impl/query.c
