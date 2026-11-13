@@ -1,0 +1,23 @@
+/* a fragment shader's read-write view of some layers of an array: the layer
+ * count it reports and the layers it writes */
+
+vert image_buffer_layers_render_vs(vertexId: uint #vertex_id) -> float4 {
+  let x = float(vertexId & 1u) * 4.0 - 1.0
+  let y = float((vertexId >> 1u) & 1u) * 4.0 - 1.0
+  return float4(x, y, 0.0, 1.0)
+}
+
+frag image_buffer_layers_render_fs(
+  position: float4                             #position,
+  layers:   image2d_array<r32uint, read_write> #texture(0)
+) -> float4 {
+  let p = uint2(position.xy)
+
+  if (p.x < layers.get_width() && p.y < layers.get_height()) {
+    let n = layers.get_array_size()
+    let v = layers.read(uint3(p, 0u))
+    layers.write(uint4(v.x + n * 1000u, 0u, 0u, 0u), uint3(p, 0u))
+  }
+
+  return float4(0.0, 0.0, 0.0, 1.0)
+}

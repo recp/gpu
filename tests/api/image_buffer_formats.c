@@ -20,8 +20,10 @@
  * emulates all): r8unorm, rg8snorm, r16sint, r16float, rgba16float and
  * rg11b10ufloat written by one kernel (8- and 16-bit texels share words with
  * their neighbours), a 3d image, two mip levels of a texture bound one after
- * the other, a 1d image and a 1d array, and a fragment shader writing an
- * image in two render passes. every texel is checked exactly.
+ * the other, a 1d image and a 1d array, a fragment shader writing an image
+ * in two render passes, and views of some layers of an array in kernels and
+ * in render passes (the layer counts they report). every texel is checked
+ * exactly.
  */
 
 #include "test.h"
@@ -55,6 +57,7 @@ enum {
   IBF_LINE,
   IBF_RENDER,
   IBF_LAYERS,
+  IBF_LAYERS_RENDER,
   IBF_LIBRARIES
 };
 
@@ -64,11 +67,11 @@ typedef struct IBFTest {
   GPUShaderLibrary   *libraries[IBF_LIBRARIES];
   GPUShaderLayout    *layouts[IBF_LIBRARIES];
   GPUComputePipeline *formats, *volume, *level, *line, *layers;
-  GPURenderPipeline  *render;
+  GPURenderPipeline  *render, *layersRender;
   GPUBuffer          *sizes, *readback;
   GPUTexture         *textures[16];
   GPUTextureView     *views[20];
-  GPUBindGroup       *groups[10];
+  GPUBindGroup       *groups[16];
   uint32_t            textureCount, viewCount, groupCount;
 } IBFTest;
 
@@ -260,7 +263,7 @@ ibf_compute(IBFTest *t, uint32_t index, const char *entry) {
 }
 
 static GPURenderPipeline*
-ibf_renderPipeline(IBFTest *t) {
+ibf_renderPipeline(IBFTest *t, uint32_t index, const char *vertex, const char *fragment) {
   GPURenderPipelineCreateInfo info     = {0};
   GPUColorTargetState         target   = {0};
   GPURenderPipeline          *pipeline = NULL;
@@ -270,10 +273,10 @@ ibf_renderPipeline(IBFTest *t) {
   info.chain.sType             = GPU_STRUCTURE_TYPE_RENDER_PIPELINE_CREATE_INFO;
   info.chain.structSize        = sizeof(info);
   info.label                   = "image-buffer-render";
-  info.layout                  = t->layouts[IBF_RENDER]->pipelineLayout;
-  info.library                 = t->libraries[IBF_RENDER];
-  info.vertexEntry             = "image_buffer_render_vs";
-  info.fragmentEntry           = "image_buffer_render_fs";
+  info.layout                  = t->layouts[index]->pipelineLayout;
+  info.library                 = t->libraries[index];
+  info.vertexEntry             = vertex;
+  info.fragmentEntry           = fragment;
   info.colorTargetCount        = 1u;
   info.pColorTargets           = &target;
   info.primitiveTopology       = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -359,7 +362,7 @@ ibf_dispatch(GPUCommandBuffer *cmdb, GPUComputePipeline *pipeline, GPUBindGroup 
 }
 
 static void
-ibf_draw(GPUCommandBuffer *cmdb, IBFTest *t, GPUTextureView *target, GPUBindGroup *group) {
+ibf_draw(GPUCommandBuffer *cmdb, GPURenderPipeline *pipeline, GPUTextureView *target, GPUBindGroup *group) {
   GPURenderPassColorAttachment color = {0};
   GPURenderPassCreateInfo      info  = {0};
   GPURenderPassEncoder        *pass;
@@ -380,7 +383,7 @@ ibf_draw(GPUCommandBuffer *cmdb, IBFTest *t, GPUTextureView *target, GPUBindGrou
   if (!(pass = GPUBeginRenderPass(cmdb, &info)))
     return;
 
-  GPUBindRenderPipeline(pass, t->render);
+  GPUBindRenderPipeline(pass, pipeline);
   GPUBindRenderGroup(pass, 0u, group, 0u, NULL);
   GPUSetViewport(pass, &viewport);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
@@ -540,9 +543,9 @@ ibf_run(IBFTest *t) {
   ibf_dispatch(cmdb, t->level, levels[0], 1u, 1u, 1u);
   ibf_dispatch(cmdb, t->level, levels[1], 1u, 1u, 1u);
   ibf_dispatch(cmdb, t->line, lineGroup, (IBF_LINE_W + 15u) / 16u, 1u, 1u);
-  ibf_draw(cmdb, t, rtView, render);
+  ibf_draw(cmdb, t->render, rtView, render);
   GPUTransitionTexture(cmdb, counts, GPU_ACCESS_SHADER_WRITE, GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE);
-  ibf_draw(cmdb, t, rtView, render);
+  ibf_draw(cmdb, t->render, rtView, render);
   ibf_dispatch(cmdb, t->volume, volumeGroup, (IBF_VOL_W + 3u) / 4u, 1u, 1u);
 
   GPUTransitionTexture(cmdb, counts, GPU_ACCESS_SHADER_WRITE, GPU_ACCESS_TRANSFER_READ);
@@ -787,6 +790,58 @@ ibf_run(IBFTest *t) {
     }
   }
 
+  /* the same views in render passes, after a dispatch left another count in
+   * a header: layers 1-2 by a kernel, then layer 1 alone and layers 0-1 drawn
+   * (a pass can't write headers once begun; render passes write them first) */
+
+  {
+    GPUTexture     *array;
+    GPUTextureView *two, *one, *front;
+    GPUBindGroup   *gTwo, *gOne, *gFront;
+    uint32_t        start[5u * 4u * 3u], v, expected;
+
+    for (i = 0u; i < 5u * 4u * 3u; i++)
+      start[i] = i;
+
+    ok = (array = ibf_texture(t, GPU_TEXTURE_DIMENSION_2D, GPU_FORMAT_R32_UINT, 5u, 4u, 3u, 1u, 0u))
+         && ibf_upload(t, array, 0u, 5u, 4u, 1u, 3u, 4u, start) && (two = ibf_layers(t, array, 1u, 2u))
+         && (one = ibf_layers(t, array, 1u, 1u)) && (front = ibf_layers(t, array, 0u, 2u))
+         && (gTwo = ibf_group(t, IBF_LAYERS, &two, 1u, false))
+         && (gOne = ibf_group(t, IBF_LAYERS_RENDER, &one, 1u, false))
+         && (gFront = ibf_group(t, IBF_LAYERS_RENDER, &front, 1u, false));
+    IBF_EXPECT(ok, "render layer views");
+
+    cmdb = NULL;
+    IBF_EXPECT(GPUAcquireCommandBuffer(t->queue, "image-buffer-render-layers", &cmdb) == GPU_OK && cmdb,
+               "command buffer 4");
+    ibf_dispatch(cmdb, t->layers, gTwo, 1u, 1u, 1u);
+    GPUTransitionTexture(cmdb, array, GPU_ACCESS_SHADER_WRITE, GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE);
+    ibf_draw(cmdb, t->layersRender, rtView, gOne);
+    GPUTransitionTexture(cmdb, array, GPU_ACCESS_SHADER_WRITE, GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE);
+    ibf_draw(cmdb, t->layersRender, rtView, gFront);
+    GPUTransitionTexture(cmdb, array, GPU_ACCESS_SHADER_WRITE, GPU_ACCESS_TRANSFER_READ);
+    IBF_EXPECT((copy = GPUBeginTransferPass(cmdb, "image-buffer-render-layers-readback")), "transfer pass 4");
+    ibf_copyOut(copy, t, array, 0u, 0u, 5u, 4u, 1u, 3u);
+    GPUEndTransferPass(copy);
+    IBF_EXPECT(GPUCreateFence(t->device, NULL, &fence) == GPU_OK, "fence 4");
+    submit.ppCommandBuffers = &cmdb;
+    submit.fence            = fence;
+    ok = GPUQueueSubmit(t->queue, &submit) == GPU_OK && GPUWaitFence(fence, UINT64_MAX) == GPU_OK
+         && GPUQueueReadBuffer(t->queue, t->readback, 0u, readback, IBF_SLOT) == GPU_OK;
+    GPUDestroyFence(fence);
+    IBF_EXPECT(ok, "submission or readback 4");
+
+    for (z = 0u; z < 3u; z++) {
+      for (y = 0u; y < 4u; y++) {
+        for (x = 0u; x < 5u; x++) {
+          expected = (z * 4u + y) * 5u + x + (z == 0u ? 2000u : z == 1u ? 3000u : 0u);
+          memcpy(&v, ibf_texel(readback, 0u, z * 4u + y, x, 4u), 4u);
+          IBF_EXPECT(v == expected, "drawn layer %u at %u,%u is %u, expected %u", z, x, y, v, expected);
+        }
+      }
+    }
+  }
+
   return 1;
 }
 
@@ -800,7 +855,7 @@ main(int argc, char **argv) {
   int          ok;
 
   if (argc < 1 + IBF_LIBRARIES) {
-    fprintf(stderr, "usage: %s <image_buffer_{formats,volume,level,line,render,layers}.us>\n", argv[0]);
+    fprintf(stderr, "usage: %s <image_buffer_{formats,volume,level,line,render,layers,layers_render}.us>\n", argv[0]);
     return 2;
   }
 
@@ -820,7 +875,9 @@ main(int argc, char **argv) {
   ok = ok && (t.formats = ibf_compute(&t, IBF_FORMATS, "image_buffer_formats_cs"))
        && (t.volume = ibf_compute(&t, IBF_VOLUME, "image_buffer_volume_cs"))
        && (t.level = ibf_compute(&t, IBF_LEVEL, "image_buffer_level_cs"))
-       && (t.line = ibf_compute(&t, IBF_LINE, "image_buffer_line_cs")) && (t.render = ibf_renderPipeline(&t))
+       && (t.line = ibf_compute(&t, IBF_LINE, "image_buffer_line_cs")) && (t.render = ibf_renderPipeline(&t, IBF_RENDER, "image_buffer_render_vs", "image_buffer_render_fs"))
+       && (t.layersRender = ibf_renderPipeline(&t, IBF_LAYERS_RENDER, "image_buffer_layers_render_vs",
+                                               "image_buffer_layers_render_fs"))
        && (t.layers = ibf_compute(&t, IBF_LAYERS, "image_buffer_layers_cs"))
        && (t.sizes = ibf_buffer(t.device, 16u, GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_SRC))
        && (t.readback = ibf_buffer(t.device, IBF_SLOT * 16u, GPU_BUFFER_USAGE_COPY_DST | GPU_BUFFER_USAGE_COPY_SRC));
@@ -856,6 +913,7 @@ main(int argc, char **argv) {
 
   GPUDestroyBuffer(t.readback);
   GPUDestroyBuffer(t.sizes);
+  GPUDestroyRenderPipeline(t.layersRender);
   GPUDestroyRenderPipeline(t.render);
   GPUDestroyComputePipeline(t.layers);
   GPUDestroyComputePipeline(t.line);
