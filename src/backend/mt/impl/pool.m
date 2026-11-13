@@ -16,16 +16,15 @@
 
 /* small buffers and textures placed in pooled heaps: one driver allocation
  * serves many resources, so creating and destroying them stays out of the
- * kernel. Metal 4 command buffers order work through GPU-C's barriers, so
- * every small resource goes in. classic ones track a heap as one resource:
- * a shader writing anything in it makes later passes wait for that pass,
- * which would undo their overlap (a compute pass and the render pass after
- * it ran 3.5 ms apart, 6.7-7.2 ms in one heap), while resources shaders only
- * read cost nothing there; so classic devices pool those alone (buffers
- * without storage, textures neither written by shaders nor drawn into).
- * residency sets (Metal 4) and command buffers (classic) retain what they
- * use, so a destroyed resource's space is reused only once the GPU is done
- * with it. GPU_RESOURCE_POOL=0 turns the pool off. */
+ * kernel. Metal 4 devices only: their command buffers order work through
+ * GPU-C's barriers. classic ones track a heap as one resource, so anything
+ * writing in it makes later passes wait: a compute pass and the render pass
+ * after it ran 3.5 ms apart, 6.7-7.2 ms in one heap; pooling only what
+ * shaders read still let uploads and readback copies write there, and a
+ * pdf page's submit and wait took 0.3-0.7 ms longer (60 runs, an M6).
+ * residency sets retain what they hold, so a destroyed resource's space is
+ * reused only once the GPU is done with it. GPU_RESOURCE_POOL=0 turns the
+ * pool off. */
 
 #include "../common.h"
 
@@ -63,12 +62,7 @@ mt_initResourcePool(GPUDeviceMT *deviceMT) {
   const char     *env;
   uint32_t        kind;
 
-#if TARGET_OS_SIMULATOR
-  /* the Simulator's Metal: never checked with heaps */
-  return;
-#endif
-
-  if (!deviceMT
+  if (!deviceMT || deviceMT->commandMode != MTCommandMode4
       || ((env = getenv("GPU_RESOURCE_POOL")) && strcmp(env, "0") == 0)
       || ![deviceMT->device respondsToSelector:@selector(hasUnifiedMemory)]
       || !deviceMT->device.hasUnifiedMemory)
@@ -276,9 +270,7 @@ mt_poolTexture(GPUDeviceMT *deviceMT, MTLTextureDescriptor *desc) {
   id<MTLTexture>  texture;
   uint32_t        kind;
 
-  if (!deviceMT || !deviceMT->resourcePool || !desc
-      || (deviceMT->commandMode != MTCommandMode4
-          && (desc.usage & (MTLTextureUsageShaderWrite | MTLTextureUsageRenderTarget))))
+  if (!deviceMT || !deviceMT->resourcePool || !desc)
     return nil;
 
   storageMode = original = desc.storageMode;
