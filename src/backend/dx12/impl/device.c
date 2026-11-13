@@ -1674,6 +1674,8 @@ dx12_createDevice(GPUAdapter   *__restrict adapter,
     }
   }
 
+  dx12_initResourcePool(deviceDX12);
+
   return device;
 
 err:
@@ -1742,6 +1744,7 @@ dx12_destroyDevice(GPUDevice *__restrict device) {
     }
 
     if (deviceDX12->d3dDevice) {
+      dx12_destroyResourcePool(deviceDX12);
       dx12__freeSignatures(deviceDX12);
       dx12_destroyDescriptorHeaps(deviceDX12);
 

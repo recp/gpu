@@ -1199,6 +1199,7 @@ dx12_createTexture(GPUDevice                  *__restrict device,
   D3D12_HEAP_PROPERTIES heap = {0};
   D3D12_RESOURCE_DESC   desc = {0};
   D3D12_CLEAR_VALUE     clearValue = {0};
+  DX12PoolRange         poolRange;
   GPUDeviceDX12        *deviceDX12;
   ID3D12Resource       *resource;
   D3D12_RESOURCE_STATES initialState;
@@ -1233,6 +1234,11 @@ dx12_createTexture(GPUDevice                  *__restrict device,
   heap.CreationNodeMask = 1u;
   heap.VisibleNodeMask  = 1u;
   resource              = NULL;
+  memset(&poolRange, 0, sizeof(poolRange));
+
+  if (!(info->usage & GPU_TEXTURE_USAGE_DEPTH_STENCIL)
+      && dx12_poolPlaceTexture(deviceDX12, &desc, initialState, &resource, &poolRange))
+    goto placed;
 
   nativeResult = deviceDX12->d3dDevice->lpVtbl->CreateCommittedResource(deviceDX12->d3dDevice,
                                                                         &heap,
@@ -1247,6 +1253,7 @@ dx12_createTexture(GPUDevice                  *__restrict device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+placed:
   result = dx12_wrapTexture(device,
                             info,
                             resource,
@@ -1259,9 +1266,19 @@ dx12_createTexture(GPUDevice                  *__restrict device,
 
   if (result != GPU_OK) {
     resource->lpVtbl->Release(resource);
+    dx12_poolRelease(&poolRange);
+    return result;
   }
 
-  return result;
+  ((GPUTextureDX12 *)(*outTexture)->_priv)->poolRange = poolRange;
+  if (poolRange.pool)
+    return GPU_OK;
+
+#if GPU_DX12_HAS_TYPED_CLEAR
+  ((GPUTextureDX12 *)(*outTexture)->_priv)->committed = true;
+#endif
+
+  return GPU_OK;
 }
 
 GPU_HIDE
@@ -1277,6 +1294,7 @@ dx12_destroyTexture(GPUTexture *__restrict texture) {
 
   if (native && native->resource) {
     native->resource->lpVtbl->Release(native->resource);
+    dx12_poolRelease(&native->poolRange);
   }
 
   free(texture);

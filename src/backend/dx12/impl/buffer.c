@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 
 #if GPU_BUILD_WITH_DEBUG_MARKERS
 static void
@@ -534,14 +535,17 @@ dx12_createBuffer(GPUDevice                 *__restrict device,
   desc.Flags            = unorderedAccess ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE;
 
   initialState = dx12__bufferInitialState(info->usage, defaultHeap);
-  result       = deviceDX12->d3dDevice->lpVtbl->CreateCommittedResource(deviceDX12->d3dDevice,
-                                                                        &heap,
-                                                                        D3D12_HEAP_FLAG_NONE,
-                                                                        &desc,
-                                                                        initialState,
-                                                                        NULL,
-                                                                        &IID_ID3D12Resource,
-                                                                        (void **)&native->resource);
+  result       = dx12_poolPlaceBuffer(deviceDX12, heap.Type, &desc, initialState,
+                                      &native->resource, &native->poolRange)
+                 ? S_OK
+                 : deviceDX12->d3dDevice->lpVtbl->CreateCommittedResource(deviceDX12->d3dDevice,
+                                                                          &heap,
+                                                                          D3D12_HEAP_FLAG_NONE,
+                                                                          &desc,
+                                                                          initialState,
+                                                                          NULL,
+                                                                          &IID_ID3D12Resource,
+                                                                          (void **)&native->resource);
 
   if (FAILED(result) || !native->resource) {
     free(buffer);
@@ -556,6 +560,7 @@ dx12_createBuffer(GPUDevice                 *__restrict device,
 
     if (FAILED(result) || !native->mapped) {
       native->resource->lpVtbl->Release(native->resource);
+      dx12_poolRelease(&native->poolRange);
       free(buffer);
       return GPU_ERROR_BACKEND_FAILURE;
     }
@@ -597,6 +602,7 @@ dx12_destroyBuffer(GPUBuffer *__restrict buffer) {
     }
 
     native->resource->lpVtbl->Release(native->resource);
+    dx12_poolRelease(&native->poolRange);
   }
 
   free(buffer);

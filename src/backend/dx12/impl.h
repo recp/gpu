@@ -364,4 +364,40 @@ GPU_HIDE
 void
 dx12_freeShaderCode(DX12ShaderCode *code);
 
+/* small resources placed in pooled heaps (impl/pool.c); false: the caller
+ * makes a committed resource */
+
+GPU_HIDE
+void
+dx12_initResourcePool(GPUDeviceDX12 *deviceDX12);
+
+GPU_HIDE
+void
+dx12_destroyResourcePool(GPUDeviceDX12 *deviceDX12);
+
+GPU_HIDE
+void
+dx12_trimResourcePool(GPUDeviceDX12 *deviceDX12);
+
+GPU_HIDE
+bool
+dx12_poolPlaceBuffer(GPUDeviceDX12             *deviceDX12,
+                     D3D12_HEAP_TYPE            heapType,
+                     const D3D12_RESOURCE_DESC *desc,
+                     D3D12_RESOURCE_STATES      initialState,
+                     ID3D12Resource           **outResource,
+                     DX12PoolRange             *outRange);
+
+GPU_HIDE
+bool
+dx12_poolPlaceTexture(GPUDeviceDX12             *deviceDX12,
+                      const D3D12_RESOURCE_DESC *desc,
+                      D3D12_RESOURCE_STATES      initialState,
+                      ID3D12Resource           **outResource,
+                      DX12PoolRange             *outRange);
+
+GPU_HIDE
+void
+dx12_poolRelease(DX12PoolRange *range);
+
 #endif /* dx12_apis_h */

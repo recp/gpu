@@ -127,7 +127,19 @@ typedef void (WINAPI *DX12PixBeginEventFn)(ID3D12GraphicsCommandList *commandLis
 typedef void (WINAPI *DX12PixEndEventFn)(ID3D12GraphicsCommandList *commandList);
 #endif
 
+typedef struct GPUClearContextDX12  GPUClearContextDX12;
+typedef struct GPUClearPipelineDX12 GPUClearPipelineDX12;
+
+/* a buffer's or texture's range of a pooled heap (impl/pool.c) */
+typedef struct DX12PoolRange {
+  struct GPUSubAllocator *pool; /* NULL: not pooled */
+  struct GPUSubBlock     *block;
+  uint64_t                offset;
+  uint64_t                size;
+} DX12PoolRange;
+
 typedef struct GPUDeviceDX12 {
+  struct GPUSubAllocator          *resourcePool; /* NULL: every resource committed */
   ID3D12Device                    *d3dDevice;
   ID3D12Device2                   *d3dDevice2;
   ID3D12Device5                   *d3dDevice5;
@@ -267,6 +279,7 @@ typedef struct GPUSamplerFeedbackMapDX12 {
 
 typedef struct GPUBufferDX12 {
   ID3D12Resource           *resource;
+  DX12PoolRange             poolRange;
   void                     *mapped;
   D3D12_GPU_VIRTUAL_ADDRESS gpuAddress;
   uint64_t                  sizeBytes;
@@ -329,6 +342,7 @@ typedef struct GPURayTracingEncoderDX12 {
 
 typedef struct GPUTextureDX12 {
   ID3D12Resource        *resource;
+  DX12PoolRange          poolRange;
   D3D12_RESOURCE_STATES *states;
   D3D12_PACKED_MIP_INFO  packedMipInfo;
   D3D12_TILE_SHAPE       tileShape;
