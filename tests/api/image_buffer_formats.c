@@ -700,6 +700,12 @@ ibf_run(IBFTest *t) {
 
     cmdb = NULL;
     IBF_EXPECT(GPUAcquireCommandBuffer(t->queue, "image-buffer-formats-2", &cmdb) == GPU_OK && cmdb, "command buffer 2");
+
+    /* the copies out left them for transfers; back to read-write use */
+
+    for (i = 0u; i < 6u; i++)
+      GPUTransitionTexture(cmdb, t->textures[i], GPU_ACCESS_TRANSFER_READ, GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE);
+
     ibf_dispatch(cmdb, t->formats, formats, (IBF_W + 7u) / 8u, (IBF_H + 7u) / 8u, 1u);
     GPUTransitionTexture(cmdb, halves, GPU_ACCESS_SHADER_WRITE, GPU_ACCESS_TRANSFER_READ);
     GPUTransitionTexture(cmdb, bytes, GPU_ACCESS_SHADER_WRITE, GPU_ACCESS_TRANSFER_READ);
