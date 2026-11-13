@@ -1826,7 +1826,8 @@ GPUGetFormatCapabilities(const GPUAdapter      *adapter,
     }
   }
 
-  /* read-write wherever storage is, unless a backend knows less */
+  /* read-write wherever storage is when no backend answers; a backend that
+   * answers says it itself (most clear the caps first) */
   outCaps->storageReadWrite = true;
 
   if ((api = adapterApi(adapter)) && api->device.getFormatCapabilities) {

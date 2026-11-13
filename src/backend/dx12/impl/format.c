@@ -172,6 +172,9 @@ dx12_queryFormatCapabilities(const GPUAdapter *adapter) {
                                (D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD | D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE);
     caps->colorAttachment = (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_RENDER_TARGET) != 0u;
     caps->blendable       = (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_BLENDABLE) != 0u;
+
+    /* storage here already needs typed loads as well as stores */
+    caps->storageReadWrite = caps->storage;
     caps->depthStencil    = (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL) != 0u;
 
     if (caps->colorAttachment || caps->depthStencil) {

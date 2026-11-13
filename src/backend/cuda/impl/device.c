@@ -545,6 +545,7 @@ cuda_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
       outCapabilities->sampled               = (info.flags & GPU_CUDA_FORMAT_SAMPLED_BIT) != 0u;
       outCapabilities->filterable            = (info.flags & GPU_CUDA_FORMAT_FILTERABLE_BIT) != 0u;
       outCapabilities->storage               = (info.flags & GPU_CUDA_FORMAT_STORAGE_BIT) != 0u;
+      outCapabilities->storageReadWrite      = outCapabilities->storage; /* surfaces load and store */
     }
   }
 }
