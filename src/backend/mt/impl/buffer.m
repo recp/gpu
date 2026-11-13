@@ -18,6 +18,27 @@
 #include <string.h>
 #include <unistd.h>
 
+/* nothing the queue was given still runs, and no transfer waits to be sent
+ * (the check texture writes make before writing host memory) */
+
+static bool
+mt_queueIdle(GPUQueue *queue) {
+  MTCommandQueue *native;
+  uint32_t        i;
+
+  if (!(native = mt_commandQueue(queue)) || native->transferOpen || !native->inFlightGroup
+      || dispatch_group_wait(native->inFlightGroup, DISPATCH_TIME_NOW) != 0)
+    return false;
+
+  for (i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
+    if (native->transferSlots[i].pending
+        && native->transferSlots[i].command.status != MTLCommandBufferStatusCompleted)
+      return false;
+  }
+
+  return true;
+}
+
 /* classic command buffers track a pooled heap as one resource: only buffers
  * shaders never write go in there (pool.m) */
 
@@ -172,6 +193,15 @@ mt_writeBuffer(GPUQueue   *__restrict queue,
 
   if (sizeBytes > SIZE_MAX) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  /* nothing the queue was given still runs or waits: written now, the
+   * queue's order holds, with no staging copy or blit (as textures do).
+   * a private buffer's contents isn't NULL but no memory to write */
+  if (buffer.storageMode != MTLStorageModePrivate && mt_queueIdle(queue)
+      && (contents = (uint8_t *)[buffer contents])) {
+    memcpy(contents + dstOffset, data, (size_t)sizeBytes);
+    return GPU_OK;
   }
 
   result = mt_beginTransfer(queue,
