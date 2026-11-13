@@ -18,8 +18,17 @@
 #include "../../../../api/cmdqueue_internal.h"
 #include "../../../../api/frame_feedback_internal.h"
 
+/* staging a slot starts with and doubles up to MT_TRANSFER_STAGING_KEEP; a
+ * larger transfer gets staging of about its own size, kept while such
+ * transfers keep coming (making it again costs: 125 MB into kept staging
+ * 1.4-1.6 ms, into new staging 8-20 ms) and given back once
+ * MT_TRANSFER_LARGE_IDLE batches went by without one (a 125 MB page image
+ * otherwise pinned 128 MB for good) */
 enum {
   MT_TRANSFER_STAGING_CAPACITY = 4u * 1024u * 1024u,
+  MT_TRANSFER_STAGING_KEEP     = 16u * 1024u * 1024u,
+  MT_TRANSFER_STAGING_LARGE    = 1024u * 1024u, /* large staging rounds up to this */
+  MT_TRANSFER_LARGE_IDLE       = 32u,
   MT_SUBMIT_STACK_COUNT        = 64u,
   MT_TRANSFER_OFFSET_ALIGNMENT = 256u
 };
@@ -111,6 +120,11 @@ mt_observeFrameFeedback(GPUFrameFeedback *feedback, id<MTLDrawable> drawable) {
 static uint64_t
 mt_transferCapacity(uint64_t sizeBytes) {
   uint64_t capacity;
+
+  if (sizeBytes > MT_TRANSFER_STAGING_KEEP) {
+    capacity = (sizeBytes + MT_TRANSFER_STAGING_LARGE - 1u) & ~(uint64_t)(MT_TRANSFER_STAGING_LARGE - 1u);
+    return capacity >= sizeBytes ? capacity : sizeBytes;
+  }
 
   capacity = MT_TRANSFER_STAGING_CAPACITY;
 
@@ -691,6 +705,33 @@ mt_freeTransferSlot(MTCommandQueue *native) {
   return &native->transferSlots[native->nextTransferSlot];
 }
 
+/* large staging of slots the GPU is done with goes back */
+static void
+mt_trimTransferStaging(GPUQueue *queue, MTCommandQueue *native) {
+  MTTransferSlot        *slot;
+  MTLCommandBufferStatus status;
+  uint32_t               i;
+
+  for (i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
+    slot = &native->transferSlots[i];
+
+    if (!slot->staging || slot->capacity <= MT_TRANSFER_STAGING_KEEP)
+      continue;
+
+    if (slot->pending) {
+      status = slot->command.status;
+      if (status != MTLCommandBufferStatusCompleted && status != MTLCommandBufferStatusError)
+        continue;
+      (void)mt_waitTransfer(queue, slot, false);
+    }
+
+    [slot->staging release];
+    slot->staging  = nil;
+    slot->capacity = 0u;
+    slot->used     = 0u;
+  }
+}
+
 GPU_HIDE
 GPUResult
 mt_beginTransfer(GPUQueue                  *queue,
@@ -717,6 +758,9 @@ mt_beginTransfer(GPUQueue                  *queue,
   if (!native || (!native->classic && !native->upload)) {
     return GPU_ERROR_UNSUPPORTED;
   }
+
+  if (sizeBytes > MT_TRANSFER_STAGING_KEEP)
+    native->transfersSinceLarge = 0u;
 
   if (native->transferOpen) {
     slot = &native->transferSlots[native->activeTransferSlot];
@@ -748,6 +792,13 @@ mt_beginTransfer(GPUQueue                  *queue,
 
   slot   = mt_freeTransferSlot(native);
   result = mt_waitTransfer(queue, slot, true);
+
+  /* a batch: past MT_TRANSFER_LARGE_IDLE without large staging, the large
+   * staging left goes, this slot's too (done with: it's set up small below) */
+  if (sizeBytes <= MT_TRANSFER_STAGING_KEEP && native->transfersSinceLarge < MT_TRANSFER_LARGE_IDLE)
+    native->transfersSinceLarge++;
+  if (result == GPU_OK && native->transfersSinceLarge >= MT_TRANSFER_LARGE_IDLE)
+    mt_trimTransferStaging(queue, native);
 
   if (result != GPU_OK
       || !mt_ensureTransferStaging(queue, slot, sizeBytes)) {
@@ -870,6 +921,8 @@ mt_waitCommandQueueIdle(GPUQueue *queue) {
   }
 
   dispatch_group_wait(native->inFlightGroup, DISPATCH_TIME_FOREVER);
+  if (native->transfersSinceLarge >= MT_TRANSFER_LARGE_IDLE)
+    mt_trimTransferStaging(queue, native);
 
   return GPU_OK;
 }
