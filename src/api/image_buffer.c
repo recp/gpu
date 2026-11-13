@@ -345,7 +345,7 @@ ib_track(GPUImageBuffer *ib, const GPUTexture *texture) {
     counts  += m->count;
   }
 
-  if (!(block = calloc(1, words * sizeof(uint64_t) + counts * sizeof(uint32_t))))
+  if (!(block = calloc(1, words * sizeof(uint64_t) + 2u * counts * sizeof(uint32_t))))
     return false;
 
   ib->tracking = block;
@@ -364,14 +364,30 @@ ib_track(GPUImageBuffer *ib, const GPUTexture *texture) {
 
   for (mip = 0u; mip < ib->mipCount; mip++) {
     m              = &ib->mips[mip];
-    m->layerCounts = (uint32_t *)(block + at);
-    at            += m->count * sizeof(uint32_t);
+    m->layerCounts  = (uint32_t *)(block + at);
+    at             += m->count * sizeof(uint32_t);
+    m->renderCounts = (uint32_t *)(block + at);
+    at             += m->count * sizeof(uint32_t);
 
     for (i = 0u; i < m->count; i++)
       m->layerCounts[i] = m->count - i;
   }
 
   return true;
+}
+
+/* the layers a view from 'layer' sees: 'count', or all from it on (0, or past the end) */
+
+static uint32_t
+ib_seen(const GPUImageBufferMip *m, uint32_t layer, uint32_t count) {
+  return count && count < m->count - layer ? count : m->count - layer;
+}
+
+/* a view the shader sees as an array: only these read the layer count */
+
+static bool
+ib_layered(const GPUTextureView *view) {
+  return view->viewType == GPU_TEXTURE_VIEW_1D_ARRAY || view->viewType == GPU_TEXTURE_VIEW_2D_ARRAY;
 }
 
 static GPUImageBuffer*
@@ -644,6 +660,7 @@ typedef struct GPUImageBufferUse {
   bool     readWrite;  /* the buffer, at its base level */
   bool     writes;     /* write-only storage: the texture */
   bool     render;     /* visible to render stages */
+  bool     layered;    /* an array view: its shader may ask its layer count */
 } GPUImageBufferUse;
 
 typedef bool (*GPUImageBufferVisitFn)(void *ctx, GPUImageBuffer *ib, const GPUImageBufferUse *use);
@@ -681,6 +698,7 @@ ib_visitGroup(GPUBindGroup *group, GPUImageBufferVisitFn fn, void *ctx) {
     use.mips       = ib_mipMask(ib, view->baseMipLevel, use.readWrite ? 1u : view->mipLevelCount);
     use.layer      = view->baseArrayLayer;
     use.layerCount = view->arrayLayerCount;
+    use.layered    = ib_layered(view);
 
     if (!fn(ctx, ib, &use))
       return false;
@@ -689,9 +707,32 @@ ib_visitGroup(GPUBindGroup *group, GPUImageBufferVisitFn fn, void *ctx) {
   return true;
 }
 
+/* a render stage's read-write view of an array: the layer count its first
+ * header must hold while a pass runs. a pass can't write headers once begun,
+ * so render passes write these before they begin; two such views from one
+ * layer that see different counts can't both be right (the later one is) */
+
+static void
+ib_renderView(GPUImageBuffer *ib, const GPUTextureView *view) {
+  GPUImageBufferMip *m;
+  uint32_t           count;
+
+  if (!ib_layered(view) || ib->texture->dimension == GPU_TEXTURE_DIMENSION_3D
+      || view->baseArrayLayer >= (m = &ib->mips[view->baseMipLevel])->count)
+    return;
+
+  count = ib_seen(m, view->baseArrayLayer, view->arrayLayerCount);
+
+  if (m->renderCounts[view->baseArrayLayer] != count) {
+    m->renderCounts[view->baseArrayLayer] = count;
+    ib->renderStale                       = true;
+  }
+}
+
 /* a group made or updated: the levels it binds read-write to render stages,
- * which render passes copy into the buffer before they begin, and the
- * textures render stages read otherwise, which render passes bring up to date */
+ * which render passes copy into the buffer before they begin (and the layer
+ * counts those views need), and the textures render stages read otherwise,
+ * which render passes bring up to date */
 
 GPU_HIDE
 void
@@ -726,8 +767,13 @@ imageBufferGroupCreated(GPUBindGroup *group) {
     }
 
     if ((ib = view->_texture->_imageBuffer ? view->_texture->_imageBuffer : ib_create(view->_texture))
-        && view->baseMipLevel < ib->mipCount)
+        && view->baseMipLevel < ib->mipCount) {
+      /* render passes read these under the lock as they begin */
+      ib_lock(view->_texture->device);
       ib->renderMips |= 1u << view->baseMipLevel;
+      ib_renderView(ib, view);
+      ib_unlock(view->_texture->device);
+    }
   }
 }
 
@@ -949,7 +995,7 @@ ib_viewCount(const GPUImageBuffer *ib, const GPUImageBufferUse *use) {
   const GPUImageBufferMip *m;
   uint32_t                 mip, count;
 
-  if (!use->readWrite || ib->texture->dimension == GPU_TEXTURE_DIMENSION_3D)
+  if (!use->readWrite || !use->layered || ib->texture->dimension == GPU_TEXTURE_DIMENSION_3D)
     return 0u;
 
   for (mip = 0u; mip < ib->mipCount && !(use->mips & (1u << mip)); mip++) {}
@@ -957,28 +1003,39 @@ ib_viewCount(const GPUImageBuffer *ib, const GPUImageBufferUse *use) {
   if (mip == ib->mipCount || use->layer >= (m = &ib->mips[mip])->count)
     return 0u;
 
-  count = use->layerCount && use->layerCount < m->count - use->layer ? use->layerCount : m->count - use->layer;
+  count = ib_seen(m, use->layer, use->layerCount);
 
   return m->layerCounts[use->layer] != count && count < GPU_IMAGE_BUFFER_COUNTS ? count : 0u;
 }
 
-/* outside a pass: that count copied into the view's first header */
+/* a layer count to put in a header */
 
-static void
-ib_writeViewCount(GPUCommandBuffer *cmdb, GPUImageBuffer *ib, const GPUImageBufferUse *use) {
+typedef struct GPUImageBufferCount {
+  uint32_t mip;
+  uint32_t layer;
+  uint32_t count;
+} GPUImageBufferCount;
+
+/* outside a pass: counts copied into their layers' headers, one transfer
+ * pass for them all; false if they couldn't be */
+
+static bool
+ib_writeCounts(GPUCommandBuffer *cmdb, GPUImageBuffer *ib, const GPUImageBufferCount *writes, uint32_t n) {
   GPUTransferPassEncoder *pass;
+  GPUImageBufferMip      *m;
   GPUBufferCopyRegion     region;
   GPUBufferBarrier        buffer;
   GPUBarrierBatch         batch;
   GPUBuffer              *counts;
   GPUApi                 *api;
-  uint32_t                mip, count;
+  uint32_t                i;
 
-  if (!(count = ib_viewCount(ib, use)) || !(api = commandBufferApi(cmdb)) || !api->renderPass.copyBufferToBuffer
+  if (!n)
+    return true;
+
+  if (!(api = commandBufferApi(cmdb)) || !api->renderPass.copyBufferToBuffer
       || !(counts = ib_counts(ib->texture->device, cmdb->_queue)))
-    return;
-
-  for (mip = 0u; !(use->mips & (1u << mip)); mip++) {}
+    return false;
 
   memset(&buffer, 0, sizeof(buffer));
   memset(&batch, 0, sizeof(batch));
@@ -993,10 +1050,16 @@ ib_writeViewCount(GPUCommandBuffer *cmdb, GPUImageBuffer *ib, const GPUImageBuff
   GPUEncodeBarriers(cmdb, &batch);
 
   if ((pass = GPUBeginTransferPass(cmdb, "gpu image buffer layer count"))) {
-    region.srcOffset = (uint64_t)count * sizeof(uint32_t);
-    region.dstOffset = ib->mips[mip].base + (uint64_t)use->layer * ib->mips[mip].layerBytes + 3u * sizeof(uint32_t);
     region.sizeBytes = sizeof(uint32_t);
-    api->renderPass.copyBufferToBuffer(pass, counts, ib->buffer, &region);
+
+    for (i = 0u; i < n; i++) {
+      m                = &ib->mips[writes[i].mip];
+      region.srcOffset = (uint64_t)writes[i].count * sizeof(uint32_t);
+      region.dstOffset = m->base + (uint64_t)writes[i].layer * m->layerBytes + 3u * sizeof(uint32_t);
+      api->renderPass.copyBufferToBuffer(pass, counts, ib->buffer, &region);
+      m->layerCounts[writes[i].layer] = writes[i].count;
+    }
+
     GPUEndTransferPass(pass);
   }
 
@@ -1006,7 +1069,69 @@ ib_writeViewCount(GPUCommandBuffer *cmdb, GPUImageBuffer *ib, const GPUImageBuff
   batch.dstStages  = GPU_STAGE_COMPUTE | GPU_STAGE_FRAGMENT;
   GPUEncodeBarriers(cmdb, &batch);
 
-  ib->mips[mip].layerCounts[use->layer] = count;
+  return pass != NULL;
+}
+
+/* outside a pass: the count a view needs in its first header, where it
+ * differs (a render pass's view there wants its own back after) */
+
+static void
+ib_writeViewCount(GPUCommandBuffer *cmdb, GPUImageBuffer *ib, const GPUImageBufferUse *use) {
+  GPUImageBufferCount write;
+
+  if (!(write.count = ib_viewCount(ib, use)))
+    return;
+
+  for (write.mip = 0u; !(use->mips & (1u << write.mip)); write.mip++) {}
+
+  write.layer = use->layer;
+
+  if (ib_writeCounts(cmdb, ib, &write, 1u) && ib->mips[write.mip].renderCounts[write.layer])
+    ib->renderStale = true;
+}
+
+/* before a render pass begins: the counts render stages' read-write views
+ * of arrays need, where a dispatch or another view left others */
+
+static void
+ib_renderCounts(GPUCommandBuffer *cmdb, GPUImageBuffer *ib) {
+  GPUImageBufferCount      writes[16];
+  const GPUImageBufferMip *m;
+  uint32_t                 mip, layer, want, n;
+  bool                     ok;
+
+  if (!ib->renderStale)
+    return;
+
+  if (!ib->headers)
+    ib_writeHeaders(ib, cmdb->_queue);
+
+  ok = true;
+  n  = 0u;
+
+  for (mip = 0u; mip < ib->mipCount; mip++) {
+    if (!(ib->renderMips & (1u << mip)))
+      continue;
+
+    m = &ib->mips[mip];
+
+    for (layer = 0u; layer < m->count; layer++) {
+      if (!(want = m->renderCounts[layer]) || want == m->layerCounts[layer] || want >= GPU_IMAGE_BUFFER_COUNTS)
+        continue;
+
+      writes[n].mip   = mip;
+      writes[n].layer = layer;
+      writes[n].count = want;
+
+      if (++n == GPU_ARRAY_LEN(writes)) {
+        ok = ib_writeCounts(cmdb, ib, writes, n) && ok;
+        n  = 0u;
+      }
+    }
+  }
+
+  ok              = ib_writeCounts(cmdb, ib, writes, n) && ok;
+  ib->renderStale = !ok;
 }
 
 typedef struct GPUImageBufferSync {
@@ -1132,6 +1257,7 @@ imageBufferRenderSync(GPUCommandBuffer *cmdb, const GPURenderPassCreateInfo *inf
       ib_copy(cmdb, ib, true, ib->bufferNewer, 0u, UINT32_MAX);
 
     ib_copy(cmdb, ib, false, ib->textureNewer & ib->renderMips, 0u, UINT32_MAX);
+    ib_renderCounts(cmdb, ib);
   }
 
   ib_unlock(device);

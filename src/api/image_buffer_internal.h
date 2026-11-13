@@ -53,6 +53,7 @@ typedef struct GPUImageBufferMip {
   uint64_t *bufferNewer;  /* a bit a layer (one for a 3d level): read-write bindings wrote it last */
   uint64_t *textureNewer; /* a bit a layer: something else wrote it last, or it was never copied */
   uint32_t *layerCounts;  /* header word 3 of each layer now: the layers a binding there sees */
+  uint32_t *renderCounts; /* the word a render pass's read-write array view from a layer needs (0: none) */
   uint32_t  pitchBytes;
   uint32_t  width;
   uint32_t  height;
@@ -70,6 +71,7 @@ typedef struct GPUImageBuffer {
   uint32_t               renderMips;   /* levels bound read-write to vertex or fragment shaders */
   uint32_t               mipCount;
   bool                   headers;      /* the header rows are written */
+  bool                   renderStale;  /* a layer count may differ from its renderCounts */
   GPUImageBufferMip      mips[];
 } GPUImageBuffer;
 
