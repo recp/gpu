@@ -647,9 +647,12 @@ mt_applyPendingBarrier(GPUCommandBuffer *cmdb,
     } else
 #endif
     {
+#if !TARGET_OS_SIMULATOR
+      /* the Simulator's encoders say they have queue barriers and throw; classic resources are tracked */
       [(id<MTLCommandEncoder>)encoder
         barrierAfterQueueStages:native->pendingAfterStages
                    beforeStages:native->pendingBeforeStages];
+#endif
     }
   }
 

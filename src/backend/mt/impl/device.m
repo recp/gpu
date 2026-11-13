@@ -1055,10 +1055,16 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
 #else
       return adapterMT->appleFamily2;
 #endif
+    case GPU_FEATURE_BUFFER_HOST_MEMORY_EXT:
+#if TARGET_OS_SIMULATOR
+      /* the Simulator's Metal traps wrapping host pages (newBufferWithBytesNoCopy) */
+      return false;
+#else
+      return true;
+#endif
     case GPU_FEATURE_COMPUTE:
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_SHADER_F16:
-    case GPU_FEATURE_BUFFER_HOST_MEMORY_EXT:
     case GPU_FEATURE_THREADED_UPLOADS:
       return true;
     case GPU_FEATURE_FRAME_PACER:
