@@ -54,6 +54,7 @@ enum {
   IBF_LEVEL,
   IBF_LINE,
   IBF_RENDER,
+  IBF_LAYERS,
   IBF_LIBRARIES
 };
 
@@ -62,12 +63,12 @@ typedef struct IBFTest {
   GPUQueue           *queue;
   GPUShaderLibrary   *libraries[IBF_LIBRARIES];
   GPUShaderLayout    *layouts[IBF_LIBRARIES];
-  GPUComputePipeline *formats, *volume, *level, *line;
+  GPUComputePipeline *formats, *volume, *level, *line, *layers;
   GPURenderPipeline  *render;
   GPUBuffer          *sizes, *readback;
-  GPUTexture         *textures[13];
-  GPUTextureView     *views[13];
-  GPUBindGroup       *groups[6];
+  GPUTexture         *textures[16];
+  GPUTextureView     *views[20];
+  GPUBindGroup       *groups[10];
   uint32_t            textureCount, viewCount, groupCount;
 } IBFTest;
 
@@ -219,6 +220,29 @@ ibf_library(IBFTest *t, uint32_t index, const char *path) {
   free(bytecode);
 
   return ok;
+}
+
+/* a 2d array view of 'count' layers from 'layer' */
+
+static GPUTextureView*
+ibf_layers(IBFTest *t, GPUTexture *texture, uint32_t layer, uint32_t count) {
+  GPUTextureViewCreateInfo info = {0};
+  GPUTextureView          *view = NULL;
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.viewType         = GPU_TEXTURE_VIEW_2D_ARRAY;
+  info.format           = texture->format;
+  info.mipLevelCount    = 1u;
+  info.baseArrayLayer   = layer;
+  info.arrayLayerCount  = count;
+
+  if (GPUCreateTextureView(texture, &info, &view) != GPU_OK || !view)
+    return NULL;
+
+  t->views[t->viewCount++] = view;
+
+  return view;
 }
 
 static GPUComputePipeline*
@@ -653,6 +677,109 @@ ibf_run(IBFTest *t) {
     }
   }
 
+  /* uploads on the queue while the buffers are newer: rows 1-2 of the
+   * float16 image whole, four texels of the r8unorm one; the kernel again */
+
+  {
+    GPUTextureWriteRegion write = {0};
+    uint16_t              rows[IBF_W * 2u * 4u];
+    uint8_t               four[4] = {10u, 20u, 30u, 40u};
+
+    for (i = 0u; i < IBF_W * 2u * 4u; i++)
+      rows[i] = (uint16_t)ibf_small(0.25f + 0.5f * (float)(i & 3u), 10u, true);
+
+    write.width = IBF_W, write.height = 2u, write.depth = 1u, write.layerCount = 1u, write.y = 1u;
+    write.bytesPerRow = IBF_W * 8u;
+    IBF_EXPECT(GPUQueueWriteTexture(t->queue, halves, &write, rows, sizeof(rows)) == GPU_OK, "upload rows");
+
+    memset(&write, 0, sizeof(write));
+    write.width = 4u, write.height = 1u, write.depth = 1u, write.layerCount = 1u, write.x = 4u;
+    write.bytesPerRow = 4u;
+    IBF_EXPECT(GPUQueueWriteTexture(t->queue, bytes, &write, four, sizeof(four)) == GPU_OK, "upload texels");
+
+    cmdb = NULL;
+    IBF_EXPECT(GPUAcquireCommandBuffer(t->queue, "image-buffer-formats-2", &cmdb) == GPU_OK && cmdb, "command buffer 2");
+    ibf_dispatch(cmdb, t->formats, formats, (IBF_W + 7u) / 8u, (IBF_H + 7u) / 8u, 1u);
+    GPUTransitionTexture(cmdb, halves, GPU_ACCESS_SHADER_WRITE, GPU_ACCESS_TRANSFER_READ);
+    GPUTransitionTexture(cmdb, bytes, GPU_ACCESS_SHADER_WRITE, GPU_ACCESS_TRANSFER_READ);
+    IBF_EXPECT((copy = GPUBeginTransferPass(cmdb, "image-buffer-formats-readback-2")), "transfer pass 2");
+    ibf_copyOut(copy, t, bytes, 0u, 0u, IBF_W, IBF_H, 1u, 1u);
+    ibf_copyOut(copy, t, halves, 1u, 0u, IBF_W, IBF_H, 1u, 1u);
+    GPUEndTransferPass(copy);
+    IBF_EXPECT(GPUCreateFence(t->device, NULL, &fence) == GPU_OK, "fence 2");
+    submit.ppCommandBuffers = &cmdb;
+    submit.fence            = fence;
+    ok = GPUQueueSubmit(t->queue, &submit) == GPU_OK && GPUWaitFence(fence, UINT64_MAX) == GPU_OK
+         && GPUQueueReadBuffer(t->queue, t->readback, 0u, readback, IBF_SLOT * 2u) == GPU_OK;
+    GPUDestroyFence(fence);
+    IBF_EXPECT(ok, "submission or readback 2");
+
+    for (y = 0u; y < IBF_H; y++) {
+      for (x = 0u; x < IBF_W; x++) {
+        uint32_t expected = y == 0u && x >= 4u && x < 8u ? 255u - four[x - 4u] : (uint32_t)ibf_byteValue(x, y);
+
+        IBF_EXPECT(*ibf_texel(readback, 0u, y, x, 1u) == expected, "r8unorm after upload %u,%u is %u, expected %u", x, y,
+                   *ibf_texel(readback, 0u, y, x, 1u), expected);
+
+        for (c = 0u; c < 4u; c++) {
+          uint16_t hv;
+          float    v = y == 1u || y == 2u ? 2.0f * (0.25f + 0.5f * (float)c) : 4.0f * ibf_half(x, y, c);
+
+          memcpy(&hv, ibf_texel(readback, 1u, y, x, 8u) + c * 2u, 2u);
+          IBF_EXPECT(hv == ibf_small(v, 10u, true), "rgba16float after upload %u,%u.%u is %04x, expected %04x", x, y, c,
+                     hv, ibf_small(v, 10u, true));
+        }
+      }
+    }
+  }
+
+  /* views of some layers of a 3-layer array: layer 1 alone, all three, layers
+   * 1-2; each adds 1000 times the layers it reports to its first layer */
+
+  {
+    GPUTexture     *array;
+    GPUTextureView *one, *all, *two;
+    GPUBindGroup   *gOne, *gAll, *gTwo;
+    uint32_t        start[5u * 4u * 3u], v, expected;
+
+    for (i = 0u; i < 5u * 4u * 3u; i++)
+      start[i] = i;
+
+    ok = (array = ibf_texture(t, GPU_TEXTURE_DIMENSION_2D, GPU_FORMAT_R32_UINT, 5u, 4u, 3u, 1u, 0u))
+         && ibf_upload(t, array, 0u, 5u, 4u, 1u, 3u, 4u, start) && (one = ibf_layers(t, array, 1u, 1u))
+         && (all = ibf_layers(t, array, 0u, 3u)) && (two = ibf_layers(t, array, 1u, 2u))
+         && (gOne = ibf_group(t, IBF_LAYERS, &one, 1u, false)) && (gAll = ibf_group(t, IBF_LAYERS, &all, 1u, false))
+         && (gTwo = ibf_group(t, IBF_LAYERS, &two, 1u, false));
+    IBF_EXPECT(ok, "layer views");
+
+    cmdb = NULL;
+    IBF_EXPECT(GPUAcquireCommandBuffer(t->queue, "image-buffer-layers", &cmdb) == GPU_OK && cmdb, "command buffer 3");
+    ibf_dispatch(cmdb, t->layers, gOne, 1u, 1u, 1u);
+    ibf_dispatch(cmdb, t->layers, gAll, 1u, 1u, 1u);
+    ibf_dispatch(cmdb, t->layers, gTwo, 1u, 1u, 1u);
+    GPUTransitionTexture(cmdb, array, GPU_ACCESS_SHADER_WRITE, GPU_ACCESS_TRANSFER_READ);
+    IBF_EXPECT((copy = GPUBeginTransferPass(cmdb, "image-buffer-layers-readback")), "transfer pass 3");
+    ibf_copyOut(copy, t, array, 0u, 0u, 5u, 4u, 1u, 3u);
+    GPUEndTransferPass(copy);
+    IBF_EXPECT(GPUCreateFence(t->device, NULL, &fence) == GPU_OK, "fence 3");
+    submit.ppCommandBuffers = &cmdb;
+    submit.fence            = fence;
+    ok = GPUQueueSubmit(t->queue, &submit) == GPU_OK && GPUWaitFence(fence, UINT64_MAX) == GPU_OK
+         && GPUQueueReadBuffer(t->queue, t->readback, 0u, readback, IBF_SLOT) == GPU_OK;
+    GPUDestroyFence(fence);
+    IBF_EXPECT(ok, "submission or readback 3");
+
+    for (z = 0u; z < 3u; z++) {
+      for (y = 0u; y < 4u; y++) {
+        for (x = 0u; x < 5u; x++) {
+          expected = (z * 4u + y) * 5u + x + (z < 2u ? 3000u : 0u);
+          memcpy(&v, ibf_texel(readback, 0u, z * 4u + y, x, 4u), 4u);
+          IBF_EXPECT(v == expected, "layer %u at %u,%u is %u, expected %u", z, x, y, v, expected);
+        }
+      }
+    }
+  }
+
   return 1;
 }
 
@@ -666,7 +793,7 @@ main(int argc, char **argv) {
   int          ok;
 
   if (argc < 1 + IBF_LIBRARIES) {
-    fprintf(stderr, "usage: %s <image_buffer_{formats,volume,level,line,render}.us>\n", argv[0]);
+    fprintf(stderr, "usage: %s <image_buffer_{formats,volume,level,line,render,layers}.us>\n", argv[0]);
     return 2;
   }
 
@@ -687,6 +814,7 @@ main(int argc, char **argv) {
        && (t.volume = ibf_compute(&t, IBF_VOLUME, "image_buffer_volume_cs"))
        && (t.level = ibf_compute(&t, IBF_LEVEL, "image_buffer_level_cs"))
        && (t.line = ibf_compute(&t, IBF_LINE, "image_buffer_line_cs")) && (t.render = ibf_renderPipeline(&t))
+       && (t.layers = ibf_compute(&t, IBF_LAYERS, "image_buffer_layers_cs"))
        && (t.sizes = ibf_buffer(t.device, 16u, GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_SRC))
        && (t.readback = ibf_buffer(t.device, IBF_SLOT * 16u, GPU_BUFFER_USAGE_COPY_DST | GPU_BUFFER_USAGE_COPY_SRC));
 
@@ -722,6 +850,7 @@ main(int argc, char **argv) {
   GPUDestroyBuffer(t.readback);
   GPUDestroyBuffer(t.sizes);
   GPUDestroyRenderPipeline(t.render);
+  GPUDestroyComputePipeline(t.layers);
   GPUDestroyComputePipeline(t.line);
   GPUDestroyComputePipeline(t.level);
   GPUDestroyComputePipeline(t.volume);

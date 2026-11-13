@@ -388,7 +388,8 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     "${CMAKE_CURRENT_SOURCE_DIR}/image_buffer_volume.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/image_buffer_level.usl"
     "${CMAKE_CURRENT_SOURCE_DIR}/image_buffer_line.usl"
-    "${CMAKE_CURRENT_SOURCE_DIR}/image_buffer_render.usl")
+    "${CMAKE_CURRENT_SOURCE_DIR}/image_buffer_render.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/image_buffer_layers.usl")
 
   add_executable(gpu-image-buffer-formats-test image_buffer_formats.c runner.c ${GPU_IMAGE_BUFFER_FORMAT_FIXTURES})
 

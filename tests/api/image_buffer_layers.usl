@@ -1,0 +1,13 @@
+/* a read-write view of some layers of an array: the layer count it reports
+ * and the layers it writes */
+
+kern(8, 8) image_buffer_layers_cs(
+  layers: image2d_array<r32uint, read_write> #texture(0),
+  pixel:  uint2                              #global_id
+) {
+  if (pixel.x >= layers.get_width() || pixel.y >= layers.get_height()) { return }
+
+  let n = layers.get_array_size()
+  let v = layers.read(uint3(pixel, 0u))
+  layers.write(uint4(v.x + n * 1000u, 0u, 0u, 0u), uint3(pixel, 0u))
+}
