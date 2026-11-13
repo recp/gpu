@@ -67,6 +67,10 @@ webgpu_bufferUsage(GPUBufferUsageFlags usage) {
   return result;
 }
 
+/* a WGPUBuffer each: WebGPU checks a pass's usages per whole buffer, so
+ * storage buffers can't share one, and pooling the rest measured too small
+ * to pay */
+
 static GPUResult
 webgpu_createBuffer(GPUDevice                 *__restrict device,
                     const GPUBufferCreateInfo *__restrict info,
