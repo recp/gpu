@@ -541,6 +541,7 @@ ibf_run(IBFTest *t) {
   ibf_dispatch(cmdb, t->level, levels[1], 1u, 1u, 1u);
   ibf_dispatch(cmdb, t->line, lineGroup, (IBF_LINE_W + 15u) / 16u, 1u, 1u);
   ibf_draw(cmdb, t, rtView, render);
+  GPUTransitionTexture(cmdb, counts, GPU_ACCESS_SHADER_WRITE, GPU_ACCESS_SHADER_READ | GPU_ACCESS_SHADER_WRITE);
   ibf_draw(cmdb, t, rtView, render);
   ibf_dispatch(cmdb, t->volume, volumeGroup, (IBF_VOL_W + 3u) / 4u, 1u, 1u);
 
