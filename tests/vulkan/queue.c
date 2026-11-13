@@ -624,6 +624,7 @@ buffer_transfers_reuse(GPUDevice *device,
   uint64_t            readbackCapacity;
   uint32_t            value;
   uint32_t            copied;
+  uint32_t            used;
   int                 ok;
 
   native = queue ? queue->_priv : NULL;
@@ -674,11 +675,21 @@ buffer_transfers_reuse(GPUDevice *device,
     return 0;
   }
 
+  /* uploads take finished slots first, so only some may be set up (all
+   * of them only while the GPU lags behind); each set up one is whole */
+  used = 0u;
+
   for (uint32_t i = 0u; i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
     GPUBufferVk *upload;
 
     slots[i] = native->transferSlots[i];
     upload   = slots[i].uploadStaging ? slots[i].uploadStaging->_priv : NULL;
+
+    if (!slots[i].command && !slots[i].uploadStaging) {
+      continue;
+    }
+
+    used++;
 
     if (!slots[i].command || !slots[i].fence || !upload
         || !upload->buffer || !upload->memory || !upload->mapped
@@ -687,6 +698,12 @@ buffer_transfers_reuse(GPUDevice *device,
       GPUDestroyBuffer(buffer);
       return 0;
     }
+  }
+
+  if (used == 0u) {
+    (void)wait_queue(queue, fence);
+    GPUDestroyBuffer(buffer);
+    return 0;
   }
 
   readback         = native->readbackStaging;
@@ -730,8 +747,13 @@ buffer_transfers_reuse(GPUDevice *device,
     }
   }
 
+  /* set up slots are reused as they are; unused ones may be set up since */
   for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
     GPUTransferSlotVk *slot;
+
+    if (!slots[i].command && !slots[i].uploadStaging) {
+      continue;
+    }
 
     slot = &native->transferSlots[i];
     ok   = slot->command == slots[i].command
@@ -804,14 +826,19 @@ texture_uploads_reuse(GPUDevice *device,
 
   ok = ok && wait_queue(queue, fence);
 
+  /* uploads take finished slots first: each set up slot is whole, and
+   * at least one is */
+  ok = ok && (native->transferSlots[0].command || native->transferSlots[0].uploadStaging);
+
   for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
     GPUBufferVk *upload;
 
     slots[i] = native->transferSlots[i];
     upload   = slots[i].uploadStaging ? slots[i].uploadStaging->_priv : NULL;
-    ok       = slots[i].command && slots[i].fence && upload && upload->buffer
-               && upload->memory && upload->mapped
-               && slots[i].uploadCapacity >= sizeof(kTextureUpload);
+    ok       = (!slots[i].command && !slots[i].uploadStaging)
+               || (slots[i].command && slots[i].fence && upload && upload->buffer
+                   && upload->memory && upload->mapped
+                   && slots[i].uploadCapacity >= sizeof(kTextureUpload));
   }
 
   for (uint32_t i = 0u; ok && i < 16u; i++) {
@@ -830,8 +857,13 @@ texture_uploads_reuse(GPUDevice *device,
     }
   }
 
+  /* set up slots are reused as they are; unused ones may be set up since */
   for (uint32_t i = 0u; ok && i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
     GPUTransferSlotVk *slot;
+
+    if (!slots[i].command && !slots[i].uploadStaging) {
+      continue;
+    }
 
     slot = &native->transferSlots[i];
     ok   = slot->command == slots[i].command
