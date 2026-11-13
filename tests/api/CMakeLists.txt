@@ -415,3 +415,31 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     endforeach()
   endforeach()
 endif()
+
+# GPU_FEATURE_THREADED_UPLOADS on whichever backend is built: uploaders on
+# worker threads and queue writes and submits on the main one, one queue
+
+if(NOT EMSCRIPTEN)
+  add_executable(gpu-threaded-uploads-test threaded_uploads.c runner.c)
+
+  set_target_properties(gpu-threaded-uploads-test PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+  if(NOT MSVC)
+    target_compile_options(gpu-threaded-uploads-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+  endif()
+
+  target_link_libraries(gpu-threaded-uploads-test PRIVATE gpu Threads::Threads)
+
+  if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    foreach(mode classic metal4)
+      add_test(NAME threaded-uploads-${mode} COMMAND gpu-threaded-uploads-test)
+      set_tests_properties(threaded-uploads-${mode} PROPERTIES
+        ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1"
+        SKIP_RETURN_CODE 77 LABELS "upload;threading" TIMEOUT 60 RUN_SERIAL TRUE)
+    endforeach()
+  else()
+    add_test(NAME threaded-uploads COMMAND gpu-threaded-uploads-test)
+    set_tests_properties(threaded-uploads PROPERTIES
+      SKIP_RETURN_CODE 77 LABELS "upload;threading" TIMEOUT 60 RUN_SERIAL TRUE)
+  endif()
+endif()
