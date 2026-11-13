@@ -18,6 +18,17 @@
 #include <string.h>
 #include <unistd.h>
 
+/* classic command buffers track a pooled heap as one resource: only buffers
+ * shaders never write go in there (pool.m) */
+
+static bool
+mt_poolable(const GPUDeviceMT *deviceMT, GPUBufferUsageFlags usage) {
+  return deviceMT->commandMode == MTCommandMode4
+         || !(usage & ~(GPUBufferUsageFlags)(GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_INDEX
+                                             | GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_INDIRECT
+                                             | GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST));
+}
+
 GPU_HIDE
 GPUResult
 mt_wrapBuffer(GPUDevice                 *device,
@@ -96,7 +107,8 @@ mt_createBuffer(GPUDevice                 *__restrict device,
                                                  length:(NSUInteger)host->allocationSize
                                                 options:MTLResourceStorageModeShared
                                             deallocator:nil];
-  } else if (!(buffer = mt_poolBuffer(deviceMT, (NSUInteger)info->sizeBytes))) {
+  } else if (!mt_poolable(deviceMT, info->usage)
+             || !(buffer = mt_poolBuffer(deviceMT, (NSUInteger)info->sizeBytes))) {
     buffer = [deviceMT->device newBufferWithLength:(NSUInteger)info->sizeBytes
                                            options:MTLResourceStorageModeShared];
   }

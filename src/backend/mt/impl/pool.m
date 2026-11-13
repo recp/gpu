@@ -16,10 +16,15 @@
 
 /* small buffers and textures placed in pooled heaps: one driver allocation
  * serves many resources, so creating and destroying them stays out of the
- * kernel. Metal 4 devices only: their command buffers order work through
- * GPU-C's barriers, while classic ones would track a pooled heap as one
- * resource and serialize unrelated work. residency sets retain what they
- * hold, so a destroyed resource's space is reused only once the GPU is done
+ * kernel. Metal 4 command buffers order work through GPU-C's barriers, so
+ * every small resource goes in. classic ones track a heap as one resource:
+ * a shader writing anything in it makes later passes wait for that pass,
+ * which would undo their overlap (a compute pass and the render pass after
+ * it ran 3.5 ms apart, 6.7-7.2 ms in one heap), while resources shaders only
+ * read cost nothing there; so classic devices pool those alone (buffers
+ * without storage, textures neither written by shaders nor drawn into).
+ * residency sets (Metal 4) and command buffers (classic) retain what they
+ * use, so a destroyed resource's space is reused only once the GPU is done
  * with it. GPU_RESOURCE_POOL=0 turns the pool off. */
 
 #include "../common.h"
@@ -58,7 +63,12 @@ mt_initResourcePool(GPUDeviceMT *deviceMT) {
   const char     *env;
   uint32_t        kind;
 
-  if (!deviceMT || deviceMT->commandMode != MTCommandMode4
+#if TARGET_OS_SIMULATOR
+  /* the Simulator's Metal: never checked with heaps */
+  return;
+#endif
+
+  if (!deviceMT
       || ((env = getenv("GPU_RESOURCE_POOL")) && strcmp(env, "0") == 0)
       || ![deviceMT->device respondsToSelector:@selector(hasUnifiedMemory)]
       || !deviceMT->device.hasUnifiedMemory)
@@ -233,7 +243,9 @@ mt_poolTexture(GPUDeviceMT *deviceMT, MTLTextureDescriptor *desc) {
   MTLStorageMode  storageMode, original;
   id<MTLTexture>  texture;
 
-  if (!deviceMT || !deviceMT->resourcePool || !desc)
+  if (!deviceMT || !deviceMT->resourcePool || !desc
+      || (deviceMT->commandMode != MTCommandMode4
+          && (desc.usage & (MTLTextureUsageShaderWrite | MTLTextureUsageRenderTarget))))
     return nil;
 
   storageMode = original = desc.storageMode;
