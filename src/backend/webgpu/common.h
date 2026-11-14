@@ -253,6 +253,14 @@ webgpuDestroyPushConstants(GPUDeviceWebGPU *device);
 bool
 webgpuStartCompletionWorker(GPUDeviceWebGPU *device);
 
+GPU_HIDE
+bool
+webgpuWaitCommandSlot(GPUDeviceWebGPU *device);
+
+GPU_HIDE
+void
+webgpuCommandSlotFreed(GPUDeviceWebGPU *device);
+
 void
 webgpuQueueCompletion(GPUDeviceWebGPU    *device,
                       GPUWebGPUCompletion completion);
