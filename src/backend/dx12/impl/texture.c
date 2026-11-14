@@ -1281,6 +1281,26 @@ placed:
   return GPU_OK;
 }
 
+static void
+dx12__releaseTexture(void *device, void *owner) {
+  GPUTexture     *texture;
+  GPUTextureDX12 *native;
+
+  (void)device;
+  texture = owner;
+  native  = texture->_priv;
+
+  if (native && native->resource) {
+    native->resource->lpVtbl->Release(native->resource);
+    dx12_poolRelease(&native->poolRange);
+  }
+
+  free(texture);
+}
+
+/* kept until the work given before it finishes (api/retire_internal.h).
+ * Views go at once: a command list reads their RTV and DSV descriptors when
+ * it records, and they hold no reference of their own. */
 GPU_HIDE
 void
 dx12_destroyTexture(GPUTexture *__restrict texture) {
@@ -1290,14 +1310,12 @@ dx12_destroyTexture(GPUTexture *__restrict texture) {
     return;
   }
 
-  native = texture->_priv;
-
-  if (native && native->resource) {
-    native->resource->lpVtbl->Release(native->resource);
-    dx12_poolRelease(&native->poolRange);
+  if (!(native = texture->_priv) || !texture->device) {
+    dx12__releaseTexture(NULL, texture);
+    return;
   }
 
-  free(texture);
+  dx12_retire(texture->device->_priv, &native->retired, texture, dx12__releaseTexture);
 }
 
 GPU_HIDE

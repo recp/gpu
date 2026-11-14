@@ -400,4 +400,19 @@ GPU_HIDE
 void
 dx12_poolRelease(DX12PoolRange *range);
 
+/* buffers and textures destroyed while queues may still use them go once the
+ * work given before the destroy finishes (impl/retire.c, api/retire_internal.h) */
+
+GPU_HIDE
+void
+dx12_retire(GPUDeviceDX12     *device,
+            GPURetired        *node,
+            void              *owner,
+            GPURetireReleaseFn release);
+
+/* the queue finished its work up to serial (and so all before it) */
+GPU_HIDE
+void
+dx12_queueDone(GPUDeviceDX12 *device, GPUQueueDX12 *queue, uint64_t serial);
+
 #endif /* dx12_apis_h */

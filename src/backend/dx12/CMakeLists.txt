@@ -21,6 +21,7 @@ target_sources(gpu PRIVATE
   impl/ray.c
   impl/renderpass.c
   impl/rce.c
+  impl/retire.c
   impl/sampler.c
   impl/sampler_feedback.c
   impl/surface.c

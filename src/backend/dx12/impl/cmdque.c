@@ -92,6 +92,17 @@ dx12__queueDevice(GPUQueueDX12 *queue) {
   return queue && queue->queue ? queue->queue->_device : NULL;
 }
 
+/* work went out on the queue: *serial 0 takes the next one (api/retire) */
+static void
+dx12__submitted(GPUQueueDX12 *queue, uint64_t *serial) {
+  gpuRetireSubmitted(&((GPUDeviceDX12 *)queue->queue->_device->_priv)->retire, queue->queue, serial);
+}
+
+static void
+dx12__queueDone(GPUQueueDX12 *queue, uint64_t serial) {
+  dx12_queueDone(queue->queue->_device->_priv, queue, serial);
+}
+
 static bool
 dx12__lostReason(GPUQueueDX12        *queue,
                  HRESULT              result,
@@ -345,6 +356,9 @@ dx12__completionMain(LPVOID context) {
 
     if (completed) {
       dx12__recordFrameTime(native);
+      /* before its completion is reported: what was destroyed while it ran
+       * is gone by the time a fence wait returns */
+      dx12__queueDone(queue, native->serial);
     }
 
     finishCommandBuffer(cmdb,
@@ -821,6 +835,7 @@ dx12__waitTransfer(GPUQueue            *queue,
   }
 
   slot->pending = false;
+  dx12__queueDone(native, slot->serial);
 
   return GPU_OK;
 }
@@ -856,6 +871,7 @@ dx12__flushTransfers(GPUQueue *queue, bool wait) {
     native->transferUpload = false;
 
     if (FAILED(result)) {
+      gpuRetireDropBatch(native->queue, &slot->serial, slot->givenBefore);
       dx12__reportQueueError(native, "close transfer command list", result);
       return GPU_ERROR_BACKEND_FAILURE;
     }
@@ -865,6 +881,7 @@ dx12__flushTransfers(GPUQueue *queue, bool wait) {
     native->commandQueue->lpVtbl->ExecuteCommandLists(native->commandQueue,
                                                       1u,
                                                       commandLists);
+    dx12__submitted(native, &slot->serial);
 
     fenceValue = ++native->transferFenceValue;
     result     = native->commandQueue->lpVtbl->Signal(native->commandQueue,
@@ -1166,9 +1183,11 @@ dx12_submitEx(GPUQueue                   *queueHandle,
   GPUResult             flushResult;
   HRESULT               result;
   HRESULT               presentResult;
+  uint64_t              serial;
   uint32_t              i;
 
-  queue = queueHandle ? queueHandle->_priv : NULL;
+  serial = 0u;
+  queue  = queueHandle ? queueHandle->_priv : NULL;
 
   if (!queue || !info || info->commandBufferCount == 0u
       || info->commandBufferCount > DX12_SUBMIT_STACK_COUNT) {
@@ -1253,6 +1272,7 @@ dx12_submitEx(GPUQueue                   *queueHandle,
   queue->commandQueue->lpVtbl->ExecuteCommandLists(queue->commandQueue,
                                                    info->commandBufferCount,
                                                    commandLists);
+  dx12__submitted(queue, &serial);
 
   for (i = 0u; i < info->commandBufferCount; i++) {
     dx12_submitGraphInitializations(natives[i]);
@@ -1312,6 +1332,7 @@ dx12_submitEx(GPUQueue                   *queueHandle,
 
   for (i = 0u; i < info->commandBufferCount; i++) {
     natives[i]->fenceValue  = fenceValue;
+    natives[i]->serial      = serial;
     natives[i]->pendingNext = NULL;
 
     if (queue->pendingTail) {
@@ -1548,6 +1569,8 @@ dx12_beginTransfer(GPUQueue                   *queue,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  /* the batch's serial now: what is destroyed while it records waits for it */
+  gpuRetireOpenBatch(&device->retire, queue, &slot->serial, &slot->givenBefore);
   native->activeTransferSlot = (uint32_t)(slot - native->transferSlots);
   native->transferOpen       = true;
   native->transferUpload     = upload;
@@ -1600,6 +1623,7 @@ dx12_abortTransfer(GPUQueue *queue) {
   }
 
   (void)slot->commandList->lpVtbl->Close(slot->commandList);
+  gpuRetireDropBatch(queue, &slot->serial, slot->givenBefore);
   slot->uploadUsed       = 0u;
   native->transferOpen   = false;
   native->transferUpload = false;
@@ -1820,6 +1844,7 @@ dx12_waitCommandQueueIdle(GPUQueueDX12 *queue) {
   UINT64    fenceValue;
   HRESULT   result;
   DWORD     waitResult;
+  uint64_t  submitted;
   uint32_t  slot;
 
   if (!queue || !queue->commandQueue || !queue->completionFence) {
@@ -1829,6 +1854,9 @@ dx12_waitCommandQueueIdle(GPUQueueDX12 *queue) {
   if (dx12__flushTransfers(queue->queue, false) != GPU_OK) {
     return false;
   }
+
+  /* the fence below follows everything submitted so far */
+  submitted = gpuRetireLoad(&queue->queue->_retire.submitted);
 
   if (!(event = CreateEventW(NULL, FALSE, FALSE, NULL))) {
     return false;
@@ -1852,6 +1880,9 @@ dx12_waitCommandQueueIdle(GPUQueueDX12 *queue) {
     for (slot = 0u; slot < GPU_DX12_TRANSFER_SLOT_COUNT; slot++) {
       queue->transferSlots[slot].pending = false;
     }
+
+    /* objects destroyed meanwhile go, before an idle device trims its pool */
+    dx12__queueDone(queue, submitted);
 
     if (queue->transfersSinceLarge >= DX12_TRANSFER_LARGE_IDLE)
       dx12__trimTransferStaging(queue->queue, queue);
@@ -2062,7 +2093,9 @@ dx12_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
   HRESULT               result;
   HRESULT               presentResult;
   GPUResult             commitResult;
+  uint64_t              serial;
 
+  serial = 0u;
   native = cmdb ? cmdb->_priv : NULL;
   queue  = native ? native->owner : NULL;
 
@@ -2093,6 +2126,8 @@ dx12_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
   queue->commandQueue->lpVtbl->ExecuteCommandLists(queue->commandQueue,
                                                    1u,
                                                    commandLists);
+  dx12__submitted(queue, &serial);
+  native->serial = serial;
   dx12_submitGraphInitializations(native);
 
   commitResult = GPU_OK;
@@ -2158,9 +2193,11 @@ dx12_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   UINT64                fenceValue;
   GPUResult             flushResult;
   HRESULT               result;
+  uint64_t              serial;
   uint32_t              i;
 
-  queue = queueHandle ? queueHandle->_priv : NULL;
+  serial = 0u;
+  queue  = queueHandle ? queueHandle->_priv : NULL;
 
   if (!queue || !buffers || count < 2u) {
     return GPU_ERROR_BACKEND_FAILURE;
@@ -2203,6 +2240,7 @@ dx12_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   queue->commandQueue->lpVtbl->ExecuteCommandLists(queue->commandQueue,
                                                    count,
                                                    commandLists);
+  dx12__submitted(queue, &serial);
 
   for (i = 0u; i < count; i++) {
     dx12_submitGraphInitializations(natives[i]);
@@ -2224,6 +2262,7 @@ dx12_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
 
   for (i = 0u; i < count; i++) {
     natives[i]->fenceValue  = fenceValue;
+    natives[i]->serial      = serial;
     natives[i]->pendingNext = NULL;
 
     if (queue->pendingTail) {
