@@ -488,6 +488,8 @@ vk__createResources(GPUSwapchain  *swapchainObj,
   VkSurfaceFormatKHR       surfaceFormat;
   VkSwapchainCreateInfoKHR info = {0};
   GPUSwapchainVk          *swapchain;
+  VkSurfaceFormatKHR       localFormats[64];
+  VkPresentModeKHR         localModes[8];
   VkSurfaceFormatKHR      *formats;
   VkPresentModeKHR        *modes;
   VkPresentModeKHR         presentMode;
@@ -514,33 +516,16 @@ vk__createResources(GPUSwapchain  *swapchainObj,
                                                      &caps);
 
   if (result != VK_SUCCESS
-      || vkGetPhysicalDeviceSurfaceFormatsKHR(swapchain->physicalDevice,
-                                              swapchain->surface->surface,
-                                              &formatCount,
-                                              NULL) != VK_SUCCESS
-      || formatCount == 0u
-      || vkGetPhysicalDeviceSurfacePresentModesKHR(swapchain->physicalDevice,
-                                                   swapchain->surface->surface,
-                                                   &modeCount,
-                                                   NULL) != VK_SUCCESS
-      || modeCount == 0u) {
-    return false;
-  }
-
-  formats = malloc((size_t)formatCount * sizeof(*formats));
-  modes   = malloc((size_t)modeCount * sizeof(*modes));
-
-  if (!formats || !modes
-      || vkGetPhysicalDeviceSurfaceFormatsKHR(swapchain->physicalDevice,
-                                              swapchain->surface->surface,
-                                              &formatCount,
-                                              formats) != VK_SUCCESS
-      || vkGetPhysicalDeviceSurfacePresentModesKHR(swapchain->physicalDevice,
-                                                   swapchain->surface->surface,
-                                                   &modeCount,
-                                                   modes) != VK_SUCCESS) {
-    free(modes);
-    free(formats);
+      || !vk_getSurfaceLists(swapchain->physicalDevice,
+                             swapchain->surface->surface,
+                             localFormats,
+                             (uint32_t)(sizeof(localFormats) / sizeof(localFormats[0])),
+                             localModes,
+                             (uint32_t)(sizeof(localModes) / sizeof(localModes[0])),
+                             &formats,
+                             &formatCount,
+                             &modes,
+                             &modeCount)) {
     return false;
   }
 
@@ -548,16 +533,14 @@ vk__createResources(GPUSwapchain  *swapchainObj,
                                formatCount,
                                swapchain->format,
                                &surfaceFormat)) {
-    free(modes);
-    free(formats);
+    vk_freeSurfaceLists(formats, localFormats, modes, localModes);
     return false;
   }
 
   presentMode = vk__choosePresentMode(modes,
                                       modeCount,
                                       swapchain->presentMode);
-  free(modes);
-  free(formats);
+  vk_freeSurfaceLists(formats, localFormats, modes, localModes);
 
   swapchain->format    = surfaceFormat.format;
   swapchain->gpuFormat = vk_formatToGPU(surfaceFormat.format);

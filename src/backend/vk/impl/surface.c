@@ -66,6 +66,92 @@ vk_appendPresentMode(GPUSurfaceVk *surface, uint32_t *count, VkPresentModeKHR mo
   surface->presentModes[(*count)++] = (uint32_t)gpuMode;
 }
 
+GPU_HIDE
+bool
+vk_getSurfaceLists(VkPhysicalDevice     physicalDevice,
+                   VkSurfaceKHR         surface,
+                   VkSurfaceFormatKHR  *formats,
+                   uint32_t             formatCapacity,
+                   VkPresentModeKHR    *modes,
+                   uint32_t             modeCapacity,
+                   VkSurfaceFormatKHR **outFormats,
+                   uint32_t            *outFormatCount,
+                   VkPresentModeKHR   **outModes,
+                   uint32_t            *outModeCount) {
+  VkResult result;
+  uint32_t count;
+
+  *outFormats = formats;
+  *outModes   = modes;
+
+  count  = formatCapacity;
+  result = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &count, formats);
+
+  if (result == VK_INCOMPLETE) {
+    count = 0u;
+    if (vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &count, NULL) != VK_SUCCESS
+        || count == 0u
+        || !(*outFormats = malloc((size_t)count * sizeof(**outFormats)))) {
+      *outFormats = formats;
+      return false;
+    }
+
+    result = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &count, *outFormats);
+    if (result == VK_INCOMPLETE) {
+      result = VK_SUCCESS; /* the list grew meanwhile: the first ones */
+    }
+  }
+
+  if (result != VK_SUCCESS || count == 0u) {
+    vk_freeSurfaceLists(*outFormats, formats, *outModes, modes);
+    return false;
+  }
+
+  *outFormatCount = count;
+
+  count  = modeCapacity;
+  result = vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &count, modes);
+
+  if (result == VK_INCOMPLETE) {
+    count = 0u;
+    if (vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &count, NULL) != VK_SUCCESS
+        || count == 0u
+        || !(*outModes = malloc((size_t)count * sizeof(**outModes)))) {
+      *outModes = modes;
+      vk_freeSurfaceLists(*outFormats, formats, *outModes, modes);
+      return false;
+    }
+
+    result = vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &count, *outModes);
+    if (result == VK_INCOMPLETE) {
+      result = VK_SUCCESS;
+    }
+  }
+
+  if (result != VK_SUCCESS || count == 0u) {
+    vk_freeSurfaceLists(*outFormats, formats, *outModes, modes);
+    return false;
+  }
+
+  *outModeCount = count;
+  return true;
+}
+
+GPU_HIDE
+void
+vk_freeSurfaceLists(VkSurfaceFormatKHR *formats,
+                    VkSurfaceFormatKHR *localFormats,
+                    VkPresentModeKHR   *modes,
+                    VkPresentModeKHR   *localModes) {
+  if (modes != localModes) {
+    free(modes);
+  }
+
+  if (formats != localFormats) {
+    free(formats);
+  }
+}
+
 static GPUResult
 vk_getSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
                           GPUSurface             *__restrict gpuSurface,
@@ -74,6 +160,8 @@ vk_getSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
   GPUFormatCapabilities    formatCaps;
   GPUAdapterVk            *adapterVk;
   GPUSurfaceVk            *surface;
+  VkSurfaceFormatKHR       localFormats[64];
+  VkPresentModeKHR         localModes[8];
   VkSurfaceFormatKHR      *formats;
   VkPresentModeKHR        *presentModes;
   uint32_t                 formatCount;
@@ -102,38 +190,16 @@ vk_getSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
   if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(adapterVk->physicalDevice,
                                                 surface->surface,
                                                 &caps) != VK_SUCCESS
-      || vkGetPhysicalDeviceSurfaceFormatsKHR(adapterVk->physicalDevice,
-                                              surface->surface,
-                                              &formatCount,
-                                              NULL) != VK_SUCCESS
-      || formatCount == 0u
-      || vkGetPhysicalDeviceSurfacePresentModesKHR(adapterVk->physicalDevice,
-                                                   surface->surface,
-                                                   &presentModeCount,
-                                                   NULL) != VK_SUCCESS
-      || presentModeCount == 0u) {
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-
-  formats      = malloc((size_t)formatCount * sizeof(*formats));
-  presentModes = malloc((size_t)presentModeCount * sizeof(*presentModes));
-
-  if (!formats || !presentModes) {
-    free(presentModes);
-    free(formats);
-    return GPU_ERROR_OUT_OF_MEMORY;
-  }
-
-  if (vkGetPhysicalDeviceSurfaceFormatsKHR(adapterVk->physicalDevice,
-                                           surface->surface,
-                                           &formatCount,
-                                           formats) != VK_SUCCESS
-      || vkGetPhysicalDeviceSurfacePresentModesKHR(adapterVk->physicalDevice,
-                                                   surface->surface,
-                                                   &presentModeCount,
-                                                   presentModes) != VK_SUCCESS) {
-    free(presentModes);
-    free(formats);
+      || !vk_getSurfaceLists(adapterVk->physicalDevice,
+                             surface->surface,
+                             localFormats,
+                             (uint32_t)(sizeof(localFormats) / sizeof(localFormats[0])),
+                             localModes,
+                             (uint32_t)(sizeof(localModes) / sizeof(localModes[0])),
+                             &formats,
+                             &formatCount,
+                             &presentModes,
+                             &presentModeCount)) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -162,8 +228,7 @@ vk_getSurfaceCapabilities(const GPUAdapter       *__restrict adapter,
                          presentModes[modeIndex]);
   }
 
-  free(presentModes);
-  free(formats);
+  vk_freeSurfaceLists(formats, localFormats, presentModes, localModes);
 
   if (gpuFormatCount == 0u || gpuPresentModeCount == 0u) {
     return GPU_ERROR_UNSUPPORTED;

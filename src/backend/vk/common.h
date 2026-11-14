@@ -851,6 +851,29 @@ GPU_HIDE
 bool
 vk_formatFromGPU(GPUFormat format, VkFormat *outFormat);
 
+/* a surface's formats and present modes, read into the caller's arrays with one call each when they fit (the
+   count-then-fill pair is a compositor round trip a call on some platforms), else onto the heap: *outFormats and
+   *outModes are the given arrays or heap ones, freed by vk_freeSurfaceLists */
+GPU_HIDE
+bool
+vk_getSurfaceLists(VkPhysicalDevice     physicalDevice,
+                   VkSurfaceKHR         surface,
+                   VkSurfaceFormatKHR  *formats,
+                   uint32_t             formatCapacity,
+                   VkPresentModeKHR    *modes,
+                   uint32_t             modeCapacity,
+                   VkSurfaceFormatKHR **outFormats,
+                   uint32_t            *outFormatCount,
+                   VkPresentModeKHR   **outModes,
+                   uint32_t            *outModeCount);
+
+GPU_HIDE
+void
+vk_freeSurfaceLists(VkSurfaceFormatKHR *formats,
+                    VkSurfaceFormatKHR *localFormats,
+                    VkPresentModeKHR   *modes,
+                    VkPresentModeKHR   *localModes);
+
 GPU_HIDE
 bool
 vk_findMemoryType(GPUDevice             *device,
