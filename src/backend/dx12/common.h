@@ -191,6 +191,7 @@ typedef struct GPUDeviceDX12 {
   bool                             manualBlitFiltering;
   bool                             samplerTableOffsetsReliable;
   bool                             rootCbvSpacesReliable;
+  GPURetireList                    retire; /* destroyed objects work may still use (api/retire) */
 } GPUDeviceDX12;
 
 typedef struct GPUQueueDX12     GPUQueueDX12;
@@ -280,6 +281,7 @@ typedef struct GPUSamplerFeedbackMapDX12 {
 typedef struct GPUBufferDX12 {
   ID3D12Resource           *resource;
   DX12PoolRange             poolRange;
+  GPURetired                retired;
   void                     *mapped;
   D3D12_GPU_VIRTUAL_ADDRESS gpuAddress;
   uint64_t                  sizeBytes;
@@ -343,6 +345,7 @@ typedef struct GPURayTracingEncoderDX12 {
 typedef struct GPUTextureDX12 {
   ID3D12Resource        *resource;
   DX12PoolRange          poolRange;
+  GPURetired             retired;
   D3D12_RESOURCE_STATES *states;
   D3D12_PACKED_MIP_INFO  packedMipInfo;
   D3D12_TILE_SHAPE       tileShape;
@@ -516,6 +519,7 @@ typedef struct GPUCommandBufferDX12 {
   struct GPUCommandBufferDX12           *poolNext;
   struct GPUCommandBufferDX12           *pendingNext;
   UINT64                                 fenceValue;
+  uint64_t                               serial; /* its submit's (api/retire) */
   GPUCommandBuffer                       commandBuffer;
   GPURenderPassDesc                      renderPassDesc;
   GPURenderPassDX12                      renderPass;
@@ -551,6 +555,8 @@ typedef struct GPUTransferSlotDX12 {
   UINT64                     fenceValue;
   uint64_t                   uploadCapacity;
   uint64_t                   uploadUsed;
+  uint64_t                   serial;      /* its batch's, taken when the batch opens (api/retire) */
+  uint64_t                   givenBefore; /* the queue's given serial before the batch opened */
   bool                       pending;
 } GPUTransferSlotDX12;
 

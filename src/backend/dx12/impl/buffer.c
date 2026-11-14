@@ -585,15 +585,13 @@ dx12_createBuffer(GPUDevice                 *__restrict device,
   return GPU_OK;
 }
 
-GPU_HIDE
-void
-dx12_destroyBuffer(GPUBuffer *__restrict buffer) {
+static void
+dx12__releaseBuffer(void *device, void *owner) {
+  GPUBuffer     *buffer;
   GPUBufferDX12 *native;
 
-  if (!buffer) {
-    return;
-  }
-
+  (void)device;
+  buffer = owner;
   native = buffer->_priv;
 
   if (native && native->resource) {
@@ -606,6 +604,25 @@ dx12_destroyBuffer(GPUBuffer *__restrict buffer) {
   }
 
   free(buffer);
+}
+
+/* kept until the work given before it finishes (api/retire_internal.h): a
+ * command list holds no reference to what it uses */
+GPU_HIDE
+void
+dx12_destroyBuffer(GPUBuffer *__restrict buffer) {
+  GPUBufferDX12 *native;
+
+  if (!buffer) {
+    return;
+  }
+
+  if (!(native = buffer->_priv) || !buffer->device) {
+    dx12__releaseBuffer(NULL, buffer);
+    return;
+  }
+
+  dx12_retire(buffer->device->_priv, &native->retired, buffer, dx12__releaseBuffer);
 }
 
 GPU_HIDE

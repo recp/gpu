@@ -1675,6 +1675,7 @@ dx12_createDevice(GPUAdapter   *__restrict adapter,
   }
 
   dx12_initResourcePool(deviceDX12);
+  (void)gpuRetireInit(&deviceDX12->retire, deviceDX12);
 
   return device;
 
@@ -1735,6 +1736,10 @@ dx12_destroyDevice(GPUDevice *__restrict device) {
   deviceDX12 = device->_priv;
 
   if (deviceDX12) {
+    /* idle (GPUDestroyDevice waited): what was destroyed while in use goes,
+     * before the queues (their last waits reclaim) and its memory's pool */
+    gpuRetireFinish(&deviceDX12->retire);
+
     if (deviceDX12->createdQueues) {
       for (i = 0u; i < deviceDX12->nCreatedQueues; i++) {
         dx12_destroyCommandQueue(deviceDX12->createdQueues[i]);
@@ -1742,6 +1747,8 @@ dx12_destroyDevice(GPUDevice *__restrict device) {
 
       free(deviceDX12->createdQueues);
     }
+
+    gpuRetireDestroy(&deviceDX12->retire);
 
     if (deviceDX12->d3dDevice) {
       dx12_destroyResourcePool(deviceDX12);
