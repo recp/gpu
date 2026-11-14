@@ -48,11 +48,93 @@ enum {
 #define MT_POOL_MAX_RESOURCE ((NSUInteger)4u << 20)
 
 struct MTResourcePool {
-  os_unfair_lock lock;
-  id<MTLHeap>    heaps[MT_POOL_KINDS][MT_POOL_MAX_HEAPS];
-  NSUInteger     nextSize[MT_POOL_KINDS];
-  uint32_t       count[MT_POOL_KINDS];
+  os_unfair_lock   lock;
+  id<MTLHeap>      heaps[MT_POOL_KINDS][MT_POOL_MAX_HEAPS];
+  NSUInteger       nextSize[MT_POOL_KINDS];
+  uint32_t         count[MT_POOL_KINDS];
+  dispatch_group_t warming; /* the first heaps, made on a worker */
 };
+
+static id<MTLHeap>
+mt_newPoolHeap(GPUDeviceMT *deviceMT, MTLStorageMode storageMode, NSUInteger size) {
+  MTLHeapDescriptor *heapDesc;
+  id<MTLHeap>        heap;
+
+  heapDesc                    = [MTLHeapDescriptor new];
+  heapDesc.type               = MTLHeapTypeAutomatic;
+  heapDesc.storageMode        = storageMode;
+  heapDesc.cpuCacheMode       = MTLCPUCacheModeDefaultCache;
+  heapDesc.hazardTrackingMode = MTLHazardTrackingModeTracked;
+  heapDesc.size               = size;
+  heap                        = [deviceMT->device newHeapWithDescriptor:heapDesc];
+  [heapDesc release];
+
+#if GPU_BUILD_WITH_DEBUG_MARKERS
+  if (heap)
+    heap.label = @"gpu-resource-pool";
+#endif
+
+  return heap;
+}
+
+/* the first heap of each kind, made and made resident on a worker while the
+ * app starts: a heap's first residency maps all of it, and a page's first
+ * submit paid that (four 8 MB heaps: +1.8 M instructions, +0.7 ms CPU on an
+ * M-series Mac). Nothing waits for it: an allocation that comes first makes
+ * its own heap as before, and the worker's spare is let go */
+static void
+mt_warmResourcePool(GPUDeviceMT *deviceMT, MTResourcePool *pool) {
+  id<MTLHeap> made[MT_POOL_KINDS];
+  NSUInteger  size;
+  uint32_t    kind, kept;
+
+  for (kind = 0u; kind < MT_POOL_KINDS; kind++)
+    made[kind] = mt_newPoolHeap(deviceMT,
+                                kind == MT_POOL_PRIVATE_TEXTURES ? MTLStorageModePrivate : MTLStorageModeShared,
+                                MT_POOL_FIRST_HEAP);
+
+  size = MT_POOL_FIRST_HEAP * 2u;
+  kept = 0u;
+  os_unfair_lock_lock(&pool->lock);
+  for (kind = 0u; kind < MT_POOL_KINDS; kind++) {
+    if (!made[kind] || pool->count[kind]) {
+      [made[kind] release];
+      made[kind] = nil;
+      continue;
+    }
+    pool->heaps[kind][pool->count[kind]++] = made[kind];
+    pool->nextSize[kind]                   = size;
+    kept++;
+  }
+  os_unfair_lock_unlock(&pool->lock);
+
+  /* a hint, kept for the heaps' life; the set itself can go */
+#if MT_HAS_METAL4
+  if (@available(macOS 15.0, iOS 18.0, *)) {
+    MTLResidencySetDescriptor *setDesc;
+    id<MTLResidencySet>        set;
+
+    if (!kept)
+      return;
+
+    setDesc = [MTLResidencySetDescriptor new];
+    set     = [deviceMT->device newResidencySetWithDescriptor:setDesc error:nil];
+    [setDesc release];
+
+    if (!set)
+      return;
+
+    for (kind = 0u; kind < MT_POOL_KINDS; kind++) {
+      if (made[kind])
+        [set addAllocation:made[kind]];
+    }
+
+    [set commit];
+    [set requestResidency];
+    [set release];
+  }
+#endif
+}
 
 GPU_HIDE
 void
@@ -75,6 +157,13 @@ mt_initResourcePool(GPUDeviceMT *deviceMT) {
     pool->nextSize[kind] = MT_POOL_FIRST_HEAP;
 
   deviceMT->resourcePool = pool;
+
+  /* the device outlives the worker: destroying the pool waits for it */
+  if ((pool->warming = dispatch_group_create())) {
+    dispatch_group_async(pool->warming, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      mt_warmResourcePool(deviceMT, pool);
+    });
+  }
 }
 
 GPU_HIDE
@@ -85,6 +174,11 @@ mt_destroyResourcePool(GPUDeviceMT *deviceMT) {
 
   if (!deviceMT || !(pool = deviceMT->resourcePool))
     return;
+
+  if (pool->warming) {
+    dispatch_group_wait(pool->warming, DISPATCH_TIME_FOREVER);
+    dispatch_release(pool->warming);
+  }
 
   /* resources still alive keep their heap */
   for (kind = 0u; kind < MT_POOL_KINDS; kind++) {
@@ -137,7 +231,6 @@ mt_placeResource(GPUDeviceMT          *deviceMT,
                  MTLSizeAndAlign       sizeAndAlign,
                  MTLTextureDescriptor *desc,
                  NSUInteger            length) {
-  MTLHeapDescriptor *heapDesc;
   MTResourcePool    *pool;
   id<MTLHeap>        heap;
   NSUInteger         size;
@@ -168,19 +261,9 @@ mt_placeResource(GPUDeviceMT          *deviceMT,
     while (size < 2u * sizeAndAlign.size)
       size *= 2u;
 
-    heapDesc                    = [MTLHeapDescriptor new];
-    heapDesc.type               = MTLHeapTypeAutomatic;
-    heapDesc.storageMode        = storageMode;
-    heapDesc.cpuCacheMode       = MTLCPUCacheModeDefaultCache;
-    heapDesc.hazardTrackingMode = MTLHazardTrackingModeTracked;
-    heapDesc.size               = size;
-    heap                        = [deviceMT->device newHeapWithDescriptor:heapDesc];
-    [heapDesc release];
+    heap = mt_newPoolHeap(deviceMT, storageMode, size);
 
     if (heap) {
-#if GPU_BUILD_WITH_DEBUG_MARKERS
-      heap.label = @"gpu-resource-pool";
-#endif
       pool->heaps[kind][pool->count[kind]++] = heap;
       if (pool->nextSize[kind] < MT_POOL_LARGEST_HEAP)
         pool->nextSize[kind] *= 2u;
