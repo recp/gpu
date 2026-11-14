@@ -551,7 +551,8 @@ mt_newRenderState(GPUDevice         *__restrict device,
   }
 
   if (!native->render) {
-    NSLog(@"Failed to create render pipeline state: %@", error);
+    pipelineDriverMessage("newRenderPipelineState: %s",
+                          error ? error.localizedDescription.UTF8String : "no error given");
     free(native);
     return NULL;
   }

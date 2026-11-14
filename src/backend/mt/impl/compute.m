@@ -232,7 +232,8 @@ mt_newComputeState(GPUDevice *device, GPUComputePipeline *pipeline) {
   [pipelineDesc release];
 
   if (!mtState) {
-    NSLog(@"Failed to create compute pipeline state: %@", error);
+    pipelineDriverMessage("newComputePipelineState: %s",
+                          error ? error.localizedDescription.UTF8String : "no error given");
     return NULL;
   }
 

@@ -21,6 +21,7 @@ target_sources(gpu PRIVATE
   pass/blit.c
   pass/renderpass.c
   pipeline_cache.c
+  pipeline_report.c
   query.c
   ray.c
   render/pipeline.c

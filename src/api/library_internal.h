@@ -134,8 +134,11 @@ struct GPUShaderLibrary {
   void                           *_resourceBindings;
   USLRuntimeSpecConstant         *_constants;
   GPUShaderReflection             _reflection;
+  uint64_t                        _payloadHash; /* USL's, as GPU_USL_LOG printed it; 0 unknown */
+  uint64_t                        _payloadSize; /* the backend code it was made from */
   uint32_t                        _constantCount;
   bool                            _constantIdsDense;
+  bool                            _payloadBinary;
 };
 
 struct GPUShaderFunction {

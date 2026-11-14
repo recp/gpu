@@ -137,10 +137,8 @@ mt_newLibraryWithSource(GPUDevice  *device,
   [nsSource release];
 
   if (!mtLibrary) {
-    if (error) {
-      NSLog(@"GPU mt_newLibraryWithSource failed: %@", error);
-    }
-
+    pipelineDriverMessage("newLibraryWithSource: %s",
+                          error ? error.localizedDescription.UTF8String : "no error given");
     return NULL;
   }
 

@@ -74,11 +74,32 @@ tileRenderPassExtension(const GPURenderPassCreateInfo *info,
   return true;
 }
 
+static GPUResult
+createTilePipelineOnce(GPUDevice                       *device,
+                       const GPUTilePipelineCreateInfo *info,
+                       GPUTilePipeline               **outPipeline);
+
+/* a failure is reported once, naming it (api/pipeline_report.c) */
 GPU_EXPORT
 GPUResult
 GPUCreateTilePipeline(GPUDevice                       *device,
                       const GPUTilePipelineCreateInfo *info,
                       GPUTilePipeline               **outPipeline) {
+  static const char *const stages[1] = {"tile"};
+  GPUResult                result;
+
+  pipelineDriverMessage(NULL);
+
+  if ((result = createTilePipelineOnce(device, info, outPipeline)) != GPU_OK && device && info)
+    pipelineFailed(device, result, "tile pipeline", info->label, info->library, stages, &info->entryPoint, 1u);
+
+  return result;
+}
+
+static GPUResult
+createTilePipelineOnce(GPUDevice                       *device,
+                       const GPUTilePipelineCreateInfo *info,
+                       GPUTilePipeline               **outPipeline) {
   GPUShaderReflection        reflection;
   GPUFormatCapabilities      caps;
   GPUApi                    *api;

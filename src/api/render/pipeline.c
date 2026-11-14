@@ -843,11 +843,10 @@ pipelineSetSampleCount(GPURenderPipeline *__restrict pipeline,
   api->render.sampleCount(pipeline, sampleCount);
 }
 
-GPU_HIDE
-GPUResult
-createRenderPipeline(GPUDevice                         *__restrict device,
-                     const GPURenderPipelineCreateInfo *__restrict info,
-                     GPURenderPipeline                **__restrict outPipeline) {
+static GPUResult
+createRenderPipelineOnce(GPUDevice                         *__restrict device,
+                         const GPURenderPipelineCreateInfo *__restrict info,
+                         GPURenderPipeline                **__restrict outPipeline) {
   GPUPipelineCacheKey                       cacheKey;
   const GPUPipelineConstants               *constants;
   GPUApi                                   *api;
@@ -1197,6 +1196,48 @@ GPUDestroyRenderPipeline(GPURenderPipeline *pipeline) {
   }
 
   free(pipeline);
+}
+
+/* every render pipeline, made here or by a compile job: a failure is
+ * reported once, naming it (api/pipeline_report.c) */
+GPU_HIDE
+GPUResult
+createRenderPipeline(GPUDevice                         *__restrict device,
+                     const GPURenderPipelineCreateInfo *__restrict info,
+                     GPURenderPipeline                **__restrict outPipeline) {
+  const GPUChainedStruct   *chain;
+  const GPUMeshPipelineEXT *mesh;
+  const char               *stages[3];
+  const char               *entries[3];
+  uint32_t                  count;
+  GPUResult                 result;
+
+  pipelineDriverMessage(NULL);
+
+  if ((result = createRenderPipelineOnce(device, info, outPipeline)) == GPU_OK || !device || !info)
+    return result;
+
+  mesh = NULL;
+  for (chain = info->chain.pNext; chain; chain = chain->pNext) {
+    if (chain->sType == GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT)
+      mesh = (const GPUMeshPipelineEXT *)chain;
+  }
+
+  count = 0u;
+  if (mesh) {
+    stages[count]    = "task";
+    entries[count++] = mesh->taskEntry;
+    stages[count]    = "mesh";
+    entries[count++] = mesh->meshEntry;
+  } else {
+    stages[count]    = "vertex";
+    entries[count++] = info->vertexEntry;
+  }
+  stages[count]    = "fragment";
+  entries[count++] = info->fragmentEntry;
+
+  pipelineFailed(device, result, "render pipeline", info->label, info->library, stages, entries, count);
+  return result;
 }
 
 GPU_EXPORT
