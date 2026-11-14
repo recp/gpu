@@ -21,6 +21,7 @@
 #include "api/cmdqueue_internal.h"
 #include "api/descr/descriptor_internal.h"
 #include "api/device_internal.h"
+#include "api/instance_internal.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -1477,6 +1478,170 @@ cleanup:
   return ok;
 }
 
+/* objects destroyed while the queue still uses them: a buffer and a texture
+ * written by the queue whose transfer batch keeps recording, and a buffer a
+ * command buffer in flight reads. Each goes once the work given before its
+ * destroy finished, and validation sees no use of a destroyed object. */
+static int
+destroy_while_in_use(GPUDevice *device,
+                     GPUQueue  *queue,
+                     GPUFence  *fence) {
+  GPUBufferCreateInfo      bufferInfo  = {0};
+  GPUTextureCreateInfo     textureInfo = {0};
+  GPUTextureViewCreateInfo viewInfo    = {0};
+  GPUTextureWriteRegion    writeRegion = {0};
+  GPUBufferCopyRegion      copy        = {0};
+  GPUQueueSubmitInfo       submitInfo  = {0};
+  GPUDeviceVk             *deviceVk;
+  GPUQueueVk              *native;
+  GPUBuffer               *written;
+  GPUBuffer               *source;
+  GPUBuffer               *kept;
+  GPUTexture              *texture;
+  GPUTextureView          *view;
+  GPUCommandBuffer        *cmdb;
+  GPUTransferPassEncoder  *pass;
+  uint32_t                 values[64];
+  uint32_t                 zeros[64];
+  uint32_t                 readback[64];
+  uint32_t                 validationBefore;
+  uint32_t                 i;
+  int                      ok;
+
+  native   = queue ? queue->_priv : NULL;
+  deviceVk = device ? device->_priv : NULL;
+  written  = NULL;
+  source   = NULL;
+  kept     = NULL;
+  texture  = NULL;
+  view     = NULL;
+  cmdb     = NULL;
+  pass     = NULL;
+
+  if (!native || !deviceVk || !device->inst) {
+    return 0;
+  }
+
+  validationBefore              = device->inst->validationError;
+  device->inst->validationError = 0u;
+
+  for (i = 0u; i < 64u; i++) {
+    values[i] = UINT32_C(0xA5000000) + i;
+  }
+
+  memset(zeros, 0, sizeof(zeros));
+  memset(readback, 0, sizeof(readback));
+
+  bufferInfo.chain.sType       = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize  = sizeof(bufferInfo);
+  bufferInfo.label             = "vulkan-destroyed-in-use";
+  bufferInfo.sizeBytes         = sizeof(values);
+  bufferInfo.usage             = GPU_BUFFER_USAGE_COPY_SRC |
+                                 GPU_BUFFER_USAGE_COPY_DST;
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "vulkan-destroyed-in-use";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 64u;
+  textureInfo.height           = 64u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COPY_DST |
+                                 GPU_TEXTURE_USAGE_SAMPLED;
+  viewInfo.chain.sType         = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize    = sizeof(viewInfo);
+  viewInfo.label               = "vulkan-destroyed-in-use";
+  viewInfo.viewType            = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format              = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount       = 1u;
+  viewInfo.arrayLayerCount     = 1u;
+  writeRegion.width            = 64u;
+  writeRegion.height           = 64u;
+  writeRegion.depth            = 1u;
+  writeRegion.layerCount       = 1u;
+  writeRegion.bytesPerRow      = 64u * 4u;
+  writeRegion.rowsPerImage     = 64u;
+
+  ok = GPUCreateBuffer(device, &bufferInfo, &written) == GPU_OK && written
+       && GPUCreateBuffer(device, &bufferInfo, &source) == GPU_OK && source
+       && GPUCreateBuffer(device, &bufferInfo, &kept) == GPU_OK && kept
+       && GPUCreateTexture(device, &textureInfo, &texture) == GPU_OK && texture
+       && GPUCreateTextureView(texture, &viewInfo, &view) == GPU_OK && view
+       && GPUQueueWaitIdle(queue) == GPU_OK;
+
+  /* written, then destroyed while its batch records: the batch takes more */
+  ok = ok && GPUQueueWriteBuffer(queue, written, 0u, values, sizeof(values)) == GPU_OK
+       && native->transferOpen;
+  GPUDestroyBuffer(written);
+  written = NULL;
+  ok      = ok && deviceVk->retiredHead != NULL
+            && GPUQueueWriteTexture(queue,
+                                    texture,
+                                    &writeRegion,
+                                    kTextureUpload,
+                                    64u * 64u * 4u) == GPU_OK
+            && native->transferOpen;
+  GPUDestroyTextureView(view);
+  GPUDestroyTexture(texture);
+  view    = NULL;
+  texture = NULL;
+  ok      = ok
+            && GPUQueueWriteBuffer(queue, source, 0u, values, sizeof(values)) == GPU_OK
+            && GPUQueueWriteBuffer(queue, kept, 0u, values, sizeof(values)) == GPU_OK
+            && GPUQueueReadBuffer(queue, kept, 0u, readback, sizeof(readback)) == GPU_OK
+            && memcmp(readback, values, sizeof(values)) == 0
+            && deviceVk->retiredHead == NULL;
+
+  /* read by a command buffer in flight, then destroyed */
+  ok = ok && GPUQueueWriteBuffer(queue, kept, 0u, zeros, sizeof(zeros)) == GPU_OK
+       && GPUAcquireCommandBuffer(queue, "vulkan-destroyed-in-use", &cmdb) == GPU_OK
+       && cmdb && (pass = GPUBeginTransferPass(cmdb, "vulkan-destroyed-in-use"));
+
+  if (ok) {
+    copy.sizeBytes = sizeof(values);
+    GPUCopyBufferToBuffer(pass, source, kept, &copy);
+    GPUEndTransferPass(pass);
+    submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+    submitInfo.chain.structSize   = sizeof(submitInfo);
+    submitInfo.commandBufferCount = 1u;
+    submitInfo.ppCommandBuffers   = &cmdb;
+    submitInfo.fence              = fence;
+    ok                            = GPUQueueSubmit(queue, &submitInfo) == GPU_OK;
+    cmdb                          = NULL;
+  }
+
+  GPUDestroyBuffer(source);
+  source = NULL;
+  memset(readback, 0, sizeof(readback));
+  ok = ok && GPUWaitFence(fence, UINT64_MAX) == GPU_OK
+       && deviceVk->retiredHead == NULL
+       && GPUQueueReadBuffer(queue, kept, 0u, readback, sizeof(readback)) == GPU_OK
+       && memcmp(readback, values, sizeof(values)) == 0;
+
+  /* nothing in flight: a destroy frees at once */
+  ok = ok && GPUQueueWaitIdle(queue) == GPU_OK;
+  GPUDestroyBuffer(kept);
+  kept = NULL;
+  ok   = ok && deviceVk->retiredHead == NULL
+         && device->inst->validationError == 0u;
+
+  if (cmdb) {
+    GPUDiscardCommandBuffer(cmdb);
+  }
+
+  GPUDestroyBuffer(written);
+  GPUDestroyBuffer(source);
+  GPUDestroyBuffer(kept);
+  GPUDestroyTextureView(view);
+  GPUDestroyTexture(texture);
+  (void)GPUQueueWaitIdle(queue);
+  device->inst->validationError |= validationBefore;
+
+  return ok;
+}
+
 int
 main(void) {
   GPUInstanceCreateInfo  instanceInfo  = {0};
@@ -1626,6 +1791,8 @@ main(void) {
                texture_uploads_reuse(device, graphics, fence));
   VULKAN_CHECK("large staging goes back",
                large_staging_goes_back(device, graphics, fence));
+  VULKAN_CHECK("destroy while in use",
+               destroy_while_in_use(device, graphics, fence));
   VULKAN_CHECK("timestamp roundtrip",
                timestamp_roundtrip(device, graphics, fence));
   VULKAN_CHECK("frame time roundtrip",
