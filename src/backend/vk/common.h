@@ -229,6 +229,7 @@ typedef struct VKPoolRange {
 
 typedef struct GPUDeviceVk {
   struct GPUSubAllocator                        *resourcePool; /* NULL: every resource its own memory */
+  void                                          *resourcePoolWarm; /* the warm-up worker, joined before the pool goes */
   struct GPUClassicRenderPassVk                 *classicRenderPasses;
   struct GPUClassicFramebufferVk                *classicFramebuffers;
   GPUQueue                                     **createdQueues;
@@ -874,6 +875,25 @@ vk_freeSurfaceLists(VkSurfaceFormatKHR *formats,
                     VkSurfaceFormatKHR *localFormats,
                     VkPresentModeKHR   *modes,
                     VkPresentModeKHR   *localModes);
+
+/* where a buffer lives: device-local memory (mapped as well when it's
+ * host-visible anyway, as on most phones: queue writes and cached reads then
+ * skip staging), host memory written by the host (coherent where offered),
+ * or host memory read back (cached where offered: uncached reads are slow) */
+
+typedef enum VKBufferMemory {
+  VK_BUFFER_DEVICE     = 0,
+  VK_BUFFER_HOST_WRITE = 1,
+  VK_BUFFER_HOST_READ  = 2
+} VKBufferMemory;
+
+GPU_HIDE
+bool
+vk_bufferMemoryType(GPUDevice             *device,
+                    uint32_t               typeBits,
+                    VKBufferMemory         memory,
+                    uint32_t              *outIndex,
+                    VkMemoryPropertyFlags *outFlags);
 
 GPU_HIDE
 bool

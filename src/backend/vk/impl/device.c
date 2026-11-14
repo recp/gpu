@@ -3822,6 +3822,7 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   }
 
   vk_initResourcePool(deviceVk);
+  vk_warmResourcePool(device);
 
   if (!(deviceVk->createdQueues = calloc(totalQueueCount,
                                          sizeof(*deviceVk->createdQueues)))) {

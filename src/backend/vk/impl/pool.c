@@ -121,6 +121,199 @@ vk_initResourcePool(GPUDeviceVk *deviceVk) {
   deviceVk->resourcePool = pool;
 }
 
+/* a pooled buffer's block: by memory type, device addresses and mapping */
+static uint32_t
+vk__poolBufferKey(uint32_t memoryTypeIndex, bool deviceAddress, bool mapped) {
+  return memoryTypeIndex | (deviceAddress ? VK_POOL_ADDRESS : 0u) | (mapped ? VK_POOL_MAPPED : 0u);
+}
+
+typedef struct VKPoolWarm {
+  GPUDevice *device;
+#if defined(_WIN32) || defined(WIN32)
+  HANDLE     thread;
+#else
+  pthread_t  thread;
+#endif
+} VKPoolWarm;
+
+/* making queued first blocks until none is left: one of the warm-up's threads */
+#if defined(_WIN32) || defined(WIN32)
+static DWORD WINAPI
+vk__warmMake(LPVOID context) {
+  while (gpuSubMakeQueued(context) != 0) {}
+  return 0;
+}
+#else
+static void*
+vk__warmMake(void *context) {
+  while (gpuSubMakeQueued(context) != 0) {}
+  return NULL;
+}
+#endif
+
+/* the first blocks a device's work uses, made as the device starts:
+ * allocating and mapping a block can take milliseconds, which the first
+ * allocations would otherwise pay. The keys are those
+ * vk__createBuffer and vk_createTexture reach for device and host-written
+ * buffers and optimal-tiling color images; each block is made on a thread
+ * of its own. Nothing waits for a block not yet started: an allocation
+ * that comes first makes it itself (gpuSubAllocate) */
+static void
+vk__warmPool(GPUDevice *device) {
+  static const GPUBufferUsageFlags usages[2] = {
+    GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST,
+    GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_VERTEX | GPU_BUFFER_USAGE_INDEX
+  };
+  static const VKBufferMemory memories[2] = {VK_BUFFER_DEVICE, VK_BUFFER_HOST_WRITE};
+  GPUBufferCreateInfo   info      = {0};
+  VkBufferCreateInfo    bufferInfo;
+  VkImageCreateInfo     imageInfo = {0};
+  VkMemoryRequirements  requirements;
+  VkMemoryPropertyFlags flags;
+  GPUDeviceVk          *deviceVk;
+  VkBuffer              buffer;
+  VkImage               image;
+  uint32_t              keys[3], count, index, i;
+  bool                  mapped;
+#if defined(_WIN32) || defined(WIN32)
+  HANDLE                helpers[2];
+#else
+  pthread_t             helpers[2];
+#endif
+  uint32_t              helperCount;
+
+  deviceVk = device->_priv;
+  count    = 0u;
+
+  for (i = 0u; i < 2u; i++) {
+    memset(&bufferInfo, 0, sizeof(bufferInfo));
+    info.sizeBytes = 256u;
+    info.usage     = usages[i];
+    buffer         = VK_NULL_HANDLE;
+    if (vk_bufferCreateInfo(device, &info, &bufferInfo) != GPU_OK
+        || vkCreateBuffer(deviceVk->device, &bufferInfo, NULL, &buffer) != VK_SUCCESS)
+      continue;
+
+    vkGetBufferMemoryRequirements(deviceVk->device, buffer, &requirements);
+    vkDestroyBuffer(deviceVk->device, buffer, NULL);
+
+    if (!vk_bufferMemoryType(device, requirements.memoryTypeBits, memories[i], &index, &flags)
+        || index > VK_POOL_TYPE_MASK || (flags & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT))
+      continue;
+
+    mapped          = memories[i] != VK_BUFFER_DEVICE || (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u;
+    keys[count++]   = vk__poolBufferKey(index, (bufferInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0u,
+                                        mapped);
+  }
+
+  imageInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  imageInfo.imageType     = VK_IMAGE_TYPE_2D;
+  imageInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
+  imageInfo.extent.width  = 64u;
+  imageInfo.extent.height = 64u;
+  imageInfo.extent.depth  = 1u;
+  imageInfo.mipLevels     = 1u;
+  imageInfo.arrayLayers   = 1u;
+  imageInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+  imageInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+  imageInfo.usage         = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT
+                            | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  imageInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+  imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  image                   = VK_NULL_HANDLE;
+
+  if (vkCreateImage(deviceVk->device, &imageInfo, NULL, &image) == VK_SUCCESS) {
+    vkGetImageMemoryRequirements(deviceVk->device, image, &requirements);
+    vkDestroyImage(deviceVk->device, image, NULL);
+
+    if (vk_findMemoryType(device, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0u, &index,
+                          &flags)
+        && index <= VK_POOL_TYPE_MASK && !(flags & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT))
+      keys[count++] = index | VK_POOL_IMAGE;
+  }
+
+  gpuSubQueue(deviceVk->resourcePool, keys, count);
+
+  /* the blocks' allocations don't wait for each other */
+  for (helperCount = 0u; count > 1u && helperCount < count - 1u; helperCount++) {
+#if defined(_WIN32) || defined(WIN32)
+    if (!(helpers[helperCount] = CreateThread(NULL, 0, vk__warmMake, deviceVk->resourcePool, 0, NULL)))
+      break;
+#else
+    if (pthread_create(&helpers[helperCount], NULL, vk__warmMake, deviceVk->resourcePool) != 0)
+      break;
+#endif
+  }
+
+  vk__warmMake(deviceVk->resourcePool);
+
+  for (i = 0u; i < helperCount; i++) {
+#if defined(_WIN32) || defined(WIN32)
+    WaitForSingleObject(helpers[i], INFINITE);
+    CloseHandle(helpers[i]);
+#else
+    pthread_join(helpers[i], NULL);
+#endif
+  }
+}
+
+#if defined(_WIN32) || defined(WIN32)
+static DWORD WINAPI
+vk__warmPoolMain(LPVOID context) {
+  vk__warmPool(((VKPoolWarm *)context)->device);
+  return 0;
+}
+#else
+static void*
+vk__warmPoolMain(void *context) {
+  vk__warmPool(((VKPoolWarm *)context)->device);
+  return NULL;
+}
+#endif
+
+/* after vk_initResourcePool, with the device's _priv and adapter set */
+GPU_HIDE
+void
+vk_warmResourcePool(GPUDevice *device) {
+  GPUDeviceVk *deviceVk;
+  VKPoolWarm  *warm;
+
+  if (!device || !(deviceVk = device->_priv) || !deviceVk->resourcePool
+      || !(warm = calloc(1, sizeof(*warm))))
+    return;
+
+  warm->device = device;
+#if defined(_WIN32) || defined(WIN32)
+  if (!(warm->thread = CreateThread(NULL, 0, vk__warmPoolMain, warm, 0, NULL))) {
+    free(warm);
+    return;
+  }
+#else
+  if (pthread_create(&warm->thread, NULL, vk__warmPoolMain, warm) != 0) {
+    free(warm);
+    return;
+  }
+#endif
+  deviceVk->resourcePoolWarm = warm;
+}
+
+static void
+vk__joinWarm(GPUDeviceVk *deviceVk) {
+  VKPoolWarm *warm;
+
+  if (!(warm = deviceVk->resourcePoolWarm))
+    return;
+
+#if defined(_WIN32) || defined(WIN32)
+  WaitForSingleObject(warm->thread, INFINITE);
+  CloseHandle(warm->thread);
+#else
+  pthread_join(warm->thread, NULL);
+#endif
+  free(warm);
+  deviceVk->resourcePoolWarm = NULL;
+}
+
 /* after every resource placed in it is gone, before the device */
 
 GPU_HIDE
@@ -129,6 +322,7 @@ vk_destroyResourcePool(GPUDeviceVk *deviceVk) {
   if (!deviceVk || !deviceVk->resourcePool)
     return;
 
+  vk__joinWarm(deviceVk);
   gpuSubDestroy(deviceVk->resourcePool);
   free(deviceVk->resourcePool);
   deviceVk->resourcePool = NULL;
@@ -214,7 +408,7 @@ vk_poolBindBuffer(GPUDeviceVk          *deviceVk,
       || !(requirements.memoryRequirements.memoryTypeBits & (1u << memoryTypeIndex)))
     return false;
 
-  key = memoryTypeIndex | (deviceAddress ? VK_POOL_ADDRESS : 0u) | (mapped ? VK_POOL_MAPPED : 0u);
+  key = vk__poolBufferKey(memoryTypeIndex, deviceAddress, mapped);
 
   if (!vk__poolPlace(deviceVk, key, &requirements.memoryRequirements, outMemory, outMapped, outRange))
     return false;

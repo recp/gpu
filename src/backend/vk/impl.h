@@ -303,6 +303,11 @@ GPU_HIDE
 void
 vk_destroyResourcePool(GPUDeviceVk *deviceVk);
 
+/* the pool's first blocks, made on a worker */
+GPU_HIDE
+void
+vk_warmResourcePool(GPUDevice *device);
+
 GPU_HIDE
 void
 vk_trimResourcePool(GPUDeviceVk *deviceVk);

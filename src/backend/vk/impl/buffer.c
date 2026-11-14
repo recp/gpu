@@ -118,16 +118,35 @@ vk__destroyBufferState(GPUBufferVk *native) {
   }
 }
 
-/* where a buffer lives: device-local memory (mapped as well when it's
- * host-visible anyway, as on most phones: queue writes and cached reads then
- * skip staging), host memory written by the host (coherent where offered),
- * or host memory read back (cached where offered: uncached reads are slow) */
+/* the memory type of a buffer living in 'memory' (VKBufferMemory), its
+ * memoryTypeBits given; shared with the pool's warm-up so both pick alike */
+GPU_HIDE
+bool
+vk_bufferMemoryType(GPUDevice             *device,
+                    uint32_t               typeBits,
+                    VKBufferMemory         memory,
+                    uint32_t              *outIndex,
+                    VkMemoryPropertyFlags *outFlags) {
+  bool hostVisible;
 
-typedef enum VKBufferMemory {
-  VK_BUFFER_DEVICE     = 0,
-  VK_BUFFER_HOST_WRITE = 1,
-  VK_BUFFER_HOST_READ  = 2
-} VKBufferMemory;
+  hostVisible = memory != VK_BUFFER_DEVICE;
+
+  if (memory == VK_BUFFER_HOST_READ
+      && vk_findMemoryType(device,
+                           typeBits,
+                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                           outIndex,
+                           outFlags))
+    return true;
+
+  return vk_findMemoryType(device,
+                           typeBits,
+                           hostVisible ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                           hostVisible ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0u,
+                           outIndex,
+                           outFlags);
+}
 
 static GPUResult
 vk__createBuffer(GPUDevice                 *__restrict device,
@@ -141,8 +160,6 @@ vk__createBuffer(GPUDevice                 *__restrict device,
   VkMemoryRequirements      requirements;
   GPUDeviceVk              *deviceVk;
   VkMemoryPropertyFlags     memoryFlags;
-  VkMemoryPropertyFlags     preferredFlags;
-  VkMemoryPropertyFlags     requiredFlags;
   uint32_t                  memoryTypeIndex;
   bool                      hostVisible, mapped;
 
@@ -168,24 +185,9 @@ vk__createBuffer(GPUDevice                 *__restrict device,
   }
 
   vkGetBufferMemoryRequirements(state.device, state.buffer, &requirements);
-  hostVisible    = memory != VK_BUFFER_DEVICE;
-  requiredFlags  = hostVisible ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-                               : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-  preferredFlags = hostVisible ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0u;
+  hostVisible = memory != VK_BUFFER_DEVICE;
 
-  if (!(memory == VK_BUFFER_HOST_READ
-        && vk_findMemoryType(device,
-                             requirements.memoryTypeBits,
-                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
-                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                             &memoryTypeIndex,
-                             &memoryFlags))
-      && !vk_findMemoryType(device,
-                            requirements.memoryTypeBits,
-                            requiredFlags,
-                            preferredFlags,
-                            &memoryTypeIndex,
-                            &memoryFlags)) {
+  if (!vk_bufferMemoryType(device, requirements.memoryTypeBits, memory, &memoryTypeIndex, &memoryFlags)) {
     vk__destroyBufferState(&state);
     return GPU_ERROR_UNSUPPORTED;
   }
