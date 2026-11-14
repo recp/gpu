@@ -2805,6 +2805,11 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
+    if (device->uslBareConversions
+        && us_cap_atom_text(&targetAtoms[targetAtomCount++], "spirv_bare_conversions") != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
     if (device->uslFloatControls2
         && us_cap_atom_text(&targetAtoms[targetAtomCount++], "spirv_float_controls2") != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;

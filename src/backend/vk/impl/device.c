@@ -1094,6 +1094,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #endif
   bool spirv14Extension;
   bool shaderFloatControlsExtension;
+  bool driverPropertiesExtension;
   bool spirv14Core;
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   bool accelerationExtension;
@@ -1232,6 +1233,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 #endif
   spirv14Extension             = false;
   shaderFloatControlsExtension = false;
+  driverPropertiesExtension    = false;
   spirv14Core                  = false;
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
   accelerationExtension = false;
@@ -1452,6 +1454,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       if (!strcmp(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         shaderFloatControlsExtension = true;
+      }
+
+      if (!strcmp(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        driverPropertiesExtension = true;
       }
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
       if (!strcmp(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
@@ -1675,6 +1682,38 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
         goto fail;
       }
     }
+  }
+
+  /* Qualcomm's own compiler asserts ("Unknown floating point rounding mode")
+   * on NoContraction over OpFConvert, which strict SPIR-V without
+   * float_controls2 puts on conversions. Turnip, the same vendor, needs the
+   * decoration, so the driver decides; without driver properties, the vendor */
+  if (adapterVk->props.vendorID == 0x5143u) {
+    PFN_vkGetPhysicalDeviceProperties2 getDriverProperties;
+    VkPhysicalDeviceDriverProperties   driverProperties   = {0};
+    VkPhysicalDeviceProperties2        driverProperties2  = {0};
+
+    getDriverProperties = NULL;
+
+    if (timelineCore || driverPropertiesExtension) {
+      getDriverProperties = (PFN_vkGetPhysicalDeviceProperties2)
+        vkGetInstanceProcAddr(instanceVk->inst, "vkGetPhysicalDeviceProperties2");
+
+      if (!getDriverProperties) {
+        getDriverProperties = (PFN_vkGetPhysicalDeviceProperties2)
+          vkGetInstanceProcAddr(instanceVk->inst, "vkGetPhysicalDeviceProperties2KHR");
+      }
+    }
+
+    if (getDriverProperties) {
+      driverProperties.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+      driverProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+      driverProperties2.pNext = &driverProperties;
+      getDriverProperties(raw, &driverProperties2);
+    }
+
+    adapterVk->bareConversions = driverProperties.driverID == 0
+                                 || driverProperties.driverID == VK_DRIVER_ID_QUALCOMM_PROPRIETARY;
   }
 #ifdef VK_KHR_shader_float_controls2
   if (getFeatures2 && instanceVk->apiVersion >= VK_API_VERSION_1_1
@@ -3502,6 +3541,7 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   device->uslHalfRoundtrip  = uslVulkanHalfRoundtrip(adapterVk->props.vendorID,
                                                      adapterVk->props.deviceID,
                                                      adapterVk->props.driverVersion);
+  device->uslBareConversions = adapterVk->bareConversions;
 #ifdef VK_EXT_shader_atomic_float
   device->uslFloatAtomicAdd = (floatAtomicFeatures.shaderBufferFloat32AtomicAdd ? 1u : 0u) |
                             (floatAtomicFeatures.shaderSharedFloat32AtomicAdd ? 2u : 0u);
