@@ -124,3 +124,38 @@ vk_pipelineBarrier(GPUDeviceVk                 *device,
     imageOffset  += imageCount;
   }
 }
+
+GPU_HIDE
+void
+vk_memoryBarrier(GPUDeviceVk         *device,
+                 VkCommandBuffer      command,
+                 VkPipelineStageFlags srcStages,
+                 VkPipelineStageFlags dstStages,
+                 VkAccessFlags        srcAccess,
+                 VkAccessFlags        dstAccess) {
+  VkMemoryBarrier2KHR barrier2   = {0};
+  VkDependencyInfoKHR dependency = {0};
+  VkMemoryBarrier     barrier    = {0};
+
+  if (!command) {
+    return;
+  }
+
+  if (!device || !device->synchronization2) {
+    barrier.sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    barrier.srcAccessMask = srcAccess;
+    barrier.dstAccessMask = dstAccess;
+    vkCmdPipelineBarrier(command, srcStages, dstStages, 0u, 1u, &barrier, 0u, NULL, 0u, NULL);
+    return;
+  }
+
+  barrier2.sType                = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2_KHR;
+  barrier2.srcStageMask         = srcStages;
+  barrier2.srcAccessMask        = srcAccess;
+  barrier2.dstStageMask         = dstStages;
+  barrier2.dstAccessMask        = dstAccess;
+  dependency.sType              = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR;
+  dependency.memoryBarrierCount = 1u;
+  dependency.pMemoryBarriers    = &barrier2;
+  device->pipelineBarrier2(command, &dependency);
+}
