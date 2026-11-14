@@ -179,6 +179,7 @@ typedef struct GPUAdapterVk {
   bool                                                  dynamicRendering;
   bool                                                  shaderFloat16;
   bool                                                  storageBuffer16BitAccess;
+  bool                                                  storageInputOutput16;
   bool                                                  vulkanMemoryModel;
   bool                                                  descriptorIndexing;
   bool                                                  boundedDescriptorIndexing;
@@ -213,6 +214,7 @@ typedef struct GPUAdapterVk {
   bool                                                  executionGraph;
   VkQueueFlags                                          indirectCopyQueues;
   bool                                                  negativeViewport;
+  bool                                                  memorylessAttachments;
 } GPUAdapterVk;
 
 /* a buffer's or image's range of a pooled memory block (impl/pool.c) */

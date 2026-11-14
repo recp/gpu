@@ -1,0 +1,5 @@
+kern(1) half_compute(input: [float] #buffer(0), inout output: [float] #buffer(1)) {
+  let value = half2(input[0], input[1]) + half2(0.25, 0.5)
+  output[0] = float(value.x)
+  output[1] = float(value.y)
+}

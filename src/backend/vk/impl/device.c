@@ -649,6 +649,22 @@ vk_hasHostVisibleDescriptorBufferMemory(VkPhysicalDevice physicalDevice,
 }
 #endif
 
+static bool
+vk_hasLazyAttachmentMemory(VkPhysicalDevice device) {
+  VkPhysicalDeviceMemoryProperties properties;
+  uint32_t                         i;
+
+  vkGetPhysicalDeviceMemoryProperties(device, &properties);
+  for (i = 0u; i < properties.memoryTypeCount; i++) {
+    if ((properties.memoryTypes[i].propertyFlags
+         & (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT))
+        == (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT))
+      return true;
+  }
+
+  return false;
+}
+
 static void
 vk_querySubgroupCapabilities(GPUInstanceVk *instance,
                              GPUAdapterVk  *adapter,
@@ -1258,6 +1274,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   }
 
   adapterVk->physicalDevice = raw;
+  adapterVk->memorylessAttachments = vk_hasLazyAttachmentMemory(raw);
   adapter->_priv            = adapterVk;
   adapter->inst             = inst;
   instanceVk                = inst ? inst->_priv : NULL;
@@ -1708,8 +1725,10 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     getFeatures2(raw, &storage16Features2);
 
     adapterVk->storageBuffer16BitAccess = storage16Features.storageBuffer16BitAccess;
+    adapterVk->storageInputOutput16     = storage16Features.storageInputOutput16;
 
-    if (adapterVk->storageBuffer16BitAccess && !storage16Core
+    if ((adapterVk->storageBuffer16BitAccess || adapterVk->storageInputOutput16)
+        && !storage16Core
         && !vk_addDeviceExtension(adapterVk,
                                   VK_KHR_16BIT_STORAGE_EXTENSION_NAME)) {
       goto fail;
@@ -2554,6 +2573,10 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
   }
 
   switch (feature) {
+    case GPU_FEATURE_MEMORYLESS_ATTACHMENTS:
+      return adapterVk->memorylessAttachments;
+    case GPU_FEATURE_SWAPCHAIN_SCALE:
+      return vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT);
     case GPU_FEATURE_COMPUTE:
       return vk_hasQueueCapability(adapterVk, VK_QUEUE_COMPUTE_BIT);
     case GPU_FEATURE_THREADED_UPLOADS:
@@ -3180,10 +3203,11 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
     float16Features.shaderFloat16 = VK_TRUE;
     deviceCI.pNext                = &float16Features;
 
-    if (adapterVk->storageBuffer16BitAccess) {
+    if (adapterVk->storageBuffer16BitAccess || adapterVk->storageInputOutput16) {
       storage16Features.sType                    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
       storage16Features.pNext                    = (void *)deviceCI.pNext;
-      storage16Features.storageBuffer16BitAccess = VK_TRUE;
+      storage16Features.storageBuffer16BitAccess = adapterVk->storageBuffer16BitAccess;
+      storage16Features.storageInputOutput16     = adapterVk->storageInputOutput16;
       deviceCI.pNext                             = &storage16Features;
     }
   }
@@ -3465,6 +3489,7 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   device->uslRoundingRTE    = adapterVk->roundingRTE;
   device->uslFloatControls2 = adapterVk->floatControls2;
   device->uslStorageF16     = storage16Features.storageBuffer16BitAccess == VK_TRUE;
+  device->uslIOF16          = storage16Features.storageInputOutput16 == VK_TRUE;
   device->uslHalfRoundtrip  = uslVulkanHalfRoundtrip(adapterVk->props.vendorID,
                                                      adapterVk->props.deviceID,
                                                      adapterVk->props.driverVersion);

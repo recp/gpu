@@ -1,0 +1,7 @@
+vert shader_vs(id: uint #vertex_id) -> float4 {
+  return float4(float(id), 0.0, 0.0, 1.0)
+}
+
+frag shader_fs() -> float4 {
+  return float4(0.25, 0.5, 0.75, 1.0)
+}
