@@ -1,4 +1,4 @@
-if((GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
+if((GPU_BUILD_TOOLS OR GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
    NOT EMSCRIPTEN)
   add_executable(gpu-usl-fixture tests/usl_fixture.c)
   if(TARGET us)
@@ -12,8 +12,8 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
     C_EXTENSIONS NO
   )
 
-  if(GPU_USL_ROOT AND EXISTS "${GPU_USL_ROOT}/tools/uslpack.c")
-    add_executable(gpu-uslpack "${GPU_USL_ROOT}/tools/uslpack.c")
+  if(GPU_USL_ROOT AND EXISTS "${GPU_USL_ROOT}/tools/cli/uslpack.c")
+    add_executable(gpu-uslpack "${GPU_USL_ROOT}/tools/cli/uslpack.c")
     target_include_directories(gpu-uslpack PRIVATE "${GPU_USL_ROOT}/us/include")
     if(TARGET us)
       target_link_libraries(gpu-uslpack PRIVATE us)
@@ -22,6 +22,30 @@ if((GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
     endif()
     set_target_properties(gpu-uslpack PROPERTIES
       OUTPUT_NAME uslpack
+      RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+      C_STANDARD 11
+      C_STANDARD_REQUIRED YES
+      C_EXTENSIONS NO
+    )
+  endif()
+
+  if(GPU_BUILD_TOOLS AND GPU_USL_ROOT AND EXISTS "${GPU_USL_ROOT}/tools/cli/uslc.c")
+    if(US_RUNTIME_ONLY)
+      message(FATAL_ERROR "GPU_BUILD_TOOLS requires the full USL source compiler")
+    endif()
+
+    add_executable(gpu-uslc
+      "${GPU_USL_ROOT}/tools/cli/uslc.c"
+      "${GPU_USL_ROOT}/us/src/uslc/common/file.c"
+    )
+    target_include_directories(gpu-uslc PRIVATE "${GPU_USL_ROOT}/us/include")
+    if(TARGET us)
+      target_link_libraries(gpu-uslc PRIVATE us)
+    elseif(TARGET gpu_usl)
+      target_link_libraries(gpu-uslc PRIVATE gpu_usl)
+    endif()
+    set_target_properties(gpu-uslc PROPERTIES
+      OUTPUT_NAME uslc
       RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
       C_STANDARD 11
       C_STANDARD_REQUIRED YES
