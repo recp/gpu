@@ -207,21 +207,24 @@ if(GPU_BUILD_TESTS)
     set(GPU_PIPELINE_CACHE_PROCESS_PATH
       "$<TARGET_FILE_DIR:gpu-pipeline-cache-process-contract>/.gpu-pipeline-cache-process-${GPU_API_DEFAULT_BACKEND}.bin"
     )
-    add_test(
-      NAME pipeline-cache-process-${GPU_API_DEFAULT_BACKEND}
-      COMMAND ${CMAKE_COMMAND}
-              -DPIPELINE_EXE=$<TARGET_FILE:gpu-pipeline-cache-process-contract>
-              -DPAIR_EXE=$<TARGET_FILE:gpu-cache-file-concurrency-contract>
-              -DARTIFACT=${GPU_PIPELINE_CACHE_PROCESS_US}
-              -DBACKEND=${GPU_API_DEFAULT_BACKEND}
-              -DCACHE_PATH=${GPU_PIPELINE_CACHE_PROCESS_PATH}
-              -P ${PROJECT_SOURCE_DIR}/tests/validation/pipeline-cache-process/run.cmake
-    )
-    set_tests_properties(
-      pipeline-cache-process-${GPU_API_DEFAULT_BACKEND} PROPERTIES
-      RUN_SERIAL TRUE
-      TIMEOUT 120
-    )
+    # the backends with a disk pipeline cache (benchmarks/pipeline_stress.c)
+    if(GPU_API_DEFAULT_BACKEND MATCHES "^(metal|vulkan|dx12)$")
+      add_test(
+        NAME pipeline-cache-process-${GPU_API_DEFAULT_BACKEND}
+        COMMAND ${CMAKE_COMMAND}
+                -DPIPELINE_EXE=$<TARGET_FILE:gpu-pipeline-cache-process-contract>
+                -DPAIR_EXE=$<TARGET_FILE:gpu-cache-file-concurrency-contract>
+                -DARTIFACT=${GPU_PIPELINE_CACHE_PROCESS_US}
+                -DBACKEND=${GPU_API_DEFAULT_BACKEND}
+                -DCACHE_PATH=${GPU_PIPELINE_CACHE_PROCESS_PATH}
+                -P ${PROJECT_SOURCE_DIR}/tests/validation/pipeline-cache-process/run.cmake
+      )
+      set_tests_properties(
+        pipeline-cache-process-${GPU_API_DEFAULT_BACKEND} PROPERTIES
+        RUN_SERIAL TRUE
+        TIMEOUT 120
+      )
+    endif()
 
     if(GPU_BUILD_VULKAN AND
        NOT GPU_API_DEFAULT_BACKEND STREQUAL "vulkan" AND
