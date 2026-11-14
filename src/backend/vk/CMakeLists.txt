@@ -51,6 +51,7 @@ target_sources(gpu PRIVATE
   impl/memory.c
   impl/multigpu.c
   impl/pool.c
+  impl/retire.c
   impl/pipeline.c
   impl/pipeline_cache.c
   impl/query.c

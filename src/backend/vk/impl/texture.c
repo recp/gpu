@@ -1446,15 +1446,32 @@ bound:
   return createInfoResult;
 }
 
+static void
+vk__releaseTexture(GPUDeviceVk *deviceVk, void *owner) {
+  GPUTexture *texture;
+
+  (void)deviceVk;
+  texture = owner;
+  vk__destroyTextureState(texture->_priv);
+  free(texture);
+}
+
+/* kept until the work given before it finishes (impl/retire.c) */
 GPU_HIDE
 void
 vk_destroyTexture(GPUTexture *__restrict texture) {
+  GPUTextureVk *native;
+
   if (!texture || !texture->_ownsNative) {
     return;
   }
 
-  vk__destroyTextureState(texture->_priv);
-  free(texture);
+  if (!(native = texture->_priv) || !texture->device) {
+    vk__releaseTexture(NULL, texture);
+    return;
+  }
+
+  vk_retire(texture->device->_priv, &native->retired, texture, vk__releaseTexture);
 }
 
 GPU_HIDE
@@ -1579,21 +1596,19 @@ vk_createTextureView(GPUTexture                     *__restrict texture,
   return GPU_OK;
 }
 
-GPU_HIDE
-void
-vk_destroyTextureView(GPUTextureView *__restrict view) {
+/* deviceVk: the view's texture's device, passed in (the texture itself may be
+ * gone by the time a retired view goes) */
+static void
+vk__releaseTextureView(GPUDeviceVk *deviceVk, void *owner) {
+  GPUTextureView   *view;
   GPUTextureViewVk *native;
 
-  if (!view || !view->_ownsNative) {
-    return;
-  }
-
+  view   = owner;
   native = view->_priv;
 
   if (native && native->device) {
-    if (native->texture && native->texture->gpuDevice) {
-      vk_invalidateClassicFramebuffers(native->texture->gpuDevice,
-                                       native->view);
+    if (deviceVk) {
+      vk_invalidateClassicFramebuffers(deviceVk, native->view);
     }
 
     if (native->framebuffer) {
@@ -1606,6 +1621,29 @@ vk_destroyTextureView(GPUTextureView *__restrict view) {
   }
 
   free(view);
+}
+
+/* kept until the work given before it finishes (impl/retire.c): its image
+ * view and the framebuffers made with it */
+GPU_HIDE
+void
+vk_destroyTextureView(GPUTextureView *__restrict view) {
+  GPUTextureViewVk *native;
+  GPUDeviceVk      *deviceVk;
+
+  if (!view || !view->_ownsNative) {
+    return;
+  }
+
+  native   = view->_priv;
+  deviceVk = native && native->texture ? native->texture->gpuDevice : NULL;
+
+  if (!native || !deviceVk) {
+    vk__releaseTextureView(deviceVk, view);
+    return;
+  }
+
+  vk_retire(deviceVk, &native->retired, view, vk__releaseTextureView);
 }
 
 GPU_HIDE

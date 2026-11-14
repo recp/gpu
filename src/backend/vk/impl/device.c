@@ -2908,6 +2908,10 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   deviceVk->classicRenderLockInitialized = true;
 #endif
 
+  if (!vk_initRetire(deviceVk)) {
+    goto err;
+  }
+
   adapterVk = adapter->_priv;
 
   if (!adapterVk->negativeViewport) {
@@ -3779,6 +3783,8 @@ err:
       vkDeviceWaitIdle(deviceVk->device);
     }
 
+    vk_finishRetire(deviceVk);
+
     if (deviceVk->createdQueues) {
       for (cleanupIndex = 0; cleanupIndex < deviceVk->nCreatedQueues; cleanupIndex++) {
         vk_destroyCommandQueue(deviceVk->createdQueues[cleanupIndex]);
@@ -3801,6 +3807,7 @@ err:
 #endif
     }
 
+    vk_destroyRetire(deviceVk);
     free(deviceVk);
   }
 
@@ -3826,6 +3833,10 @@ vk_destroyDevice(GPUDevice * __restrict device) {
       vkDeviceWaitIdle(deviceVk->device);
     }
 
+    /* idle: what was destroyed while in use goes, before the queues (their
+     * last waits reclaim) and its memory's pool */
+    vk_finishRetire(deviceVk);
+
     if (deviceVk->createdQueues) {
       for (i = 0; i < deviceVk->nCreatedQueues; i++) {
         vk_destroyCommandQueue(deviceVk->createdQueues[i]);
@@ -3848,6 +3859,7 @@ vk_destroyDevice(GPUDevice * __restrict device) {
 #endif
     }
 
+    vk_destroyRetire(deviceVk);
     free(deviceVk);
   }
 
