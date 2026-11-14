@@ -18,8 +18,9 @@
 #include "impl.h"
 
 GPUApi vk = {
-  .initialized = false,
-  .backend     = GPU_BACKEND_VULKAN
+  .initialized            = false,
+  .backend                = GPU_BACKEND_VULKAN,
+  .storageAlwaysReadWrite = true
 };
 
 GPU_HIDE

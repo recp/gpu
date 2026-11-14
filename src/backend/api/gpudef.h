@@ -58,6 +58,9 @@ typedef struct GPUApi {
    * isn't thread-safe): no compile threads, the backend compiles in the
    * background itself where it can */
   bool                  callerThreadPipelines;
+  /* every storage texture format it can bind binds read-write: no format's
+   * read-write images need emulating (api/image_buffer.c) */
+  bool                  storageAlwaysReadWrite;
   GPUDeviceApi          device;
   GPURenderApi          render;
   GPURCEApi             rce;

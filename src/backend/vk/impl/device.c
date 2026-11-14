@@ -788,7 +788,8 @@ vk_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
   outCaps->storage         = (features & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0u;
   outCaps->colorAttachment = (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) != 0u;
 
-  /* a storage image of a declared format reads as well as writes */
+  /* a storage image of a declared format reads as well as writes (the api's
+   * storageAlwaysReadWrite skips the image-buffer probe on it) */
   outCaps->storageReadWrite = outCaps->storage;
   outCaps->blendable       = (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0u;
   outCaps->depthStencil    = (features & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0u;

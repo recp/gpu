@@ -166,6 +166,7 @@ GPU_HIDE
 void
 initImageBufferDevice(GPUDevice *device) {
   GPUFormatCapabilities caps;
+  const GPUApi         *api;
   const char           *force;
   uint64_t              mask;
   void                 *lock;
@@ -183,6 +184,10 @@ initImageBufferDevice(GPUDevice *device) {
   mask  = 0u;
 
   if (force && force[0] == '0')
+    return;
+
+  /* nothing to find, and each format's query can be a driver round trip */
+  if (!(force && force[0] == '1') && (api = deviceApi(device)) && api->storageAlwaysReadWrite)
     return;
 
   for (i = 0u; i < GPU_ARRAY_LEN(gpu_imageBufferFormats); i++) {
