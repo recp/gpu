@@ -26,7 +26,9 @@ enum {
   COPY_TEST_PIXEL_SIZE  = 4u,
   COPY_TEST_ROW_PITCH   = 256u,
   COPY_TEST_WARM_RUNS   = 16u,
-  COPY_TEST_UPLOAD_RUNS = 32u
+  COPY_TEST_UPLOAD_RUNS = 32u,
+  COPY_TEST_RETIRE_SMALL = 64u * 1024u,
+  COPY_TEST_RETIRE_LARGE = 16u * 1024u * 1024u
 };
 
 typedef struct TextureBlitCase {
@@ -2393,12 +2395,234 @@ cleanup:
   return ok;
 }
 
+static bool
+retire_fill(GPUQueue *queue, GPUBuffer *buffer, uint32_t *words, uint64_t sizeBytes, uint32_t seed) {
+  void    *mapped;
+  uint64_t i;
+
+  for (i = 0u; i < sizeBytes / sizeof(uint32_t); i++) {
+    words[i] = seed ^ (uint32_t)(i * 0x9e3779b9u);
+  }
+
+  if ((mapped = GPUGetBufferHostAddress(buffer))) {
+    memcpy(mapped, words, (size_t)sizeBytes);
+    return true;
+  }
+
+  return GPUQueueWriteBuffer(queue, buffer, 0u, words, sizeBytes) == GPU_OK;
+}
+
+/* objects destroyed while the GPU may still use them stay usable until that
+ * work finishes, on every backend: a buffer and a texture written by the queue
+ * and destroyed before their writes went out (the queue keeps writing after
+ * them), and copy sources destroyed while submitted copies read them, their
+ * memory asked for again at once by buffers the host writes (a backend that
+ * freed a source early copies the new contents, or faults on a freed one) */
+static int
+check_destroy_while_in_use(GPUDevice *device) {
+  GPUBufferCreateInfo      bufferInfo  = {0};
+  GPUTextureCreateInfo     textureInfo = {0};
+  GPUTextureViewCreateInfo viewInfo    = {0};
+  GPUTextureWriteRegion    writeRegion = {0};
+  GPUBufferCopyRegion      region      = {0};
+  GPUQueueSubmitInfo       submitInfo  = {0};
+  GPUCommandBuffer        *buffers[1];
+  GPUQueue                *queue;
+  GPUBuffer               *written, *kept, *sources[2], *targets[2], *takers[2];
+  GPUTexture              *texture;
+  GPUTextureView          *view;
+  GPUCommandBuffer        *cmdb;
+  GPUTransferPassEncoder  *pass;
+  uint32_t                *expected[2], *actual, *scratch, *texels;
+  uint64_t                 sizes[2];
+  uint32_t                 i;
+  int                      ok;
+
+  queue      = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  written    = kept = NULL;
+  texture    = NULL;
+  view       = NULL;
+  cmdb       = NULL;
+  pass       = NULL;
+  sizes[0]   = COPY_TEST_RETIRE_LARGE;
+  sizes[1]   = COPY_TEST_RETIRE_SMALL;
+  ok         = 0;
+  memset(sources, 0, sizeof(sources));
+  memset(targets, 0, sizeof(targets));
+  memset(takers, 0, sizeof(takers));
+  expected[0] = malloc(COPY_TEST_RETIRE_LARGE);
+  expected[1] = malloc(COPY_TEST_RETIRE_SMALL);
+  actual      = malloc(COPY_TEST_RETIRE_LARGE);
+  scratch     = malloc(COPY_TEST_RETIRE_LARGE);
+  texels      = calloc(1u, 64u * 64u * 4u);
+
+  if (!queue || !expected[0] || !expected[1] || !actual || !scratch || !texels) {
+    goto cleanup;
+  }
+
+  bufferInfo.chain.sType       = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize  = sizeof(bufferInfo);
+  bufferInfo.label             = "destroy-while-in-use";
+  bufferInfo.sizeBytes         = 256u;
+  bufferInfo.usage             = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "destroy-while-in-use";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 64u;
+  textureInfo.height           = 64u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COPY_DST | GPU_TEXTURE_USAGE_SAMPLED;
+  viewInfo.chain.sType         = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize    = sizeof(viewInfo);
+  viewInfo.viewType            = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format              = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount       = 1u;
+  viewInfo.arrayLayerCount     = 1u;
+  writeRegion.width            = 64u;
+  writeRegion.height           = 64u;
+  writeRegion.depth            = 1u;
+  writeRegion.layerCount       = 1u;
+  writeRegion.bytesPerRow      = 64u * 4u;
+  writeRegion.rowsPerImage     = 64u;
+
+  /* written, then destroyed before the write went out */
+  if (GPUCreateBuffer(device, &bufferInfo, &written) != GPU_OK
+      || GPUCreateBuffer(device, &bufferInfo, &kept) != GPU_OK
+      || GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK
+      || GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK
+      || !retire_fill(queue, written, expected[1], 256u, 0x5a5a0000u)) {
+    goto cleanup;
+  }
+
+  GPUDestroyBuffer(written);
+  written = NULL;
+
+  if (GPUQueueWriteTexture(queue, texture, &writeRegion, texels, 64u * 64u * 4u) != GPU_OK) {
+    goto cleanup;
+  }
+
+  GPUDestroyTextureView(view);
+  GPUDestroyTexture(texture);
+  view    = NULL;
+  texture = NULL;
+
+  for (i = 0u; i < 64u; i++) {
+    expected[1][i] = 0xa5000000u + i;
+  }
+
+  if (GPUQueueWriteBuffer(queue, kept, 0u, expected[1], 256u) != GPU_OK
+      || GPUQueueReadBuffer(queue, kept, 0u, actual, 256u) != GPU_OK
+      || memcmp(actual, expected[1], 256u) != 0) {
+    fprintf(stderr, "queue writes after destroying what they wrote failed\n");
+    goto cleanup;
+  }
+
+  /* read by copies in flight, then destroyed; the long copy first keeps the
+   * short one waiting while its source's memory is taken again */
+  for (i = 0u; i < 2u; i++) {
+    bufferInfo.sizeBytes = sizes[i];
+    bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_SRC;
+
+    if (GPUCreateBuffer(device, &bufferInfo, &sources[i]) != GPU_OK
+        || !retire_fill(queue, sources[i], expected[i], sizes[i], 0x13570000u + i)) {
+      goto cleanup;
+    }
+
+    bufferInfo.usage = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
+
+    if (GPUCreateBuffer(device, &bufferInfo, &targets[i]) != GPU_OK) {
+      goto cleanup;
+    }
+  }
+
+  if (GPUAcquireCommandBuffer(queue, "destroy-while-in-use", &cmdb) != GPU_OK || !cmdb
+      || !(pass = GPUBeginTransferPass(cmdb, "destroy-while-in-use"))) {
+    goto cleanup;
+  }
+
+  for (i = 0u; i < 2u; i++) {
+    region.sizeBytes = sizes[i];
+    GPUCopyBufferToBuffer(pass, sources[i], targets[i], &region);
+  }
+
+  GPUEndTransferPass(pass);
+  buffers[0]                    = cmdb;
+  submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+  submitInfo.chain.structSize   = sizeof(submitInfo);
+  submitInfo.commandBufferCount = 1u;
+  submitInfo.ppCommandBuffers   = buffers;
+
+  if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
+    cmdb = NULL;
+    goto cleanup;
+  }
+
+  cmdb = NULL;
+
+  for (i = 0u; i < 2u; i++) {
+    GPUDestroyBuffer(sources[i]);
+    sources[i] = NULL;
+  }
+
+  for (i = 0u; i < 2u; i++) {
+    bufferInfo.sizeBytes = sizes[i];
+    bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_SRC;
+
+    if (GPUCreateBuffer(device, &bufferInfo, &takers[i]) != GPU_OK
+        || !retire_fill(queue, takers[i], scratch, sizes[i], 0xeeee0000u + i)) {
+      goto cleanup;
+    }
+  }
+
+  ok = GPUQueueWaitIdle(queue) == GPU_OK;
+
+  for (i = 0u; ok && i < 2u; i++) {
+    ok = GPUQueueReadBuffer(queue, targets[i], 0u, actual, sizes[i]) == GPU_OK
+         && memcmp(actual, expected[i], (size_t)sizes[i]) == 0;
+  }
+
+  if (!ok) {
+    fprintf(stderr, "a copy whose source was destroyed while it ran read other contents\n");
+  }
+
+cleanup:
+  if (cmdb) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+  }
+
+  if (queue) {
+    (void)GPUQueueWaitIdle(queue);
+  }
+
+  for (i = 0u; i < 2u; i++) {
+    GPUDestroyBuffer(sources[i]);
+    GPUDestroyBuffer(targets[i]);
+    GPUDestroyBuffer(takers[i]);
+  }
+
+  GPUDestroyBuffer(written);
+  GPUDestroyBuffer(kept);
+  GPUDestroyTextureView(view);
+  GPUDestroyTexture(texture);
+  free(expected[0]);
+  free(expected[1]);
+  free(actual);
+  free(scratch);
+  free(texels);
+  return ok;
+}
+
 int
 gpu_test_copy(GPUDevice *device) {
   return check_copy_pass_device_dispatch(device)
          && check_copy_pass_validation(device)
          && check_copy_pass_invalid_copy_noops(device)
          && check_buffer_upload_order(device)
+         && check_destroy_while_in_use(device)
          && check_compressed_texture_copies(device)
          && check_texture_blit(device)
          && check_texture_blit_variants(device)
