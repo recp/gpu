@@ -1724,10 +1724,13 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     storage16Features2.pNext = &storage16Features;
     getFeatures2(raw, &storage16Features2);
 
-    adapterVk->storageBuffer16BitAccess = storage16Features.storageBuffer16BitAccess;
-    adapterVk->storageInputOutput16     = storage16Features.storageInputOutput16;
+    adapterVk->storageBuffer16BitAccess           = storage16Features.storageBuffer16BitAccess;
+    adapterVk->uniformAndStorageBuffer16BitAccess = storage16Features.uniformAndStorageBuffer16BitAccess;
+    adapterVk->storageInputOutput16               = storage16Features.storageInputOutput16;
 
-    if ((adapterVk->storageBuffer16BitAccess || adapterVk->storageInputOutput16)
+    if ((adapterVk->storageBuffer16BitAccess
+         || adapterVk->uniformAndStorageBuffer16BitAccess
+         || adapterVk->storageInputOutput16)
         && !storage16Core
         && !vk_addDeviceExtension(adapterVk,
                                   VK_KHR_16BIT_STORAGE_EXTENSION_NAME)) {
@@ -3203,12 +3206,17 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
     float16Features.shaderFloat16 = VK_TRUE;
     deviceCI.pNext                = &float16Features;
 
-    if (adapterVk->storageBuffer16BitAccess || adapterVk->storageInputOutput16) {
-      storage16Features.sType                    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
-      storage16Features.pNext                    = (void *)deviceCI.pNext;
-      storage16Features.storageBuffer16BitAccess = adapterVk->storageBuffer16BitAccess;
-      storage16Features.storageInputOutput16     = adapterVk->storageInputOutput16;
-      deviceCI.pNext                             = &storage16Features;
+    /* half in uniform blocks too, and in the Uniform class's buffer blocks
+     * (SPIR-V before 1.3) */
+    if (adapterVk->storageBuffer16BitAccess
+        || adapterVk->uniformAndStorageBuffer16BitAccess
+        || adapterVk->storageInputOutput16) {
+      storage16Features.sType                              = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
+      storage16Features.pNext                              = (void *)deviceCI.pNext;
+      storage16Features.storageBuffer16BitAccess           = adapterVk->storageBuffer16BitAccess;
+      storage16Features.uniformAndStorageBuffer16BitAccess = adapterVk->uniformAndStorageBuffer16BitAccess;
+      storage16Features.storageInputOutput16               = adapterVk->storageInputOutput16;
+      deviceCI.pNext                                       = &storage16Features;
     }
   }
 #ifdef VK_EXT_shader_atomic_float

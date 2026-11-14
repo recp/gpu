@@ -179,6 +179,7 @@ typedef struct GPUAdapterVk {
   bool                                                  dynamicRendering;
   bool                                                  shaderFloat16;
   bool                                                  storageBuffer16BitAccess;
+  bool                                                  uniformAndStorageBuffer16BitAccess;
   bool                                                  storageInputOutput16;
   bool                                                  vulkanMemoryModel;
   bool                                                  descriptorIndexing;
