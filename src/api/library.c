@@ -2510,6 +2510,70 @@ shaderLibraryRefused(GPUDevice *device, GPUApi *api, uint64_t size, uint64_t has
   pipelineFailed(device, GPU_ERROR_BACKEND_FAILURE, "shader library", NULL, &payload, NULL, NULL, 0u);
 }
 
+/* USL made nothing for this device: the target it was asked for and the
+ * payloads the artifact carries (all a runtime-only USL can use), so a
+ * missing variant shows which. A supported target that got nothing is
+ * reported to the app; an unsupported one is an answer, logged only with
+ * GPU_USL_LOG. "USL compile failed" stays first: tests match it */
+static void
+uslLibraryFailed(GPUDevice           *device,
+                 GPUApi              *api,
+                 const void          *bytecode,
+                 size_t               size,
+                 const USLTargetSpec *target,
+                 USResult             result,
+                 GPUResult            rc) {
+  USReflection     reflection = {0};
+  GPUShaderLibrary payload    = {0};
+  char             caps[512];
+  char             packed[320];
+  size_t           used;
+  uint32_t         count;
+  uint32_t         i;
+  int              n;
+
+  if (rc != GPU_ERROR_BACKEND_FAILURE && !getenv("GPU_USL_LOG"))
+    return;
+
+  if (us_target_caps(target, caps, sizeof(caps)) != USLOk)
+    caps[0] = '\0';
+
+  packed[0] = '\0';
+  count     = 0u;
+  used      = 0u;
+
+  if (us_reflect(bytecode, size, &reflection) == USLOk) {
+    count = reflection.embedded_blobs.blob_count;
+
+    for (i = 0u; i < count && reflection.embedded_blobs.blobs && used < sizeof(packed); i++) {
+      const USLRuntimeEmbeddedBlob *blob = &reflection.embedded_blobs.blobs[i];
+
+      n = snprintf(packed + used, sizeof(packed) - used, "%s backend %u %s %u bytes, base %016llx, features %llx",
+                   i ? ";" : ":", (unsigned)blob->backend,
+                   blob->encoding == USL_RUNTIME_EMBEDDED_BLOB_ENCODING_BINARY ? "binary" : "text",
+                   (unsigned)blob->data_size, (unsigned long long)blob->target_base_hash,
+                   (unsigned long long)blob->target_feature_mask);
+      used = n < 0 ? sizeof(packed) : used + (size_t)n;
+    }
+
+    us_free_reflection(&reflection);
+  }
+
+  if (rc != GPU_ERROR_BACKEND_FAILURE) {
+    fprintf(stderr, "GPU: USL compile failed (result=%d, backend=%u, profile=%06x, caps=%s): unsupported; "
+                    "%u packed payload%s%s\n",
+            (int)result, (unsigned)target->backend, (unsigned)target->profile, caps,
+            (unsigned)count, count == 1u ? "" : "s", packed);
+    return;
+  }
+
+  pipelineDriverMessage("USL compile failed (result=%d, backend=%u, profile=%06x, caps=%s); %u packed payload%s%s",
+                        (int)result, (unsigned)target->backend, (unsigned)target->profile, caps,
+                        (unsigned)count, count == 1u ? "" : "s", packed);
+  payload._api = api;
+  pipelineFailed(device, rc, "shader library", NULL, &payload, NULL, NULL, 0u);
+}
+
 static GPUResult
 createShaderLibraryFromBackendText(GPUDevice         *device,
                                    const void        *sourceData,
@@ -3250,23 +3314,6 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
       || compileOutput.encoding != encoding
       || !compileOutput.backend_data
       || compileOutput.backend_size == 0) {
-    if (getenv("GPU_USL_LOG")) {
-      char targetCaps[1024];
-
-      if (us_target_caps(&target,
-                         targetCaps,
-                         sizeof(targetCaps)) != USLOk) {
-        targetCaps[0] = '\0';
-      }
-
-      fprintf(stderr,
-              "GPU: USL compile failed " "(result=%d, backend=%u, profile=%06x, caps=%s)\n",
-              (int)compileResult,
-              (unsigned)target.backend,
-              (unsigned)target.profile,
-              targetCaps);
-    }
-
     /* us_compile validates successful outputs; decode again only to classify
      * a failure. dxil already passed its module-wide check above. */
 
@@ -3277,6 +3324,7 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
     rc = targetSupported
            ? GPU_ERROR_BACKEND_FAILURE
            : GPU_ERROR_UNSUPPORTED;
+    uslLibraryFailed(device, api, bytecodeData, (size_t)bytecodeSize, &target, compileResult, rc);
     goto cleanup;
   }
 
