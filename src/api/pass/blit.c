@@ -793,6 +793,15 @@ generateMipmapsFallback(GPUCommandBuffer *cmdb,
       barrierBatch.srcStages           = GPU_STAGE_FRAGMENT;
       barrierBatch.dstStages           = GPU_STAGE_FRAGMENT;
       barrierBatch.textureBarrierCount = 1u;
+
+      /* blitTexture wrote the level with a draw or, given both copy usages,
+       * a native blit: wait for either */
+      if ((texture->usage & (GPU_TEXTURE_USAGE_COPY_SRC | GPU_TEXTURE_USAGE_COPY_DST))
+          == (GPU_TEXTURE_USAGE_COPY_SRC | GPU_TEXTURE_USAGE_COPY_DST)) {
+        textureBarrier.srcAccess |= GPU_ACCESS_TRANSFER_WRITE;
+        barrierBatch.srcStages   |= GPU_STAGE_TRANSFER;
+      }
+
       GPUEncodeBarriers(cmdb, &barrierBatch);
     }
   }
