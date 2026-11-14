@@ -2208,6 +2208,7 @@ check_queue_submit_ex_semaphore(GPUDevice *device) {
   GPUCommandBuffer        submittedCmdb = {0};
   GPUCommandBuffer       *duplicateBuffers[2];
   GPUQueueSubmitExInfo    submitInfo = {0};
+  GPUResult               result;
   int                     ok;
 
   api = deviceApi(device);
@@ -2261,7 +2262,15 @@ check_queue_submit_ex_semaphore(GPUDevice *device) {
   semaphoreInfo.initialValue     = 1u;
   semaphore                      = NULL;
 
-  if (GPUCreateSemaphore(device, &semaphoreInfo, &semaphore) != GPU_OK || !semaphore) {
+  result = GPUCreateSemaphore(device, &semaphoreInfo, &semaphore);
+
+  /* timeline semaphores are optional (Vulkan 1.1 drivers, Adreno 610) */
+  if (result == GPU_ERROR_UNSUPPORTED && !semaphore) {
+    printf("submit-ex semaphores unsupported by this device: skipped\n");
+    return 1;
+  }
+
+  if (result != GPU_OK || !semaphore) {
     fprintf(stderr, "failed to create semaphore\n");
     return 0;
   }
