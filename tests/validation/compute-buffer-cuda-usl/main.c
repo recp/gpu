@@ -15,8 +15,10 @@
  */
 
 #include <gpu/gpu.h>
+#include "../../../src/api/buffer_internal.h"
 #include "../../../src/api/cmdqueue_internal.h"
 #include "../../../src/api/device_internal.h"
+#include "../../../src/backend/cuda/common.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -24,7 +26,9 @@
 #include <stdlib.h>
 
 enum {
-  ValueCount = 512u
+  ValueCount          = 512u,
+  RetireDispatchCount = 64u,
+  RetireRoundCount    = 8u
 };
 
 typedef struct Params {
@@ -127,6 +131,201 @@ cleanup:
   if (cmdb && !cmdb->_submitted) {
     (void)GPUDiscardCommandBuffer(cmdb);
   }
+
+  return 0;
+}
+
+static GPUBuffer*
+create_values_buffer(GPUDevice *device, const char *label, const float values[ValueCount]) {
+  GPUBufferCreateInfo info = {0};
+  GPUBuffer          *buffer;
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.label            = label;
+  info.sizeBytes        = ValueCount * sizeof(float);
+  info.usage            = GPU_BUFFER_USAGE_STORAGE |
+                          GPU_BUFFER_USAGE_COPY_SRC |
+                          GPU_BUFFER_USAGE_COPY_DST;
+  buffer                = NULL;
+
+  if (GPUCreateBuffer(device, &info, &buffer) != GPU_OK || !buffer) {
+    return NULL;
+  }
+
+  if (values && GPUQueueWriteBuffer(GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u),
+                                    buffer,
+                                    0u,
+                                    values,
+                                    info.sizeBytes) != GPU_OK) {
+    GPUDestroyBuffer(buffer);
+    return NULL;
+  }
+
+  return buffer;
+}
+
+/* a buffer destroyed while dispatches still read it keeps its pooled range
+ * until they finish, so a buffer made meanwhile gets other memory, and
+ * nothing waits any more once their fence is signaled. a round tells only
+ * if the dispatches were still running when the new buffer was made: the
+ * queue hadn't finished their serial even after it. */
+static int
+check_destroy_while_in_use(GPUDevice          *device,
+                           GPUQueue           *queue,
+                           GPUComputePipeline *pipeline,
+                           GPUBindGroupLayout *dataLayout,
+                           GPUBindGroup       *paramsGroup,
+                           GPUFence           *fence,
+                           uint32_t            dynamicOffset,
+                           const Params       *params) {
+  GPUBindGroupCreateInfo groupInfo  = {0};
+  GPUBindGroupEntry      entries[2] = {0};
+  GPUQueueSubmitInfo     submitInfo = {0};
+  float                  values[ValueCount];
+  GPUCommandBuffer      *cmdb;
+  GPUComputePassEncoder *pass;
+  GPUBuffer             *input;
+  GPUBuffer             *output;
+  GPUBuffer             *later;
+  GPUBindGroup          *group;
+  uint64_t               serial;
+  uint64_t               address;
+  uint32_t               held;
+  uint32_t               round;
+  uint32_t               i;
+
+  for (i = 0u; i < ValueCount; i++) {
+    values[i] = (float)i;
+  }
+
+  held = 0u;
+
+  for (round = 0u; round < RetireRoundCount; round++) {
+    cmdb   = NULL;
+    pass   = NULL;
+    later  = NULL;
+    group  = NULL;
+    output = NULL;
+
+    if (!(input = create_values_buffer(device, "cuda-retire-input", values))
+        || !(output = create_values_buffer(device, "cuda-retire-output", NULL))) {
+      fprintf(stderr, "CUDA retire buffers creation failed\n");
+      goto done;
+    }
+
+    entries[0].binding       = 0u;
+    entries[0].bindingType   = GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
+    entries[0].buffer.buffer = input;
+    entries[0].buffer.size   = sizeof(values);
+    entries[1].binding       = 1u;
+    entries[1].bindingType   = GPU_BINDING_STORAGE_BUFFER;
+    entries[1].buffer.buffer = output;
+    entries[1].buffer.size   = sizeof(values);
+    groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+    groupInfo.chain.structSize = sizeof(groupInfo);
+    groupInfo.label            = "cuda-retire-group";
+    groupInfo.layout           = dataLayout;
+    groupInfo.entryCount       = 2u;
+    groupInfo.pEntries         = entries;
+
+    if (GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group
+        || GPUAcquireCommandBuffer(queue, "cuda-retire", &cmdb) != GPU_OK || !cmdb
+        || !(pass = GPUBeginComputePass(cmdb, "cuda-retire"))) {
+      fprintf(stderr, "CUDA retire dispatch setup failed\n");
+      goto done;
+    }
+
+    GPUBindComputePipeline(pass, pipeline);
+    GPUBindComputeGroup(pass, 0u, paramsGroup, 1u, &dynamicOffset);
+    GPUBindComputeGroup(pass, 1u, group, 0u, NULL);
+
+    for (i = 0u; i < RetireDispatchCount; i++) {
+      GPUDispatch(pass, ValueCount / 256u, 1u, 1u);
+    }
+
+    GPUEndComputePass(pass);
+    pass = NULL;
+
+    submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+    submitInfo.chain.structSize   = sizeof(submitInfo);
+    submitInfo.ppCommandBuffers   = &cmdb;
+    submitInfo.fence              = fence;
+    submitInfo.commandBufferCount = 1u;
+
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
+      cmdb = NULL;
+      fprintf(stderr, "CUDA retire submit failed\n");
+      goto done;
+    }
+
+    cmdb    = NULL;
+    serial  = gpuRetireLoad(&queue->_retire.submitted);
+    address = input->_gpuAddress;
+    GPUDestroyBindGroup(group);
+    GPUDestroyBuffer(input);
+    group = NULL;
+    input = NULL;
+
+    if (!(later = create_values_buffer(device, "cuda-retire-later", NULL))) {
+      fprintf(stderr, "CUDA retire later buffer creation failed\n");
+      goto done;
+    }
+
+    if (gpuRetireLoad(&queue->_retire.done) < serial) {
+      held++;
+
+      if (later->_gpuAddress == address) {
+        fprintf(stderr, "CUDA buffer memory reused while dispatches still read it\n");
+        goto done;
+      }
+    }
+
+    if (GPUWaitFence(fence, UINT64_MAX) != GPU_OK) {
+      fprintf(stderr, "CUDA retire fence wait failed\n");
+      goto done;
+    }
+
+    GPUResetFence(fence);
+
+    if (cuda_device(device)->retire.head) {
+      fprintf(stderr, "CUDA destroyed buffer still waiting after its fence\n");
+      goto done;
+    }
+
+    if (GPUQueueReadBuffer(queue, output, 0u, values, sizeof(values)) != GPU_OK
+        || !values_match(values, params)) {
+      fprintf(stderr, "CUDA retire readback validation failed\n");
+      goto done;
+    }
+
+    for (i = 0u; i < ValueCount; i++) {
+      values[i] = (float)i;
+    }
+
+    GPUDestroyBuffer(later);
+    GPUDestroyBuffer(output);
+  }
+
+  printf("CUDA destroy while in use: %u of %u rounds still running at the destroy\n",
+         held,
+         (unsigned)RetireRoundCount);
+
+  return 1;
+
+done:
+  if (pass) {
+    GPUEndComputePass(pass);
+  }
+
+  if (cmdb && !cmdb->_submitted) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+  }
+
+  GPUDestroyBindGroup(group);
+  GPUDestroyBuffer(later);
+  GPUDestroyBuffer(output);
+  GPUDestroyBuffer(input);
 
   return 0;
 }
@@ -387,6 +586,17 @@ main(int argc, char **argv) {
               device->currentFrameStats.hotPathAllocCount,
             (unsigned long long)
               device->currentFrameStats.hotPathFreeCount);
+    goto cleanup;
+  }
+
+  if (!check_destroy_while_in_use(device,
+                                  queue,
+                                  pipeline,
+                                  shaderLayout->bindGroupLayouts[1],
+                                  paramsGroup,
+                                  fence,
+                                  dynamicOffset,
+                                  &params[1])) {
     goto cleanup;
   }
 
