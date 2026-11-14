@@ -2033,8 +2033,11 @@ check_texture_write_origins(GPUDevice *device) {
     textureInfo.mipLevelCount = entry->mipCount;
 
     result = GPUCreateTexture(device, &textureInfo, &texture);
+    /* no mipmapped 1D textures on Metal, nor in one layer on WebGPU (a 1D
+     * array is a 2D array there) */
     if (entry->dimension == GPU_TEXTURE_DIMENSION_1D && entry->mipCount > 1u
-        && properties.backend == GPU_BACKEND_METAL) {
+        && (properties.backend == GPU_BACKEND_METAL
+            || (properties.backend == GPU_BACKEND_WEBGPU && entry->images == 1u))) {
       if (result != GPU_ERROR_UNSUPPORTED || texture)
         goto cleanup;
 
