@@ -98,7 +98,6 @@ cuda_destroyBuffer(GPUBuffer *__restrict buffer) {
 
   if (native && device && native->poolBlock) {
     cuda_poolRelease(device, native);
-    free(native);
     free(buffer);
     return;
   }
