@@ -2495,6 +2495,7 @@ check_destroy_while_in_use(GPUDevice *device) {
       || GPUCreateTexture(device, &textureInfo, &texture) != GPU_OK
       || GPUCreateTextureView(texture, &viewInfo, &view) != GPU_OK
       || !retire_fill(queue, written, expected[1], 256u, 0x5a5a0000u)) {
+    fprintf(stderr, "destroy-while-in-use setup failed\n");
     goto cleanup;
   }
 
@@ -2523,12 +2524,15 @@ check_destroy_while_in_use(GPUDevice *device) {
 
   /* read by copies in flight, then destroyed; the long copy first keeps the
    * short one waiting while its source's memory is taken again */
+  /* COPY_DST too: retire_fill may write them through the queue (WebGPU
+   * requires it) */
   for (i = 0u; i < 2u; i++) {
     bufferInfo.sizeBytes = sizes[i];
-    bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_SRC;
+    bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
 
     if (GPUCreateBuffer(device, &bufferInfo, &sources[i]) != GPU_OK
         || !retire_fill(queue, sources[i], expected[i], sizes[i], 0x13570000u + i)) {
+      fprintf(stderr, "destroy-while-in-use source setup failed\n");
       goto cleanup;
     }
 
@@ -2570,10 +2574,11 @@ check_destroy_while_in_use(GPUDevice *device) {
 
   for (i = 0u; i < 2u; i++) {
     bufferInfo.sizeBytes = sizes[i];
-    bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_SRC;
+    bufferInfo.usage     = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
 
     if (GPUCreateBuffer(device, &bufferInfo, &takers[i]) != GPU_OK
         || !retire_fill(queue, takers[i], scratch, sizes[i], 0xeeee0000u + i)) {
+      fprintf(stderr, "destroy-while-in-use taker setup failed\n");
       goto cleanup;
     }
   }
