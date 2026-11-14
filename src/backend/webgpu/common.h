@@ -42,12 +42,15 @@
 
 #include <stdatomic.h>
 
-#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+#if !defined(__EMSCRIPTEN__)
 #  if defined(_WIN32) || defined(WIN32)
 #    include <windows.h>
 #  else
 #    include <pthread.h>
 #  endif
+#endif
+
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
 #  define GPU_WEBGPU_FEATURE_NORM16 \
     ((WGPUFeatureName)WGPUNativeFeature_TextureFormat16bitNorm)
 #  define GPU_WEBGPU_FEATURE_MULTI_DRAW \
@@ -130,12 +133,21 @@ typedef struct GPUCommandWebGPU {
   WGPURenderPassDepthStencilAttachment depthStencilAttachment;
 } GPUCommandWebGPU;
 
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+typedef WGPUSubmissionIndex GPUWebGPUCompletion;
+#elif !defined(__EMSCRIPTEN__)
+typedef WGPUFuture GPUWebGPUCompletion;
+#endif
+
 typedef struct GPUDeviceWebGPU {
   WGPUDevice          device;
   WGPUQueue           queue;
   WGPUBindGroupLayout pushConstantLayout;
   void               *errorContext;
-#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+#if !defined(__EMSCRIPTEN__)
+#  if GPU_WEBGPU_PROVIDER_DAWN
+  WGPUInstance        completionInstance;
+#  endif
 #  if defined(_WIN32) || defined(WIN32)
   HANDLE              completionWorker;
   CRITICAL_SECTION    completionLock;
@@ -146,11 +158,12 @@ typedef struct GPUDeviceWebGPU {
   pthread_cond_t      completionCondition;
 #  endif
 #endif
+  bool                norm16Resolve;
   WGPULimits          limits;
   GPUQueue            queueHandle;
   GPUCommandWebGPU    commands[GPU_WEBGPU_COMMAND_SLOT_COUNT];
-#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  WGPUSubmissionIndex completionSubmissions[GPU_WEBGPU_COMMAND_SLOT_COUNT];
+#if !defined(__EMSCRIPTEN__)
+  GPUWebGPUCompletion completions[GPU_WEBGPU_COMMAND_SLOT_COUNT];
   uint32_t            completionHead;
   uint32_t            completionTail;
   uint32_t            completionCount;
@@ -236,13 +249,13 @@ webgpuInitPushConstants(GPUDeviceWebGPU *device);
 void
 webgpuDestroyPushConstants(GPUDeviceWebGPU *device);
 
-#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+#if !defined(__EMSCRIPTEN__)
 bool
 webgpuStartCompletionWorker(GPUDeviceWebGPU *device);
 
 void
 webgpuQueueCompletion(GPUDeviceWebGPU    *device,
-                      WGPUSubmissionIndex submission);
+                      GPUWebGPUCompletion completion);
 
 void
 webgpuStopCompletionWorker(GPUDeviceWebGPU *device);

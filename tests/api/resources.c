@@ -531,8 +531,40 @@ check_format_texture_create(GPUDevice           *device,
 
 static int
 check_format_capability_textures(GPUDevice *device) {
+  static const GPUFormat coreStorage[] = {
+    GPU_FORMAT_RG32_UINT, GPU_FORMAT_RG32_SINT, GPU_FORMAT_RG32_FLOAT
+  };
+  GPUAdapterProperties  properties;
   GPUFormatCapabilities caps;
   GPUFormat             format;
+  uint32_t              i;
+
+  if (GPUGetAdapterProperties(device->adapter, &properties) != GPU_OK)
+    return 0;
+
+  if (properties.backend == GPU_BACKEND_WEBGPU) {
+    if (GPUGetFormatCapabilities(device->adapter, GPU_FORMAT_RGBA16_FLOAT, &caps) != GPU_OK
+        || !caps.colorAttachment
+        || !(caps.supportedSampleCounts & GPU_SAMPLE_COUNT_4_BIT)) {
+      fprintf(stderr, "WebGPU core RGBA16_FLOAT multisampling is unavailable\n");
+      return 0;
+    }
+
+    if (GPUGetFormatCapabilities(device->adapter, GPU_FORMAT_BGRA8_UNORM_SRGB, &caps) != GPU_OK
+        || !caps.sampled || !caps.filterable || !caps.colorAttachment
+        || !caps.blendable || !(caps.supportedSampleCounts & GPU_SAMPLE_COUNT_4_BIT)) {
+      fprintf(stderr, "WebGPU core BGRA8_UNORM_SRGB capabilities are unavailable\n");
+      return 0;
+    }
+
+    for (i = 0u; i < GPU_ARRAY_LEN(coreStorage); i++) {
+      if (GPUGetFormatCapabilities(device->adapter, coreStorage[i], &caps) != GPU_OK
+          || !caps.storage) {
+        fprintf(stderr, "WebGPU core storage format %u is unavailable\n", (uint32_t)coreStorage[i]);
+        return 0;
+      }
+    }
+  }
 
   for (format = GPU_FORMAT_R8_UNORM;
        format < GPU_FORMAT_COUNT;
@@ -1808,7 +1840,6 @@ check_metal_1d_mip_limits(GPUDevice *device) {
 
   return 1;
 }
-
 
 int
 gpu_test_resources(GPUDevice *device) {
