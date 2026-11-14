@@ -72,6 +72,7 @@ vk_newLibraryWithBinary(GPUDevice  *device,
   free(alignedWords);
 
   if (result != VK_SUCCESS) {
+    pipelineDriverMessage("vkCreateShaderModule returned %s (%d)", vk_resultName(result), (int)result);
     free(libraryVk);
     free(library);
     return NULL;

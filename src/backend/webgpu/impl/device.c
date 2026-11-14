@@ -1092,15 +1092,10 @@ GPUResult
 webgpuEndPipelineError(GPUWebGPUPipelineError *error) {
   webgpu_pipelineError = error->previous;
 
-  /* report after the native call releases its error-sink lock; callbacks may reenter. */
-
-  if (error->result != GPU_OK) {
-    deviceReportError(error->device,
-                      error->type,
-                      GPU_DEVICE_LOST_REASON_UNKNOWN,
-                      error->result,
-                      error->message[0] ? error->message : "WebGPU pipeline creation failed");
-  }
+  /* the api layer reports the failure once, with this as the driver's words
+   * (api/pipeline_report.c), after the native call released its lock */
+  if (error->result != GPU_OK)
+    pipelineDriverMessage("%s", error->message[0] ? error->message : "WebGPU pipeline creation failed");
 
   return error->result;
 }

@@ -23,6 +23,10 @@ cuda_createModule(GPUDevice  *device,
   GPUDeviceCuda *deviceNative;
   GPUCudaModule *module;
   void          *terminatedImage;
+  void          *jitValues[2];
+  const char    *name;
+  char           jitLog[1024];
+  int            jitOptions[2];
   CUresult       result;
 
   deviceNative = cuda_device(device);
@@ -54,16 +58,26 @@ cuda_createModule(GPUDevice  *device,
     return NULL;
   }
 
+  /* the JIT's own words on a refused PTX go into the failure's report */
+  jitOptions[0] = CUDA_JIT_ERROR_LOG_BUFFER;
+  jitOptions[1] = CUDA_JIT_ERROR_LOG_BUFFER_SIZE_BYTES;
+  jitValues[0]  = jitLog;
+  jitValues[1]  = (void *)(uintptr_t)sizeof(jitLog);
+  jitLog[0]     = '\0';
   result = module->driver->moduleLoadData(&module->module,
                                           terminatedImage,
-                                          0u,
-                                          NULL,
-                                          NULL);
+                                          2u,
+                                          jitOptions,
+                                          jitValues);
   cuda_pop(module->driver);
   free(terminatedImage);
 
   if (result != CUDA_SUCCESS) {
-    cuda_report(device, result, "PTX module creation");
+    name = NULL;
+    if (module->driver->getErrorName)
+      (void)module->driver->getErrorName(result, &name);
+    pipelineDriverMessage("cuModuleLoadData returned %s (%d)%s%s",
+                          name ? name : "CUresult", (int)result, jitLog[0] ? ": " : "", jitLog);
     free(module);
     return NULL;
   }

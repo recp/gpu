@@ -152,8 +152,8 @@ mt_createTilePipeline(GPUDevice                       *device,
 
   destroyShaderFunction(info->library, function);
   if (!state) {
-    if (error)
-      fprintf(stderr, "GPU: tile pipeline: %s\n", error.localizedDescription.UTF8String);
+    pipelineDriverMessage("newRenderPipelineStateWithTileDescriptor: %s",
+                          error ? error.localizedDescription.UTF8String : "no error given");
     return GPU_ERROR_BACKEND_FAILURE;
   }
 

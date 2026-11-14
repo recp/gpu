@@ -2497,12 +2497,26 @@ copyShaderReflection(const GPUShaderReflection *src,
   return GPU_OK;
 }
 
+/* the backend refused a payload: there's no library to name, so the payload
+ * (api/pipeline_report.c); hash: USL's, 0 for an app's own code */
+static void
+shaderLibraryRefused(GPUDevice *device, GPUApi *api, uint64_t size, uint64_t hash, bool binary) {
+  GPUShaderLibrary payload = {0};
+
+  payload._api           = api;
+  payload._payloadSize   = size;
+  payload._payloadHash   = hash;
+  payload._payloadBinary = binary;
+  pipelineFailed(device, GPU_ERROR_BACKEND_FAILURE, "shader library", NULL, &payload, NULL, NULL, 0u);
+}
+
 static GPUResult
 createShaderLibraryFromBackendText(GPUDevice         *device,
                                    const void        *sourceData,
                                    uint64_t           sourceSize,
                                    uint32_t           defineCount,
                                    uint32_t           compileFlags,
+                                   uint64_t           payloadHash,
                                    GPUShaderLibrary **outLibrary) {
   GPUApi *api;
 
@@ -2519,17 +2533,23 @@ createShaderLibraryFromBackendText(GPUDevice         *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  pipelineDriverMessage(NULL);
   *outLibrary = api->library.newLibraryWithSource(device,
                                                   sourceData,
                                                   sourceSize,
                                                   compileFlags);
 
-  if (*outLibrary) {
-    (*outLibrary)->_api    = api;
-    (*outLibrary)->_device = device;
+  if (!*outLibrary) {
+    shaderLibraryRefused(device, api, sourceSize, payloadHash, false);
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  return *outLibrary ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+  (*outLibrary)->_api         = api;
+  (*outLibrary)->_device      = device;
+  (*outLibrary)->_payloadSize = sourceSize;
+  (*outLibrary)->_payloadHash = payloadHash;
+
+  return GPU_OK;
 }
 
 static GPUResult
@@ -2549,6 +2569,7 @@ createShaderLibraryFromMSLText(GPUDevice                        *device,
                                             info->sourceSize,
                                             info->defineCount,
                                             GPU_SHADER_SOURCE_COMPILE_NONE,
+                                            0u,
                                             outLibrary);
 }
 
@@ -2569,6 +2590,7 @@ createShaderLibraryFromWGSLText(GPUDevice                        *device,
                                             info->sourceSize,
                                             info->defineCount,
                                             GPU_SHADER_SOURCE_COMPILE_NONE,
+                                            0u,
                                             outLibrary);
 }
 
@@ -2577,6 +2599,7 @@ createShaderLibraryFromBackendBinary(GPUDevice         *device,
                                      const void        *sourceData,
                                      uint64_t           sourceSize,
                                      uint32_t           defineCount,
+                                     uint64_t           payloadHash,
                                      GPUShaderLibrary **outLibrary) {
   GPUApi *api;
 
@@ -2589,16 +2612,23 @@ createShaderLibraryFromBackendBinary(GPUDevice         *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  pipelineDriverMessage(NULL);
   *outLibrary = api->library.newLibraryWithBinary(device,
                                                   sourceData,
                                                   sourceSize);
 
-  if (*outLibrary) {
-    (*outLibrary)->_api    = api;
-    (*outLibrary)->_device = device;
+  if (!*outLibrary) {
+    shaderLibraryRefused(device, api, sourceSize, payloadHash, true);
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  return *outLibrary ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+  (*outLibrary)->_api           = api;
+  (*outLibrary)->_device        = device;
+  (*outLibrary)->_payloadSize   = sourceSize;
+  (*outLibrary)->_payloadHash   = payloadHash;
+  (*outLibrary)->_payloadBinary = true;
+
+  return GPU_OK;
 }
 
 static GPUResult
@@ -2617,6 +2647,7 @@ createShaderLibraryFromBinary(GPUDevice                        *device,
                                               info->sourceData,
                                               info->sourceSize,
                                               info->defineCount,
+                                              0u,
                                               outLibrary);
 }
 
@@ -2626,7 +2657,6 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
                                uint64_t           bytecodeSize,
                                bool               disableDiskCache,
                                GPUShaderLibrary **outLibrary) {
-  GPUShaderLibraryCreateInfo  info                = {0};
   USReflection                bootstrapReflection = {0};
   USCompileOutput             compileOutput       = {0};
   USLCompileOptions           compileOptions;
@@ -3305,17 +3335,20 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
   }
 
   if (target.backend == USL_BACKEND_SPIRV) {
-    info.chain.sType      = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
-    info.chain.structSize = sizeof(info);
-    info.sourceKind       = GPU_SHADER_SOURCE_SPIRV_BINARY;
-    info.sourceData       = compileOutput.backend_data;
-    info.sourceSize       = compileOutput.backend_size;
-    rc                    = createShaderLibraryFromBinary(device, &info, outLibrary);
+    rc = deviceApi(device) && deviceApi(device)->backend == GPU_BACKEND_VULKAN
+           ? createShaderLibraryFromBackendBinary(device,
+                                                  compileOutput.backend_data,
+                                                  compileOutput.backend_size,
+                                                  0u,
+                                                  compileOutput.backend_hash,
+                                                  outLibrary)
+           : GPU_ERROR_INVALID_ARGUMENT;
   } else if (target.backend == USL_BACKEND_DXIL) {
     rc = createShaderLibraryFromBackendBinary(device,
                                               compileOutput.backend_data,
                                               compileOutput.backend_size,
                                               0u,
+                                              compileOutput.backend_hash,
                                               outLibrary);
   } else if (target.backend == USL_BACKEND_METAL
              || target.backend == USL_BACKEND_HLSL
@@ -3326,6 +3359,7 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
                                             compileOutput.backend_size,
                                             0u,
                                             sourceCompileFlags,
+                                            compileOutput.backend_hash,
                                             outLibrary);
   } else {
     rc = GPU_ERROR_UNSUPPORTED;

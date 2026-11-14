@@ -332,6 +332,8 @@ enum {
   CU_TRSF_NORMALIZED_COORDINATES               = 0x02u,
   CU_TRSF_SRGB                                 = 0x10u,
   CU_TRSF_SEAMLESS_CUBEMAP                     = 0x40u,
+  CUDA_JIT_ERROR_LOG_BUFFER                    = 5, /* CUjit_option */
+  CUDA_JIT_ERROR_LOG_BUFFER_SIZE_BYTES         = 6,
   CU_STREAM_NON_BLOCKING                       = 1,
   CU_EVENT_DISABLE_TIMING                      = 2,
   CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK    = 1,

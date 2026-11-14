@@ -1107,6 +1107,7 @@ dx12_createGraphicsPSO(GPUPipelineCache                         *cache,
                                                                   (void **)outState);
 
   if (FAILED(result) || !*outState) {
+    pipelineDriverMessage("CreateGraphicsPipelineState returned 0x%08lx", (unsigned long)result);
 #if GPU_BUILD_WITH_VALIDATION
     fprintf(stderr,
             "GPU Direct3D 12 render pipeline create failed: 0x%08lx\n",
@@ -1200,6 +1201,7 @@ dx12_createComputePSO(GPUPipelineCache                        *cache,
                                                                  (void **)outState);
 
   if (FAILED(result) || !*outState) {
+    pipelineDriverMessage("CreateComputePipelineState returned 0x%08lx", (unsigned long)result);
 #if GPU_BUILD_WITH_VALIDATION
     fprintf(stderr,
             "GPU Direct3D 12 compute pipeline create failed: 0x%08lx\n",
@@ -1308,6 +1310,7 @@ dx12_createMeshPSO(GPUPipelineCache                       *cache,
                                                            (void **)outState);
 
   if (FAILED(result) || !*outState) {
+    pipelineDriverMessage("CreatePipelineState returned 0x%08lx", (unsigned long)result);
     dx12__logPipelineMessages(device);
     return GPU_ERROR_BACKEND_FAILURE;
   }

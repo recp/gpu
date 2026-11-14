@@ -1308,17 +1308,50 @@ vk_unlockCache(GPUPipelineCache *cache) {
 }
 
 GPU_HIDE
+const char*
+vk_resultName(VkResult result) {
+  switch (result) {
+    case VK_SUCCESS:                        return "VK_SUCCESS";
+    case VK_NOT_READY:                      return "VK_NOT_READY";
+    case VK_TIMEOUT:                        return "VK_TIMEOUT";
+    case VK_INCOMPLETE:                     return "VK_INCOMPLETE";
+    case VK_ERROR_OUT_OF_HOST_MEMORY:       return "VK_ERROR_OUT_OF_HOST_MEMORY";
+    case VK_ERROR_OUT_OF_DEVICE_MEMORY:     return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+    case VK_ERROR_INITIALIZATION_FAILED:    return "VK_ERROR_INITIALIZATION_FAILED";
+    case VK_ERROR_DEVICE_LOST:              return "VK_ERROR_DEVICE_LOST";
+    case VK_ERROR_FEATURE_NOT_PRESENT:      return "VK_ERROR_FEATURE_NOT_PRESENT";
+    case VK_ERROR_FORMAT_NOT_SUPPORTED:     return "VK_ERROR_FORMAT_NOT_SUPPORTED";
+    case VK_ERROR_UNKNOWN:                  return "VK_ERROR_UNKNOWN";
+    case VK_ERROR_INVALID_SHADER_NV:        return "VK_ERROR_INVALID_SHADER_NV";
+    case VK_PIPELINE_COMPILE_REQUIRED:      return "VK_PIPELINE_COMPILE_REQUIRED";
+    default:                                return "VkResult";
+  }
+}
+
+/* a failed creation leaves the call and its result for the api layer's
+ * report (api/pipeline_report.c); the driver's own text, if any, is in the
+ * system log */
+static VkResult
+vk__pipelineResult(const char *call, VkResult result) {
+  if (result != VK_SUCCESS)
+    pipelineDriverMessage("%s returned %s (%d)", call, vk_resultName(result), (int)result);
+
+  return result;
+}
+
+GPU_HIDE
 VkResult
 vk_createGraphicsPipelineCached(GPUDeviceVk                        *device,
                                 GPUPipelineCache                   *cache,
                                 const VkGraphicsPipelineCreateInfo *info,
                                 VkPipeline                         *pipeline) {
 #ifdef VK_KHR_pipeline_binary
-  return vk__createPipelineCached(device,
-                                  cache,
-                                  VK_PIPELINE_KIND_GRAPHICS,
-                                  info,
-                                  pipeline);
+  return vk__pipelineResult("vkCreateGraphicsPipelines",
+                            vk__createPipelineCached(device,
+                                                     cache,
+                                                     VK_PIPELINE_KIND_GRAPHICS,
+                                                     info,
+                                                     pipeline));
 #else
   VkPipelineCache nativeCache;
   VkResult        result;
@@ -1332,7 +1365,7 @@ vk_createGraphicsPipelineCached(GPUDeviceVk                        *device,
                                           pipeline);
   vk_endCompile(cache);
 
-  return result;
+  return vk__pipelineResult("vkCreateGraphicsPipelines", result);
 #endif
 }
 
@@ -1343,11 +1376,12 @@ vk_createComputePipelineCached(GPUDeviceVk                       *device,
                                const VkComputePipelineCreateInfo *info,
                                VkPipeline                        *pipeline) {
 #ifdef VK_KHR_pipeline_binary
-  return vk__createPipelineCached(device,
-                                  cache,
-                                  VK_PIPELINE_KIND_COMPUTE,
-                                  info,
-                                  pipeline);
+  return vk__pipelineResult("vkCreateComputePipelines",
+                            vk__createPipelineCached(device,
+                                                     cache,
+                                                     VK_PIPELINE_KIND_COMPUTE,
+                                                     info,
+                                                     pipeline));
 #else
   VkPipelineCache nativeCache;
   VkResult        result;
@@ -1361,7 +1395,7 @@ vk_createComputePipelineCached(GPUDeviceVk                       *device,
                                          pipeline);
   vk_endCompile(cache);
 
-  return result;
+  return vk__pipelineResult("vkCreateComputePipelines", result);
 #endif
 }
 
@@ -1374,11 +1408,12 @@ vk_createRayPipelineCached(GPUDeviceVk                             *device,
                            const VkRayTracingPipelineCreateInfoKHR *info,
                            VkPipeline                              *pipeline) {
 #ifdef VK_KHR_pipeline_binary
-  return vk__createPipelineCached(device,
-                                  cache,
-                                  VK_PIPELINE_KIND_RAY,
-                                  info,
-                                  pipeline);
+  return vk__pipelineResult("vkCreateRayTracingPipelinesKHR",
+                            vk__createPipelineCached(device,
+                                                     cache,
+                                                     VK_PIPELINE_KIND_RAY,
+                                                     info,
+                                                     pipeline));
 #else
   VkPipelineCache nativeCache;
   VkResult        result;
@@ -1393,7 +1428,7 @@ vk_createRayPipelineCached(GPUDeviceVk                             *device,
                                                   pipeline);
   vk_endCompile(cache);
 
-  return result;
+  return vk__pipelineResult("vkCreateRayTracingPipelinesKHR", result);
 #endif
 }
 

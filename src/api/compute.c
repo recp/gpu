@@ -335,9 +335,9 @@ computePipelineChecks(GPUDevice                                 *device,
 }
 
 static GPUResult
-createComputePipeline(GPUDevice                          *__restrict device,
-                         const GPUComputePipelineCreateInfo *__restrict info,
-                         GPUComputePipeline                **__restrict outPipeline) {
+createComputePipelineOnce(GPUDevice                          *__restrict device,
+                          const GPUComputePipelineCreateInfo *__restrict info,
+                          GPUComputePipeline                **__restrict outPipeline) {
   GPUPipelineCacheKey                      cacheKey;
   const char                              *entries[1];
   GPUComputePipelineState                 *state;
@@ -502,6 +502,26 @@ createComputePipeline(GPUDevice                          *__restrict device,
   return GPU_OK;
 }
 
+/* a failed compute pipeline, reported once naming it (api/pipeline_report.c) */
+static GPUResult
+computePipelineReport(GPUDevice *device, const GPUComputePipelineCreateInfo *info, GPUResult result) {
+  static const char *const stages[1] = {"compute"};
+
+  if (result != GPU_OK && device && info)
+    pipelineFailed(device, result, "compute pipeline", info->label, info->library, stages, &info->entryPoint, 1u);
+
+  return result;
+}
+
+/* every compute pipeline, made here or by a compile job */
+static GPUResult
+createComputePipeline(GPUDevice                          *__restrict device,
+                      const GPUComputePipelineCreateInfo *__restrict info,
+                      GPUComputePipeline                **__restrict outPipeline) {
+  pipelineDriverMessage(NULL);
+  return computePipelineReport(device, info, createComputePipelineOnce(device, info, outPipeline));
+}
+
 /* a compute pipeline compiled on the device's threads: the caller gets a
  * placeholder at once, whose compiled pipeline its uses wait for */
 
@@ -561,7 +581,7 @@ computeCompileDeferred(GPUDevice                          *device,
   uint32_t                                  requiredBindGroupMask;
 
   if ((result = computePipelineChecks(device, info, &intersection)) != GPU_OK)
-    return result;
+    return computePipelineReport(device, info, result);
 
   /* intersection functions keep caller memory: compiled here */
   if (intersection)
@@ -570,11 +590,11 @@ computeCompileDeferred(GPUDevice                          *device,
   entries[0] = info->entryPoint;
   if (!pipelineLayoutMatchesShaderEntries(info->layout, info->library, entries, 1u,
                                           GPU_SHADER_STAGE_COMPUTE_BIT, &requiredBindGroupMask))
-    return GPU_ERROR_INVALID_ARGUMENT;
+    return computePipelineReport(device, info, GPU_ERROR_INVALID_ARGUMENT);
 
   if (!(job = calloc(1u, sizeof(*job))) || !(shell = calloc(1u, sizeof(*shell)))) {
     free(job);
-    return GPU_ERROR_OUT_OF_MEMORY;
+    return computePipelineReport(device, info, GPU_ERROR_OUT_OF_MEMORY);
   }
 
   if ((result = prepareConstants(info->library, info->chain.pNext, true, &job->prepared)) != GPU_OK
@@ -582,7 +602,7 @@ computeCompileDeferred(GPUDevice                          *device,
       || (info->label && !(job->label = computeCompileString(info->label)))) {
     computeCompileFree(job);
     free(shell);
-    return result != GPU_OK ? result : GPU_ERROR_OUT_OF_MEMORY;
+    return computePipelineReport(device, info, result != GPU_OK ? result : GPU_ERROR_OUT_OF_MEMORY);
   }
 
   job->info             = *info;

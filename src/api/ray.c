@@ -1120,11 +1120,46 @@ GPUBindRenderIntersectionFunctionTableEXT(GPURenderPassEncoder            *pass,
                                                             table);
 }
 
+static GPUResult
+createRayTracingPipelineOnce(GPUDevice                                *device,
+                             const GPURayTracingPipelineCreateInfoEXT *info,
+                             GPURayTracingPipelineEXT                **outPipeline);
+
+/* a failure is reported once, naming it and its groups' entry points
+ * (api/pipeline_report.c) */
 GPU_EXPORT
 GPUResult
 GPUCreateRayTracingPipelineEXT(GPUDevice                                *device,
                                const GPURayTracingPipelineCreateInfoEXT *info,
                                GPURayTracingPipelineEXT                **outPipeline) {
+  const char *stages[16];
+  const char *entries[16];
+  uint32_t    count, i;
+  GPUResult   result;
+
+  pipelineDriverMessage(NULL);
+
+  if ((result = createRayTracingPipelineOnce(device, info, outPipeline)) == GPU_OK || !device || !info)
+    return result;
+
+  count = 0u;
+  for (i = 0u; info->pGroups && i < info->groupCount && count + 4u <= 16u; i++) {
+    const GPURayTracingShaderGroupEXT *group = &info->pGroups[i];
+
+    stages[count] = "general";      entries[count++] = group->generalEntry;
+    stages[count] = "closest hit";  entries[count++] = group->closestHitEntry;
+    stages[count] = "any hit";      entries[count++] = group->anyHitEntry;
+    stages[count] = "intersection"; entries[count++] = group->intersectionEntry;
+  }
+
+  pipelineFailed(device, result, "ray tracing pipeline", info->label, info->library, stages, entries, count);
+  return result;
+}
+
+static GPUResult
+createRayTracingPipelineOnce(GPUDevice                                *device,
+                             const GPURayTracingPipelineCreateInfoEXT *info,
+                             GPURayTracingPipelineEXT                **outPipeline) {
   GPURayTracingPipelineEXT          *pipeline;
   GPURayTracingShaderGroupTypeEXT   *groupTypes;
   GPUShaderStageFlags               *generalStages;

@@ -160,6 +160,28 @@ deviceReportError(GPUDevice          *device,
                   GPUResult           result,
                   const char         *message);
 
+/* api/pipeline_report.c: a backend leaves the driver's words on a failed
+ * pipeline or library for this thread (NULL clears); the api layer then
+ * reports the failure once, naming label, entry points and payload */
+GPU_HIDE
+void
+pipelineDriverMessage(const char *format, ...)
+#if defined(__GNUC__) || defined(__clang__)
+  __attribute__((format(printf, 1, 2)))
+#endif
+  ;
+
+GPU_HIDE
+void
+pipelineFailed(GPUDevice              *device,
+               GPUResult               result,
+               const char             *kind,
+               const char             *label,
+               const GPUShaderLibrary *library,
+               const char *const      *stages,
+               const char *const      *entries,
+               uint32_t                entryCount);
+
 #if GPU_BUILD_WITH_VALIDATION
 GPU_HIDE
 void

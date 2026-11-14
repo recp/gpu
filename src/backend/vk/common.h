@@ -879,6 +879,11 @@ vk_pipelineBarrier(GPUDeviceVk                 *device,
                    uint32_t                     imageBarrierCount,
                    const VkImageMemoryBarrier  *imageBarriers);
 
+/* a VkResult's enumerator name, for reports (impl/pipeline_cache.c) */
+GPU_HIDE
+const char*
+vk_resultName(VkResult result);
+
 /* a dependency over all memory, not one resource */
 GPU_HIDE
 void
