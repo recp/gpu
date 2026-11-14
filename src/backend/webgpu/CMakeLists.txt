@@ -27,7 +27,10 @@ if(EMSCRIPTEN)
     GPU_WEBGPU_PROVIDER_WGPU_NATIVE=0
   )
   target_compile_options(gpu PRIVATE --use-port=emdawnwebgpu)
-  target_link_options(gpu PRIVATE --use-port=emdawnwebgpu)
+  target_link_options(gpu INTERFACE
+    --use-port=emdawnwebgpu
+    -sDEFAULT_TO_CXX=1
+  )
 else()
   set(GPU_WEBGPU_PROVIDER "AUTO" CACHE STRING
       "Native WebGPU provider: AUTO, DAWN, or WGPU_NATIVE")
@@ -81,6 +84,19 @@ else()
 
   message(STATUS "GPU native WebGPU provider: ${_gpu_webgpu_provider}")
   target_include_directories(gpu PRIVATE "${GPU_WEBGPU_INCLUDE_DIR}")
+
+  if(APPLE AND _gpu_webgpu_provider STREQUAL "DAWN")
+    target_link_libraries(gpu PRIVATE c++)
+
+    find_library(GPU_FRAMEWORK_IOSURFACE IOSurface REQUIRED)
+    gpu_link_apple_framework(gpu IOSurface "${GPU_FRAMEWORK_IOSURFACE}")
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+      find_library(GPU_FRAMEWORK_IOKIT IOKit REQUIRED)
+      gpu_link_apple_framework(gpu IOKit "${GPU_FRAMEWORK_IOKIT}")
+    endif()
+  endif()
+
   if(BUILD_SHARED_LIBS)
     target_link_libraries(gpu PRIVATE "${GPU_WEBGPU_LIBRARY}")
   else()

@@ -202,6 +202,8 @@ webgpu_submitCommandBuffers(GPUQueue                *__restrict queue,
   GPUDeviceWebGPU              *device;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
   WGPUSubmissionIndex           submission;
+#elif !defined(__EMSCRIPTEN__)
+  WGPUFuture                    completion;
 #endif
   uint32_t                      validateIndex;
   uint32_t                      finishIndex;
@@ -273,15 +275,24 @@ webgpu_submitCommandBuffers(GPUQueue                *__restrict queue,
   }
 
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  callbackInfo.mode      = WGPUCallbackMode_AllowProcessEvents;
+  callbackInfo.mode     = WGPUCallbackMode_AllowProcessEvents;
+#elif !defined(__EMSCRIPTEN__)
+  callbackInfo.mode     = device->completionWorkerStarted
+                            ? WGPUCallbackMode_WaitAnyOnly
+                            : WGPUCallbackMode_AllowSpontaneous;
 #else
-  callbackInfo.mode      = WGPUCallbackMode_AllowSpontaneous;
+  callbackInfo.mode     = WGPUCallbackMode_AllowSpontaneous;
 #endif
   callbackInfo.callback  = webgpu_commandDone;
 
   for (callbackIndex = 0u; callbackIndex < count; callbackIndex++) {
     callbackInfo.userdata1 = commands[callbackIndex];
+#if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
+    completion = wgpuQueueOnSubmittedWorkDone(device->queue, callbackInfo);
+    webgpuQueueCompletion(device, completion);
+#else
     wgpuQueueOnSubmittedWorkDone(device->queue, callbackInfo);
+#endif
   }
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
   webgpuQueueCompletion(device, submission);

@@ -17,7 +17,7 @@
 #include "../common.h"
 #include "../impl.h"
 
-#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+#if !defined(__EMSCRIPTEN__)
 static void
 webgpu_completionLock(GPUDeviceWebGPU *device) {
 #  if defined(_WIN32) || defined(WIN32)
@@ -58,7 +58,13 @@ webgpu_completionWait(GPUDeviceWebGPU *device) {
 
 static void
 webgpu_completionLoop(GPUDeviceWebGPU *device) {
-  WGPUSubmissionIndex submission;
+#  if GPU_WEBGPU_PROVIDER_DAWN
+  WGPUFutureWaitInfo  waitInfo = WGPU_FUTURE_WAIT_INFO_INIT;
+#  endif
+  GPUWebGPUCompletion completion;
+#  if GPU_WEBGPU_PROVIDER_DAWN
+  WGPUWaitStatus      status;
+#  endif
 
   for (;;) {
     webgpu_completionLock(device);
@@ -74,12 +80,23 @@ webgpu_completionLoop(GPUDeviceWebGPU *device) {
       break;
     }
 
-    submission             = device->completionSubmissions[device->completionHead];
+    completion             = device->completions[device->completionHead];
     device->completionHead = (device->completionHead + 1u) % GPU_WEBGPU_COMMAND_SLOT_COUNT;
     device->completionCount--;
     webgpu_completionUnlock(device);
 
-    wgpuDevicePoll(device->device, true, &submission);
+#  if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+    wgpuDevicePoll(device->device, true, &completion);
+#  else
+    /* bound each wait because Dawn Vulkan holds its fence lock during it. */
+    waitInfo.future = completion;
+    do {
+      status = wgpuInstanceWaitAny(device->completionInstance,
+                                   1u,
+                                   &waitInfo,
+                                   UINT64_C(1000000));
+    } while (status == WGPUWaitStatus_TimedOut);
+#  endif
   }
 }
 
@@ -104,6 +121,11 @@ webgpuStartCompletionWorker(GPUDeviceWebGPU *device) {
   if (!device || !device->device) {
     return false;
   }
+
+#  if GPU_WEBGPU_PROVIDER_DAWN
+  if (!device->completionInstance)
+    return true;
+#  endif
 
 #  if defined(_WIN32) || defined(WIN32)
   InitializeCriticalSection(&device->completionLock);
@@ -145,7 +167,7 @@ webgpuStartCompletionWorker(GPUDeviceWebGPU *device) {
 
 void
 webgpuQueueCompletion(GPUDeviceWebGPU    *device,
-                      WGPUSubmissionIndex submission) {
+                      GPUWebGPUCompletion completion) {
   if (!device || !device->completionWorkerStarted) {
     return;
   }
@@ -153,7 +175,7 @@ webgpuQueueCompletion(GPUDeviceWebGPU    *device,
   webgpu_completionLock(device);
 
   if (device->completionCount < GPU_WEBGPU_COMMAND_SLOT_COUNT) {
-    device->completionSubmissions[device->completionTail] = submission;
+    device->completions[device->completionTail] = completion;
     device->completionTail = (device->completionTail + 1u) % GPU_WEBGPU_COMMAND_SLOT_COUNT;
     device->completionCount++;
   }

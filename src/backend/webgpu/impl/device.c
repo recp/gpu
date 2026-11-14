@@ -516,6 +516,21 @@ webgpu_hasAdapterFeature(const GPUAdapter *adapter, WGPUFeatureName feature) {
          && wgpuAdapterHasFeature(native->adapter, feature);
 }
 
+static bool
+webgpu_hasCoreFeatures(const GPUAdapter *adapter) {
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  GPUAdapterWebGPU *native;
+
+  native = webgpuAdapter(adapter);
+
+  /* adapters are requested at the core level; wgpu-native omits this
+   * baseline feature name from its optional feature map. */
+  return native && native->adapter;
+#else
+  return webgpu_hasAdapterFeature(adapter, WGPUFeatureName_CoreFeaturesAndLimits);
+#endif
+}
+
 #if GPU_WEBGPU_PROVIDER_DAWN && defined(WGPU_SUPPORTED_WGSL_LANGUAGE_FEATURES_INIT)
 static bool
 webgpu_hasWGSLLanguageFeature(const GPUAdapter           *adapter,
@@ -552,8 +567,7 @@ webgpu_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
   }
 
   if (format == GPU_FORMAT_BGRA8_UNORM_SRGB
-      && !webgpu_hasAdapterFeature(adapter,
-                                   WGPUFeatureName_CoreFeaturesAndLimits)) {
+      && !webgpu_hasCoreFeatures(adapter)) {
     return;
   }
 
@@ -600,8 +614,7 @@ webgpu_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
       break;
   }
 
-  coreFeatures     = webgpu_hasAdapterFeature(adapter,
-                                              WGPUFeatureName_CoreFeaturesAndLimits);
+  coreFeatures     = webgpu_hasCoreFeatures(adapter);
   tier1            = webgpu_hasAdapterFeature(adapter,
                                               WGPUFeatureName_TextureFormatsTier1);
   wideNorm         = webgpu_isWideNormFormat(format);
@@ -771,6 +784,9 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
   GPUDevice           *device;
   uint32_t             i;
   bool                 usable;
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  bool                 nativeFormatFeatures;
+#endif
 
   GPU__UNUSED(message);
   GPU__UNUSED(unused);
@@ -784,7 +800,7 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
       native->queue  = wgpuDeviceGetQueue(nativeDevice);
       usable         = native->queue
                        && webgpuInitPushConstants(native) == GPU_OK;
-#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+#if !defined(__EMSCRIPTEN__)
       if (usable) {
         usable = webgpuStartCompletionWorker(native);
       }
@@ -801,8 +817,14 @@ webgpu_deviceReady(WGPURequestDeviceStatus status,
         device->_priv         = native;
         device->queueFamilies = native->queueHandle.bits;
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-        device->uslStorageExtAccess = wgpuDeviceHasFeature(nativeDevice,
-                                                           (WGPUFeatureName)WGPUNativeFeature_TextureAdapterSpecificFormatFeatures);
+        nativeFormatFeatures = wgpuDeviceHasFeature(nativeDevice,
+                                                    (WGPUFeatureName)WGPUNativeFeature_TextureAdapterSpecificFormatFeatures);
+
+        device->uslStorageExtAccess = nativeFormatFeatures;
+        native->norm16Resolve       = nativeFormatFeatures
+                                      && wgpuDeviceHasFeature(nativeDevice, GPU_WEBGPU_FEATURE_NORM16);
+#else
+        native->norm16Resolve = wgpuDeviceHasFeature(nativeDevice, GPU_WEBGPU_FEATURE_NORM16);
 #endif
       } else {
         if (native->queue) {
@@ -852,6 +874,9 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   WGPUFeatureName               requiredFeatures[22];
   GPUAdapterWebGPU             *native;
   WebGPUDeviceRequest          *request;
+#if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
+  GPUInstanceWebGPU            *instance;
+#endif
   uint64_t                      supportedMask;
   GPUQueueFlagBits              queueBits;
   uint32_t                      graphicsCount;
@@ -948,6 +973,12 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   request->userData       = userData;
   request->queueBits      = queueBits;
   request->native->limits = requiredLimits;
+
+#if GPU_WEBGPU_PROVIDER_DAWN && !defined(__EMSCRIPTEN__)
+  instance = webgpuInstance(adapter->inst);
+  if (instance && instance->timedWaitAny)
+    request->native->completionInstance = instance->instance;
+#endif
 #if GPU_WEBGPU_PROVIDER_DAWN && defined(WGPU_SUPPORTED_WGSL_LANGUAGE_FEATURES_INIT)
   request->device->uslStorageExtAccess  =
     wgpuAdapterHasFeature(native->adapter,
@@ -1019,7 +1050,7 @@ webgpu_destroyDevice(GPUDevice *device) {
     }
 
     if (native->queue) {
-#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+#if !defined(__EMSCRIPTEN__)
       webgpuStopCompletionWorker(native);
 #endif
       wgpuQueueRelease(native->queue);

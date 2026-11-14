@@ -85,6 +85,31 @@ webgpu_formatHasStencil(GPUFormat format) {
          || format == GPU_FORMAT_DEPTH32_FLOAT_STENCIL8;
 }
 
+static bool
+webgpu_supportsColorResolve(const GPUDeviceWebGPU *device, GPUFormat format) {
+  if (formatNumericType(format) != GPU_FORMAT_NUMERIC_FLOAT
+      || format == GPU_FORMAT_R32_FLOAT
+      || format == GPU_FORMAT_RG32_FLOAT
+      || format == GPU_FORMAT_RGBA32_FLOAT) {
+    return false;
+  }
+
+  switch (format) {
+    case GPU_FORMAT_R16_SNORM:
+    case GPU_FORMAT_RG16_SNORM:
+    case GPU_FORMAT_RGBA16_SNORM:
+#if !GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+      return false;
+#endif
+    case GPU_FORMAT_R16_UNORM:
+    case GPU_FORMAT_RG16_UNORM:
+    case GPU_FORMAT_RGBA16_UNORM:
+      return device && device->norm16Resolve;
+    default:
+      return true;
+  }
+}
+
 static WGPUTextureAspect
 webgpu_copyAspect(GPUTextureAspect aspect) {
   return (uint32_t)aspect < GPU_ARRAY_LEN(webgpu_copyAspects)
@@ -243,6 +268,7 @@ static GPURenderPassDesc*
 webgpu_beginRenderPass(GPUCommandBuffer              *cmdb,
                        const GPURenderPassCreateInfo *info) {
   GPUCommandWebGPU                          *command;
+  GPUDeviceWebGPU                           *device;
   const GPURenderPassColorAttachment        *colorSource;
   WGPURenderPassColorAttachment             *colorTarget;
   const GPURenderPassDepthStencilAttachment *depthSource;
@@ -251,6 +277,7 @@ webgpu_beginRenderPass(GPUCommandBuffer              *cmdb,
   GPUFormat                                  format;
 
   command = webgpuCommand(cmdb);
+  device  = webgpuDevice(commandBufferDevice(cmdb));
 
   if (!command || !command->encoder
       || info->colorAttachmentCount > GPU_RENDER_ENCODER_MAX_COLOR_ATTACHMENTS) {
@@ -263,7 +290,14 @@ webgpu_beginRenderPass(GPUCommandBuffer              *cmdb,
   memset(command->colorAttachments, 0, sizeof(command->colorAttachments));
 
   for (i = 0u; i < info->colorAttachmentCount; i++) {
-    colorSource                = &info->pColorAttachments[i];
+    colorSource = &info->pColorAttachments[i];
+    format      = colorSource->view->format;
+
+    if (colorSource->resolveView
+        && !webgpu_supportsColorResolve(device, format)) {
+      return NULL;
+    }
+
     colorTarget                = &command->colorAttachments[i];
     *colorTarget               = (WGPURenderPassColorAttachment)WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
     colorTarget->view          = colorSource->view->_priv;
