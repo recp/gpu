@@ -40,6 +40,7 @@ struct GPUTexture {
   GPUTextureUsageFlags         usage;
   bool                         _sparse;
   bool                         _ownsNative;
+  bool                         _memoryless;
   struct GPUImageBuffer       *_imageBuffer; /* read-write bindings, when the device emulates them */
   bool                         _imageBufferRenderRead; /* read by vertex or fragment shaders (not read-write) */
 };

@@ -20,6 +20,7 @@
 #include "pass/blit_internal.h"
 #include "texture_internal.h"
 #include "image_buffer_internal.h"
+#include "buffer_internal.h"
 
 #include <math.h>
 
@@ -279,7 +280,8 @@ validateTextureCreateInfo(const GPUDevice            *device,
                                      | GPU_TEXTURE_USAGE_DEPTH_STENCIL
                                      | GPU_TEXTURE_USAGE_COPY_SRC
                                      | GPU_TEXTURE_USAGE_COPY_DST
-                                     | GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT;
+                                     | GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT
+                                     | GPU_TEXTURE_USAGE_TRANSIENT_ATTACHMENT;
 
   if (!device || !info
       || info->format <= GPU_FORMAT_UNDEFINED
@@ -307,6 +309,15 @@ validateTextureCreateInfo(const GPUDevice            *device,
   if ((info->usage & ~known) != 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
+
+  if ((info->usage & GPU_TEXTURE_USAGE_TRANSIENT_ATTACHMENT)
+      && (info->dimension != GPU_TEXTURE_DIMENSION_2D
+          || info->mipLevelCount > 1u
+          || !(info->usage & (GPU_TEXTURE_USAGE_COLOR_TARGET | GPU_TEXTURE_USAGE_DEPTH_STENCIL))
+          || (info->usage & ~(GPU_TEXTURE_USAGE_TRANSIENT_ATTACHMENT
+                             | GPU_TEXTURE_USAGE_COLOR_TARGET
+                             | GPU_TEXTURE_USAGE_DEPTH_STENCIL))))
+    return GPU_ERROR_INVALID_ARGUMENT;
 
   if (info->dimension == GPU_TEXTURE_DIMENSION_1D && info->height != 1u) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -578,6 +589,57 @@ GPUDestroyTextureView(GPUTextureView *__restrict view) {
   }
 
   api->texture.destroyView(view);
+}
+
+GPU_EXPORT
+uint32_t
+GPUGetLinearTextureAlignment(GPUDevice *device, GPUFormat format) {
+  GPUApi *api;
+
+  api = deviceApi(device);
+  return api && api->texture.linearAlignment ? api->texture.linearAlignment(device, format) : 0u;
+}
+
+GPU_EXPORT
+GPUResult
+GPUCreateTextureFromBuffer(GPUDevice                        *__restrict device,
+                           const GPUBufferTextureCreateInfo *__restrict info,
+                           GPUTexture                      **__restrict outTexture) {
+  GPUFormatLayout layout;
+  GPUApi         *api;
+  uint64_t        extent;
+  uint32_t        alignment;
+
+  if (outTexture)
+    *outTexture = NULL;
+
+  if (!device || !info || !outTexture || !info->buffer || info->buffer->device != device
+      || info->chain.sType != GPU_STRUCTURE_TYPE_BUFFER_TEXTURE_CREATE_INFO
+      || info->chain.structSize < sizeof(*info) || info->chain.pNext
+      || !info->width || !info->height || !info->bytesPerRow
+      || !(info->usage & GPU_TEXTURE_USAGE_SAMPLED)
+      || (info->usage & ~(GPU_TEXTURE_USAGE_SAMPLED | GPU_TEXTURE_USAGE_COPY_SRC | GPU_TEXTURE_USAGE_COPY_DST)))
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  if (!GPUIsFeatureEnabled(device, GPU_FEATURE_BUFFER_TEXTURES))
+    return GPU_ERROR_UNSUPPORTED;
+
+  api = deviceApi(device);
+  if (!api || !api->texture.fromBuffer || !GPUGetBufferHostAddress(info->buffer))
+    return GPU_ERROR_UNSUPPORTED;
+
+  alignment = GPUGetLinearTextureAlignment(device, info->format);
+  if (!alignment || !gpuFormatLayout(info->format, &layout)
+      || layout.blockWidth != 1u || layout.blockHeight != 1u)
+    return GPU_ERROR_UNSUPPORTED;
+
+  extent = (uint64_t)info->bytesPerRow * info->height;
+  if (info->offset % alignment || info->bytesPerRow % alignment
+      || (uint64_t)info->width * layout.bytesPerBlock > info->bytesPerRow
+      || !bufferRangeValid(info->buffer, info->offset, extent))
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  return api->texture.fromBuffer(device, info, outTexture);
 }
 
 GPU_HIDE

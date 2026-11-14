@@ -513,6 +513,7 @@ gpu_test_chains(GPUDevice *nativeDevice) {
   libraryInfo.sourceSize          = strlen(libraryInfo.sourceData);
 
   swapchainInfo.surface           = &surface;
+  surface.scale                   = 1.0f;
   swapchainInfo.width             = 2u;
   swapchainInfo.height            = 2u;
   swapchainInfo.format            = GPU_FORMAT_RGBA8_UNORM;

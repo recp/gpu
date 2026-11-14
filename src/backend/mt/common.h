@@ -121,6 +121,7 @@ typedef struct GPUSwapchainMetal {
   GPUTexture     target;
   GPUTextureView targetView;
   bool           frameActive;
+  bool           presentsWithTransaction;
 } GPUSwapchainMetal;
 
 typedef struct MTResourcePool MTResourcePool;
@@ -468,6 +469,12 @@ mt_prepareArgumentState(GPUCommandBuffer *cmdb,
 GPU_HIDE
 void
 mt_useAllocation(GPUCommandBuffer *cmdb, id allocation);
+
+static inline void
+mt_useTextureAllocation(GPUCommandBuffer *cmdb, GPUTexture *texture) {
+  if (texture && !texture->_memoryless)
+    mt_useAllocation(cmdb, mt_nativeTexture(texture));
+}
 
 GPU_HIDE
 void

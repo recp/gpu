@@ -35,30 +35,40 @@ typedef struct Target {
   GPUTextureView *multisampleView;
 } Target;
 
+typedef struct AttachmentBudgetCase {
+  uint32_t samples, colors, width, height, sampleLength, threadgroupLength;
+  bool     accepted;
+} AttachmentBudgetCase;
+
 typedef enum KernelKind {
   KERNEL_NEIGHBOR,
   KERNEL_UNIFORM,
-  KERNEL_LOOP
+  KERNEL_LOOP,
+  KERNEL_MIXED,
+  KERNEL_MIXED_SMALL
 } KernelKind;
 
-static const char *kernelEntries[] = {"kernel_update", "kernel_uniform", "kernel_loop"};
-static const char *kernelLabels[]  = {"", " uniform", " loop"};
+static const char *kernelEntries[] = {"kernel_update", "kernel_uniform", "kernel_loop",
+                                    "kernel_mixed", "kernel_mixed_small"};
+static const char *kernelLabels[]  = {"", " uniform", " loop", " mixed", " mixed small"};
 
 static bool
-create_target(GPUDevice *device, uint32_t samples, Target *target) {
+create_target(GPUDevice *device, GPUFormat format, uint32_t samples, Target *target) {
   GPUTextureCreateInfo     info = {0};
   GPUTextureViewCreateInfo view = {0};
+  bool                     depth = format == GPU_FORMAT_DEPTH32_FLOAT;
 
   info.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
   info.chain.structSize = sizeof(info);
   info.dimension        = GPU_TEXTURE_DIMENSION_2D;
-  info.format           = GPU_FORMAT_RGBA32_FLOAT;
+  info.format           = format;
   info.width            = KERNEL_WIDTH;
   info.height           = KERNEL_HEIGHT;
   info.depthOrLayers    = 1u;
   info.mipLevelCount     = 1u;
-  info.sampleCount      = 1u;
-  info.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET | GPU_TEXTURE_USAGE_COPY_SRC;
+  info.sampleCount      = depth ? samples : 1u;
+  info.usage            = depth ? GPU_TEXTURE_USAGE_DEPTH_STENCIL
+                          : GPU_TEXTURE_USAGE_COLOR_TARGET | GPU_TEXTURE_USAGE_COPY_SRC;
 
   view.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
   view.chain.structSize = sizeof(view);
@@ -71,13 +81,364 @@ create_target(GPUDevice *device, uint32_t samples, Target *target) {
       || GPUCreateTextureView(target->texture, &view, &target->view) != GPU_OK)
     return false;
 
-  if (samples == 1u)
+  if (samples == 1u || depth)
     return true;
 
   info.sampleCount = samples;
   info.usage       = GPU_TEXTURE_USAGE_COLOR_TARGET;
   return GPUCreateTexture(device, &info, &target->multisample) == GPU_OK
          && GPUCreateTextureView(target->multisample, &view, &target->multisampleView) == GPU_OK;
+}
+
+static bool
+check_storage_budget(GPUDevice *device, uint32_t samples, bool depth) {
+  const struct {
+    uint32_t            width, height, sampleLength, threadgroupLength;
+    GPUSampleCountFlags validSamples;
+  } cases[] = {
+    {16u, 16u, 64u,          0u,                    GPU_SAMPLE_COUNT_1_BIT},
+    { 0u,  0u, 64u,          0u,                    GPU_SAMPLE_COUNT_1_BIT},
+    {32u, 16u, 64u,          0u,                    GPU_SAMPLE_COUNT_1_BIT},
+    {32u, 32u, 32u,          0u,                    GPU_SAMPLE_COUNT_1_BIT},
+    {16u, 16u, 32u,          0u,                    GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT},
+    { 0u,  0u, 32u,          0u,                    GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT},
+    {16u, 16u, 64u,      16384u,                    GPU_SAMPLE_COUNT_1_BIT},
+    {16u, 16u, 64u,      16400u,                    0u},
+    {16u, 16u, 32u,         16u,                    GPU_SAMPLE_COUNT_1_BIT},
+    {16u, 16u, 80u,          0u,                    0u},
+    { 0u,  0u, 80u,          0u,                    0u},
+    {16u, 16u, UINT32_MAX,   0u,                    0u},
+    {16u, 16u, 64u,      32768u,                    0u},
+    {16u, 16u, 32u, UINT32_MAX & ~15u,              0u},
+    { 0u,  0u, 32u, UINT32_MAX & ~15u,              0u},
+    {32u, 32u,  0u,          0u,                    GPU_SAMPLE_COUNT_1_BIT},
+    {16u, 16u,  0u,          0u,
+      GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT | GPU_SAMPLE_COUNT_8_BIT},
+    {16u, 16u,  0u,      32768u,
+      depth ? GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT | GPU_SAMPLE_COUNT_8_BIT : 0u},
+    { 0u,  0u,  0u,      32768u,
+      depth ? GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT | GPU_SAMPLE_COUNT_8_BIT : 0u},
+    {16u, 16u,  0u,      32784u,                    0u},
+    { 0u,  0u,  0u, UINT32_MAX & ~15u,              0u},
+    {16u, 16u, 16u,          0u,
+      GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT | GPU_SAMPLE_COUNT_8_BIT},
+    {16u, 16u, 16u,         16u,                    GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT},
+    {32u, 16u,  0u,          0u,                    GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT},
+    {16u, 16u,  0u,      28672u,
+      depth ? GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT | GPU_SAMPLE_COUNT_8_BIT : GPU_SAMPLE_COUNT_1_BIT},
+    {16u, 16u,  0u,      16384u,
+      depth ? GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT | GPU_SAMPLE_COUNT_8_BIT
+            : GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT},
+    {16u, 16u,  0u,      16400u,
+      depth ? GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT | GPU_SAMPLE_COUNT_8_BIT : GPU_SAMPLE_COUNT_1_BIT},
+    { 0u,  0u,  0u,      16384u,
+      depth ? GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT | GPU_SAMPLE_COUNT_8_BIT
+            : GPU_SAMPLE_COUNT_1_BIT | GPU_SAMPLE_COUNT_4_BIT}
+  };
+  GPURenderPassColorAttachment        color     = {0};
+  GPURenderPassDepthStencilAttachment attachment = {0};
+  GPURenderPassCreateInfo             info      = {0};
+  GPUTileRenderPassEXT                tile      = {0};
+  Target                             target    = {0};
+  GPUCommandBuffer                  *command   = NULL;
+  GPURenderPassEncoder              *pass      = NULL;
+  GPUQueue                          *queue;
+  uint32_t                           i, checks = 0u;
+  bool                               accepted;
+  bool                               ok = false;
+
+  if (!create_target(device,
+                     depth ? GPU_FORMAT_DEPTH32_FLOAT : GPU_FORMAT_RGBA32_FLOAT,
+                     samples,
+                     &target))
+    goto cleanup;
+
+  color.view        = target.multisampleView ? target.multisampleView : target.view;
+  color.resolveView = target.multisampleView ? target.view : NULL;
+  color.loadOp      = GPU_LOAD_OP_CLEAR;
+  color.storeOp     = GPU_STORE_OP_STORE;
+
+  attachment.view           = target.view;
+  attachment.depthLoadOp    = GPU_LOAD_OP_CLEAR;
+  attachment.depthStoreOp   = GPU_STORE_OP_STORE;
+  attachment.stencilLoadOp  = GPU_LOAD_OP_DONT_CARE;
+  attachment.stencilStoreOp = GPU_STORE_OP_DONT_CARE;
+  attachment.clearDepth     = 1.0;
+
+  tile.chain.sType      = GPU_STRUCTURE_TYPE_TILE_RENDER_PASS_EXT;
+  tile.chain.structSize = sizeof(tile);
+  info.chain.sType      = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.chain.pNext      = &tile;
+  info.pColorAttachments       = depth ? NULL : &color;
+  info.colorAttachmentCount    = depth ? 0u : 1u;
+  info.pDepthStencilAttachment = depth ? &attachment : NULL;
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  if (GPUAcquireCommandBuffer(queue, "tile-storage-budget", &command) != GPU_OK)
+    goto cleanup;
+
+  for (i = 0u; i < sizeof(cases) / sizeof(cases[0]); i++) {
+    tile.tileWidth               = cases[i].width;
+    tile.tileHeight              = cases[i].height;
+    tile.imageblockSampleLength  = cases[i].sampleLength;
+    tile.threadgroupMemoryLength = cases[i].threadgroupLength;
+    accepted = (cases[i].validSamples & samples) != 0u;
+    pass = GPUBeginRenderPass(command, &info);
+    if ((pass != NULL) != accepted) {
+      fprintf(stderr, "tile storage case=%u depth=%u samples=%u accepted=%u expected=%u\n",
+              i, depth, samples, pass != NULL, accepted);
+      goto cleanup;
+    }
+    if (pass) {
+      GPUEndRenderPass(pass);
+      pass = NULL;
+    } else {
+      /* a rejected reservation must leave this command usable. */
+      tile.tileWidth               = 16u;
+      tile.tileHeight              = 16u;
+      tile.imageblockSampleLength  = samples == 8u ? 16u : 32u;
+      tile.threadgroupMemoryLength = 0u;
+      if (!(pass = GPUBeginRenderPass(command, &info))) {
+        fprintf(stderr, "tile storage recovery case=%u depth=%u samples=%u\n", i, depth, samples);
+        goto cleanup;
+      }
+      GPUEndRenderPass(pass);
+      pass = NULL;
+    }
+    checks++;
+  }
+  ok = true;
+
+cleanup:
+  if (pass)
+    GPUEndRenderPass(pass);
+  if (command)
+    GPUDiscardCommandBuffer(command);
+  GPUDestroyTextureView(target.multisampleView);
+  GPUDestroyTexture(target.multisample);
+  GPUDestroyTextureView(target.view);
+  GPUDestroyTexture(target.texture);
+  printf("tile storage depth=%u samples=%u: %u cases %s\n", depth, samples, checks, ok ? "pass" : "fail");
+  return ok;
+}
+
+static bool
+check_attachment_cases(GPUDevice                  *device,
+                       GPUAdapter                 *adapter,
+                       const GPUFormat            *formats,
+                       const AttachmentBudgetCase *cases,
+                       const char                 *label,
+                       uint32_t                    samples,
+                       uint32_t                    colorCount,
+                       uint32_t                    caseCount) {
+  GPURenderPassColorAttachment colors[8]  = {{0}};
+  Target                      targets[8] = {{0}};
+  GPURenderPassCreateInfo      info = {0};
+  GPUTileRenderPassEXT         tile = {0};
+  GPUFormatCapabilities       caps;
+  GPUCommandBuffer           *command = NULL;
+  GPURenderPassEncoder        *pass    = NULL;
+  GPUQueue                   *queue;
+  GPUFormat                   format;
+  uint32_t                    i, checks = 0u;
+  bool                        ok = false;
+
+  if (formats) {
+    for (i = 0u; i < colorCount; i++) {
+      if (GPUGetFormatCapabilities(adapter, formats[i], &caps) != GPU_OK)
+        return false;
+      if (!caps.colorAttachment || !(caps.supportedSampleCounts & samples)) {
+        printf("tile attachment%s storage samples=%u format=%u unsupported, subcase skipped\n",
+               label, samples, formats[i]);
+        return true;
+      }
+    }
+  }
+
+  for (i = 0u; i < colorCount; i++) {
+    format = formats ? formats[i] : GPU_FORMAT_RGBA32_FLOAT;
+    if (!create_target(device, format, samples, &targets[i]))
+      goto cleanup;
+
+    colors[i].view    = samples == 1u ? targets[i].view : targets[i].multisampleView;
+    colors[i].loadOp  = GPU_LOAD_OP_CLEAR;
+    colors[i].storeOp = GPU_STORE_OP_DONT_CARE;
+  }
+
+  tile.chain.sType      = GPU_STRUCTURE_TYPE_TILE_RENDER_PASS_EXT;
+  tile.chain.structSize = sizeof(tile);
+  info.chain.sType      = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.chain.pNext      = &tile;
+
+  info.pColorAttachments = colors;
+
+  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  if (GPUAcquireCommandBuffer(queue, "tile-attachment-budget", &command) != GPU_OK)
+    goto cleanup;
+
+  for (i = 0u; i < caseCount; i++) {
+    if (cases[i].samples != samples)
+      continue;
+
+    info.colorAttachmentCount = cases[i].colors;
+
+    tile.tileWidth               = cases[i].width;
+    tile.tileHeight              = cases[i].height;
+    tile.imageblockSampleLength  = cases[i].sampleLength;
+    tile.threadgroupMemoryLength = cases[i].threadgroupLength;
+
+    pass = GPUBeginRenderPass(command, &info);
+    if ((pass != NULL) != cases[i].accepted) {
+      fprintf(stderr, "tile attachment%s samples=%u case=%u accepted=%u expected=%u\n",
+              label, samples, i, pass != NULL, cases[i].accepted);
+      goto cleanup;
+    }
+    if (pass) {
+      GPUEndRenderPass(pass);
+      pass = NULL;
+    } else {
+      /* a rejected attachment layout must leave this command usable. */
+      info.colorAttachmentCount    = formats ? 1u : 4u;
+      tile.tileWidth               = 16u;
+      tile.tileHeight              = 16u;
+      tile.imageblockSampleLength  = formats ? 16u : 64u;
+      tile.threadgroupMemoryLength = 0u;
+      if (!(pass = GPUBeginRenderPass(command, &info)))
+        goto cleanup;
+
+      GPUEndRenderPass(pass);
+      pass = NULL;
+    }
+    checks++;
+  }
+  ok = true;
+
+cleanup:
+  if (pass)
+    GPUEndRenderPass(pass);
+  if (command)
+    GPUDiscardCommandBuffer(command);
+  for (i = 0u; i < colorCount; i++) {
+    GPUDestroyTextureView(targets[i].multisampleView);
+    GPUDestroyTexture(targets[i].multisample);
+    GPUDestroyTextureView(targets[i].view);
+    GPUDestroyTexture(targets[i].texture);
+  }
+  printf("tile attachment%s storage samples=%u: %u cases %s\n",
+         label, samples, checks, ok ? "pass" : "fail");
+  return ok;
+}
+
+static bool
+check_attachment_budget(GPUDevice *device, GPUAdapter *adapter, uint32_t samples) {
+  const GPUFormat mixedFormats[] = {GPU_FORMAT_RGBA16_FLOAT, GPU_FORMAT_RGBA8_UNORM,
+                                    GPU_FORMAT_RGBA32_FLOAT};
+  const GPUFormat msaa8Formats[] = {GPU_FORMAT_RGBA8_UNORM, GPU_FORMAT_R8_UNORM};
+  const AttachmentBudgetCase cases[] = {
+    {1u, 4u, 16u, 16u,  0u,   512u, true},
+    {1u, 5u, 16u, 16u,  0u,   512u, false},
+    {1u, 7u, 16u, 16u,  0u,   512u, false},
+    {1u, 8u, 16u, 16u,  0u,   512u, false},
+    {1u, 5u, 16u, 16u, 32u,     0u, false},
+    {1u, 5u, 16u, 16u, 32u,   512u, false},
+    {1u, 4u, 16u, 16u, 32u, 16384u, true},
+    {1u, 4u, 16u, 16u, 32u, 16400u, false},
+    {1u, 4u, 16u, 16u, 16u, 16384u, true},
+    {1u, 4u, 16u, 16u, 16u, 16400u, false},
+    {1u, 4u, 32u, 16u, 16u,     0u, true},
+    {1u, 4u, 32u, 16u, 16u,    16u, false},
+    {1u, 4u, 32u, 32u, 16u,     0u, false},
+    {1u, 4u, 16u, 16u, 64u, 16384u, true},
+    {1u, 4u, 16u, 16u, 64u, 16400u, false},
+    {1u, 4u, 16u, 16u,  0u, 16384u, true},
+    {1u, 4u, 16u, 16u,  0u, 16400u, false},
+    {1u, 1u, 16u, 16u, 17u, 26624u, true},
+    {1u, 1u, 16u, 16u, 17u, 26640u, false},
+
+    /* the 12- and 28-byte layouts reserve 16 and 32 bytes per sample. */
+    {2u, 2u, 32u, 32u,  8u,     0u, true},
+    {2u, 2u, 32u, 32u,  8u,    16u, false},
+    {2u, 3u, 32u, 16u, 16u,     0u, true},
+    {2u, 3u, 32u, 16u, 16u,    16u, false},
+    {2u, 3u, 16u, 16u, 33u, 12288u, true},
+    {2u, 3u, 16u, 16u, 33u, 12304u, false},
+    {4u, 2u, 16u, 16u,  0u, 16384u, true},
+    {4u, 2u, 16u, 16u,  0u, 16400u, false},
+    {4u, 3u, 16u, 16u, 16u,     0u, true},
+    {4u, 3u, 16u, 16u, 16u,    16u, false},
+    {4u, 2u, 32u, 16u, 12u,     0u, true},
+    {4u, 2u, 32u, 16u, 12u,    16u, false},
+
+    /* the 5-byte layout reserves 8 bytes unless the declaration is larger. */
+    {8u, 2u, 16u, 16u,  0u, 16384u, true},
+    {8u, 2u, 16u, 16u,  0u, 16400u, false},
+    {8u, 2u,  0u,  0u,  0u, 16384u, true},
+    {8u, 2u,  0u,  0u,  0u, 16400u, false},
+    {8u, 2u, 16u, 16u,  9u,     0u, true},
+    {8u, 2u, 16u, 16u,  9u,    16u, false}
+  };
+  const GPUFormat *formats;
+  uint32_t         colorCount;
+
+  formats    = mixedFormats;
+  colorCount = GPU_ARRAY_LEN(mixedFormats);
+  if (samples == 1u) {
+    formats    = NULL;
+    colorCount = 8u;
+  } else if (samples == 8u) {
+    formats    = msaa8Formats;
+    colorCount = GPU_ARRAY_LEN(msaa8Formats);
+  }
+
+  return check_attachment_cases(device, adapter, formats, cases, "", samples,
+                                colorCount, GPU_ARRAY_LEN(cases));
+}
+
+static bool
+check_packed_attachment_budget(GPUDevice *device, GPUAdapter *adapter, uint32_t samples) {
+  const struct {
+    const char *label;
+    GPUFormat   formats[4];
+    uint32_t    colorCount, sampleBytes;
+  } layouts[] = {
+    {" packed uint", {GPU_FORMAT_RGB10A2_UINT, GPU_FORMAT_R8_UINT}, 2u, 16u},
+    {" packed first", {GPU_FORMAT_RGB10A2_UNORM, GPU_FORMAT_RG8_UNORM, GPU_FORMAT_R8_UNORM}, 3u, 8u},
+    {" packed after r8", {GPU_FORMAT_R8_UNORM, GPU_FORMAT_RGB10A2_UNORM, GPU_FORMAT_RG8_UNORM}, 3u, 16u},
+    {" rg16 after r8", {GPU_FORMAT_R8_UNORM, GPU_FORMAT_RG16_FLOAT, GPU_FORMAT_RG8_UNORM,
+                        GPU_FORMAT_R8_UNORM}, 4u, 16u}
+  };
+  const GPUFormat limitFormats[] = {
+    GPU_FORMAT_R8_UNORM, GPU_FORMAT_RGBA32_FLOAT, GPU_FORMAT_R8_UNORM, GPU_FORMAT_RGBA32_FLOAT,
+    GPU_FORMAT_R8_UNORM, GPU_FORMAT_RGBA32_FLOAT, GPU_FORMAT_RGBA16_FLOAT
+  };
+  const AttachmentBudgetCase limitCases[] = {
+    {1u, 7u, 16u, 16u, 0u, 0u, true},
+    {1u, 7u, 16u, 16u, 8u, 0u, false}
+  };
+  AttachmentBudgetCase cases[2];
+  uint32_t             i, persistent;
+  bool                 ok = true;
+
+  for (i = 0u; i < GPU_ARRAY_LEN(layouts); i++) {
+    persistent = 32768u - 16u * 16u * samples * layouts[i].sampleBytes;
+    cases[0]   = (AttachmentBudgetCase){
+      samples, layouts[i].colorCount, 16u, 16u, persistent ? 0u : 8u, persistent, true
+    };
+    cases[1] = cases[0];
+    cases[1].threadgroupLength += 16u;
+    cases[1].accepted           = false;
+
+    ok = check_attachment_cases(device, adapter, layouts[i].formats, cases, layouts[i].label, samples,
+                                layouts[i].colorCount, GPU_ARRAY_LEN(cases)) && ok;
+  }
+
+  if (samples == 1u)
+    ok = check_attachment_cases(device, adapter, limitFormats, limitCases, " padded limit", samples,
+                                GPU_ARRAY_LEN(limitFormats), GPU_ARRAY_LEN(limitCases)) && ok;
+
+  return ok;
 }
 
 static bool
@@ -253,6 +614,56 @@ expected_loop_pixel(uint32_t x, uint32_t y, uint32_t samples, float expected[4])
   }
 }
 
+static void
+expected_mixed_pixel(uint32_t x, uint32_t y, uint32_t samples, float expected[4]) {
+  float    values[4];
+  uint32_t groupX, groupY, source, neighborX, neighborY, sample, c;
+
+  groupX    = x / 16u;
+  groupY    = y / 16u;
+  source    = (x % 16u + (y % 16u) * 16u + 17u) % 256u;
+  neighborX = source % 16u;
+  neighborY = source / 16u;
+
+  memset(expected, 0, 4u * sizeof(*expected));
+  for (sample = 0u; sample < samples; sample++) {
+    values[0] = 0.125f + (float)neighborX / 32.0f + (float)(1u + neighborX) / 512.0f
+                + ((float)neighborX - 8.0f) / 8192.0f;
+    values[1] = 0.25f + (float)neighborY / 64.0f + (float)(2u + neighborY) / 1024.0f
+                + (float)(7u + groupX) / 16384.0f;
+    values[2] = 0.375f + (float)sample / 16.0f + (float)(3u + sample) / 128.0f
+                + (float)(4u + neighborY) / 4096.0f + (float)(11u + groupY) / 16384.0f;
+    values[3] = 0.5f + (float)(groupX + groupY * 2u) / 16.0f
+                + (float)(1234u + neighborX + neighborY * 16u + sample * 256u) / 65536.0f;
+    for (c = 0u; c < 4u; c++) {
+      expected[c] += values[c] / (float)samples;
+    }
+  }
+}
+
+static void
+expected_small_pixel(uint32_t x, uint32_t y, uint32_t samples, float expected[4]) {
+  float    values[4];
+  uint32_t groupX, groupY, source, neighborX, neighborY, sample, c;
+
+  groupX    = x / 16u;
+  groupY    = y / 16u;
+  source    = (x % 16u + (y % 16u) * 16u + 17u) % 256u;
+  neighborX = source % 16u;
+  neighborY = source / 16u;
+
+  memset(expected, 0, 4u * sizeof(*expected));
+  for (sample = 0u; sample < samples; sample++) {
+    values[0] = 0.125f + (float)neighborX / 32.0f + ((float)neighborX - 8.0f) / 8192.0f;
+    values[1] = 0.25f + (float)neighborY / 64.0f;
+    values[2] = 0.375f + (float)sample / 16.0f + (float)(groupX + groupY * 2u) / 128.0f;
+    values[3] = (float)(1234u + neighborX + neighborY * 16u + sample * 256u) / 65536.0f;
+    for (c = 0u; c < 4u; c++) {
+      expected[c] += values[c] / (float)samples;
+    }
+  }
+}
+
 static bool
 check_kernel(GPUDevice        *device,
              GPUShaderLibrary *library,
@@ -281,10 +692,13 @@ check_kernel(GPUDevice        *device,
   GPUCommandBuffer           *command    = NULL;
   GPURenderPassEncoder       *pass       = NULL;
   GPUQueue                   *queue;
+  const char                 *initEntry;
+  const char                 *resolveEntry;
   const GPUBindGroupLayoutEntry *layoutEntries;
   const GPUFormat             format     = GPU_FORMAT_RGBA32_FLOAT;
   uint32_t                    config[4]  = {KERNEL_WIDTH, KERNEL_HEIGHT, threads, 37u};
   uint32_t                    count, width, height, length, x, y, c;
+  bool                        resources;
   bool                        ok = false;
 
 #define REQUIRE(expr) do { \
@@ -295,9 +709,22 @@ check_kernel(GPUDevice        *device,
   } \
 } while (0)
 
-  queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  queue     = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  resources = kind == KERNEL_NEIGHBOR || kind == KERNEL_MIXED || kind == KERNEL_MIXED_SMALL;
+
+  if (kind == KERNEL_MIXED) {
+    initEntry    = "kernel_mixed_init_fs";
+    resolveEntry = "kernel_mixed_resolve_fs";
+  } else if (kind == KERNEL_MIXED_SMALL) {
+    initEntry    = "kernel_mixed_small_init_fs";
+    resolveEntry = "kernel_mixed_small_resolve_fs";
+  } else {
+    initEntry    = "kernel_init_fs";
+    resolveEntry = "kernel_resolve_fs";
+  }
+
   REQUIRE(kind == KERNEL_NEIGHBOR || threads == 16u);
-  REQUIRE(create_target(device, samples, &target));
+  REQUIRE(create_target(device, GPU_FORMAT_RGBA32_FLOAT, samples, &target));
   REQUIRE(GPUCreateShaderLayout(device, library, &layout) == GPU_OK);
   REQUIRE(layout->bindGroupLayoutCount == 1u);
   layoutEntries = GPUGetBindGroupLayoutEntries(layout->bindGroupLayouts[0], &count);
@@ -305,13 +732,13 @@ check_kernel(GPUDevice        *device,
           && layoutEntries[0].binding == 3u
           && layoutEntries[0].bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER
           && layoutEntries[0].visibility == GPU_SHADER_STAGE_COMPUTE_BIT);
-  REQUIRE(create_draw(device, library, layout, "kernel_init_fs", samples, &init) == GPU_OK);
-  REQUIRE(create_draw(device, library, layout, "kernel_resolve_fs", samples, &resolve) == GPU_OK);
+  REQUIRE(create_draw(device, library, layout, initEntry, samples, &init) == GPU_OK);
+  REQUIRE(create_draw(device, library, layout, resolveEntry, samples, &resolve) == GPU_OK);
 
   tileInfo.chain.sType      = GPU_STRUCTURE_TYPE_TILE_PIPELINE_CREATE_INFO;
   tileInfo.chain.structSize = sizeof(tileInfo);
   tileInfo.library              = library;
-  tileInfo.layout               = kind == KERNEL_NEIGHBOR ? layout->pipelineLayout : NULL;
+  tileInfo.layout               = resources ? layout->pipelineLayout : NULL;
   tileInfo.entryPoint           = kernelEntries[kind];
   tileInfo.pColorFormats        = &format;
   tileInfo.colorAttachmentCount = 1u;
@@ -319,8 +746,10 @@ check_kernel(GPUDevice        *device,
   REQUIRE(GPUCreateTilePipeline(device, &tileInfo, &kernel) == GPU_OK);
   REQUIRE(GPUGetTilePipelineProperties(kernel, &properties) == GPU_OK);
   REQUIRE(properties.imageblockSampleLength && properties.maxThreadsPerThreadgroup >= threads * threads);
+  if (kind == KERNEL_MIXED || kind == KERNEL_MIXED_SMALL)
+    printf("tile kernel%s imageblock sample length=%u\n", kernelLabels[kind], properties.imageblockSampleLength);
 
-  if (kind == KERNEL_NEIGHBOR) {
+  if (resources) {
     bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.chain.structSize = sizeof(bufferInfo);
     bufferInfo.sizeBytes        = 256u + sizeof(config);
@@ -341,7 +770,7 @@ check_kernel(GPUDevice        *device,
   }
 
   REQUIRE(GPUAcquireCommandBuffer(queue, "tile-kernel-neighbors", &command) == GPU_OK);
-  if (kind == KERNEL_NEIGHBOR) {
+  if (resources) {
     barrier.buffer    = buffer;
     barrier.srcAccess = GPU_ACCESS_TRANSFER_WRITE;
     barrier.dstAccess = GPU_ACCESS_SHADER_READ;
@@ -363,6 +792,11 @@ check_kernel(GPUDevice        *device,
   length = GPUGetRenderPipelineImageblockSampleLength(resolve);
   if (length > tilePass.imageblockSampleLength)
     tilePass.imageblockSampleLength = length;
+
+  /* the 2x fixture combines 16 KiB of imageblock and 16 KiB of persistent memory. */
+  if (samples == 2u && tilePass.imageblockSampleLength == 32u)
+    tilePass.threadgroupMemoryLength = 16384u;
+
   color.view        = target.multisampleView ? target.multisampleView : target.view;
   color.resolveView = target.multisampleView ? target.view : NULL;
   color.loadOp      = GPU_LOAD_OP_CLEAR;
@@ -377,7 +811,7 @@ check_kernel(GPUDevice        *device,
   GPUBindRenderPipeline(pass, init);
   GPUDraw(pass, 3u, 1u, 0u, 0u);
   REQUIRE(GPUBindTilePipeline(pass, kernel) == GPU_OK);
-  if (kind == KERNEL_NEIGHBOR) {
+  if (resources) {
     REQUIRE(GPUDispatchThreadsPerTile(pass, threads, threads) == GPU_ERROR_INVALID_ARGUMENT);
     REQUIRE(GPUBindTileGroup(pass, 0u, group, 0u, NULL) == GPU_OK);
   }
@@ -393,7 +827,11 @@ check_kernel(GPUDevice        *device,
   ok = false;
   for (y = 0u; y < KERNEL_HEIGHT; y++) {
     for (x = 0u; x < KERNEL_WIDTH; x++) {
-      if (kind == KERNEL_LOOP)
+      if (kind == KERNEL_MIXED_SMALL)
+        expected_small_pixel(x, y, samples, expected);
+      else if (kind == KERNEL_MIXED)
+        expected_mixed_pixel(x, y, samples, expected);
+      else if (kind == KERNEL_LOOP)
         expected_loop_pixel(x, y, samples, expected);
       else if (kind == KERNEL_UNIFORM)
         expected_uniform_pixel(x, y, samples, expected);
@@ -425,8 +863,10 @@ cleanup:
   GPUDestroyTexture(target.multisample);
   GPUDestroyTextureView(target.view);
   GPUDestroyTexture(target.texture);
-  printf("tile kernel%s samples=%u dispatch=%ux%u neighbor/barrier exact2356=%s\n",
-         kernelLabels[kind], samples, threads, threads, ok ? "pass" : "fail");
+  printf("tile kernel%s samples=%u dispatch=%ux%u neighbor/barrier exact2356=%s"
+         " sampleBytes=%u threadgroupBytes=%u\n",
+         kernelLabels[kind], samples, threads, threads, ok ? "pass" : "fail",
+         tilePass.imageblockSampleLength, tilePass.threadgroupMemoryLength);
   return ok;
 #undef REQUIRE
 }
@@ -522,20 +962,45 @@ main(int argc, const char *argv[]) {
         || GPUCreateShaderLibraryFromUSL(device, data.bytes, data.length, &library) != GPU_OK)
       goto cleanup;
     ok = check_entry_contract(device, library);
+    for (i = 1u; i <= 8u; i *= 2u) {
+      ok = check_attachment_budget(device, adapter, i) && ok;
+      ok = check_packed_attachment_budget(device, adapter, i) && ok;
+    }
+    ok = check_storage_budget(device, 1u, false) && ok;
+    ok = check_storage_budget(device, 1u, true) && ok;
     ok = check_kernel(device, library, 1u, 16u, KERNEL_NEIGHBOR) && ok;
     ok = check_kernel(device, library, 1u, 8u, KERNEL_NEIGHBOR) && ok;
     ok = check_kernel(device, library, 1u, 16u, KERNEL_UNIFORM) && ok;
     ok = check_kernel(device, library, 1u, 16u, KERNEL_LOOP) && ok;
+    ok = check_kernel(device, library, 1u, 16u, KERNEL_MIXED) && ok;
+    ok = check_kernel(device, library, 1u, 16u, KERNEL_MIXED_SMALL) && ok;
     if (GPUGetFormatCapabilities(adapter, GPU_FORMAT_RGBA32_FLOAT, &caps) != GPU_OK) {
       ok = false;
-    } else if (caps.supportedSampleCounts & 4u) {
+      goto cleanup;
+    }
+
+    if (caps.supportedSampleCounts & GPU_SAMPLE_COUNT_2_BIT) {
+      ok = check_kernel(device, library, 2u, 16u, KERNEL_NEIGHBOR) && ok;
+      ok = check_kernel(device, library, 2u, 8u, KERNEL_NEIGHBOR) && ok;
+    } else {
+      printf("tile kernel2x MSAA: RGBA32_FLOAT unsupported, subcase skipped\n");
+    }
+
+    if (caps.supportedSampleCounts & GPU_SAMPLE_COUNT_4_BIT) {
+      ok = check_storage_budget(device, 4u, false) && ok;
+      ok = check_storage_budget(device, 4u, true) && ok;
       ok = check_kernel(device, library, 4u, 16u, KERNEL_NEIGHBOR) && ok;
       ok = check_kernel(device, library, 4u, 8u, KERNEL_NEIGHBOR) && ok;
       ok = check_kernel(device, library, 4u, 16u, KERNEL_UNIFORM) && ok;
       ok = check_kernel(device, library, 4u, 16u, KERNEL_LOOP) && ok;
+      /* the wide master exceeds the native 4x tile budget at 16x16. */
+      ok = check_kernel(device, library, 4u, 16u, KERNEL_MIXED_SMALL) && ok;
     } else {
       printf("tile kernel4x MSAA: RGBA32_FLOAT unsupported, subcase skipped\n");
     }
+
+    if (caps.supportedSampleCounts & GPU_SAMPLE_COUNT_8_BIT)
+      ok = check_storage_budget(device, 8u, false) && ok;
 
 cleanup:
     GPUDestroyShaderLibrary(library);

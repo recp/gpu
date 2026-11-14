@@ -60,6 +60,12 @@ static const GPUFeature optionalFeatures[] = {
   GPU_FEATURE_TIMESTAMPS,
   GPU_FEATURE_FRAME_PACER,
   GPU_FEATURE_FRAME_FEEDBACK,
+  GPU_FEATURE_BUFFER_TEXTURES,
+  GPU_FEATURE_THREADED_UPLOADS,
+  GPU_FEATURE_SWAPCHAIN_SCALE,
+  GPU_FEATURE_SWAPCHAIN_COLOR_SPACE,
+  GPU_FEATURE_SWAPCHAIN_TRANSACTIONS,
+  GPU_FEATURE_MEMORYLESS_ATTACHMENTS,
   GPU_FEATURE_FRAMEBUFFER_FETCH
 };
 
@@ -531,6 +537,36 @@ gpu_apple_sample_create_swapchain(GPUDevice  *device,
   (void)width;
   (void)height;
   return activeSample ? activeSample->swapchain : NULL;
+}
+
+GPUResult
+gpu_apple_sample_create_swapchain_info(GPUDevice                    *device,
+                                      const GPUSwapchainCreateInfo *info,
+                                      GPUSwapchain               **outSwapchain) {
+  GPUSwapchainCreateInfo nativeInfo;
+  GPUSwapchain         *swapchain;
+  GPUResult             result;
+
+  if (!outSwapchain)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  *outSwapchain = NULL;
+  if (!activeSample || !info || device != activeSample->device
+      || info->surface != activeSample->surface || activeSample->renderedFrameCount != 0u)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  /* canvas dimensions are pixels; the native host retains logical view size. */
+  nativeInfo        = *info;
+  nativeInfo.width  = activeSample->surfaceWidth;
+  nativeInfo.height = activeSample->surfaceHeight;
+  result = GPUCreateSwapchain(device, &nativeInfo, &swapchain);
+  if (result != GPU_OK)
+    return result;
+
+  GPUDestroySwapchain(activeSample->swapchain);
+  activeSample->swapchain = swapchain;
+  *outSwapchain           = swapchain;
+  return GPU_OK;
 }
 
 int

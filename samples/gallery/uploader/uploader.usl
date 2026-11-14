@@ -1,0 +1,15 @@
+struct QuadOut {
+  position: float4 #position
+  uv:       float2
+}
+
+vert buffer_vs(id: uint #vertex_id) -> QuadOut {
+  let x = float((id << 1) & 2)
+  let y = float(id & 2)
+  return QuadOut(float4(x * 2.0 - 1.0, 1.0 - y * 2.0, 0.0, 1.0), float2(x, y))
+}
+
+frag buffer_fs(input: QuadOut #stage_in,
+                image: texture2d<float> #texture(0)) -> float4 {
+  return image.sample(.nearest, input.uv, level(0.0))
+}

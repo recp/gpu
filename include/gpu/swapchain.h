@@ -41,6 +41,23 @@ typedef enum GPUSwapchainStatus {
   GPU_SWAPCHAIN_STATUS_SURFACE_LOST = 4
 } GPUSwapchainStatus;
 
+typedef enum GPUColorSpace {
+  GPU_COLOR_SPACE_DEFAULT    = 0,
+  GPU_COLOR_SPACE_SRGB       = 1,
+  GPU_COLOR_SPACE_DISPLAY_P3 = 2
+} GPUColorSpace;
+
+/* optional GPUSwapchainCreateInfo chain. explicit colour spaces describe the
+ * rendered content; they do not convert shader values or change the format's
+ * transfer function. enable GPU_FEATURE_SWAPCHAIN_COLOR_SPACE for SRGB/P3 and
+ * GPU_FEATURE_SWAPCHAIN_TRANSACTIONS for transaction presentation.
+ */
+typedef struct GPUSwapchainOptions {
+  GPUChainedStruct chain;
+  GPUColorSpace    colorSpace;
+  bool             presentsWithTransaction;
+} GPUSwapchainOptions;
+
 typedef struct GPUSwapchainCreateInfo {
   GPUChainedStruct   chain;
   const char        *label;
@@ -51,6 +68,17 @@ typedef struct GPUSwapchainCreateInfo {
   uint32_t           imageCount;
   GPUPresentMode     presentMode;
 } GPUSwapchainCreateInfo;
+
+/* one device/graphics queue may serve multiple independent swapchains. finish
+ * each frame before beginning another on that device: transient allocation and
+ * frame statistics are device-owned. GPU work for different windows may remain
+ * in flight. serialize frame, resize and scale calls on the rendering thread.
+ * Apple view/layer creation, resize, scale and destruction stay on the main
+ * thread. transaction swapchains also encode/submit/present on that thread in
+ * the caller's current Core Animation transaction. classic Metal waits for GPU
+ * scheduling in this opt-in mode, never GPU completion. default presentation
+ * remains asynchronous. pause an attached pacer before reconfiguration.
+ */
 
 GPU_EXPORT
 GPUResult
@@ -82,6 +110,14 @@ GPUResult
 GPUResizeSwapchain(GPUSwapchain *__restrict swapchain,
                    uint32_t                 width,
                    uint32_t                 height);
+
+/* enable GPU_FEATURE_SWAPCHAIN_SCALE. sizes use logical units; the scale maps
+ * them to drawable pixels. positive finite values only; no active frame.
+ * failure preserves the previous scale. does not change the parent surface.
+ */
+GPU_EXPORT
+GPUResult
+GPUSetSwapchainScale(GPUSwapchain *swapchain, float scale);
 
 #ifdef __cplusplus
 }

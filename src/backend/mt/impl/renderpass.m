@@ -20,6 +20,64 @@
 #include "../../../api/tile_internal.h"
 #include "../../../api/pass/blit_internal.h"
 
+enum {
+  TILE_SAMPLE_LIMIT     = 64u,
+  TILE_SAMPLE_ALIGNMENT = 8u,
+  TILE_MEMORY_LIMIT     = 32768u
+};
+
+typedef struct MTTileColorLayout {
+  uint8_t bytes, alignment;
+} MTTileColorLayout;
+
+/* align each color target to its native component storage.
+   RGB10A2Uint expands to four 16-bit components in tile memory. */
+static const MTTileColorLayout mt_tileColorLayouts[GPU_FORMAT_COUNT] = {
+  [GPU_FORMAT_R8_UNORM]         = { 1u, 1u},
+  [GPU_FORMAT_R8_SNORM]         = { 1u, 1u},
+  [GPU_FORMAT_R8_UINT]          = { 1u, 1u},
+  [GPU_FORMAT_R8_SINT]          = { 1u, 1u},
+  [GPU_FORMAT_R16_UNORM]        = { 2u, 2u},
+  [GPU_FORMAT_R16_SNORM]        = { 2u, 2u},
+  [GPU_FORMAT_R16_UINT]         = { 2u, 2u},
+  [GPU_FORMAT_R16_SINT]         = { 2u, 2u},
+  [GPU_FORMAT_R16_FLOAT]        = { 2u, 2u},
+  [GPU_FORMAT_RG8_UNORM]        = { 2u, 1u},
+  [GPU_FORMAT_RG8_SNORM]        = { 2u, 1u},
+  [GPU_FORMAT_RG8_UINT]         = { 2u, 1u},
+  [GPU_FORMAT_RG8_SINT]         = { 2u, 1u},
+  [GPU_FORMAT_R32_UINT]         = { 4u, 4u},
+  [GPU_FORMAT_R32_SINT]         = { 4u, 4u},
+  [GPU_FORMAT_R32_FLOAT]        = { 4u, 4u},
+  [GPU_FORMAT_RG16_UNORM]       = { 4u, 2u},
+  [GPU_FORMAT_RG16_SNORM]       = { 4u, 2u},
+  [GPU_FORMAT_RG16_UINT]        = { 4u, 2u},
+  [GPU_FORMAT_RG16_SINT]        = { 4u, 2u},
+  [GPU_FORMAT_RG16_FLOAT]       = { 4u, 2u},
+  [GPU_FORMAT_RGBA8_UNORM]      = { 4u, 1u},
+  [GPU_FORMAT_RGBA8_UNORM_SRGB] = { 4u, 1u},
+  [GPU_FORMAT_RGBA8_SNORM]      = { 4u, 1u},
+  [GPU_FORMAT_RGBA8_UINT]       = { 4u, 1u},
+  [GPU_FORMAT_RGBA8_SINT]       = { 4u, 1u},
+  [GPU_FORMAT_BGRA8_UNORM]      = { 4u, 1u},
+  [GPU_FORMAT_BGRA8_UNORM_SRGB] = { 4u, 1u},
+  [GPU_FORMAT_RGB10A2_UNORM]    = { 4u, 4u},
+  [GPU_FORMAT_RGB10A2_UINT]     = { 8u, 2u},
+  [GPU_FORMAT_RG11B10_UFLOAT]   = { 4u, 4u},
+  [GPU_FORMAT_RGB9E5_UFLOAT]    = { 4u, 4u},
+  [GPU_FORMAT_RG32_UINT]        = { 8u, 4u},
+  [GPU_FORMAT_RG32_SINT]        = { 8u, 4u},
+  [GPU_FORMAT_RG32_FLOAT]       = { 8u, 4u},
+  [GPU_FORMAT_RGBA16_UNORM]     = { 8u, 2u},
+  [GPU_FORMAT_RGBA16_SNORM]     = { 8u, 2u},
+  [GPU_FORMAT_RGBA16_UINT]      = { 8u, 2u},
+  [GPU_FORMAT_RGBA16_SINT]      = { 8u, 2u},
+  [GPU_FORMAT_RGBA16_FLOAT]     = { 8u, 2u},
+  [GPU_FORMAT_RGBA32_UINT]      = {16u, 4u},
+  [GPU_FORMAT_RGBA32_SINT]      = {16u, 4u},
+  [GPU_FORMAT_RGBA32_FLOAT]     = {16u, 4u},
+};
+
 static MTLLoadAction
 mt_loadAction(GPULoadOp op) {
   switch (op) {
@@ -62,6 +120,72 @@ mt_clearColor(const GPUClearColorValue *color, GPUFormat format) {
                                color->float32[2],
                                color->float32[3]);
   }
+}
+
+/* Apple4..Apple11 limit threadgroup and explicit imageblock storage to 32KiB.
+   explicit layouts share that pool. Metal Feature Set Tables, limits/note 6. */
+static bool
+mt_tileMemoryValid(const GPURenderPassCreateInfo *info,
+                   const GPUTileRenderPassEXT   *tile) {
+  const MTTileColorLayout *layout;
+  const GPUTextureView    *view;
+  const GPUTexture        *texture;
+  uint64_t                 bytes;
+  uint32_t                 samples, width, height, sampleLength, colorLength, i;
+
+  if (!tile)
+    return true;
+
+  if (tile->imageblockSampleLength > TILE_SAMPLE_LIMIT
+      || tile->threadgroupMemoryLength > TILE_MEMORY_LIMIT)
+    return false;
+
+  view = NULL;
+  if (info->colorAttachmentCount)
+    view = info->pColorAttachments[0].view;
+  else if (info->pDepthStencilAttachment)
+    view = info->pDepthStencilAttachment->view;
+
+  if (!view || !(texture = view->_texture) || !(samples = texture->sampleCount))
+    return false;
+
+  /* automatic dimensions must fit at least the smallest native tile. */
+  width  = tile->tileWidth ? tile->tileWidth : 16u;
+  height = tile->tileHeight ? tile->tileHeight : 16u;
+  if ((samples == 4u && height > 16u)
+      || (samples == 8u && (width > 16u || height > 16u)))
+    return false;
+
+  sampleLength = tile->imageblockSampleLength;
+  /* without an explicit reservation, implicit allocation stays native-owned. */
+  if (!sampleLength && !tile->threadgroupMemoryLength)
+    return true;
+
+  /* the explicit pool must also cover the active color attachment footprint. */
+  colorLength = 0u;
+  for (i = 0u; i < info->colorAttachmentCount; i++) {
+    view = info->pColorAttachments[i].view;
+    if (!view || (uint32_t)view->format >= GPU_FORMAT_COUNT)
+      return false;
+
+    layout = &mt_tileColorLayouts[view->format];
+    if (!layout->alignment)
+      return false;
+
+    colorLength  = (colorLength + layout->alignment - 1u) & ~(layout->alignment - 1u);
+    colorLength += layout->bytes;
+  }
+  if (colorLength > TILE_SAMPLE_LIMIT)
+    return false;
+
+  if (sampleLength < colorLength)
+    sampleLength = colorLength;
+
+  /* render pass reservations round each sample to an eight-byte slot. */
+  sampleLength = (sampleLength + TILE_SAMPLE_ALIGNMENT - 1u) & ~(TILE_SAMPLE_ALIGNMENT - 1u);
+  bytes = (uint64_t)width * height * samples * sampleLength;
+
+  return bytes <= TILE_MEMORY_LIMIT - tile->threadgroupMemoryLength;
 }
 
 #if MT_HAS_COMMAND_BARRIERS
@@ -458,15 +582,17 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
       || (info->colorAttachmentCount > 0 && !info->pColorAttachments))
     return NULL;
 
+  device = commandBufferDevice(cmdb);
+
   if (!renderPassVRSExtensions(info, &shadingRate, &rateMap)
-      || !tileRenderPassExtension(info, commandBufferDevice(cmdb), &tile)
-      || shadingRate) {
+      || !tileRenderPassExtension(info, device, &tile)
+      || shadingRate || !mt_tileMemoryValid(info, tile)) {
     return NULL;
   }
 
   if (rateMap
       && (!rateMap->map
-          || rateMap->map->device != commandBufferDevice(cmdb)
+          || rateMap->map->device != device
           || !rateMap->map->_priv)) {
     return NULL;
   }
@@ -588,7 +714,6 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
         && (color->view->format == GPU_FORMAT_R32_FLOAT
             || color->view->format == GPU_FORMAT_RG32_FLOAT
             || color->view->format == GPU_FORMAT_RGBA32_FLOAT)) {
-      device  = commandBufferDevice(cmdb);
       adapter = device && device->adapter ? device->adapter->_priv : NULL;
 
       if (!adapter || !adapter->msaa32Supported) {
@@ -665,11 +790,10 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
           colorDescriptor.colorAttachments[i].clearColor = rpd.colorAttachments[i].clearColor;
         }
 
-        mt_useAllocation(cmdb, mt_nativeTexture(color->view->_texture));
+        mt_useTextureAllocation(cmdb, color->view->_texture);
 
         if (color->resolveView) {
-          mt_useAllocation(cmdb,
-                           mt_nativeTexture(color->resolveView->_texture));
+          mt_useTextureAllocation(cmdb, color->resolveView->_texture);
         }
       }
     }
@@ -753,8 +877,7 @@ mt_beginRenderPass(GPUCommandBuffer              *cmdb,
           depthDescriptor.stencilAttachment = rpd.stencilAttachment;
         }
 
-        mt_useAllocation(cmdb,
-                         mt_nativeTexture(depthStencil->view->_texture));
+        mt_useTextureAllocation(cmdb, depthStencil->view->_texture);
       }
     }
 #endif
@@ -1289,8 +1412,7 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
           afterStages |= MTLStageAll;
         }
 
-        mt_useAllocation(cmdb,
-                         mt_nativeTexture(textureBarrier->texture));
+        mt_useTextureAllocation(cmdb, textureBarrier->texture);
       }
 
       for (aliasIndex = 0; aliasIndex < barriers->aliasingBarrierCount; aliasIndex++) {
@@ -1300,14 +1422,14 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
           mt_useAllocation(cmdb,
                            (id<MTLBuffer>)aliasBarrier->beforeBuffer->_priv);
         } else {
-          mt_useAllocation(cmdb, mt_nativeTexture(aliasBarrier->beforeTexture));
+          mt_useTextureAllocation(cmdb, aliasBarrier->beforeTexture);
         }
 
         if (aliasBarrier->afterBuffer) {
           mt_useAllocation(cmdb,
                            (id<MTLBuffer>)aliasBarrier->afterBuffer->_priv);
         } else {
-          mt_useAllocation(cmdb, mt_nativeTexture(aliasBarrier->afterTexture));
+          mt_useTextureAllocation(cmdb, aliasBarrier->afterTexture);
         }
       }
 

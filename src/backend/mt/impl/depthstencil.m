@@ -488,6 +488,10 @@ mt_createTexture(GPUDevice                  *__restrict device,
   deviceMT    = device->_priv;
   storageMode = MTLStorageModePrivate;
 
+  if ((info->usage & GPU_TEXTURE_USAGE_TRANSIENT_ATTACHMENT)
+      && GPUIsFeatureEnabled(device, GPU_FEATURE_MEMORYLESS_ATTACHMENTS))
+    storageMode = MTLStorageModeMemoryless;
+
   if ((info->usage & GPU_TEXTURE_USAGE_COPY_DST) != 0
       && !mt_formatIsDepthStencil(info->format)) {
 #if TARGET_OS_OSX
@@ -526,6 +530,8 @@ mt_createTexture(GPUDevice                  *__restrict device,
     [nativeTexture release];
     return result;
   }
+
+  (*outTexture)->_memoryless = storageMode == MTLStorageModeMemoryless;
 
   return GPU_OK;
 }
@@ -844,6 +850,84 @@ mt_writeTexture(GPUQueue                        *__restrict queue,
   return GPU_OK;
 }
 
+static uint32_t
+mt_linearTextureAlignment(GPUDevice *device, GPUFormat format) {
+  GPUDeviceMT *native;
+  NSUInteger   alignment;
+
+  native = device ? device->_priv : NULL;
+  if (!native || !native->device)
+    return 0u;
+
+  switch (format) {
+    case GPU_FORMAT_R8_UNORM:
+    case GPU_FORMAT_RG8_UNORM:
+    case GPU_FORMAT_RGBA8_UNORM:
+    case GPU_FORMAT_BGRA8_UNORM:
+    case GPU_FORMAT_R16_FLOAT:
+    case GPU_FORMAT_RG16_FLOAT:
+    case GPU_FORMAT_RGBA16_FLOAT:
+    case GPU_FORMAT_R32_FLOAT:
+    case GPU_FORMAT_RG32_FLOAT:
+    case GPU_FORMAT_RGBA32_FLOAT: break;
+    default: return 0u;
+  }
+
+  alignment = [native->device minimumLinearTextureAlignmentForPixelFormat:mt_format(format)];
+  return alignment <= UINT32_MAX ? (uint32_t)alignment : 0u;
+}
+
+static GPUResult
+mt_textureFromBuffer(GPUDevice                        *device,
+                      const GPUBufferTextureCreateInfo *info,
+                      GPUTexture                      **outTexture) {
+  GPUTextureCreateInfo  logical = {0};
+  MTLTextureDescriptor *descriptor;
+  id<MTLBuffer>         buffer;
+  id<MTLTexture>        texture;
+  GPUResult             result;
+
+  buffer = info->buffer->_priv;
+  if (!buffer || buffer.storageMode != MTLStorageModeShared)
+    return GPU_ERROR_UNSUPPORTED;
+
+  logical.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  logical.chain.structSize = sizeof(logical);
+  logical.label            = info->label;
+  logical.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  logical.format           = info->format;
+  logical.width            = info->width;
+  logical.height           = info->height;
+  logical.depthOrLayers    = 1u;
+  logical.mipLevelCount    = 1u;
+  logical.sampleCount      = 1u;
+  logical.usage            = info->usage;
+  result = validateTextureCreateInfo(device, &logical);
+
+  if (result != GPU_OK)
+    return result;
+
+  descriptor = [MTLTextureDescriptor new];
+  descriptor.textureType = MTLTextureType2D;
+  descriptor.pixelFormat = mt_format(info->format);
+  descriptor.width       = info->width;
+  descriptor.height      = info->height;
+  descriptor.storageMode = MTLStorageModeShared;
+  descriptor.usage       = MTLTextureUsageShaderRead;
+  texture = [buffer newTextureWithDescriptor:descriptor
+                                      offset:(NSUInteger)info->offset
+                                 bytesPerRow:info->bytesPerRow];
+  [descriptor release];
+  if (!texture)
+    return GPU_ERROR_UNSUPPORTED;
+
+  result = mt_wrapTexture(device, &logical, texture, MTLPixelFormatInvalid, outTexture);
+  if (result != GPU_OK)
+    [texture release];
+
+  return result;
+}
+
 GPU_HIDE
 void
 mt_initDepthStencil(GPUDepthStencilApi *api) {
@@ -858,4 +942,6 @@ mt_initTexture(GPUTextureApi *api) {
   api->createView  = mt_createTextureView;
   api->destroyView = mt_destroyTextureView;
   api->write       = mt_writeTexture;
+  api->linearAlignment = mt_linearTextureAlignment;
+  api->fromBuffer      = mt_textureFromBuffer;
 }

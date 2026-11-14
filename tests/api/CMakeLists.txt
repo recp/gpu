@@ -30,20 +30,6 @@ if(UNIX AND NOT EMSCRIPTEN)
 endif()
 
 if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
-  add_executable(gpu-metal-uploader-layout-test metal_uploader.m)
-
-  target_link_libraries(gpu-metal-uploader-layout-test PRIVATE gpu)
-  gpu_link_apple_framework(gpu-metal-uploader-layout-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
-
-  foreach(mode classic metal4)
-    add_test(NAME metal-uploader-layout-${mode} COMMAND gpu-metal-uploader-layout-test)
-    set_tests_properties(metal-uploader-layout-${mode} PROPERTIES
-      ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1"
-      SKIP_RETURN_CODE 77 LABELS "upload;layout" TIMEOUT 30 RUN_SERIAL TRUE)
-  endforeach()
-endif()
-
-if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   set(GPU_USL_FIXTURE_TARGET_CAPS framebuffer_fetch)
   gpu_add_usl_fixtures(GPU_TILE_FIXTURE metal api-tile
     "${CMAKE_CURRENT_SOURCE_DIR}/tile_shader.usl"
@@ -96,6 +82,49 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
 endif()
 
 if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  add_executable(gpu-metal-uploader-layout-test metal_uploader.m)
+
+  target_link_libraries(gpu-metal-uploader-layout-test PRIVATE gpu)
+  gpu_link_apple_framework(gpu-metal-uploader-layout-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+
+  foreach(mode classic metal4)
+    add_test(NAME metal-uploader-layout-${mode} COMMAND gpu-metal-uploader-layout-test)
+    set_tests_properties(metal-uploader-layout-${mode} PROPERTIES
+      ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1"
+      SKIP_RETURN_CODE 77 LABELS "upload;layout" TIMEOUT 30 RUN_SERIAL TRUE)
+  endforeach()
+endif()
+
+if((GPU_BUILD_METAL OR GPU_BUILD_VULKAN OR GPU_BUILD_DX12 OR GPU_BUILD_WEBGPU)
+   AND NOT EMSCRIPTEN)
+  add_executable(gpu-transient-attachments-test
+    transient_attachments.c
+    runner.c
+  )
+  set_target_properties(gpu-transient-attachments-test PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+  gpu_enable_c11_atomics(gpu-transient-attachments-test)
+
+  target_link_libraries(gpu-transient-attachments-test PRIVATE gpu)
+
+  if(GPU_BUILD_METAL)
+    set_source_files_properties(transient_attachments.c PROPERTIES LANGUAGE OBJC)
+    target_compile_definitions(gpu-transient-attachments-test PRIVATE GPU_TEST_METAL_TRANSIENT=1)
+    gpu_link_apple_framework(gpu-transient-attachments-test Metal "${GPU_FRAMEWORK_METAL}")
+    gpu_link_apple_framework(gpu-transient-attachments-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+
+    foreach(mode classic metal4)
+      add_test(NAME transient-attachments-${mode} COMMAND gpu-transient-attachments-test)
+      set_tests_properties(transient-attachments-${mode} PROPERTIES
+        ENVIRONMENT "GPU_METAL_MODE=${mode};MTL_DEBUG_LAYER=1" TIMEOUT 20)
+    endforeach()
+  else()
+    add_test(NAME transient-attachments COMMAND gpu-transient-attachments-test)
+    set_tests_properties(transient-attachments PROPERTIES TIMEOUT 20)
+  endif()
+endif()
+
+if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   set(GPU_USL_FIXTURE_TARGET_CAPS framebuffer_fetch)
   gpu_add_usl_fixtures(GPU_FRAMEBUFFER_FETCH_FIXTURE metal api-framebuffer-fetch
     "${CMAKE_CURRENT_SOURCE_DIR}/framebuffer_fetch.usl"
@@ -119,6 +148,46 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
       SKIP_RETURN_CODE 77 LABELS "framebuffer-fetch" TIMEOUT 30 RUN_SERIAL TRUE)
   endforeach()
 
+  add_executable(gpu-metal-swapchain-test metal_swapchain.m)
+  target_link_libraries(gpu-metal-swapchain-test PRIVATE gpu)
+  gpu_link_apple_framework(gpu-metal-swapchain-test AppKit "${GPU_FRAMEWORK_UI}")
+  gpu_link_apple_framework(gpu-metal-swapchain-test Metal "${GPU_FRAMEWORK_METAL}")
+  gpu_link_apple_framework(gpu-metal-swapchain-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+  gpu_link_apple_framework(gpu-metal-swapchain-test QuartzCore "${GPU_FRAMEWORK_QUARTZCORE}")
+
+  add_test(NAME metal-swapchain-classic COMMAND gpu-metal-swapchain-test)
+  add_test(NAME metal-swapchain-metal4 COMMAND gpu-metal-swapchain-test)
+  set_tests_properties(metal-swapchain-classic PROPERTIES
+    ENVIRONMENT "GPU_METAL_MODE=classic" TIMEOUT 20)
+  set_tests_properties(metal-swapchain-metal4 PROPERTIES
+    ENVIRONMENT "GPU_METAL_MODE=metal4" TIMEOUT 20)
+
+  foreach(mode classic metal4)
+    add_test(NAME metal-swapchain-onscreen-${mode} COMMAND gpu-metal-swapchain-test)
+    set_tests_properties(metal-swapchain-onscreen-${mode} PROPERTIES
+      ENVIRONMENT "GPU_METAL_MODE=${mode};GPU_SWAPCHAIN_ONSCREEN=1"
+      SKIP_RETURN_CODE 77 LABELS "onscreen" TIMEOUT 20 RUN_SERIAL TRUE)
+  endforeach()
+
+  add_executable(gpu-metal-pdf-support-test metal_pdf_support.m)
+  target_link_libraries(gpu-metal-pdf-support-test PRIVATE gpu)
+  gpu_link_apple_framework(gpu-metal-pdf-support-test AppKit "${GPU_FRAMEWORK_UI}")
+  gpu_link_apple_framework(gpu-metal-pdf-support-test Metal "${GPU_FRAMEWORK_METAL}")
+  gpu_link_apple_framework(gpu-metal-pdf-support-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+
+  add_test(NAME metal-pdf-support-classic COMMAND gpu-metal-pdf-support-test)
+  set_tests_properties(metal-pdf-support-classic PROPERTIES
+    ENVIRONMENT "GPU_METAL_MODE=classic" SKIP_RETURN_CODE 77 TIMEOUT 20)
+  add_test(NAME metal-pdf-support-metal4 COMMAND gpu-metal-pdf-support-test)
+  set_tests_properties(metal-pdf-support-metal4 PROPERTIES
+    ENVIRONMENT "GPU_METAL_MODE=metal4" SKIP_RETURN_CODE 77 TIMEOUT 20)
+
+  foreach(mode IN ITEMS classic metal4)
+    add_test(NAME metal-uploader-odd-${mode} COMMAND gpu-metal-pdf-support-test)
+    set_tests_properties(metal-uploader-odd-${mode} PROPERTIES
+      ENVIRONMENT "GPU_METAL_MODE=${mode};GPU_PDF_UPLOAD_ONLY=1;GPU_PDF_UPLOAD_ODD=1"
+      LABELS "upload;ordering" SKIP_RETURN_CODE 77 TIMEOUT 20)
+  endforeach()
 endif()
 
 add_executable(gpu-constant-lookup-test

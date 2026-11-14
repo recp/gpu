@@ -69,6 +69,9 @@ mt_beginDrawableFrame(GPUApi *api, GPUSwapchain *swapchain, void *nativeDrawable
     return NULL;
   }
 
+  if (swapchainMtl->presentsWithTransaction && ![NSThread isMainThread])
+    return NULL;
+
   drawable = (id<CAMetalDrawable>)nativeDrawable;
   if (!drawable) {
     swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
@@ -127,6 +130,9 @@ mt_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
   }
 
   if (native->frameActive)
+    return NULL;
+
+  if (native->presentsWithTransaction && ![NSThread isMainThread])
     return NULL;
 
   return mt_beginDrawableFrame(api, swapchain, [native->layer nextDrawable]);

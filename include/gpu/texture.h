@@ -27,6 +27,7 @@ extern "C" {
 typedef struct GPUTexture     GPUTexture;
 typedef struct GPUTextureView GPUTextureView;
 typedef struct GPUDevice      GPUDevice;
+typedef struct GPUBuffer      GPUBuffer;
 
 typedef uint32_t GPUTextureUsageFlags;
 enum {
@@ -37,7 +38,17 @@ enum {
   GPU_TEXTURE_USAGE_COPY_SRC      = 1u << 4,
   GPU_TEXTURE_USAGE_COPY_DST      = 1u << 5,
 
-  GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT = 1u << 6
+  GPU_TEXTURE_USAGE_SHADING_RATE_ATTACHMENT_EXT = 1u << 6,
+
+  /* pass-local 2D attachment, one mip; no sampling, storage or copying.
+   * load must clear/discard, store must discard; MSAA may resolve to an ordinary
+   * attachment. enable GPU_FEATURE_MEMORYLESS_ATTACHMENTS for native tile/lazy
+   * storage; otherwise ordinary backing preserves the same pass-local contract.
+   * incompatible native format/memory combinations return unsupported.
+   * texture/view objects still outlive all GPU use; heaps, sparse resources
+   * and cross-device sharing are unsupported for transient attachments.
+   */
+  GPU_TEXTURE_USAGE_TRANSIENT_ATTACHMENT = 1u << 7
 };
 
 typedef enum GPUTextureDimension {
@@ -74,6 +85,21 @@ typedef struct GPUTextureCreateInfo {
   uint32_t             sampleCount;
   GPUTextureUsageFlags usage;
 } GPUTextureCreateInfo;
+
+/* shared storage; the buffer and its host allocation outlive all texture uses.
+ * CPU overwrites require completion of previous GPU reads. No implicit upload.
+ */
+typedef struct GPUBufferTextureCreateInfo {
+  GPUChainedStruct     chain;
+  const char          *label;
+  GPUBuffer           *buffer;
+  uint64_t             offset;
+  uint32_t             bytesPerRow;
+  GPUFormat            format;
+  uint32_t             width;
+  uint32_t             height;
+  GPUTextureUsageFlags usage;
+} GPUBufferTextureCreateInfo;
 
 typedef struct GPUTextureInfo {
   GPUTextureDimension  dimension;
@@ -121,6 +147,17 @@ GPUResult
 GPUCreateTexture(GPUDevice                  *__restrict device,
                  const GPUTextureCreateInfo *__restrict info,
                  GPUTexture                **__restrict outTexture);
+
+/* requires enabled GPU_FEATURE_BUFFER_TEXTURES; zero alignment means unsupported. */
+GPU_EXPORT
+uint32_t
+GPUGetLinearTextureAlignment(GPUDevice *device, GPUFormat format);
+
+GPU_EXPORT
+GPUResult
+GPUCreateTextureFromBuffer(GPUDevice                        *__restrict device,
+                           const GPUBufferTextureCreateInfo *__restrict info,
+                           GPUTexture                      **__restrict outTexture);
 
 /* each holder of a texture releases it with GPUDestroyTexture: it is destroyed
  * with the last. a texture starts with one holder; GPURetainTexture adds one.

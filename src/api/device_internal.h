@@ -107,6 +107,7 @@ struct GPUDevice {
   bool                        uslFloatControls2;
   bool                        uslHalfRoundtrip;
   bool                        uslStorageF16;
+  bool                        uslIOF16;
   bool                        uslCubeGradFixup;
   bool                        transientConfigured;
   bool                        transientFrameBegun;

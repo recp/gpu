@@ -49,6 +49,11 @@ typedef struct GPUTextureApi {
            uint64_t                                    sizeBytes,
            const struct GPUFormatDataLayout           *layout);
 
+  uint32_t (*linearAlignment)(GPUDevice *device, GPUFormat format);
+
+  GPUResult (*fromBuffer)(GPUDevice                        *device,
+                          const GPUBufferTextureCreateInfo *info,
+                          GPUTexture                      **outTexture);
 } GPUTextureApi;
 
 #ifdef __cplusplus

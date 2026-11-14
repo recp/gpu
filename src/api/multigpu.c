@@ -243,6 +243,9 @@ validateSharedTextureInfo(GPUDeviceInteropEXT        *interop,
     return result;
   }
 
+  if ((firstInfo->usage | secondInfo->usage) & GPU_TEXTURE_USAGE_TRANSIENT_ATTACHMENT)
+    return GPU_ERROR_UNSUPPORTED;
+
   return validateTextureCreateInfo(interop->secondDevice, secondInfo);
 }
 

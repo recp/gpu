@@ -157,12 +157,8 @@ reportDeviceLostOnce(GPUDevice *device) {
 
 static bool
 knownFeature(GPUFeature feature) {
-  return (feature >= GPU_FEATURE_COMPUTE
-          && feature <= GPU_FEATURE_BUFFER_HOST_MEMORY_EXT)
-         || feature == GPU_FEATURE_FRAME_PACER
-         || feature == GPU_FEATURE_THREADED_UPLOADS
-         || (feature >= GPU_FEATURE_FRAMEBUFFER_FETCH
-             && feature <= GPU_FEATURE_FRAME_FEEDBACK);
+  return feature >= GPU_FEATURE_COMPUTE
+         && feature <= GPU_FEATURE_FRAME_FEEDBACK;
 }
 
 static bool

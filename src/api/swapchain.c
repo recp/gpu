@@ -18,6 +18,19 @@
 #include "device_internal.h"
 #include "surface_internal.h"
 #include "swapchain_internal.h"
+#include <math.h>
+
+static bool
+validScaledSize(uint32_t width, uint32_t height, float scale) {
+  double pixelWidth, pixelHeight;
+
+  pixelWidth  = (double)width * scale;
+  pixelHeight = (double)height * scale;
+
+  return isfinite(scale) && scale > 0.0f
+         && pixelWidth >= 1.0 && pixelWidth <= UINT32_MAX
+         && pixelHeight >= 1.0 && pixelHeight <= UINT32_MAX;
+}
 
 static bool
 isPresentModeValid(GPUPresentMode mode) {
@@ -75,10 +88,11 @@ createSwapchainInternal(GPUDevice                    *__restrict device,
                                                   device,
                                                   cmdQue,
                                                   info))) {
-    swapchain->device = device;
-    swapchain->width  = info->width;
-    swapchain->height = info->height;
-    swapchain->format = info->format;
+    swapchain->device            = device;
+    swapchain->width             = info->width;
+    swapchain->height            = info->height;
+    swapchain->format            = info->format;
+    swapchain->backingScaleFactor = info->surface->scale;
     swapchainResetStatus(swapchain);
   }
 
@@ -90,13 +104,14 @@ GPUResult
 GPUCreateSwapchain(GPUDevice                    *__restrict device,
                    const GPUSwapchainCreateInfo *__restrict info,
                    GPUSwapchain                **__restrict outSwapchain) {
-  GPUSurfaceCapabilities surfaceCaps;
-  GPUFormatCapabilities  formatCaps;
-  GPUQueue              *queue;
-  GPUResult              result;
-  uint32_t               i;
-  bool                   formatSupported;
-  bool                   presentModeSupported;
+  GPUSurfaceCapabilities    surfaceCaps;
+  GPUFormatCapabilities     formatCaps;
+  const GPUSwapchainOptions *options;
+  GPUQueue                 *queue;
+  GPUResult                 result;
+  uint32_t                  i;
+  bool                      formatSupported;
+  bool                      presentModeSupported;
 
   if (!outSwapchain)
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -121,9 +136,26 @@ GPUCreateSwapchain(GPUDevice                    *__restrict device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (info->chain.pNext) {
-    return GPU_ERROR_UNSUPPORTED;
+  options = info->chain.pNext;
+  if (options) {
+    if (options->chain.sType != GPU_STRUCTURE_TYPE_SWAPCHAIN_OPTIONS)
+      return GPU_ERROR_UNSUPPORTED;
+
+    if (options->chain.structSize < sizeof(*options)
+        || options->chain.pNext
+        || options->colorSpace < GPU_COLOR_SPACE_DEFAULT
+        || options->colorSpace > GPU_COLOR_SPACE_DISPLAY_P3)
+      return GPU_ERROR_INVALID_ARGUMENT;
+
+    if ((options->colorSpace != GPU_COLOR_SPACE_DEFAULT
+         && !GPUIsFeatureEnabled(device, GPU_FEATURE_SWAPCHAIN_COLOR_SPACE))
+        || (options->presentsWithTransaction
+            && !GPUIsFeatureEnabled(device, GPU_FEATURE_SWAPCHAIN_TRANSACTIONS)))
+      return GPU_ERROR_UNSUPPORTED;
   }
+
+  if (!validScaledSize(info->width, info->height, info->surface->scale))
+    return GPU_ERROR_INVALID_ARGUMENT;
 
   result = GPUGetFormatCapabilities(device->adapter,
                                     info->format,
@@ -252,7 +284,8 @@ GPUResizeSwapchain(GPUSwapchain *__restrict swapchain,
   GPUApi     *api;
   GPUResult   result;
 
-  if (!swapchain || width == 0 || height == 0)
+  if (!swapchain || width == 0u || height == 0u
+      || !validScaledSize(width, height, swapchain->backingScaleFactor))
     return GPU_ERROR_INVALID_ARGUMENT;
 
   if (!(api = deviceApi(swapchain->device)))
@@ -271,6 +304,28 @@ GPUResizeSwapchain(GPUSwapchain *__restrict swapchain,
     swapchain->height = height;
     swapchainResetStatus(swapchain);
   }
+
+  return result;
+}
+
+GPU_EXPORT
+GPUResult
+GPUSetSwapchainScale(GPUSwapchain *swapchain, float scale) {
+  GPUResult result;
+  float     previous;
+
+  if (!swapchain || !isfinite(scale) || scale <= 0.0f
+      || !validScaledSize(swapchain->width, swapchain->height, scale))
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  if (!GPUIsFeatureEnabled(swapchain->device, GPU_FEATURE_SWAPCHAIN_SCALE))
+    return GPU_ERROR_UNSUPPORTED;
+
+  previous                     = swapchain->backingScaleFactor;
+  swapchain->backingScaleFactor = scale;
+  result = GPUResizeSwapchain(swapchain, swapchain->width, swapchain->height);
+  if (result != GPU_OK)
+    swapchain->backingScaleFactor = previous;
 
   return result;
 }

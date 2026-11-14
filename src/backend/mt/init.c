@@ -17,7 +17,7 @@
 #include "common.h"
 #include "impl.h"
 
-GPUApi mt = {
+static GPUApi mt = {
   .initialized = false,
   .backend     = GPU_BACKEND_METAL,
 };

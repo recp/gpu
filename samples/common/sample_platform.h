@@ -156,6 +156,7 @@ gpu_android_set_scissor(GPURenderPassEncoder *pass,
 #define GPUCreateInstance gpu_apple_sample_create_instance
 #define GPUCreateSurfaceFromNative gpu_apple_sample_create_surface
 #define GPUCreateSwapchainDefault gpu_apple_sample_create_swapchain
+#define GPUCreateSwapchain gpu_apple_sample_create_swapchain_info
 
 #elif defined(GPU_SAMPLE_GALLERY_LINUX)
 

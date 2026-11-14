@@ -1526,8 +1526,10 @@ check_swapchain_create_validation(GPUDevice *device) {
   scopedDevice.adapter = &scopedAdapter;
   scopedDevice._api    = &scopedApi;
   scopedSurface.inst = &scopedInstance;
+  scopedSurface.scale = 1.0f;
 
   surface.inst          = device->inst;
+  surface.scale         = 1.0f;
   foreignSurface.inst   = &foreignInstance;
   info.chain.sType      = GPU_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO;
   info.chain.structSize = sizeof(info);
