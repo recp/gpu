@@ -80,12 +80,7 @@ vk__queueSubmit(GPUQueueVk         *queue,
   result = vkQueueSubmit(queue->queRaw, 1u, info, fence);
 
   if (result == VK_SUCCESS) {
-    if (!*serial) {
-      *serial = vk_nextSerial(queue->queue->_device->_priv);
-      __atomic_store_n(&queue->givenSerial, *serial, __ATOMIC_RELEASE);
-    }
-
-    __atomic_store_n(&queue->submittedSerial, *serial, __ATOMIC_RELEASE);
+    gpuRetireSubmitted(&((GPUDeviceVk *)queue->queue->_device->_priv)->retire, queue->queue, serial);
   }
 
   vk_queueSubmitUnlock(queue);
@@ -96,10 +91,7 @@ vk__queueSubmit(GPUQueueVk         *queue,
 /* a transfer batch that won't go out gives its serial back */
 static void
 vk__dropTransferSerial(GPUQueueVk *queue, GPUTransferSlotVk *slot) {
-  if (slot->serial) {
-    __atomic_store_n(&queue->givenSerial, slot->givenBefore, __ATOMIC_RELEASE);
-    slot->serial = 0u;
-  }
+  gpuRetireDropBatch(queue->queue, &slot->serial, slot->givenBefore);
 }
 
 static VkResult
@@ -1332,7 +1324,7 @@ vk_waitDeviceIdle(GPUDevice *__restrict device) {
     }
   }
 
-  before = __atomic_load_n(&deviceVk->serial, __ATOMIC_ACQUIRE);
+  before = gpuRetireLoad(&deviceVk->retire.serial);
   result = vkDeviceWaitIdle(deviceVk->device);
 
   for (j = 0u; j < deviceVk->nCreatedQueues; j++) {
@@ -1347,7 +1339,7 @@ vk_waitDeviceIdle(GPUDevice *__restrict device) {
 
         /* what was submitted before the wait finished (and objects
          * destroyed meanwhile go, before the pool is trimmed below) */
-        submitted = __atomic_load_n(&nativeQueue->submittedSerial, __ATOMIC_ACQUIRE);
+        submitted = gpuRetireLoad(&nativeQueue->queue->_retire.submitted);
         vk_queueDone(deviceVk, nativeQueue, submitted < before ? submitted : before);
       }
 
@@ -1526,9 +1518,7 @@ vk_beginTransfer(GPUQueue        *queue,
   }
 
   /* the batch's serial now: what is destroyed while it records waits for it */
-  slot->givenBefore          = __atomic_load_n(&native->givenSerial, __ATOMIC_RELAXED);
-  slot->serial               = vk_nextSerial(device);
-  __atomic_store_n(&native->givenSerial, slot->serial, __ATOMIC_RELEASE);
+  gpuRetireOpenBatch(&device->retire, queue, &slot->serial, &slot->givenBefore);
   native->activeTransferSlot = (uint32_t)(slot - native->transferSlots);
   native->transferOpen       = true;
   native->transferUpload     = upload;
