@@ -24,6 +24,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if !defined(_WIN32) && !defined(WIN32)
+#  include <pthread.h>
+#  include <time.h>
+#endif
 
 #define LIVE_MAX 4096u
 
@@ -49,6 +53,12 @@ createBlock(void *user, uint32_t key, uint64_t size, uint64_t *outHandle, void *
   (void)user;
   if (key == 7u)
     return false; /* a key whose memory can't be had */
+#if !defined(_WIN32) && !defined(WIN32)
+  if (key == 5u) { /* a slow driver: the warm-up is still making it when the page asks */
+    struct timespec wait = {0, 30000000};
+    nanosleep(&wait, NULL);
+  }
+#endif
   *outHandle = (uint64_t)++blocksMade;
   *outMapped = key == 1u ? malloc((size_t)size) : NULL;
   return true;
@@ -105,6 +115,87 @@ check(GPUSubAllocator *alloc, Live *live, uint32_t count) {
     }
   }
 
+  return 1;
+}
+
+/* a warm-up's first blocks: a queued key's block serves its allocations and
+ * isn't made twice; a failing key reports it; until a key's block is made,
+ * its allocations go to the caller at once, waiting for nothing */
+#if !defined(_WIN32) && !defined(WIN32)
+static void*
+makeSlow(void *context) {
+  return gpuSubMakeQueued(context) == 1 ? context : NULL;
+}
+#endif
+
+static uint32_t
+blocksOf(const GPUSubAllocator *alloc, uint32_t key) {
+  uint32_t i, n;
+
+  for (i = 0u, n = 0u; i < alloc->blockCount; i++)
+    n += alloc->blocks[i]->key == key;
+  return n;
+}
+
+static int
+check_warm(const GPUSubAllocatorInfo *info) {
+  static const uint32_t four = 4u, five = 5u, six = 6u, seven = 7u;
+  GPUSubAllocator       alloc;
+  GPUSubAllocation      a;
+  uint32_t              made;
+
+  if (!gpuSubInit(&alloc, info))
+    return 0;
+
+  made = blocksMade;
+  gpuSubQueue(&alloc, &four, 1u);
+  if (gpuSubMakeQueued(&alloc) != 1 || blocksMade != made + 1u)
+    return fprintf(stderr, "suballoc: a queued block not made\n"), 0;
+  gpuSubQueue(&alloc, &four, 1u);
+  if (gpuSubMakeQueued(&alloc) != 0 || !gpuSubAllocate(&alloc, 4u, 4096u, 256u, &a)
+      || blocksMade != made + 1u || blocksOf(&alloc, 4u) != 1u)
+    return fprintf(stderr, "suballoc: a warm block made twice or not used\n"), 0;
+  gpuSubFree(&alloc, &a);
+
+  gpuSubQueue(&alloc, &seven, 1u);
+  if (gpuSubMakeQueued(&alloc) != -1)
+    return fprintf(stderr, "suballoc: a warm block that can't be had was\n"), 0;
+
+  made = blocksMade;
+  gpuSubQueue(&alloc, &six, 1u);
+  if (gpuSubAllocate(&alloc, 6u, 4096u, 256u, &a) || blocksMade != made || gpuSubMakeQueued(&alloc) != 1
+      || !gpuSubAllocate(&alloc, 6u, 4096u, 256u, &a) || blocksMade != made + 1u || blocksOf(&alloc, 6u) != 1u)
+    return fprintf(stderr, "suballoc: a queued key's allocation placed or a block made twice\n"), 0;
+  gpuSubFree(&alloc, &a);
+
+#if !defined(_WIN32) && !defined(WIN32)
+  {
+    pthread_t       thread;
+    struct timespec soon = {0, 5000000};
+    void           *result;
+    bool            placedEarly;
+
+    struct timespec t0, t1;
+
+    made = blocksMade;
+    gpuSubQueue(&alloc, &five, 1u);
+    if (pthread_create(&thread, NULL, makeSlow, &alloc) != 0)
+      return 0;
+    nanosleep(&soon, NULL);
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    placedEarly = gpuSubAllocate(&alloc, 5u, 4096u, 256u, &a);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    pthread_join(thread, &result);
+    if (placedEarly || (t1.tv_sec - t0.tv_sec) * 1000000000L + (t1.tv_nsec - t0.tv_nsec) > 10000000L)
+      return fprintf(stderr, "suballoc: an allocation during a warm-up waited or was placed\n"), 0;
+    if (!result || !gpuSubAllocate(&alloc, 5u, 4096u, 256u, &a) || blocksMade != made + 1u
+        || blocksOf(&alloc, 5u) != 1u)
+      return fprintf(stderr, "suballoc: %u blocks made for a key being warmed\n", blocksMade - made), 0;
+    gpuSubFree(&alloc, &a);
+  }
+#endif
+
+  gpuSubDestroy(&alloc);
   return 1;
 }
 
@@ -173,6 +264,8 @@ main(void) {
     return fprintf(stderr, "suballoc: trimming kept %u blocks, not one a key\n", alloc.blockCount), 1;
 
   gpuSubDestroy(&alloc);
+  if (!check_warm(&info))
+    return 1;
   if (blocksGone != blocksMade)
     return fprintf(stderr, "suballoc: %u blocks made, %u gone\n", blocksMade, blocksGone), 1;
 

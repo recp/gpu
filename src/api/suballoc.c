@@ -142,14 +142,13 @@ gpuSub__place(GPUSubBlock *block, uint64_t size, uint64_t alignment, uint64_t *o
   return false;
 }
 
-static GPUSubBlock*
-gpuSub__newBlock(GPUSubAllocator *alloc, uint32_t key, uint64_t size) {
-  GPUSubBlock **blocks;
-  GPUSubBlock  *block;
-  uint64_t      blockSize;
-  uint32_t      i, capacity;
+/* a new block's size: each of a key twice the last, up to the largest, and
+ * twice what it's made for. Under the lock */
+static uint64_t
+gpuSub__blockSize(const GPUSubAllocator *alloc, uint32_t key, uint64_t size) {
+  uint64_t blockSize;
+  uint32_t i;
 
-  /* each block of a key twice the last, up to the largest */
   blockSize = alloc->info.firstBlockSize;
   for (i = 0u; i < alloc->blockCount; i++) {
     if (alloc->blocks[i]->key == key && alloc->blocks[i]->size >= blockSize && blockSize < alloc->info.largestBlockSize)
@@ -158,16 +157,19 @@ gpuSub__newBlock(GPUSubAllocator *alloc, uint32_t key, uint64_t size) {
 
   if (blockSize > alloc->info.largestBlockSize)
     blockSize = alloc->info.largestBlockSize;
+
   while (blockSize < 2u * size)
     blockSize *= 2u;
 
-  if (alloc->blockCount == alloc->blockCapacity) {
-    capacity = alloc->blockCapacity ? alloc->blockCapacity * 2u : 8u;
-    if (!(blocks = realloc(alloc->blocks, capacity * sizeof(*blocks))))
-      return NULL;
-    alloc->blocks        = blocks;
-    alloc->blockCapacity = capacity;
-  }
+  return blockSize;
+}
+
+/* the driver's memory for a block, outside the lock: allocating it can take
+ * milliseconds on phones, and no other thread's allocation should wait for
+ * that */
+static GPUSubBlock*
+gpuSub__makeBlock(GPUSubAllocator *alloc, uint32_t key, uint64_t blockSize) {
+  GPUSubBlock *block;
 
   if (!(block = calloc(1u, sizeof(*block))) || !gpuSub__reserve(block)) {
     free(block);
@@ -186,9 +188,51 @@ gpuSub__newBlock(GPUSubAllocator *alloc, uint32_t key, uint64_t size) {
   block->free[0].size   = blockSize;
   block->freeCount      = 1u;
 
-  alloc->blocks[alloc->blockCount++] = block;
-
   return block;
+}
+
+/* a made block joins the allocator, newest last. Under the lock; false:
+ * no room, the caller lets it go */
+static bool
+gpuSub__addBlock(GPUSubAllocator *alloc, GPUSubBlock *block) {
+  GPUSubBlock **blocks;
+  uint32_t      capacity;
+
+  if (alloc->blockCount == alloc->blockCapacity) {
+    capacity = alloc->blockCapacity ? alloc->blockCapacity * 2u : 8u;
+    if (!(blocks = realloc(alloc->blocks, capacity * sizeof(*blocks))))
+      return false;
+    alloc->blocks        = blocks;
+    alloc->blockCapacity = capacity;
+  }
+
+  alloc->blocks[alloc->blockCount++] = block;
+  return true;
+}
+
+/* where a key sits in a warm-up's queue: under the lock; -1 not there */
+static int
+gpuSub__warmFind(const GPUSubAllocator *alloc, uint32_t key) {
+  uint32_t i;
+
+  for (i = 0u; i < alloc->warmCount; i++) {
+    if (alloc->warmKeys[i] == key)
+      return (int)i;
+  }
+
+  return -1;
+}
+
+static bool
+gpuSub__hasKey(const GPUSubAllocator *alloc, uint32_t key) {
+  uint32_t i;
+
+  for (i = 0u; i < alloc->blockCount; i++) {
+    if (alloc->blocks[i]->key == key)
+      return true;
+  }
+
+  return false;
 }
 
 GPU_HIDE
@@ -199,7 +243,7 @@ gpuSubAllocate(GPUSubAllocator  *alloc,
                uint64_t          alignment,
                GPUSubAllocation *out) {
   GPUSubBlock *block;
-  uint64_t     offset;
+  uint64_t     offset, blockSize;
   uint32_t     i;
   bool         placed;
 
@@ -221,8 +265,30 @@ gpuSubAllocate(GPUSubAllocator  *alloc,
       placed = gpuSub__place(block, size, alignment, &offset);
   }
 
-  if (!placed && (block = gpuSub__newBlock(alloc, key, size)))
+  /* a key a warm-up is making the first block of: the caller allocates
+   * this one itself, as without a pool, rather than wait for that block
+   * or make another (the allocation is small; a block is milliseconds) */
+  if (!placed && gpuSub__warmFind(alloc, key) >= 0) {
+    SUB_UNLOCK(alloc);
+    return false;
+  }
+
+  if (!placed) {
+    blockSize = gpuSub__blockSize(alloc, key, size);
+    SUB_UNLOCK(alloc);
+
+    if (!(block = gpuSub__makeBlock(alloc, key, blockSize)))
+      return false;
+
+    SUB_LOCK(alloc);
+    if (!gpuSub__addBlock(alloc, block)) {
+      SUB_UNLOCK(alloc);
+      gpuSub__releaseBlock(alloc, block);
+      return false;
+    }
+
     placed = gpuSub__place(block, size, alignment, &offset);
+  }
 
   SUB_UNLOCK(alloc);
 
@@ -234,6 +300,74 @@ gpuSubAllocate(GPUSubAllocator  *alloc,
   out->size   = size;
 
   return true;
+}
+
+/* the first blocks of keys, queued by a warm-up and made by its threads
+ * (gpuSubMakeQueued) before anything asks for them; until a key's block is
+ * there, its allocations go to the caller (gpuSubAllocate). Keys with a
+ * block already, or queued, are passed over */
+GPU_HIDE
+void
+gpuSubQueue(GPUSubAllocator *alloc, const uint32_t *keys, uint32_t count) {
+  uint32_t i;
+
+  if (!alloc || !keys)
+    return;
+
+  SUB_LOCK(alloc);
+  for (i = 0u; i < count; i++) {
+    if (!gpuSub__hasKey(alloc, keys[i]) && gpuSub__warmFind(alloc, keys[i]) < 0
+        && alloc->warmCount < GPU_SUB_WARM_MAX) {
+      alloc->warmKeys[alloc->warmCount]  = keys[i];
+      alloc->warmState[alloc->warmCount] = GPU_SUB_WARM_QUEUED;
+      alloc->warmCount++;
+    }
+  }
+  SUB_UNLOCK(alloc);
+}
+
+/* makes one queued key's first block on this thread: 1 made, 0 nothing
+ * queued, -1 its memory couldn't be had */
+GPU_HIDE
+int
+gpuSubMakeQueued(GPUSubAllocator *alloc) {
+  GPUSubBlock *block;
+  uint64_t     blockSize;
+  uint32_t     key, i;
+  int          w;
+  bool         made;
+
+  if (!alloc)
+    return 0;
+
+  SUB_LOCK(alloc);
+  for (i = 0u; i < alloc->warmCount && alloc->warmState[i] != GPU_SUB_WARM_QUEUED; i++) {}
+  if (i == alloc->warmCount) {
+    SUB_UNLOCK(alloc);
+    return 0;
+  }
+  alloc->warmState[i] = GPU_SUB_WARM_MAKING;
+  key                 = alloc->warmKeys[i];
+  blockSize           = alloc->info.firstBlockSize;
+  SUB_UNLOCK(alloc);
+
+  block = gpuSub__makeBlock(alloc, key, blockSize);
+  made  = block != NULL;
+
+  SUB_LOCK(alloc);
+  if ((w = gpuSub__warmFind(alloc, key)) >= 0) {
+    alloc->warmCount--;
+    alloc->warmKeys[w]  = alloc->warmKeys[alloc->warmCount];
+    alloc->warmState[w] = alloc->warmState[alloc->warmCount];
+  }
+  if (block && !gpuSub__hasKey(alloc, key) && gpuSub__addBlock(alloc, block))
+    block = NULL;
+  SUB_UNLOCK(alloc);
+
+  if (block)
+    gpuSub__releaseBlock(alloc, block);
+
+  return made ? 1 : -1;
 }
 
 GPU_HIDE

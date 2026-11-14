@@ -65,6 +65,12 @@ typedef struct GPUSubAllocatorInfo {
   uint64_t  maxResourceSize;
 } GPUSubAllocatorInfo;
 
+enum {
+  GPU_SUB_WARM_MAX    = 8,
+  GPU_SUB_WARM_QUEUED = 1,
+  GPU_SUB_WARM_MAKING = 2
+};
+
 typedef struct GPUSubAllocator {
   GPUSubAllocatorInfo info;
   GPUSubBlock       **blocks;
@@ -75,6 +81,9 @@ typedef struct GPUSubAllocator {
 #else
   pthread_mutex_t     lock;
 #endif
+  uint32_t            warmKeys[GPU_SUB_WARM_MAX];  /* first blocks a warm-up makes */
+  uint8_t             warmState[GPU_SUB_WARM_MAX]; /* GPU_SUB_WARM_QUEUED, _MAKING */
+  uint32_t            warmCount;
 } GPUSubAllocator;
 
 typedef struct GPUSubAllocation {
@@ -101,6 +110,15 @@ gpuSubAllocate(GPUSubAllocator  *alloc,
                uint64_t          size,
                uint64_t          alignment,
                GPUSubAllocation *out);
+
+/* a warm-up's first blocks: keys queued, then made by its threads */
+GPU_HIDE
+void
+gpuSubQueue(GPUSubAllocator *alloc, const uint32_t *keys, uint32_t count);
+
+GPU_HIDE
+int
+gpuSubMakeQueued(GPUSubAllocator *alloc);
 
 GPU_HIDE
 void
