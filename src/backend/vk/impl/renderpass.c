@@ -662,7 +662,16 @@ vk_beginDynamicRenderPass(GPUCommandBuffer              *cmdb,
                         resolveView,
                         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-      nativeAttachment->resolveMode        = VK_RESOLVE_MODE_AVERAGE_BIT;
+      switch (formatNumericType(colorAttachment->view->format)) {
+        case GPU_FORMAT_NUMERIC_UINT:
+        case GPU_FORMAT_NUMERIC_SINT:
+          nativeAttachment->resolveMode = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
+          break;
+        default:
+          nativeAttachment->resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+          break;
+      }
+
       nativeAttachment->resolveImageView   = resolveView->view;
       nativeAttachment->resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     }
