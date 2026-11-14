@@ -44,6 +44,7 @@ enum {
   CUDA_INLINE_PARAM_BYTES            = 64u,
   CUDA_INLINE_TEXTURE_CACHE_CAPACITY = 4u,
   CUDA_TEXTURE_CACHE_CAPACITY        = 64u,
+  CUDA_MAX_QUEUE_COUNT               = 64u,
   CUDA_PARAM_MASK_WORD_COUNT         = GPU_SHADER_PTX_MAX_PARAM_COUNT / 64u
 };
 
@@ -69,6 +70,7 @@ typedef struct GPUBufferCuda {
   struct GPUSubBlock *poolBlock; /* NULL: its own cuMemAlloc */
   uint64_t            poolOffset;
   uint64_t            poolSize;
+  GPURetired          retired; /* a pooled range waits here for the work using it */
 } GPUBufferCuda;
 
 typedef struct GPUTextureCuda {
@@ -189,6 +191,7 @@ struct GPUCommandCuda {
   GPUComputePipelineCuda *pipeline;
   uint8_t                *paramData;
   CUevent                 completion;
+  uint64_t                serial; /* the device's retire serial, at submit */
   uint64_t                boundParamMask[CUDA_PARAM_MASK_WORD_COUNT];
   uint32_t                dispatchCount;
   uint32_t                dispatchCapacity;
@@ -205,6 +208,8 @@ typedef struct GPUDeviceCuda {
   CUcontext               context;
   GPUQueueCuda           *queues;
   struct GPUSubAllocator *resourcePool; /* NULL: every buffer its own memory */
+  GPURetireList           retire;       /* pooled ranges destroyed while in use */
+  GPUQueue               *queueList[CUDA_MAX_QUEUE_COUNT]; /* queues[i].queue */
   uint32_t      maxBlockDim[3];
   uint32_t      maxGridDim[3];
   uint32_t      queueCount;
@@ -220,6 +225,7 @@ void
 cuda_trimResourcePool(GPUDeviceCuda *native);
 bool
 cuda_poolAllocate(GPUDeviceCuda *native, uint64_t size, GPUBufferCuda *buffer);
+/* frees buffer once its range is back */
 void
 cuda_poolRelease(GPUDeviceCuda *native, GPUBufferCuda *buffer);
 

@@ -18,12 +18,13 @@
  * objects destroyed while queues may still use them
  *
  * for backends whose command buffers don't keep what they use alive
- * (Vulkan, D3D12): a buffer, texture or view destroyed while work given to a
- * queue may still use it goes once that work finishes. Every submit, and every
- * transfer batch when it opens, takes the list's next serial. A queue's work
- * goes out in serial order (a submit flushes the queue's open batch first,
- * both under the queue lock) and a fence covers the queue's earlier submits,
- * so a queue that finished serial S finished all of its work up to S.
+ * (Vulkan, D3D12, and CUDA's pooled buffer ranges): a buffer, texture or view
+ * destroyed while work given to a queue may still use it goes once that work
+ * finishes. Every submit, and every transfer batch when it opens, takes the
+ * list's next serial. A queue's work goes out in serial order (a submit
+ * flushes the queue's open batch first, both under the queue lock) and a
+ * fence covers the queue's earlier submits, so a queue that finished serial S
+ * finished all of its work up to S.
  *
  * An object destroyed when the list's last serial was G was given to queues
  * only in work up to G: it may go once every queue has finished either G or

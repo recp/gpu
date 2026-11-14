@@ -16,8 +16,9 @@
 
 /* small buffers placed in ranges of shared cuMemAlloc blocks
  * (api/suballoc): one driver allocation a block, not a buffer. a range
- * goes back once the device's streams finished, as cuMemFree waits for
- * them. GPU_RESOURCE_POOL=0 turns the pool off. */
+ * goes back once the work given before its destroy finished (the device's
+ * retire list, api/retire_internal.h), as cuMemFree waits for the device;
+ * the destroy doesn't wait. GPU_RESOURCE_POOL=0 turns the pool off. */
 
 #include "../common.h"
 #include "../../../api/suballoc_internal.h"
@@ -128,25 +129,39 @@ cuda_poolAllocate(GPUDeviceCuda *native, uint64_t size, GPUBufferCuda *buffer) {
   return true;
 }
 
-/* the streams that may still read it finished, then its range goes back */
-
-void
-cuda_poolRelease(GPUDeviceCuda *native, GPUBufferCuda *buffer) {
+static void
+cuda__poolReturn(void *context, void *owner) {
+  GPUDeviceCuda   *native;
+  GPUBufferCuda   *buffer;
   GPUSubAllocation allocation;
-  uint32_t         i;
 
-  if (!native || !native->resourcePool || !buffer || !buffer->poolBlock)
-    return;
-
-  if (cuda_push(native->driver, native->context) == GPU_OK) {
-    for (i = 0u; i < native->queueCount; i++)
-      (void)native->driver->streamSynchronize(native->queues[i].stream);
-    cuda_pop(native->driver);
-  }
+  native = context;
+  buffer = owner;
 
   allocation.block  = buffer->poolBlock;
   allocation.offset = buffer->poolOffset;
   allocation.size   = buffer->poolSize;
   gpuSubFree(native->resourcePool, &allocation);
-  buffer->poolBlock = NULL;
+  free(buffer);
+}
+
+/* the range goes back once the work that may read it finished, and buffer
+ * with it */
+
+void
+cuda_poolRelease(GPUDeviceCuda *native, GPUBufferCuda *buffer) {
+  if (!buffer)
+    return;
+
+  if (!native || !native->resourcePool || !buffer->poolBlock) {
+    free(buffer);
+    return;
+  }
+
+  gpuRetire(&native->retire,
+            native->queueList,
+            native->queueCount,
+            &buffer->retired,
+            buffer,
+            cuda__poolReturn);
 }

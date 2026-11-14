@@ -40,6 +40,7 @@ cuda__releaseDispatches(GPUCommandCuda *command) {
 static void
 cuda__completionLoop(GPUQueueCuda *queue) {
   GPUCommandCuda *command;
+  GPUDeviceCuda  *device;
   CUresult        result;
 
   for (;;) {
@@ -77,6 +78,13 @@ cuda__completionLoop(GPUQueueCuda *queue) {
       cuda_report(queue->queue._device, result, "event synchronization");
     }
 
+    /* before the fence: what was destroyed while it ran is gone by then */
+    device = cuda_device(queue->queue._device);
+    gpuRetireQueueDone(&device->retire,
+                       device->queueList,
+                       device->queueCount,
+                       &queue->queue,
+                       command->serial);
     finishCommandBuffer(&command->command, cuda_recycleCommand);
   }
 }
@@ -645,14 +653,14 @@ cuda_createDevice(GPUAdapter   *__restrict adapter,
   for (uint32_t i = 0u; i < queueInfoCount; i++) {
     if (queueInfos[i].flags != GPU_QUEUE_COMPUTE_BIT
         || ((uint32_t)queueInfos[i].optionalFlags & ~(uint32_t)GPU_QUEUE_COMPUTE_BIT) != 0u
-        || queueInfos[i].count > 64u - queueCount) {
+        || queueInfos[i].count > CUDA_MAX_QUEUE_COUNT - queueCount) {
       return NULL;
     }
 
     queueCount += queueInfos[i].count;
   }
 
-  if (queueCount == 0u || queueCount > 64u) {
+  if (queueCount == 0u || queueCount > CUDA_MAX_QUEUE_COUNT) {
     return NULL;
   }
 
@@ -713,6 +721,19 @@ cuda_createDevice(GPUAdapter   *__restrict adapter,
     return NULL;
   }
 
+  if (!gpuRetireInit(&native->retire, native)) {
+    cuda_pop(native->driver);
+    (void)native->driver->primaryCtxRelease(native->cudaDevice);
+    free(native->queues);
+    free(native);
+    free(device);
+    return NULL;
+  }
+
+  for (uint32_t i = 0u; i < queueCount; i++) {
+    native->queueList[i] = &native->queues[i].queue;
+  }
+
   for (uint32_t i = 0u; i < queueCount; i++) {
     if (!cuda__initQueue(device, native, &native->queues[i])) {
       cuda_pop(native->driver);
@@ -721,6 +742,7 @@ cuda_createDevice(GPUAdapter   *__restrict adapter,
         cuda__destroyQueue(&native->queues[j]);
       }
 
+      gpuRetireDestroy(&native->retire);
       (void)native->driver->primaryCtxRelease(native->cudaDevice);
       free(native->queues);
       free(native);
@@ -801,11 +823,15 @@ cuda_destroyDevice(GPUDevice *__restrict device) {
     return;
   }
 
+  /* idle (GPUDestroyDevice waited): what waits goes back to the pool first */
+  gpuRetireFinish(&native->retire);
   cuda_destroyResourcePool(native);
 
   for (i = 0u; i < native->queueCount; i++) {
     cuda__destroyQueue(&native->queues[i]);
   }
+
+  gpuRetireDestroy(&native->retire);
 
   (void)native->driver->primaryCtxRelease(native->cudaDevice);
   free(native->queues);

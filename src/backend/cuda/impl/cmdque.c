@@ -103,6 +103,15 @@ cuda__queuePending(GPUQueueCuda *queue, GPUCommandCuda *command) {
   queue->pendingCount++;
 }
 
+/* under the queue lock, so the queue's serials follow its stream order */
+static void
+cuda__submitted(GPUQueueCuda *queue, GPUCommandCuda *command) {
+  command->serial = 0u;
+  gpuRetireSubmitted(&cuda_device(queue->queue._device)->retire,
+                     &queue->queue,
+                     &command->serial);
+}
+
 static void
 cuda__finishCommands(uint32_t count, GPUCommandBuffer *const *commands) {
   uint32_t i;
@@ -368,6 +377,7 @@ cuda_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
 
   cuda_pop(queue->driver);
 
+  cuda__submitted(queue, command);
   cuda__queuePending(queue, command);
   cuda_queueSignal(queue);
   cuda_queueUnlock(queue);
@@ -500,6 +510,7 @@ cuda_submitEx(GPUQueue                   *queueHandle,
   cuda_pop(queue->driver);
 
   for (i = 0u; i < info->commandBufferCount; i++) {
+    cuda__submitted(queue, commands[i]);
     cuda__queuePending(queue, commands[i]);
   }
 
