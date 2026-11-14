@@ -473,6 +473,54 @@ cleanup:
   return ok;
 }
 
+typedef struct ComputeFailureReport {
+  GPUResult          result;
+  GPUDeviceErrorType type;
+  uint32_t           count;
+  char               message[1024];
+} ComputeFailureReport;
+
+static void
+capture_compute_failure(GPUDevice *device, const GPUDeviceErrorInfo *error, void *userData) {
+  ComputeFailureReport *report = userData;
+
+  (void)device;
+  report->result = error->result;
+  report->type   = error->type;
+  report->count++;
+  snprintf(report->message, sizeof(report->message), "%s", error->message ? error->message : "");
+}
+
+/* a failed pipeline is reported, naming its label, entry point and the
+ * payload it came from, so an app can tell the user and fall back */
+static int
+expect_compute_failure_report(GPUDevice *device, GPUComputePipelineCreateInfo *info) {
+  ComputeFailureReport   report = {0};
+  GPUDeviceErrorCallback savedCallback;
+  void                  *savedUserData;
+  int                    ok;
+
+  savedCallback = device->errorCallback;
+  savedUserData = device->errorUserData;
+  info->label   = "report-probe";
+  GPUSetDeviceErrorCallback(device, capture_compute_failure, &report);
+  ok = expect_compute_pipeline_error(device, info, "compute pipeline create accepted missing entry point");
+  GPUSetDeviceErrorCallback(device, savedCallback, savedUserData);
+  info->label = NULL;
+
+  /* last: validation may have spoken first */
+  if (ok && (report.count == 0u || report.result != GPU_ERROR_INVALID_ARGUMENT
+             || report.type != GPU_DEVICE_ERROR_VALIDATION
+             || !strstr(report.message, "compute pipeline \"report-probe\" failed")
+             || !strstr(report.message, "compute missing_cs")
+             || !strstr(report.message, " payload ") || !strstr(report.message, " bytes"))) {
+    fprintf(stderr, "compute pipeline failure report (%u): %s\n", report.count, report.message);
+    ok = 0;
+  }
+
+  return ok;
+}
+
 static int
 check_compute_pipeline_validation(GPUDevice  *device,
                                   const char *bytecodePath) {
@@ -557,9 +605,7 @@ check_compute_pipeline_validation(GPUDevice  *device,
 
   info.entryPoint = "missing_cs";
 
-  if (!expect_compute_pipeline_error(device,
-                                     &info,
-                                     "compute pipeline create accepted missing entry point")) {
+  if (!expect_compute_failure_report(device, &info)) {
     GPUDestroyShaderLibrary(library);
     return 0;
   }
