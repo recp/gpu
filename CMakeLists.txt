@@ -25,6 +25,7 @@ else()
 endif()
 option(GPU_ENABLE_CUDA "Build the CUDA Driver backend" ${GPU_ENABLE_CUDA_DEFAULT})
 option(GPU_BUILD_TESTS "Build GPU validation tests" OFF)
+option(GPU_BUILD_TOOLS "Build USL shader compilation and packaging tools" OFF)
 option(GPU_BUILD_SAMPLES "Build GPU samples" OFF)
 option(GPU_BUILD_BENCHMARKS "Build GPU microbenchmarks" OFF)
 option(GPU_BUILD_ANDROID_TESTS "Build Android device validation" OFF)
@@ -299,7 +300,7 @@ endif()
 add_subdirectory(src/api)
 add_subdirectory(src/backend)
 
-if((GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
+if((GPU_BUILD_TOOLS OR GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMARKS) AND
    NOT EMSCRIPTEN)
   include(cmake/USLFixtures.cmake)
 endif()
