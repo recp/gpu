@@ -797,14 +797,31 @@ vk__recordTextureWrite(VkCommandBuffer              command,
 
   finalLayout = vk__finalImageLayout(texture->usage);
 
-  if (finalLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-      && !vk_transitionTexture(command,
-                               textureVk,
-                               region->mipLevel,
-                               1u,
-                               texture->dimension == GPU_TEXTURE_DIMENSION_3D ? 0u : region->baseArrayLayer,
-                               texture->dimension == GPU_TEXTURE_DIMENSION_3D ? 1u : region->layerCount,
-                               finalLayout)) {
+  /* staying in TRANSFER_DST, the next write's transition is skipped, so
+   * order what follows after this write here, as buffer writes do */
+  if (finalLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+    return vk_transitionTextureBarrier(command,
+                                       textureVk,
+                                       region->mipLevel,
+                                       1u,
+                                       texture->dimension == GPU_TEXTURE_DIMENSION_3D ? 0u : region->baseArrayLayer,
+                                       texture->dimension == GPU_TEXTURE_DIMENSION_3D ? 1u : region->layerCount,
+                                       finalLayout,
+                                       VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                       VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                                       VK_ACCESS_TRANSFER_WRITE_BIT,
+                                       VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT)
+             ? GPU_OK
+             : GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if (!vk_transitionTexture(command,
+                            textureVk,
+                            region->mipLevel,
+                            1u,
+                            texture->dimension == GPU_TEXTURE_DIMENSION_3D ? 0u : region->baseArrayLayer,
+                            texture->dimension == GPU_TEXTURE_DIMENSION_3D ? 1u : region->layerCount,
+                            finalLayout)) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
