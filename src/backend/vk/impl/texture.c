@@ -1447,7 +1447,7 @@ bound:
 }
 
 static void
-vk__releaseTexture(GPUDeviceVk *deviceVk, void *owner) {
+vk__releaseTexture(void *deviceVk, void *owner) {
   GPUTexture *texture;
 
   (void)deviceVk;
@@ -1599,7 +1599,7 @@ vk_createTextureView(GPUTexture                     *__restrict texture,
 /* deviceVk: the view's texture's device, passed in (the texture itself may be
  * gone by the time a retired view goes) */
 static void
-vk__releaseTextureView(GPUDeviceVk *deviceVk, void *owner) {
+vk__releaseTextureView(void *deviceVk, void *owner) {
   GPUTextureView   *view;
   GPUTextureViewVk *native;
 

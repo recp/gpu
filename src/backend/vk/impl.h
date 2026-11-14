@@ -335,7 +335,7 @@ void
 vk_poolRelease(VKPoolRange *range);
 
 /* objects destroyed while queues may still use them go once the work given
- * before the destroy finishes (impl/retire.c) */
+ * before the destroy finishes (impl/retire.c, api/retire_internal.h) */
 
 GPU_HIDE
 bool
@@ -353,22 +353,14 @@ vk_destroyRetire(GPUDeviceVk *deviceVk);
 
 GPU_HIDE
 void
-vk_retire(GPUDeviceVk *deviceVk,
-          VKRetired   *node,
-          void        *owner,
-          void       (*release)(GPUDeviceVk *deviceVk, void *owner));
-
-GPU_HIDE
-uint64_t
-vk_nextSerial(GPUDeviceVk *deviceVk);
+vk_retire(GPUDeviceVk       *deviceVk,
+          GPURetired        *node,
+          void              *owner,
+          GPURetireReleaseFn release);
 
 /* the queue finished its work up to serial (and so all before it) */
 GPU_HIDE
 void
 vk_queueDone(GPUDeviceVk *deviceVk, GPUQueueVk *queue, uint64_t serial);
-
-GPU_HIDE
-void
-vk_reclaimRetired(GPUDeviceVk *deviceVk);
 
 #endif /* vk_apis_h */

@@ -225,17 +225,6 @@ typedef struct VKPoolRange {
   uint64_t                size;
 } VKPoolRange;
 
-struct GPUDeviceVk;
-
-/* an object destroyed while work given to a queue may still use it, kept
- * until that work finishes (impl/retire.c) */
-typedef struct VKRetired {
-  struct VKRetired *next;
-  void             *owner;
-  void            (*release)(struct GPUDeviceVk *device, void *owner);
-  uint64_t          serial; /* the device's last serial at the destroy */
-} VKRetired;
-
 typedef struct GPUDeviceVk {
   struct GPUSubAllocator                        *resourcePool; /* NULL: every resource its own memory */
   struct GPUClassicRenderPassVk                 *classicRenderPasses;
@@ -346,15 +335,7 @@ typedef struct GPUDeviceVk {
   pthread_mutex_t                                classicRenderLock;
 #endif
   bool                                           classicRenderLockInitialized;
-  VKRetired                                     *retiredHead; /* oldest first */
-  VKRetired                                     *retiredTail;
-  uint64_t                                       serial;      /* the last given to a queue's work (atomic) */
-#if defined(_WIN32) || defined(WIN32)
-  CRITICAL_SECTION                               retireLock;
-#else
-  pthread_mutex_t                                retireLock;
-#endif
-  bool                                           retireLockInitialized;
+  GPURetireList                                  retire;      /* destroyed objects work may still use (api/retire) */
 } GPUDeviceVk;
 
 typedef struct GPUBufferVk {
@@ -364,7 +345,7 @@ typedef struct GPUBufferVk {
   VkDeviceMemory memory;
   VkDeviceSize   allocationSize;
   VKPoolRange    poolRange;
-  VKRetired      retired;
+  GPURetired     retired;
   bool           coherent;
   bool           ownsMemory;
   bool           sparse;
@@ -419,7 +400,7 @@ typedef struct GPUTextureVk {
   VkImage                         image;
   VkDeviceMemory                  memory;
   VKPoolRange                     poolRange;
-  VKRetired                       retired;
+  GPURetired                      retired;
   VkRenderPass                    renderPasses[3][2];
   VkSparseImageMemoryRequirements sparseRequirements;
   VkImageLayout                   layout;
@@ -650,7 +631,7 @@ struct GPUCommandBufferVk {
   GPUAccelerationStructureEncoderVk      rayQueryState;
 #endif
   GPUCommandBuffer                       commandBuffer;
-  uint64_t                               serial; /* its submit's (impl/retire.c) */
+  uint64_t                               serial; /* its submit's (api/retire) */
   uint32_t                               graphInitializationCount;
   uint32_t                               presentImageIndex;
   uint32_t                               presentFrameIndex;
@@ -671,7 +652,7 @@ typedef struct GPUTransferSlotVk {
   uint64_t        uploadCapacity;
   uint64_t        uploadUsed;
   uint64_t        serial;      /* its batch's, taken when the batch opens */
-  uint64_t        givenBefore; /* the queue's givenSerial before the batch opened */
+  uint64_t        givenBefore; /* the queue's given serial before the batch opened */
   bool            pending;
 } GPUTransferSlotVk;
 
@@ -704,9 +685,6 @@ struct GPUQueueVk {
   uint32_t            activeTransferSlot;
   uint32_t            nextTransferSlot;
   uint64_t            readbackCapacity;
-  uint64_t            givenSerial;     /* the newest work given: a submit or an open transfer batch (atomic) */
-  uint64_t            submittedSerial; /* the newest submitted (atomic) */
-  uint64_t            doneSerial;      /* the newest seen finished: so is all before it (atomic) */
   uint32_t            transfersSinceLarge; /* transfer batches begun since one needed large staging */
   double              timestampPeriodNs;
   bool                stopping;
@@ -738,7 +716,7 @@ struct GPUTextureViewVk {
   VkImage            image;
   VkImageView        view;
   VkFramebuffer      framebuffer;
-  VKRetired          retired;
+  GPURetired         retired;
   VkExtent2D         extent;
   VkImageLayout      localLayout;
   VkImageAspectFlags aspect;

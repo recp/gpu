@@ -19,10 +19,12 @@
 
 #include "../common.h"
 #include "device_internal.h"
+#include "retire_internal.h"
 
 struct GPUQueue {
   void            *_priv;
   GPUDevice       *_device;
+  GPURetireQueue   _retire; /* backends that retire destroyed objects (retire_internal.h) */
   GPUQueueFlagBits bits;
 };
 

@@ -1576,7 +1576,7 @@ destroy_while_in_use(GPUDevice *device,
        && native->transferOpen;
   GPUDestroyBuffer(written);
   written = NULL;
-  ok      = ok && deviceVk->retiredHead != NULL
+  ok      = ok && deviceVk->retire.head != NULL
             && GPUQueueWriteTexture(queue,
                                     texture,
                                     &writeRegion,
@@ -1592,7 +1592,7 @@ destroy_while_in_use(GPUDevice *device,
             && GPUQueueWriteBuffer(queue, kept, 0u, values, sizeof(values)) == GPU_OK
             && GPUQueueReadBuffer(queue, kept, 0u, readback, sizeof(readback)) == GPU_OK
             && memcmp(readback, values, sizeof(values)) == 0
-            && deviceVk->retiredHead == NULL;
+            && deviceVk->retire.head == NULL;
 
   /* read by a command buffer in flight, then destroyed */
   ok = ok && GPUQueueWriteBuffer(queue, kept, 0u, zeros, sizeof(zeros)) == GPU_OK
@@ -1616,7 +1616,7 @@ destroy_while_in_use(GPUDevice *device,
   source = NULL;
   memset(readback, 0, sizeof(readback));
   ok = ok && GPUWaitFence(fence, UINT64_MAX) == GPU_OK
-       && deviceVk->retiredHead == NULL
+       && deviceVk->retire.head == NULL
        && GPUQueueReadBuffer(queue, kept, 0u, readback, sizeof(readback)) == GPU_OK
        && memcmp(readback, values, sizeof(values)) == 0;
 
@@ -1624,7 +1624,7 @@ destroy_while_in_use(GPUDevice *device,
   ok = ok && GPUQueueWaitIdle(queue) == GPU_OK;
   GPUDestroyBuffer(kept);
   kept = NULL;
-  ok   = ok && deviceVk->retiredHead == NULL
+  ok   = ok && deviceVk->retire.head == NULL
          && device->inst->validationError == 0u;
 
   if (cmdb) {

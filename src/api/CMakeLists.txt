@@ -25,6 +25,7 @@ target_sources(gpu PRIVATE
   ray.c
   render/pipeline.c
   render/rce.c
+  retire.c
   sampler.c
   surface.c
   subgroup.c

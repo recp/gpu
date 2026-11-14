@@ -766,7 +766,7 @@ vk_releaseBuffer(GPUBuffer *__restrict buffer) {
 }
 
 static void
-vk__releaseRetiredBuffer(GPUDeviceVk *deviceVk, void *owner) {
+vk__releaseRetiredBuffer(void *deviceVk, void *owner) {
   (void)deviceVk;
   vk_releaseBuffer(owner);
 }
