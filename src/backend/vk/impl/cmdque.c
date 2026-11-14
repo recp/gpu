@@ -67,15 +67,39 @@ vk_queueSubmitUnlock(GPUQueueVk *queue) {
 #endif
 }
 
+/* *serial: the submit's (impl/retire.c); 0 takes the next one, a transfer
+ * batch passes the one it took when it opened */
 static VkResult
-vk__queueSubmit(GPUQueueVk *queue, const VkSubmitInfo *info, VkFence fence) {
+vk__queueSubmit(GPUQueueVk         *queue,
+                const VkSubmitInfo *info,
+                VkFence             fence,
+                uint64_t           *serial) {
   VkResult result;
 
   vk_queueSubmitLock(queue);
   result = vkQueueSubmit(queue->queRaw, 1u, info, fence);
+
+  if (result == VK_SUCCESS) {
+    if (!*serial) {
+      *serial = vk_nextSerial(queue->queue->_device->_priv);
+      __atomic_store_n(&queue->givenSerial, *serial, __ATOMIC_RELEASE);
+    }
+
+    __atomic_store_n(&queue->submittedSerial, *serial, __ATOMIC_RELEASE);
+  }
+
   vk_queueSubmitUnlock(queue);
 
   return result;
+}
+
+/* a transfer batch that won't go out gives its serial back */
+static void
+vk__dropTransferSerial(GPUQueueVk *queue, GPUTransferSlotVk *slot) {
+  if (slot->serial) {
+    __atomic_store_n(&queue->givenSerial, slot->givenBefore, __ATOMIC_RELEASE);
+    slot->serial = 0u;
+  }
 }
 
 static VkResult
@@ -362,6 +386,9 @@ vk__completionLoop(GPUQueueVk *queue) {
       vk__reportQueueError(cmdb, "fence wait", result);
     } else {
       vk__recordFrameTime(native);
+      /* before its completion is reported: what was destroyed while it ran
+       * is gone by the time a fence wait returns */
+      vk_queueDone(deviceVk, queue, native->serial);
     }
 
     completionSync            = native->completionSync;
@@ -625,7 +652,7 @@ vk__ensureTransferBuffer(GPUQueueVk        *queue,
     return false;
   }
 
-  vk_destroyBuffer(*slot);
+  vk_releaseBuffer(*slot);
 
   *slot            = staging;
   *currentCapacity = capacity;
@@ -676,6 +703,7 @@ vk__waitTransfer(GPUQueue          *queue,
   }
 
   slot->pending = false;
+  vk_queueDone(device, native, slot->serial);
 
   return GPU_OK;
 }
@@ -710,22 +738,19 @@ vk__flushTransfers(GPUQueue *queue, bool wait) {
     native->transferOpen   = false;
     native->transferUpload = false;
 
-    if (result != VK_SUCCESS) {
-      return GPU_ERROR_BACKEND_FAILURE;
+    if (result == VK_SUCCESS) {
+      result = vkResetFences(device->device, 1u, &slot->fence);
     }
 
-    result = vkResetFences(device->device, 1u, &slot->fence);
-
-    if (result != VK_SUCCESS) {
-      return GPU_ERROR_BACKEND_FAILURE;
+    if (result == VK_SUCCESS) {
+      submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+      submitInfo.commandBufferCount = 1u;
+      submitInfo.pCommandBuffers    = &slot->command;
+      result                        = vk__queueSubmit(native, &submitInfo, slot->fence, &slot->serial);
     }
 
-    submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1u;
-    submitInfo.pCommandBuffers    = &slot->command;
-    result                        = vk__queueSubmit(native, &submitInfo, slot->fence);
-
     if (result != VK_SUCCESS) {
+      vk__dropTransferSerial(native, slot);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -996,10 +1021,12 @@ vk_submitEx(GPUQueue                   *queueHandle,
   GPUResult                     flushResult;
   VkResult                      result;
   VkResult                      presentResult;
+  uint64_t                      serial;
   uint32_t                      waitCount;
   uint32_t                      signalCount;
   bool                          frameFenceReset;
 
+  serial = 0u;
   queue  = queueHandle ? queueHandle->_priv : NULL;
   device = queueHandle && queueHandle->_device
              ? queueHandle->_device->_priv
@@ -1157,7 +1184,7 @@ vk_submitEx(GPUQueue                   *queueHandle,
     submitInfo.pCommandBuffers      = commands;
     submitInfo.signalSemaphoreCount = signalCount;
     submitInfo.pSignalSemaphores    = signals;
-    result                          = vk__queueSubmit(queue, &submitInfo, submitFence);
+    result                          = vk__queueSubmit(queue, &submitInfo, submitFence, &serial);
   }
 
   if (result != VK_SUCCESS) {
@@ -1196,6 +1223,7 @@ vk_submitEx(GPUQueue                   *queueHandle,
 
   for (uint32_t q = 0u; q < info->commandBufferCount; q++) {
     natives[q]->submitFence    = submitFence;
+    natives[q]->serial         = serial;
     natives[q]->completionSync = frameSync;
     natives[q]->pendingNext    = NULL;
 
@@ -1277,6 +1305,8 @@ vk_waitDeviceIdle(GPUDevice *__restrict device) {
   VkResult     result;
   uint32_t     i;
   GPUResult    queueResult;
+  uint64_t     before;
+  uint64_t     submitted;
   uint32_t     j;
   uint32_t     slot;
 
@@ -1302,6 +1332,7 @@ vk_waitDeviceIdle(GPUDevice *__restrict device) {
     }
   }
 
+  before = __atomic_load_n(&deviceVk->serial, __ATOMIC_ACQUIRE);
   result = vkDeviceWaitIdle(deviceVk->device);
 
   for (j = 0u; j < deviceVk->nCreatedQueues; j++) {
@@ -1313,6 +1344,11 @@ vk_waitDeviceIdle(GPUDevice *__restrict device) {
         for (slot = 0u; slot < GPU_VK_TRANSFER_SLOT_COUNT; slot++) {
           nativeQueue->transferSlots[slot].pending = false;
         }
+
+        /* what was submitted before the wait finished (and objects
+         * destroyed meanwhile go, before the pool is trimmed below) */
+        submitted = __atomic_load_n(&nativeQueue->submittedSerial, __ATOMIC_ACQUIRE);
+        vk_queueDone(deviceVk, nativeQueue, submitted < before ? submitted : before);
       }
 
       vk__waitQueueIdle(nativeQueue);
@@ -1374,7 +1410,7 @@ vk__trimTransferStaging(GPUQueue *queue, GPUQueueVk *native, GPUDeviceVk *device
       (void)vk__waitTransfer(queue, slot, false);
     }
 
-    vk_destroyBuffer(slot->uploadStaging);
+    vk_releaseBuffer(slot->uploadStaging);
     slot->uploadStaging  = NULL;
     slot->uploadCapacity = 0u;
     slot->uploadUsed     = 0u;
@@ -1382,7 +1418,7 @@ vk__trimTransferStaging(GPUQueue *queue, GPUQueueVk *native, GPUDeviceVk *device
 
   if (native->readbackStaging && native->readbackCapacity > VK_TRANSFER_STAGING_KEEP
       && !(native->transferOpen && !native->transferUpload)) {
-    vk_destroyBuffer(native->readbackStaging);
+    vk_releaseBuffer(native->readbackStaging);
     native->readbackStaging  = NULL;
     native->readbackCapacity = 0u;
   }
@@ -1489,6 +1525,10 @@ vk_beginTransfer(GPUQueue        *queue,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  /* the batch's serial now: what is destroyed while it records waits for it */
+  slot->givenBefore          = __atomic_load_n(&native->givenSerial, __ATOMIC_RELAXED);
+  slot->serial               = vk_nextSerial(device);
+  __atomic_store_n(&native->givenSerial, slot->serial, __ATOMIC_RELEASE);
   native->activeTransferSlot = (uint32_t)(slot - native->transferSlots);
   native->transferOpen       = true;
   native->transferUpload     = upload;
@@ -1566,6 +1606,7 @@ vk_abortTransfer(GPUQueue *queue) {
   }
 
   (void)vkEndCommandBuffer(slot->command);
+  vk__dropTransferSerial(native, slot);
   slot->uploadUsed       = 0u;
   native->transferOpen   = false;
   native->transferUpload = false;
@@ -1713,10 +1754,10 @@ vk_destroyCommandQueue(GPUQueue *queue) {
         vkDestroyFence(deviceVk->device, transfer->fence, NULL);
       }
 
-      vk_destroyBuffer(transfer->uploadStaging);
+      vk_releaseBuffer(transfer->uploadStaging);
     }
 
-    vk_destroyBuffer(native->readbackStaging);
+    vk_releaseBuffer(native->readbackStaging);
 
     if (deviceVk && native->commandPool) {
       vkDestroyCommandPool(deviceVk->device, native->commandPool, NULL);
@@ -1933,8 +1974,10 @@ vk_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
   VkResult             result;
   VkResult             presentResult;
   GPUResult            commitResult;
+  uint64_t             serial;
   bool                 frameFenceReset;
 
+  serial   = 0u;
   native   = cmdb ? cmdb->_priv : NULL;
   queue    = native ? native->owner : NULL;
   deviceVk = cmdb && cmdb->_queue && cmdb->_queue->_device ?
@@ -1998,7 +2041,7 @@ vk_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
       submitInfo.pSignalSemaphores    = &renderFinished;
     }
 
-    result = vk__queueSubmit(queue, &submitInfo, submitFence);
+    result = vk__queueSubmit(queue, &submitInfo, submitFence, &serial);
   }
 
   if (result != VK_SUCCESS) {
@@ -2015,6 +2058,7 @@ vk_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
 
   commitResult        = GPU_OK;
   native->submitFence = submitFence;
+  native->serial      = serial;
 
   if (swapchain) {
     swapchain->frameSubmitted = true;
@@ -2062,7 +2106,9 @@ vk_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   VkFence             submitFence;
   GPUResult           flushResult;
   VkResult            result;
+  uint64_t            serial;
 
+  serial = 0u;
   queue  = queueHandle ? queueHandle->_priv : NULL;
   device = queueHandle && queueHandle->_device
              ? queueHandle->_device->_priv
@@ -2112,7 +2158,7 @@ vk_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
     submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = count;
     submitInfo.pCommandBuffers    = commands;
-    result                        = vk__queueSubmit(queue, &submitInfo, submitFence);
+    result                        = vk__queueSubmit(queue, &submitInfo, submitFence, &serial);
   }
 
   if (result != VK_SUCCESS) {
@@ -2129,6 +2175,7 @@ vk_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
 
   for (uint32_t m = 0u; m < count; m++) {
     natives[m]->submitFence = submitFence;
+    natives[m]->serial      = serial;
     natives[m]->pendingNext = NULL;
 
     if (queue->pendingTail) {

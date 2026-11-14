@@ -274,9 +274,15 @@ GPU_HIDE
 GPUResult
 vk_flushTransfers(GPUQueue *queue);
 
+/* kept until the work given before it finishes (impl/retire.c) */
 GPU_HIDE
 void
 vk_destroyBuffer(GPUBuffer *__restrict buffer);
+
+/* now: for buffers GPU-C knows no work uses (staging it waited for) */
+GPU_HIDE
+void
+vk_releaseBuffer(GPUBuffer *__restrict buffer);
 
 GPU_HIDE
 GPUResult
@@ -327,5 +333,42 @@ vk_poolBindImage(GPUDeviceVk          *deviceVk,
 GPU_HIDE
 void
 vk_poolRelease(VKPoolRange *range);
+
+/* objects destroyed while queues may still use them go once the work given
+ * before the destroy finishes (impl/retire.c) */
+
+GPU_HIDE
+bool
+vk_initRetire(GPUDeviceVk *deviceVk);
+
+/* the device idle: what is left goes now */
+GPU_HIDE
+void
+vk_finishRetire(GPUDeviceVk *deviceVk);
+
+/* last, once no queue is left */
+GPU_HIDE
+void
+vk_destroyRetire(GPUDeviceVk *deviceVk);
+
+GPU_HIDE
+void
+vk_retire(GPUDeviceVk *deviceVk,
+          VKRetired   *node,
+          void        *owner,
+          void       (*release)(GPUDeviceVk *deviceVk, void *owner));
+
+GPU_HIDE
+uint64_t
+vk_nextSerial(GPUDeviceVk *deviceVk);
+
+/* the queue finished its work up to serial (and so all before it) */
+GPU_HIDE
+void
+vk_queueDone(GPUDeviceVk *deviceVk, GPUQueueVk *queue, uint64_t serial);
+
+GPU_HIDE
+void
+vk_reclaimRetired(GPUDeviceVk *deviceVk);
 
 #endif /* vk_apis_h */

@@ -756,13 +756,38 @@ vk_createReadbackBuffer(GPUDevice                 *__restrict device,
 
 GPU_HIDE
 void
-vk_destroyBuffer(GPUBuffer *__restrict buffer) {
+vk_releaseBuffer(GPUBuffer *__restrict buffer) {
   if (!buffer) {
     return;
   }
 
   vk__destroyBufferState(buffer->_priv);
   free(buffer);
+}
+
+static void
+vk__releaseRetiredBuffer(GPUDeviceVk *deviceVk, void *owner) {
+  (void)deviceVk;
+  vk_releaseBuffer(owner);
+}
+
+GPU_HIDE
+void
+vk_destroyBuffer(GPUBuffer *__restrict buffer) {
+  GPUBufferVk *native;
+
+  if (!buffer) {
+    return;
+  }
+
+  native = buffer->_priv;
+
+  if (!native || !buffer->device) {
+    vk_releaseBuffer(buffer);
+    return;
+  }
+
+  vk_retire(buffer->device->_priv, &native->retired, buffer, vk__releaseRetiredBuffer);
 }
 
 /* [offset, offset + size) of a mapped buffer as a range of its memory for
