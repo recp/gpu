@@ -18,8 +18,9 @@
 #include "impl.h"
 
 GPUApi dx12 = {
-  .initialized = false,
-  .backend     = GPU_BACKEND_DX12,
+  .initialized            = false,
+  .backend                = GPU_BACKEND_DX12,
+  .storageAlwaysReadWrite = true,
   .reserved    = &(GPU__DX12){0}
 };
 

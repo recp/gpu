@@ -18,8 +18,9 @@
 #include "impl.h"
 
 static GPUApi cuda = {
-  .backend     = GPU_BACKEND_CUDA,
-  .initialized = false
+  .backend                = GPU_BACKEND_CUDA,
+  .initialized            = false,
+  .storageAlwaysReadWrite = true
 };
 
 GPU_HIDE
