@@ -879,6 +879,16 @@ vk_pipelineBarrier(GPUDeviceVk                 *device,
                    uint32_t                     imageBarrierCount,
                    const VkImageMemoryBarrier  *imageBarriers);
 
+/* a dependency over all memory, not one resource */
+GPU_HIDE
+void
+vk_memoryBarrier(GPUDeviceVk         *device,
+                 VkCommandBuffer      command,
+                 VkPipelineStageFlags srcStages,
+                 VkPipelineStageFlags dstStages,
+                 VkAccessFlags        srcAccess,
+                 VkAccessFlags        dstAccess);
+
 GPU_HIDE
 VkPipelineStageFlags
 vk_barrierStages(const GPUDeviceVk *device, GPUPipelineStageMask stages);

@@ -822,6 +822,17 @@ vk_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
                                                      command->command,
                                                      label);
 
+  /* the uploader's copies follow the queue's earlier work (writes of the
+   * same destination, reads of what they overwrite), as on Metal 4 */
+  if (cmdb->_orderedUploads) {
+    vk_memoryBarrier(commandBufferDevice(cmdb) ? commandBufferDevice(cmdb)->_priv : NULL,
+                     command->command,
+                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                     VK_PIPELINE_STAGE_TRANSFER_BIT,
+                     VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                     VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
+  }
+
   return pass;
 }
 
@@ -1494,6 +1505,16 @@ vk_endTransferPass(GPUTransferPassEncoder *pass) {
   GPUCommandBufferVk *command;
 
   command = vk__copyCommand(pass);
+
+  /* and are published to the queue's later work (GPUFlushUploads) */
+  if (command && pass->_cmdb && pass->_cmdb->_orderedUploads) {
+    vk_memoryBarrier(commandBufferDevice(pass->_cmdb) ? commandBufferDevice(pass->_cmdb)->_priv : NULL,
+                     command->command,
+                     VK_PIPELINE_STAGE_TRANSFER_BIT,
+                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                     VK_ACCESS_TRANSFER_WRITE_BIT,
+                     VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
+  }
 
   if (command && command->copyDebugLabelActive) {
     vk_endDebugLabel(commandBufferDevice(pass->_cmdb), command->command);
