@@ -238,6 +238,34 @@
     "preview": "frame-pacer.png"
   },
   {
+    "id": "buffer-texture",
+    "category": "Presentation + Transfer",
+    "title": "Shared buffer texture",
+    "detail": "BGRA pixels sampled directly from host-visible storage.",
+    "preview": "buffer-texture.png"
+  },
+  {
+    "id": "uploader",
+    "category": "Transfer + Threading",
+    "title": "Worker uploads",
+    "detail": "Four independent staging rings publish texture updates while rendering.",
+    "preview": "uploader.png"
+  },
+  {
+    "id": "swapchain-options",
+    "category": "Presentation + Transfer",
+    "title": "Swapchain options",
+    "detail": "Drawable scale, explicit Display P3 and Core Animation transaction presentation.",
+    "preview": "swapchain-options.png"
+  },
+  {
+    "id": "transient-attachments",
+    "category": "Render + Tile Memory",
+    "title": "Transient attachments",
+    "detail": "Pass-local depth in native tile memory, with ordinary backing when unavailable.",
+    "preview": "transient-attachments.png"
+  },
+  {
     "id": "framebuffer-fetch",
     "category": "Render + Tile Memory",
     "title": "Metal framebuffer fetch",

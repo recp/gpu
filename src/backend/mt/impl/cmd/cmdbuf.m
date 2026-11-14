@@ -18,7 +18,8 @@
 
 enum {
   MT_CONSTANT_UPLOAD_CHUNK_SIZE = 64u * 1024u,
-  MT_CONSTANT_UPLOAD_ALIGNMENT  = 256u
+  MT_CONSTANT_UPLOAD_ALIGNMENT  = 256u,
+  MT_COMMAND_HEAP_KEEP_BYTES    = 16u << 20
 };
 
 static uint64_t
@@ -784,6 +785,9 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
   MTCommandBuffer *native;
   MTCommandQueue  *queue;
   MTUploadChunk   *upload;
+#if MT_HAS_METAL4
+  id<MTL4CommandAllocator> allocator;
+#endif
 
   native = mt_commandBuffer(cmdb);
 
@@ -833,7 +837,19 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
         native->refreshModern = false;
       }
 
-      [native->allocator reset];
+      /* reset retained heaps; a completed heap being replaced needs no
+         reusable state. keep the native command object, and stage the new
+         allocator before releasing the old heap. */
+      allocator = nil;
+      if ([(id<MTL4CommandAllocator>)native->allocator allocatedSize] > MT_COMMAND_HEAP_KEEP_BYTES)
+        allocator = [((GPUDeviceMT *)cmdb->_queue->_device->_priv)->device newCommandAllocator];
+
+      if (allocator) {
+        [native->allocator release];
+        native->allocator = allocator;
+      } else {
+        [native->allocator reset];
+      }
 
       if (native->residencyAllocationCount != 0u) {
         /* idle pooled commands must not retain completed resource allocations. */
@@ -857,12 +873,23 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
 GPU_HIDE
 bool
 mt_cmdBufDrawable(GPUCommandBuffer *cmdb, GPUFrame *frame) {
-  MTCommandBuffer *native;
+  MTCommandBuffer   *native;
+  GPUSwapchainMetal *swapchain;
 
   native = mt_commandBuffer(cmdb);
 
   if (!native || !frame || !frame->drawable) {
     return false;
+  }
+
+  swapchain = frame->_priv;
+  if (swapchain && swapchain->presentsWithTransaction) {
+    if (![NSThread isMainThread])
+      return false;
+
+    [native->drawable release];
+    native->drawable = [(id<CAMetalDrawable>)frame->drawable retain];
+    return true;
   }
 #if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {

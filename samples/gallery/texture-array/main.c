@@ -302,6 +302,26 @@ create_resources(WebGPUTextureArray *state) {
       set_status("GPU: failed to upload a 2D texture-array layer", 1);
       return 0;
     }
+
+    /* rewrite an interior rectangle without changing its surrounding texels. */
+    writeRegion.x      = 2u;
+    writeRegion.y      = 3u;
+    writeRegion.width  = 3u;
+    writeRegion.height = 2u;
+
+    if (GPUQueueWriteTexture(state->queue,
+                             state->texture2D,
+                             &writeRegion,
+                             pixels2D[layer] + 3u * ARRAY_ROW_PITCH + 2u * 4u,
+                             ARRAY_ROW_PITCH + 3u * 4u) != GPU_OK) {
+      set_status("GPU: failed to update a texture-array sub-rectangle", 1);
+      return 0;
+    }
+
+    writeRegion.x      = 0u;
+    writeRegion.y      = 0u;
+    writeRegion.width  = ARRAY_SIZE;
+    writeRegion.height = ARRAY_SIZE;
   }
 
   viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;

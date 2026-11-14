@@ -301,10 +301,13 @@ validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
         || !textureViewHasUsage(color->view, GPU_TEXTURE_USAGE_COLOR_TARGET)
         || color->view->_texture->device != device
         || formatIsDepthStencil(color->view->format)
+        || ((color->view->_texture->usage & GPU_TEXTURE_USAGE_TRANSIENT_ATTACHMENT)
+            && (color->loadOp == GPU_LOAD_OP_LOAD || color->storeOp == GPU_STORE_OP_STORE))
         || (color->resolveView
             && (!textureViewHasUsage(color->resolveView, GPU_TEXTURE_USAGE_COLOR_TARGET)
                 || color->resolveView->_texture->device != device
                 || formatIsDepthStencil(color->resolveView->format)
+                || (color->resolveView->_texture->usage & GPU_TEXTURE_USAGE_TRANSIENT_ATTACHMENT)
                 || color->resolveView->format != color->view->format
                 || textureViewExtent(color->resolveView->_texture->width,
                                      color->resolveView) !=
@@ -335,14 +338,19 @@ validRenderPassCreateInfo(const GPURenderPassCreateInfo *info,
         || !textureViewHasUsage(depthStencil->view, GPU_TEXTURE_USAGE_DEPTH_STENCIL)
         || depthStencil->view->_texture->device != device
         || !formatIsDepthStencil(depthStencil->view->format)
+        || ((depthStencil->view->_texture->usage & GPU_TEXTURE_USAGE_TRANSIENT_ATTACHMENT)
+            && (depthStencil->depthLoadOp == GPU_LOAD_OP_LOAD
+                || depthStencil->depthStoreOp == GPU_STORE_OP_STORE
+                || depthStencil->stencilLoadOp == GPU_LOAD_OP_LOAD
+                || depthStencil->stencilStoreOp == GPU_STORE_OP_STORE))
         || !validLoadOp(depthStencil->depthLoadOp)
         || !validStoreOp(depthStencil->depthStoreOp)
         || !validLoadOp(depthStencil->stencilLoadOp)
         || !validStoreOp(depthStencil->stencilStoreOp)
         || (formatHasDepth(depthStencil->view->format)
            ? (depthStencil->depthLoadOp == GPU_LOAD_OP_CLEAR
-              && (depthStencil->clearDepth < 0.0f
-                  || depthStencil->clearDepth > 1.0f))
+              && !(depthStencil->clearDepth >= 0.0f
+                   && depthStencil->clearDepth <= 1.0f))
            : (depthStencil->depthLoadOp != GPU_LOAD_OP_DONT_CARE
               || depthStencil->depthStoreOp != GPU_STORE_OP_DONT_CARE))
         || (formatHasStencil(depthStencil->view->format)

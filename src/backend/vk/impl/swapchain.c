@@ -240,8 +240,8 @@ vk__chooseExtent(const VkSurfaceCapabilitiesKHR *caps,
     return caps->currentExtent;
   }
 
-  extent.width  = (uint32_t)((float)width * scale);
-  extent.height = (uint32_t)((float)height * scale);
+  extent.width  = (uint32_t)((double)width * scale);
+  extent.height = (uint32_t)((double)height * scale);
 
   if (extent.width < caps->minImageExtent.width) {
     extent.width = caps->minImageExtent.width;

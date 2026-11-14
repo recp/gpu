@@ -22,6 +22,30 @@ struct KernelOutput {
   data: KernelMaster #imageblock
 }
 
+struct KernelMixedMaster {
+  position:      float3 #raster_order(2)
+  signedValue:   int2   #raster_order(4)
+  unsignedValue: uint2  #raster_order(5)
+  color:         half3  #raster_order(0)
+  marker:        uint   #raster_order(7)
+  bias:          half   #raster_order(1)
+}
+
+struct KernelMixedOutput {
+  data: KernelMixedMaster #imageblock
+}
+
+struct KernelSmallMaster {
+  color:       half2 #raster_order(0)
+  weight:      float #raster_order(2)
+  signedValue: int   #raster_order(4)
+  marker:      uint  #raster_order(7)
+}
+
+struct KernelSmallOutput {
+  data: KernelSmallMaster #imageblock
+}
+
 vert kernel_vs(vertexId: uint #vertex_id) -> float4 {
   return float4(float(vertexId & 1u) * 4.0 - 1.0,
                 float((vertexId >> 1u) & 1u) * 4.0 - 1.0, 0.0, 1.0)
@@ -33,6 +57,126 @@ frag kernel_init_fs() -> KernelOutput {
 
 frag kernel_resolve_fs(data: KernelMaster #imageblock) -> float4 {
   return data.rgba
+}
+
+frag kernel_mixed_init_fs() -> KernelMixedOutput {
+  return KernelMixedOutput { KernelMixedMaster {
+    float3(1.0, 2.0, 3.0), int2(-8, 4), uint2(7u, 11u),
+    half3(0.125, 0.25, 0.375), 1234u, half(0.5)
+  } }
+}
+
+frag kernel_mixed_resolve_fs(data: KernelMixedMaster #imageblock) -> float4 {
+  return float4(float(data.color.x) + data.position.x / 512.0 + float(data.signedValue.x) / 8192.0,
+                float(data.color.y) + data.position.y / 1024.0 + float(data.unsignedValue.x) / 16384.0,
+                float(data.color.z) + data.position.z / 128.0 + float(data.signedValue.y) / 4096.0
+                  + float(data.unsignedValue.y) / 16384.0,
+                float(data.bias) + float(data.marker) / 65536.0)
+}
+
+frag kernel_mixed_small_init_fs() -> KernelSmallOutput {
+  return KernelSmallOutput { KernelSmallMaster { half2(0.125, 0.25), 0.375, -8, 1234u } }
+}
+
+frag kernel_mixed_small_resolve_fs(data: KernelSmallMaster #imageblock) -> float4 {
+  return float4(float(data.color.x) + float(data.signedValue) / 8192.0,
+                float(data.color.y), data.weight, float(data.marker) / 65536.0)
+}
+
+@tile
+kern kernel_mixed_small(inout block: imageblock<KernelSmallMaster>,
+                        config:      [uint] #buffer(3),
+                        local:       uint3  #local_id,
+                        group:       uint3  #workgroup_id) {
+  let width   = block.get_width()
+  let height  = block.get_height()
+  let samples = block.get_num_samples()
+  let xy      = ushort2(local.xy)
+  let pixel   = group.xy * uint2(width, height) + local.xy
+
+  for (var sample = 0u; sample < samples; sample += 1u) {
+    var value = KernelSmallMaster { half2(0.125, 0.25), 0.375, -8, 1234u }
+    if (pixel.x < config[0] && pixel.y < config[1]) {
+      value = block.read(xy, ushort(sample))
+    }
+    value.color       += half2(float(local.x) / 32.0, float(local.y) / 64.0)
+    value.weight      += float(sample) / 16.0 + float(group.x + group.y * 2u) / 128.0
+    value.signedValue += int(local.x)
+    value.marker      += local.x + local.y * width + sample * width * height
+    block.write(value, xy, ushort(sample))
+  }
+  imageblock_barrier()
+
+  let next     = (local.y * width + local.x + 17u) % (width * height)
+  let neighbor = ushort2(next % width, next / width)
+  let value0   = block.read(neighbor, ushort(0))
+  var value1   = value0
+  var value2   = value0
+  var value3   = value0
+  if (samples == 4u) {
+    value1 = block.read(neighbor, ushort(1))
+    value2 = block.read(neighbor, ushort(2))
+    value3 = block.read(neighbor, ushort(3))
+  }
+  imageblock_barrier()
+
+  block.write(value0, xy, ushort(0))
+  if (samples == 4u) {
+    block.write(value1, xy, ushort(1))
+    block.write(value2, xy, ushort(2))
+    block.write(value3, xy, ushort(3))
+  }
+}
+
+@tile
+kern kernel_mixed(inout block: imageblock<KernelMixedMaster>,
+                  config:      [uint] #buffer(3),
+                  local:       uint3  #local_id,
+                  group:       uint3  #workgroup_id) {
+  let width   = block.get_width()
+  let height  = block.get_height()
+  let samples = block.get_num_samples()
+  let xy      = ushort2(local.xy)
+  let pixel   = group.xy * uint2(width, height) + local.xy
+
+  for (var sample = 0u; sample < samples; sample += 1u) {
+    var value = KernelMixedMaster {
+      float3(1.0, 2.0, 3.0), int2(-8, 4), uint2(7u, 11u),
+      half3(0.125, 0.25, 0.375), 1234u, half(0.5)
+    }
+    if (pixel.x < config[0] && pixel.y < config[1]) {
+      value = block.read(xy, ushort(sample))
+    }
+    value.color         += half3(float(local.x) / 32.0, float(local.y) / 64.0, float(sample) / 16.0)
+    value.bias          += half(float(group.x + group.y * 2u) / 16.0)
+    value.position      += float3(float(local.x), float(local.y), float(sample))
+    value.signedValue   += int2(int(local.x), int(local.y))
+    value.unsignedValue += group.xy
+    value.marker        += local.x + local.y * width + sample * width * height
+    block.write(value, xy, ushort(sample))
+  }
+  imageblock_barrier()
+
+  /* the permutation crosses SIMD partitions and includes partial-edge pixels. */
+  let next     = (local.y * width + local.x + 17u) % (width * height)
+  let neighbor = ushort2(next % width, next / width)
+  let value0   = block.read(neighbor, ushort(0))
+  var value1   = value0
+  var value2   = value0
+  var value3   = value0
+  if (samples == 4u) {
+    value1 = block.read(neighbor, ushort(1))
+    value2 = block.read(neighbor, ushort(2))
+    value3 = block.read(neighbor, ushort(3))
+  }
+  imageblock_barrier()
+
+  block.write(value0, xy, ushort(0))
+  if (samples == 4u) {
+    block.write(value1, xy, ushort(1))
+    block.write(value2, xy, ushort(2))
+    block.write(value3, xy, ushort(3))
+  }
 }
 
 @tile

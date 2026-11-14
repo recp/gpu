@@ -951,7 +951,7 @@ vk_textureCreateInfo(GPUDevice                  *device,
 
   if (!device || !(deviceVk = device->_priv) || !info || !outInfo || !outAspect
       || !vk__imageType(info->dimension, &outInfo->imageType) || !vk_formatFromGPU(info->format, &outInfo->format)
-      || !vk__textureUsage(info->usage, &outInfo->usage)
+      || !vk__textureUsage(info->usage & ~GPU_TEXTURE_USAGE_TRANSIENT_ATTACHMENT, &outInfo->usage)
       || (info->dimension == GPU_TEXTURE_DIMENSION_1D && info->height != 1u)) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -964,6 +964,10 @@ vk_textureCreateInfo(GPUDevice                  *device,
   }
 
   sampleCount = vk__sampleCount(info->sampleCount ? info->sampleCount : 1u);
+
+  if ((info->usage & GPU_TEXTURE_USAGE_TRANSIENT_ATTACHMENT)
+      && GPUIsFeatureEnabled(device, GPU_FEATURE_MEMORYLESS_ATTACHMENTS))
+    outInfo->usage |= VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
 
   if (!sampleCount
       || (((info->usage & GPU_TEXTURE_USAGE_COLOR_TARGET) != 0u) && (deviceVk->colorSampleCounts & sampleCount) == 0u)
@@ -1353,6 +1357,7 @@ vk_createTexture(GPUDevice                  *__restrict device,
   VkMemoryAllocateInfo  allocationInfo = {0};
   GPUDeviceVk          *deviceVk;
   VkMemoryPropertyFlags memoryFlags;
+  VkMemoryPropertyFlags requiredFlags;
   uint32_t              arrayLayerCount;
   uint32_t              subresourceCount;
   uint32_t              memoryTypeIndex;
@@ -1397,9 +1402,13 @@ vk_createTexture(GPUDevice                  *__restrict device,
 
   vkGetImageMemoryRequirements(state.device, state.image, &requirements);
 
+  requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+  if (imageInfo.usage & VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT)
+    requiredFlags |= VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT;
+
   if (!vk_findMemoryType(device,
                          requirements.memoryTypeBits,
-                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                         requiredFlags,
                          0u,
                          &memoryTypeIndex,
                          &memoryFlags)) {
@@ -1430,7 +1439,11 @@ vk_createTexture(GPUDevice                  *__restrict device,
   state.ownsMemory = true;
 bound:
 
-  return vk_finishTexture(device, info, &imageInfo, &state, outTexture);
+  createInfoResult = vk_finishTexture(device, info, &imageInfo, &state, outTexture);
+  if (createInfoResult == GPU_OK)
+    (*outTexture)->_memoryless = (memoryFlags & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) != 0u;
+
+  return createInfoResult;
 }
 
 GPU_HIDE

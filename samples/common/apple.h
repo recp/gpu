@@ -120,4 +120,9 @@ gpu_apple_sample_create_swapchain(GPUDevice  *device,
                                   uint32_t    width,
                                   uint32_t    height);
 
+GPUResult
+gpu_apple_sample_create_swapchain_info(GPUDevice                    *device,
+                                      const GPUSwapchainCreateInfo *info,
+                                      GPUSwapchain               **outSwapchain);
+
 #endif

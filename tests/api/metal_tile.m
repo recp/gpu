@@ -1168,6 +1168,9 @@ main(int argc, const char *argv[]) {
     } else {
       printf("tile 4x MSAA: RGBA32_FLOAT unsupported, subcase skipped\n");
     }
+    if (caps.supportedSampleCounts & GPU_SAMPLE_COUNT_8_BIT)
+      ok = check_tiles(device, libraries[0], false, 16u, true, 8u) && ok;
+
     if (featureCount == 4u)
       ok = check_array_resources(device, libraries[3]) && ok;
     else

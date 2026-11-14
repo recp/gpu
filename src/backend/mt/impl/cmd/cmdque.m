@@ -1246,9 +1246,7 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
   MTCommandBuffer      *native;
   MTCommandQueue       *queue;
   id<MTLCommandBuffer>  mcb;
-#if MT_HAS_METAL4
   id<CAMetalDrawable>   drawable;
-#endif
 
   if (!cmdb) {
     return GPU_ERROR_BACKEND_FAILURE;
@@ -1330,11 +1328,16 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  drawable         = native->drawable;
+  native->drawable = nil;
+  if (drawable)
+    [mcb retain];
+
   [mcb addCompletedHandler:^(id<MTLCommandBuffer> _Nonnull buffer) {
     cmdoncomplete(cmdb, native, queue, buffer);
   }];
   if (cmdb->_frameFeedback) {
-    mt_observeFrameFeedback(cmdb->_frameFeedback, native->feedbackDrawable);
+    mt_observeFrameFeedback(cmdb->_frameFeedback, drawable ? drawable : native->feedbackDrawable);
     [native->feedbackDrawable release];
     native->feedbackDrawable = nil;
   }
@@ -1344,6 +1347,14 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
                         true,
                         memory_order_release);
   [mcb commit];
+
+  if (drawable) {
+    /* Core Animation needs presentation on the caller's transaction thread. */
+    [mcb waitUntilScheduled];
+    [drawable present];
+    [drawable release];
+    [mcb release];
+  }
 
   return GPU_OK;
 }

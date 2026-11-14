@@ -1058,6 +1058,11 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
 #else
       return adapterMT->appleFamily2;
 #endif
+    case GPU_FEATURE_MEMORYLESS_ATTACHMENTS:
+      if (@available(macOS 11.0, iOS 13.0, *))
+        return [adapterMT->device supportsFamily:MTLGPUFamilyApple2];
+
+      return false;
     case GPU_FEATURE_BUFFER_HOST_MEMORY_EXT:
 #if TARGET_OS_SIMULATOR
       /* the Simulator's Metal traps wrapping host pages (newBufferWithBytesNoCopy) */
@@ -1068,7 +1073,11 @@ mt_supportsFeature(const GPUAdapter *__restrict adapter, GPUFeature feature) {
     case GPU_FEATURE_COMPUTE:
     case GPU_FEATURE_INDIRECT_DRAW:
     case GPU_FEATURE_SHADER_F16:
+    case GPU_FEATURE_BUFFER_TEXTURES:
     case GPU_FEATURE_THREADED_UPLOADS:
+    case GPU_FEATURE_SWAPCHAIN_SCALE:
+    case GPU_FEATURE_SWAPCHAIN_COLOR_SPACE:
+    case GPU_FEATURE_SWAPCHAIN_TRANSACTIONS:
       return true;
     case GPU_FEATURE_FRAME_PACER:
 #if __has_include(<QuartzCore/CAMetalDisplayLink.h>)

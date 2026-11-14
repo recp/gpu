@@ -308,6 +308,9 @@ GPUGetTextureMemoryRequirements(GPUDevice                  *__restrict device,
     return result;
   }
 
+  if (info->usage & GPU_TEXTURE_USAGE_TRANSIENT_ATTACHMENT)
+    return GPU_ERROR_UNSUPPORTED;
+
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_PLACED_RESOURCES)) {
     return GPU_ERROR_UNSUPPORTED;
   }
@@ -399,6 +402,9 @@ GPUGetSparseTextureRequirements(GPUDevice                    *__restrict device,
   if (result != GPU_OK) {
     return result;
   }
+
+  if (info->usage & GPU_TEXTURE_USAGE_TRANSIENT_ATTACHMENT)
+    return GPU_ERROR_UNSUPPORTED;
 
   if (!GPUIsFeatureEnabled(device, GPU_FEATURE_SPARSE_TEXTURES)) {
     return GPU_ERROR_UNSUPPORTED;
@@ -836,7 +842,9 @@ GPUQueueSubmitSparse(GPUQueue                       *__restrict queue,
 
   backendInfo       = *info;
   backendInfo.fence = NULL;
-  result            = api->memory.submitSparse(queue, &backendInfo);
+  commandQueueLock(queue, api);
+  result = api->memory.submitSparse(queue, &backendInfo);
+  commandQueueUnlock(queue, api);
 
   return result == GPU_OK && info->fence
            ? submitSparseFenceMarker(queue, info->fence)
