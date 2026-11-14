@@ -28,6 +28,9 @@ webgpu_recycleCommand(GPUCommandBuffer *cmdb) {
   }
 
   atomic_store_explicit(&command->inUse, false, memory_order_release);
+#if !defined(__EMSCRIPTEN__)
+  webgpuCommandSlotFreed(webgpuDevice(cmdb->_queue ? cmdb->_queue->_device : NULL));
+#endif
 }
 
 static void
@@ -99,20 +102,29 @@ webgpu_newCommandBuffer(GPUQueue                    *queue,
 
   command = NULL;
 
-  for (i = 0u; i < GPU_WEBGPU_COMMAND_SLOT_COUNT; i++) {
-    bool expected;
+  /* every slot in flight: the completion worker frees the oldest, so wait
+   * for it instead of failing the acquire (Metal and Vulkan don't fail here) */
+  do {
+    for (i = 0u; i < GPU_WEBGPU_COMMAND_SLOT_COUNT; i++) {
+      bool expected;
 
-    expected = false;
+      expected = false;
 
-    if (atomic_compare_exchange_strong_explicit(&device->commands[i].inUse,
-                                                &expected,
-                                                true,
-                                                memory_order_acq_rel,
-                                                memory_order_acquire)) {
-      command = &device->commands[i];
-      break;
+      if (atomic_compare_exchange_strong_explicit(&device->commands[i].inUse,
+                                                  &expected,
+                                                  true,
+                                                  memory_order_acq_rel,
+                                                  memory_order_acquire)) {
+        command = &device->commands[i];
+        break;
+      }
     }
   }
+#if !defined(__EMSCRIPTEN__)
+  while (!command && webgpuWaitCommandSlot(device));
+#else
+  while (0);
+#endif
 
   if (!command) {
     return NULL;

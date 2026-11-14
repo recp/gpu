@@ -36,12 +36,14 @@ webgpu_completionUnlock(GPUDeviceWebGPU *device) {
 #  endif
 }
 
+/* every waiter: the worker (completions to wait for) and an acquire waiting
+ * for a command slot share the condition */
 static void
 webgpu_completionSignal(GPUDeviceWebGPU *device) {
 #  if defined(_WIN32) || defined(WIN32)
-  WakeConditionVariable(&device->completionCondition);
+  WakeAllConditionVariable(&device->completionCondition);
 #  else
-  pthread_cond_signal(&device->completionCondition);
+  pthread_cond_broadcast(&device->completionCondition);
 #  endif
 }
 
@@ -115,6 +117,50 @@ webgpu_completionMain(void *context) {
   return NULL;
 }
 #  endif
+
+/* every command slot taken: true once one is free, false when none is in
+ * flight (the app holds them all; nothing would free one) or the worker stops */
+GPU_HIDE
+bool
+webgpuWaitCommandSlot(GPUDeviceWebGPU *device) {
+  bool     free, inFlight;
+  uint32_t i;
+
+  if (!device || !device->completionWorkerStarted)
+    return false;
+
+  webgpu_completionLock(device);
+
+  for (;;) {
+    free     = false;
+    inFlight = false;
+
+    for (i = 0u; i < GPU_WEBGPU_COMMAND_SLOT_COUNT; i++) {
+      free     = free || !atomic_load_explicit(&device->commands[i].inUse, memory_order_acquire);
+      inFlight = inFlight || atomic_load_explicit(&device->commands[i].submitted, memory_order_acquire);
+    }
+
+    if (free || !inFlight || device->stoppingCompletionWorker)
+      break;
+
+    webgpu_completionWait(device);
+  }
+
+  webgpu_completionUnlock(device);
+  return free;
+}
+
+/* a slot came back: wake an acquire waiting for one */
+GPU_HIDE
+void
+webgpuCommandSlotFreed(GPUDeviceWebGPU *device) {
+  if (!device || !device->completionWorkerStarted)
+    return;
+
+  webgpu_completionLock(device);
+  webgpu_completionSignal(device);
+  webgpu_completionUnlock(device);
+}
 
 bool
 webgpuStartCompletionWorker(GPUDeviceWebGPU *device) {
