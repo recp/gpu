@@ -1,3 +1,27 @@
+if(GPU_BUILD_VULKAN AND UNIX AND NOT EMSCRIPTEN AND NOT BUILD_SHARED_LIBS)
+  gpu_add_usl_fixtures(GPU_VULKAN_F16_FIXTURES webgpu api-vulkan-f16
+    "${CMAKE_CURRENT_SOURCE_DIR}/vulkan_io16.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/vulkan_f16_compute.usl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/vulkan_f32.usl")
+  add_custom_target(gpu-vulkan-f16-fixtures DEPENDS ${GPU_VULKAN_F16_FIXTURES})
+
+  add_executable(gpu-vulkan-features-test vulkan_features.c runner.c)
+  add_dependencies(gpu-vulkan-features-test gpu-vulkan-f16-fixtures)
+
+  set_target_properties(gpu-vulkan-features-test PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+  target_compile_options(gpu-vulkan-features-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+
+  target_link_libraries(gpu-vulkan-features-test PRIVATE gpu Vulkan::Vulkan ${CMAKE_DL_LIBS})
+
+  foreach(mode plain f16)
+    add_test(NAME api-vulkan-features-${mode}
+      COMMAND gpu-vulkan-features-test ${mode} ${GPU_VULKAN_F16_FIXTURES})
+    set_tests_properties(api-vulkan-features-${mode} PROPERTIES
+      SKIP_RETURN_CODE 77 LABELS "vulkan;features" TIMEOUT 20)
+  endforeach()
+endif()
+
 if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   add_executable(gpu-metal-uploader-ready-test metal_uploader_ready.m)
   target_compile_options(gpu-metal-uploader-ready-test PRIVATE -UNDEBUG)
