@@ -176,7 +176,7 @@ typedef struct GPUAdapterVk {
   uint8_t                                               denormPreserve;
   uint8_t                                               roundingRTE;
   bool                                                  floatControls2;
-  bool                                                  bareConversions; /* Qualcomm's compiler: no NoContraction on OpFConvert */
+  bool                                                  qualcommCompiler; /* Qualcomm's own shader compiler, quirks and all */
   bool                                                  dynamicRendering;
   bool                                                  shaderFloat16;
   bool                                                  storageBuffer16BitAccess;

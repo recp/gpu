@@ -116,7 +116,7 @@ struct GPUDevice {
   uint8_t                     uslFloatAtomicAdd; /* buffer/workgroup bits, enabled on the device */
   bool                        uslFloatControls2;
   bool                        uslHalfRoundtrip;
-  bool                        uslBareConversions; /* spirv_bare_conversions: Qualcomm's compiler */
+  bool                        uslQualcommCompiler; /* its quirk atoms: spirv_bare_conversions, spirv_guard_mul_shift */
   bool                        uslStorageF16;
   uint8_t                     uslNarrowStorage; /* GPU_USL_NARROW_*: classes keeping 8/16-bit data narrow */
   bool                        uslIOF16;

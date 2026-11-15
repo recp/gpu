@@ -1697,10 +1697,12 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     }
   }
 
-  /* Qualcomm's own compiler asserts ("Unknown floating point rounding mode")
-   * on NoContraction over OpFConvert, which strict SPIR-V without
-   * float_controls2 puts on conversions. Turnip, the same vendor, needs the
-   * decoration, so the driver decides; without driver properties, the vendor */
+  /* Qualcomm's own compiler: it asserts ("Unknown floating point rounding
+   * mode") on NoContraction over OpFConvert, which strict SPIR-V without
+   * float_controls2 puts on conversions, and it folds (x*c)>>s to x when
+   * c = odd*2^k, s = k+1 and it thinks the product can't overflow; USL writes
+   * around both for it (library.c). Turnip, the same vendor, needs neither,
+   * so the driver decides; without driver properties, the vendor */
   if (adapterVk->props.vendorID == 0x5143u) {
     PFN_vkGetPhysicalDeviceProperties2 getDriverProperties;
     VkPhysicalDeviceDriverProperties   driverProperties   = {0};
@@ -1725,7 +1727,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       getDriverProperties(raw, &driverProperties2);
     }
 
-    adapterVk->bareConversions = driverProperties.driverID == 0
+    adapterVk->qualcommCompiler = driverProperties.driverID == 0
                                  || driverProperties.driverID == VK_DRIVER_ID_QUALCOMM_PROPRIETARY;
   }
 #ifdef VK_KHR_shader_float_controls2
@@ -3598,7 +3600,7 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   device->uslHalfRoundtrip  = uslVulkanHalfRoundtrip(adapterVk->props.vendorID,
                                                      adapterVk->props.deviceID,
                                                      adapterVk->props.driverVersion);
-  device->uslBareConversions = adapterVk->bareConversions;
+  device->uslQualcommCompiler = adapterVk->qualcommCompiler;
 #ifdef VK_EXT_shader_atomic_float
   device->uslFloatAtomicAdd = (floatAtomicFeatures.shaderBufferFloat32AtomicAdd ? 1u : 0u) |
                             (floatAtomicFeatures.shaderSharedFloat32AtomicAdd ? 2u : 0u);

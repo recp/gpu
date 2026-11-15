@@ -2880,8 +2880,11 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
-    if (device->uslBareConversions
-        && us_cap_atom_text(&targetAtoms[targetAtomCount++], "spirv_bare_conversions") != USLOk) {
+    /* Qualcomm's compiler: NoContraction on OpFConvert asserts it, and
+     * (x*c)>>s with c = odd*2^k, s = k+1 comes out as x */
+    if (device->uslQualcommCompiler
+        && (us_cap_atom_text(&targetAtoms[targetAtomCount++], "spirv_bare_conversions") != USLOk
+            || us_cap_atom_text(&targetAtoms[targetAtomCount++], "spirv_guard_mul_shift") != USLOk)) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
