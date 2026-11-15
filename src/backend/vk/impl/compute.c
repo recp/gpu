@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 #include "../../../api/buffer_internal.h"
 #include "../../../api/compute_internal.h"
 #include "../../../api/descr/descriptor_internal.h"
@@ -60,8 +61,9 @@ vk_createComputePipeline(GPUDevice                          *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native         = (GPUComputePipelineVk *)(state + 1);
-  native->device = deviceVk->device;
+  native            = (GPUComputePipelineVk *)(state + 1);
+  native->gpuDevice = deviceVk;
+  native->device    = deviceVk->device;
   entryMask      = UINT64_MAX;
 
   if (shaderLibraryHasEntryResourceInfo(info->library)) {
@@ -118,6 +120,30 @@ vk_createComputePipeline(GPUDevice                          *device,
   return GPU_OK;
 }
 
+static void
+vk__releaseComputePipeline(void *context, void *owner) {
+  GPUComputePipeline      *pipeline;
+  GPUComputePipelineState *state;
+  GPUComputePipelineVk    *native;
+
+  GPU__UNUSED(context);
+  pipeline = owner;
+  state    = pipeline->_state;
+  native   = state ? state->_priv : NULL;
+
+  if (native && native->device && native->pipeline) {
+    vkDestroyPipeline(native->device, native->pipeline, NULL);
+  }
+
+  if (native) {
+    vk_destroyShaderLayout(&native->shaderLayout);
+  }
+
+  free(state);
+  free(pipeline);
+}
+
+/* kept until the work given before it finishes (impl/retire.c) */
 GPU_HIDE
 void
 vk_destroyComputePipeline(GPUComputePipeline *pipeline) {
@@ -131,16 +157,12 @@ vk_destroyComputePipeline(GPUComputePipeline *pipeline) {
   state  = pipeline->_state;
   native = state ? state->_priv : NULL;
 
-  if (native && native->device && native->pipeline) {
-    vkDestroyPipeline(native->device, native->pipeline, NULL);
+  if (!native || !native->gpuDevice) {
+    vk__releaseComputePipeline(NULL, pipeline);
+    return;
   }
 
-  if (native) {
-    vk_destroyShaderLayout(&native->shaderLayout);
-  }
-
-  free(state);
-  free(pipeline);
+  vk_retire(native->gpuDevice, &native->retired, pipeline, vk__releaseComputePipeline);
 }
 
 GPU_HIDE

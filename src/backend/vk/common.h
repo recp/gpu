@@ -380,6 +380,7 @@ typedef struct GPUHeapVk {
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
 typedef struct GPUAccelerationStructureVk {
   GPUDeviceVk                              *gpuDevice;
+  GPURetired                                retired;
   GPUBuffer                                *instanceBuffer;
   VkAccelerationStructureGeometryKHR       *geometries;
   VkAccelerationStructureBuildRangeInfoKHR *ranges;
@@ -600,6 +601,8 @@ typedef struct GPUComputeEncoderVk {
 #if defined(VK_KHR_acceleration_structure) && \
     defined(VK_KHR_ray_tracing_pipeline)
 typedef struct GPUShaderTableVk {
+  GPUDeviceVk                    *gpuDevice;
+  GPURetired                      retired;
   VkDevice                        device;
   VkBuffer                        buffer;
   VkDeviceMemory                  memory;
@@ -773,6 +776,8 @@ typedef struct GPUShaderLayoutVk {
     defined(VK_KHR_ray_tracing_pipeline)
 typedef struct GPURayTracingPipelineVk {
   GPUShaderLayoutVk shaderLayout;
+  GPUDeviceVk      *gpuDevice;
+  GPURetired        retired;
   VkDevice          device;
   VkPipeline        pipeline;
   uint32_t          groupHandleSize;
@@ -783,6 +788,8 @@ typedef struct GPURayTracingPipelineVk {
 
 typedef struct GPURenderPipelineVk {
   GPUShaderLayoutVk shaderLayout;
+  GPUDeviceVk      *gpuDevice;
+  GPURetired        retired;
   VkDevice          device;
   VkPipeline        pipeline;
   VkRenderPass      renderPass;
@@ -790,6 +797,8 @@ typedef struct GPURenderPipelineVk {
 
 typedef struct GPUComputePipelineVk {
   GPUShaderLayoutVk shaderLayout;
+  GPUDeviceVk      *gpuDevice;
+  GPURetired        retired;
   VkDevice          device;
   VkPipeline        pipeline;
 } GPUComputePipelineVk;

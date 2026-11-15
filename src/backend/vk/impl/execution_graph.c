@@ -32,6 +32,7 @@ typedef struct ExecutionGraphEntryVk {
 
 typedef struct ExecutionGraphVk {
   GPUDeviceVk              *gpuDevice;
+  GPURetired                retired;
   GPUShaderLayoutVk         shaderLayout;
   VkPipeline                pipeline;
   ExecutionGraphEntryVk    *entries;
@@ -279,13 +280,28 @@ vk_createExecutionGraph(GPUDevice                            *device,
 }
 
 static void
+vk__releaseExecutionGraph(void *context, void *owner) {
+  GPU__UNUSED(context);
+  vk_destroyExecutionGraphState(owner);
+}
+
+/* kept until the work given before it finishes (impl/retire.c) */
+static void
 vk_destroyExecutionGraph(GPUExecutionGraphEXT *graph) {
-  if (!graph) {
+  ExecutionGraphVk *native;
+
+  if (!graph || !(native = graph->_priv)) {
     return;
   }
 
-  vk_destroyExecutionGraphState(graph->_priv);
   graph->_priv = NULL;
+
+  if (!native->gpuDevice) {
+    vk_destroyExecutionGraphState(native);
+    return;
+  }
+
+  vk_retire(native->gpuDevice, &native->retired, native, vk__releaseExecutionGraph);
 }
 
 static uint64_t

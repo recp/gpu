@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 #include "../../../api/descr/descriptor_internal.h"
 #include "../../../api/library_internal.h"
 #include "../../../api/render/pipeline_internal.h"
@@ -537,7 +538,8 @@ vk_createRenderPipeline(GPUDevice                         *device,
   }
 
   GPU__UNUSED(requiredBindGroupMask);
-  native->device = deviceVk->device;
+  native->gpuDevice = deviceVk;
+  native->device    = deviceVk->device;
   entryMask      = UINT64_MAX;
 
   if (shaderLibraryHasEntryResourceInfo(info->library)) {
@@ -761,16 +763,14 @@ vk_createRenderPipeline(GPUDevice                         *device,
   return GPU_OK;
 }
 
-GPU_HIDE
-void
-vk_destroyRenderPipeline(GPURenderPipeline *pipeline) {
+static void
+vk__releaseRenderPipeline(void *context, void *owner) {
+  GPURenderPipeline   *pipeline;
   GPURenderPipelineVk *native;
 
-  if (!pipeline) {
-    return;
-  }
-
-  native = pipeline->_priv;
+  GPU__UNUSED(context);
+  pipeline = owner;
+  native   = pipeline->_priv;
 
   if (native) {
     if (native->pipeline) {
@@ -786,6 +786,27 @@ vk_destroyRenderPipeline(GPURenderPipeline *pipeline) {
   }
 
   free(pipeline);
+}
+
+/* kept until the work given before it finishes (impl/retire.c): its
+ * pipeline, render pass and static samplers */
+GPU_HIDE
+void
+vk_destroyRenderPipeline(GPURenderPipeline *pipeline) {
+  GPURenderPipelineVk *native;
+
+  if (!pipeline) {
+    return;
+  }
+
+  native = pipeline->_priv;
+
+  if (!native || !native->gpuDevice) {
+    vk__releaseRenderPipeline(NULL, pipeline);
+    return;
+  }
+
+  vk_retire(native->gpuDevice, &native->retired, pipeline, vk__releaseRenderPipeline);
 }
 
 GPU_HIDE

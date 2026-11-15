@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 #include "../../../api/buffer_internal.h"
 #include "../../../api/query_internal.h"
 
@@ -48,8 +49,10 @@ VK__ASSERT_PIPESTAT(GPU_PIPESTAT_COMPUTE_SHADER_INVOCATIONS,
 #undef VK__ASSERT_PIPESTAT
 
 typedef struct QuerySetVk {
-  VkDevice    device;
-  VkQueryPool pool;
+  GPUDeviceVk *gpuDevice;
+  GPURetired   retired;
+  VkDevice     device;
+  VkQueryPool  pool;
 } QuerySetVk;
 
 static VkQueryPipelineStatisticFlags
@@ -99,8 +102,9 @@ vk_createQuerySet(GPUDevice                   *device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  native->device = deviceVk->device;
-  set->_priv     = native;
+  native->gpuDevice = deviceVk;
+  native->device    = deviceVk->device;
+  set->_priv        = native;
 
   return GPU_OK;
 }
@@ -194,6 +198,22 @@ vk_endPipelineStatisticsQuery(GPUCommandBuffer *cmdb,
   vkCmdEndQuery(command->command, native->pool, queryIndex);
 }
 
+static void
+vk__releaseQuerySet(void *context, void *owner) {
+  QuerySetVk *native;
+
+  GPU__UNUSED(context);
+  native = owner;
+
+  if (native->device && native->pool) {
+    vkDestroyQueryPool(native->device, native->pool, NULL);
+  }
+
+  free(native);
+}
+
+/* kept until the work given before it finishes (impl/retire.c): queries
+ * written there land in its pool */
 GPU_HIDE
 void
 vk_destroyQuerySet(GPUQuerySet *set) {
@@ -205,12 +225,14 @@ vk_destroyQuerySet(GPUQuerySet *set) {
     return;
   }
 
-  if (native->device && native->pool) {
-    vkDestroyQueryPool(native->device, native->pool, NULL);
+  set->_priv = NULL;
+
+  if (!native->gpuDevice) {
+    vk__releaseQuerySet(NULL, native);
+    return;
   }
 
-  free(native);
-  set->_priv = NULL;
+  vk_retire(native->gpuDevice, &native->retired, native, vk__releaseQuerySet);
 }
 
 GPU_HIDE

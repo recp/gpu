@@ -560,6 +560,7 @@ vk_createRayTracingPipeline(GPUDevice                                *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
+  native->gpuDevice            = deviceVk;
   native->device               = deviceVk->device;
   native->groupHandleSize      = deviceVk->rayTracingShaderGroupHandleSize;
   native->groupHandleAlignment = deviceVk->rayTracingShaderGroupHandleAlignment;
@@ -719,15 +720,28 @@ invalid:
 }
 
 static void
+vk__releaseRayTracingPipeline(void *context, void *owner) {
+  GPU__UNUSED(context);
+  vk_rayDestroyPipelineState(owner);
+}
+
+/* kept until the work given before it finishes (impl/retire.c) */
+static void
 vk_destroyRayTracingPipeline(GPURayTracingPipelineEXT *pipeline) {
   GPURayTracingPipelineVk *native;
 
-  native = pipeline ? pipeline->_priv : NULL;
-  vk_rayDestroyPipelineState(native);
-
-  if (pipeline) {
-    pipeline->_priv = NULL;
+  if (!pipeline || !(native = pipeline->_priv)) {
+    return;
   }
+
+  pipeline->_priv = NULL;
+
+  if (!native->gpuDevice) {
+    vk_rayDestroyPipelineState(native);
+    return;
+  }
+
+  vk_retire(native->gpuDevice, &native->retired, native, vk__releaseRayTracingPipeline);
 }
 
 static void
@@ -883,7 +897,8 @@ vk_createShaderTable(GPUDevice                         *device,
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native->device = deviceVk->device;
+  native->gpuDevice = deviceVk;
+  native->device    = deviceVk->device;
 
   result = deviceVk->getRayTracingShaderGroupHandles(native->device,
                                                      pipeline->pipeline,
@@ -1052,15 +1067,29 @@ vk_createShaderTable(GPUDevice                         *device,
 }
 
 static void
+vk__releaseShaderTable(void *context, void *owner) {
+  GPU__UNUSED(context);
+  vk_rayDestroyShaderTableState(owner);
+}
+
+/* kept until the work given before it finishes (impl/retire.c): trace calls
+ * there read its records */
+static void
 vk_destroyShaderTable(GPUShaderTableEXT *table) {
   GPUShaderTableVk *native;
 
-  native = table ? table->_priv : NULL;
-  vk_rayDestroyShaderTableState(native);
-
-  if (table) {
-    table->_priv = NULL;
+  if (!table || !(native = table->_priv)) {
+    return;
   }
+
+  table->_priv = NULL;
+
+  if (!native->gpuDevice) {
+    vk_rayDestroyShaderTableState(native);
+    return;
+  }
+
+  vk_retire(native->gpuDevice, &native->retired, native, vk__releaseShaderTable);
 }
 
 static GPURayTracingPassEncoderEXT*
@@ -1358,17 +1387,31 @@ vk_createAccelerationStructure(GPUDevice                                   *devi
   return GPU_OK;
 }
 
+static void
+vk__releaseAccelerationStructure(void *context, void *owner) {
+  GPU__UNUSED(context);
+  vk_rayDestroyState(owner);
+}
+
+/* kept until the work given before it finishes (impl/retire.c): builds and
+ * traces there use its memory */
 GPU_HIDE
 void
 vk_destroyAccelerationStructure(GPUAccelerationStructureEXT *structure) {
   GPUAccelerationStructureVk *native;
 
-  native = vk_rayStructure(structure);
-  vk_rayDestroyState(native);
-
-  if (structure) {
-    structure->_priv = NULL;
+  if (!(native = vk_rayStructure(structure))) {
+    return;
   }
+
+  structure->_priv = NULL;
+
+  if (!native->gpuDevice) {
+    vk_rayDestroyState(native);
+    return;
+  }
+
+  vk_retire(native->gpuDevice, &native->retired, native, vk__releaseAccelerationStructure);
 }
 
 GPU_HIDE

@@ -1664,7 +1664,9 @@ destroy_bindings_while_in_use(GPUDevice *device, GPUQueue *queue) {
   GPUBindGroupCreateInfo       groupInfo        = {0};
   GPUBufferCreateInfo          bufferInfo       = {0};
   GPUSamplerCreateInfo         samplerInfo      = {0};
+  GPUQuerySetCreateInfo        queryInfo        = {0};
   GPUDeviceVk                 *deviceVk;
+  GPUQuerySet                 *queries;
   GPUQueueVk                  *native;
   GPUBindGroupLayout          *layout;
   GPUBindGroup                *group;
@@ -1682,6 +1684,7 @@ destroy_bindings_while_in_use(GPUDevice *device, GPUQueue *queue) {
   layout   = NULL;
   group    = NULL;
   sampler  = NULL;
+  queries  = NULL;
   uniform  = NULL;
   kept     = NULL;
 
@@ -1734,13 +1737,19 @@ destroy_bindings_while_in_use(GPUDevice *device, GPUQueue *queue) {
   groupInfo.label                 = "vulkan-bindings-destroyed-in-use";
   groupInfo.entryCount            = 2u;
   groupInfo.pEntries              = groupEntries;
+  queryInfo.chain.sType           = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+  queryInfo.chain.structSize      = sizeof(queryInfo);
+  queryInfo.label                 = "vulkan-bindings-destroyed-in-use";
+  queryInfo.type                  = GPU_QUERY_OCCLUSION;
+  queryInfo.count                 = 4u;
 
   ok = GPUCreateBuffer(device, &bufferInfo, &uniform) == GPU_OK && uniform;
   /* written by the queue's transfer batch, as destroy_while_in_use's are */
   bufferInfo.usage = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
   ok = ok && GPUCreateBuffer(device, &bufferInfo, &kept) == GPU_OK && kept
        && GPUCreateSampler(device, &samplerInfo, false, &sampler) == GPU_OK && sampler
-       && GPUCreateBindGroupLayout(device, &layoutInfo, &layout) == GPU_OK && layout;
+       && GPUCreateBindGroupLayout(device, &layoutInfo, &layout) == GPU_OK && layout
+       && GPUCreateQuerySet(device, &queryInfo, &queries) == GPU_OK && queries;
 
   if (ok) {
     groupEntries[0].buffer.buffer = uniform;
@@ -1750,18 +1759,20 @@ destroy_bindings_while_in_use(GPUDevice *device, GPUQueue *queue) {
          && GPUQueueWaitIdle(queue) == GPU_OK;
   }
 
-  /* destroyed while a transfer batch records: all three wait for it */
+  /* destroyed while a transfer batch records: all four wait for it */
   ok = ok && GPUQueueWriteBuffer(queue, kept, 0u, values, sizeof(values)) == GPU_OK
        && native->transferOpen;
   GPUDestroyBindGroup(group);
   GPUDestroyBindGroupLayout(layout);
   GPUDestroySampler(sampler);
+  GPUDestroyQuerySet(queries);
   group   = NULL;
   layout  = NULL;
   sampler = NULL;
-  ok      = ok && retired_count(deviceVk) == 3u;
+  queries = NULL;
+  ok      = ok && retired_count(deviceVk) == 4u;
   if (!ok)
-    fprintf(stderr, "bindings destroyed in use: %u waiting, 3 expected\n", retired_count(deviceVk));
+    fprintf(stderr, "bindings destroyed in use: %u waiting, 4 expected\n", retired_count(deviceVk));
   ok = ok && GPUQueueReadBuffer(queue, kept, 0u, readback, sizeof(readback)) == GPU_OK
        && memcmp(readback, values, sizeof(values)) == 0
        && deviceVk->retire.head == NULL && deviceVk->orphanLayouts == NULL;
@@ -1788,6 +1799,7 @@ destroy_bindings_while_in_use(GPUDevice *device, GPUQueue *queue) {
   GPUDestroyBindGroup(group);
   GPUDestroyBindGroupLayout(layout);
   GPUDestroySampler(sampler);
+  GPUDestroyQuerySet(queries);
   GPUDestroyBuffer(uniform);
   GPUDestroyBuffer(kept);
   (void)GPUQueueWaitIdle(queue);
