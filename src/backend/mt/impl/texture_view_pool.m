@@ -26,6 +26,8 @@ struct MTTextureViewPoolPage {
   id                            pool;
   struct MTTextureViewPoolPage *next;
   uint64_t                      used[MT_TEXTURE_VIEW_POOL_WORDS];
+  uint64_t                      released[MT_TEXTURE_VIEW_POOL_WORDS]; /* the view is gone, work still holds the slot */
+  uint32_t                      holds[MT_TEXTURE_VIEW_POOL_SIZE];      /* command buffers that bound it, not done */
 };
 
 #if MT_HAS_METAL4
@@ -187,6 +189,40 @@ mt_acquireTextureView(GPUDeviceMT       *device,
 
 GPU_HIDE
 void
+mt_holdTextureView(const MTTextureViewSlot *slot) {
+  if (slot && slot->page && slot->index < MT_TEXTURE_VIEW_POOL_SIZE)
+    __atomic_add_fetch(&slot->page->holds[slot->index], 1u, __ATOMIC_ACQ_REL);
+}
+
+GPU_HIDE
+void
+mt_dropTextureView(GPUDeviceMT *device, MTTextureViewSlot slot) {
+#if MT_HAS_METAL4
+  MTTextureViewPoolPage *page;
+  uint32_t               index;
+
+  if (!device || !(page = slot.page) || (index = slot.index) >= MT_TEXTURE_VIEW_POOL_SIZE)
+    return;
+
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    os_unfair_lock_lock(&device->textureViewPoolLock);
+    if (__atomic_sub_fetch(&page->holds[index], 1u, __ATOMIC_ACQ_REL) == 0u
+        && (page->released[index / 64u] & (1ull << (index % 64u))) != 0u) {
+      [(id<MTLTextureViewPool>)page->pool setTextureView:(id<MTLTexture>)device->textureViewPlaceholder
+                                                 atIndex:index];
+      page->used[index / 64u]     &= ~(1ull << (index % 64u));
+      page->released[index / 64u] &= ~(1ull << (index % 64u));
+    }
+    os_unfair_lock_unlock(&device->textureViewPoolLock);
+  }
+#else
+  GPU__UNUSED(device);
+  GPU__UNUSED(slot);
+#endif
+}
+
+GPU_HIDE
+void
 mt_releaseTextureView(GPUDeviceMT *device, MTTextureViewSlot *slot) {
 #if MT_HAS_METAL4
   MTTextureViewPoolPage *page;
@@ -200,7 +236,11 @@ mt_releaseTextureView(GPUDeviceMT *device, MTTextureViewSlot *slot) {
   if (@available(macOS 26.0, iOS 26.0, *)) {
     os_unfair_lock_lock(&device->textureViewPoolLock);
 
-    if ((page->used[index / 64u] & (1ull << (index % 64u))) != 0u) {
+    /* work in flight reads the view through this slot's id: the slot goes
+     * when the last such command buffer is done (mt_dropTextureView) */
+    if (__atomic_load_n(&page->holds[index], __ATOMIC_ACQUIRE) != 0u) {
+      page->released[index / 64u] |= 1ull << (index % 64u);
+    } else if ((page->used[index / 64u] & (1ull << (index % 64u))) != 0u) {
       [(id<MTLTextureViewPool>)page->pool setTextureView:(id<MTLTexture>)device->textureViewPlaceholder
                                                  atIndex:index];
       page->used[index / 64u] &= ~(1ull << (index % 64u));

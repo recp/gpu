@@ -29,6 +29,15 @@ GPU_HIDE
 void
 mt_releaseTextureView(GPUDeviceMT *device, MTTextureViewSlot *slot);
 
+/* a command buffer bound the slot: it stays the view's until mt_dropTextureView */
+GPU_HIDE
+void
+mt_holdTextureView(const MTTextureViewSlot *slot);
+
+GPU_HIDE
+void
+mt_dropTextureView(GPUDeviceMT *device, MTTextureViewSlot slot);
+
 GPU_HIDE
 void
 mt_destroyTextureViewPools(GPUDeviceMT *device);

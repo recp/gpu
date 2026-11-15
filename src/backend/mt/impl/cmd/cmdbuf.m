@@ -15,6 +15,7 @@
  */
 
 #include "../../common.h"
+#include "../texture_view_pool.h"
 
 enum {
   MT_CONSTANT_UPLOAD_CHUNK_SIZE = 64u * 1024u,
@@ -347,6 +348,72 @@ mt_setArgumentBuffer(GPUCommandBuffer *cmdb,
   mt_setArgumentBufferFast(cmdb, state, buffer, offset, index);
 }
 
+/* argument tables reach views and samplers by resource id, which no
+ * residency set holds: the command buffer keeps them until it's done
+ * (mt__releaseHeld at recycle), so one destroyed meanwhile can't hand its id
+ * to a new one under this work. Repeats of the last one are skipped */
+static void
+mt__holdView(GPUCommandBuffer *cmdb, const MTTextureViewSlot *slot) {
+  MTCommandBuffer   *native;
+  MTTextureViewSlot *grown;
+  uint32_t           capacity;
+
+  if (!slot || !slot->page || !(native = mt_commandBuffer(cmdb)))
+    return;
+
+  if (native->heldViewCount
+      && native->heldViews[native->heldViewCount - 1u].page == slot->page
+      && native->heldViews[native->heldViewCount - 1u].index == slot->index)
+    return;
+
+  if (native->heldViewCount == native->heldViewCapacity) {
+    capacity = native->heldViewCapacity ? native->heldViewCapacity * 2u : 32u;
+    if (!(grown = realloc(native->heldViews, capacity * sizeof(*grown))))
+      return; /* no memory: the old behaviour, released at destroy */
+    native->heldViews        = grown;
+    native->heldViewCapacity = capacity;
+  }
+
+  mt_holdTextureView(slot);
+  native->heldViews[native->heldViewCount++] = *slot;
+}
+
+static void
+mt__holdObject(GPUCommandBuffer *cmdb, id object) {
+  MTCommandBuffer *native;
+  id              *grown;
+  uint32_t         capacity;
+
+  if (!object || !(native = mt_commandBuffer(cmdb)))
+    return;
+
+  if (native->heldObjectCount && native->heldObjects[native->heldObjectCount - 1u] == object)
+    return;
+
+  if (native->heldObjectCount == native->heldObjectCapacity) {
+    capacity = native->heldObjectCapacity ? native->heldObjectCapacity * 2u : 16u;
+    if (!(grown = realloc(native->heldObjects, capacity * sizeof(*grown))))
+      return;
+    native->heldObjects        = grown;
+    native->heldObjectCapacity = capacity;
+  }
+
+  native->heldObjects[native->heldObjectCount++] = [object retain];
+}
+
+/* the GPU is done with this command buffer's work (or it never ran) */
+static void
+mt__releaseHeld(MTCommandBuffer *native, GPUDeviceMT *device) {
+  uint32_t i;
+
+  for (i = 0u; i < native->heldViewCount; i++)
+    mt_dropTextureView(device, native->heldViews[i]);
+  for (i = 0u; i < native->heldObjectCount; i++)
+    [native->heldObjects[i] release];
+  native->heldViewCount   = 0u;
+  native->heldObjectCount = 0u;
+}
+
 GPU_HIDE
 void
 mt_setArgumentTexture(GPUCommandBuffer *cmdb,
@@ -367,6 +434,7 @@ mt_setArgumentTexture(GPUCommandBuffer *cmdb,
          atIndex:index];
     state->textureMask[index / 64u] |= 1ull << (index % 64u);
     mt_useAllocation(cmdb, mt_nativeTexture(view->_texture));
+    mt__holdView(cmdb, (const MTTextureViewSlot *)(view + 1));
   }
 #else
   GPU__UNUSED(cmdb);
@@ -378,9 +446,10 @@ mt_setArgumentTexture(GPUCommandBuffer *cmdb,
 
 GPU_HIDE
 void
-mt_setArgumentSampler(MTArgumentState *state,
-                      GPUSampler      *sampler,
-                      uint32_t         index) {
+mt_setArgumentSampler(GPUCommandBuffer *cmdb,
+                      MTArgumentState  *state,
+                      GPUSampler       *sampler,
+                      uint32_t          index) {
 #if MT_HAS_METAL4
   MTLResourceID resourceID;
   if (!state || !state->table || !sampler || !sampler->_priv
@@ -394,8 +463,10 @@ mt_setArgumentSampler(MTArgumentState *state,
       setSamplerState:resourceID
               atIndex:index];
     state->samplerMask |= (uint16_t)(1u << index);
+    mt__holdObject(cmdb, (id)sampler->_priv);
   }
 #else
+  GPU__UNUSED(cmdb);
   GPU__UNUSED(state);
   GPU__UNUSED(sampler);
   GPU__UNUSED(index);
@@ -619,6 +690,18 @@ mt_carryPendingBarrier(GPUCommandBuffer *cmdb) {
   native->pendingVisibility   = 0u;
 }
 
+static bool
+mt__fullBarriers(void) {
+  static int cached = -1;
+
+  if (cached < 0) {
+    const char *env = getenv("GPU_METAL_FULL_BARRIERS");
+    cached          = env && env[0] && env[0] != '0';
+  }
+
+  return cached != 0;
+}
+
 GPU_HIDE
 void
 mt_applyPendingBarrier(GPUCommandBuffer *cmdb,
@@ -691,6 +774,15 @@ mt_applyPendingBarrier(GPUCommandBuffer *cmdb,
     os_unfair_lock_unlock(&owner->poolLock);
   }
 
+  /* GPU_METAL_FULL_BARRIERS=1, a debug aid: every encoder waits for all the
+   * work before it with every write made visible, to tell a missing barrier
+   * from other faults */
+  if (native->mode == MTCommandMode4 && mt__fullBarriers()) {
+    native->pendingAfterStages  = (uint64_t)MTLStageAll;
+    native->pendingBeforeStages = (uint64_t)MTLStageAll;
+    native->pendingVisibility  |= MTL4VisibilityOptionDevice;
+  }
+
   if (native->pendingAfterStages == 0 || native->pendingBeforeStages == 0) {
     return;
   }
@@ -747,6 +839,11 @@ mt_destroyCommandBufferState(MTCommandBuffer *native) {
   if (native->commandBuffer._frameFeedback)
     discardCommandBufferState(&native->commandBuffer, NULL);
 
+  mt__releaseHeld(native, native->commandBuffer._queue && native->commandBuffer._queue->_device
+                            ? native->commandBuffer._queue->_device->_priv : NULL);
+  free(native->heldViews);
+  free(native->heldObjects);
+
   [native->vertexArguments.table release];
   [native->fragmentArguments.table release];
   [native->tileArguments.table release];
@@ -796,6 +893,7 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
   }
 
   queue = native->owner;
+  mt__releaseHeld(native, cmdb->_queue && cmdb->_queue->_device ? cmdb->_queue->_device->_priv : NULL);
   [native->renderState.classic release];
   native->renderState.classic = nil;
   [native->computeState.classic release];

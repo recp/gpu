@@ -793,7 +793,7 @@ mt_rceSetVertexSampler(GPURenderPassEncoder *rce,
   samplerState = sampler ? (id<MTLSamplerState>)sampler->_priv : nil;
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentSampler(native->vertexArguments, sampler, index);
+    mt_setArgumentSampler(rce->_cmdb, native->vertexArguments, sampler, index);
     return;
   }
 #endif
@@ -904,7 +904,7 @@ mt_rceSetTaskSampler(GPURenderPassEncoder *rce,
   }
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentSampler(native->taskArguments, sampler, index);
+    mt_setArgumentSampler(rce->_cmdb, native->taskArguments, sampler, index);
     return;
   }
 #endif
@@ -987,7 +987,7 @@ mt_rceSetMeshSampler(GPURenderPassEncoder *rce,
   }
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentSampler(native->meshArguments, sampler, index);
+    mt_setArgumentSampler(rce->_cmdb, native->meshArguments, sampler, index);
     return;
   }
 #endif
@@ -1068,7 +1068,7 @@ mt_rceSetFragmentSampler(GPURenderPassEncoder *rce,
   samplerState = sampler ? (id<MTLSamplerState>)sampler->_priv : nil;
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentSampler(native->fragmentArguments, sampler, index);
+    mt_setArgumentSampler(rce->_cmdb, native->fragmentArguments, sampler, index);
     return;
   }
 #endif

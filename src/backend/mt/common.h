@@ -369,6 +369,12 @@ struct MTCommandBuffer {
   uint64_t                               pendingMLAfterStages;
   uint64_t                               pendingMLBeforeStages;
   uint64_t                               pendingMLVisibility;
+  MTTextureViewSlot                     *heldViews;   /* view slots bound here: given back once the GPU is done */
+  id                                    *heldObjects; /* sampler states bound here: released then too */
+  uint32_t                               heldViewCount;
+  uint32_t                               heldViewCapacity;
+  uint32_t                               heldObjectCount;
+  uint32_t                               heldObjectCapacity;
   uint32_t                               residencyAllocationCount;
   MTCommandMode                          mode;
   atomic_bool                            completionReady;
@@ -493,7 +499,8 @@ mt_setArgumentTexture(GPUCommandBuffer *cmdb,
 
 GPU_HIDE
 void
-mt_setArgumentSampler(MTArgumentState *state,
+mt_setArgumentSampler(GPUCommandBuffer *cmdb,
+                      MTArgumentState  *state,
                       GPUSampler      *sampler,
                       uint32_t         index);
 

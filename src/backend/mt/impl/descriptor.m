@@ -1304,7 +1304,7 @@ mt_tileBinding(void *context, const GPUBindGroupBindingView *binding) {
   } else if (binding->kind == GPUBindKindSampler) {
 #if MT_HAS_METAL4
     if (native->modern) {
-      mt_setArgumentSampler(native->tileArguments, binding->sampler, index);
+      mt_setArgumentSampler(ctx->pass->_cmdb, native->tileArguments, binding->sampler, index);
       return;
     }
 #endif

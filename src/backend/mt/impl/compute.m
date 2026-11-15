@@ -456,7 +456,7 @@ mt_computeSampler(GPUComputePassEncoder *enc,
   }
 #if MT_HAS_METAL4
   if (native->modern) {
-    mt_setArgumentSampler(native->arguments, sampler, index);
+    mt_setArgumentSampler(enc->_cmdb, native->arguments, sampler, index);
     return;
   }
 #endif
