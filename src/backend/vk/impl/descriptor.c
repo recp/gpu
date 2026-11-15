@@ -58,6 +58,21 @@ typedef struct DescriptorBufferWriteVk {
 } DescriptorBufferWriteVk;
 #endif
 
+/* a buffer binding's range on whole 32-bit words: USL keeps 8- and 16-bit
+ * data in words where the device can't store it narrow, and reads and writes
+ * whole ones. Every VkBuffer is whole words long (vk_bufferCreateInfo), so
+ * the rounded range stays in the buffer; offsets are words too (the limits
+ * say so, vk_getLimits) */
+static VkDeviceSize
+vk__wordRange(const GPUBuffer *buffer, uint64_t offset, uint64_t size) {
+  uint64_t end, limit;
+
+  limit = (buffer->sizeBytes + 3u) & ~(uint64_t)3u;
+  end   = (offset + size + 3u) & ~(uint64_t)3u;
+
+  return (end > limit ? limit : end) - offset;
+}
+
 static bool
 vk__addPoolSize(VkDescriptorPoolSize *sizes,
                 uint32_t             *count,
@@ -854,9 +869,14 @@ vk__writeDescriptor(void                          *context,
         return;
       }
 
+      if (binding->offset & 3u) {
+        writeContext->valid = false;
+        return;
+      }
+
       bufferInfo->buffer = buffer->buffer;
       bufferInfo->offset = binding->offset;
-      bufferInfo->range  = binding->size;
+      bufferInfo->range  = vk__wordRange(binding->buffer, binding->offset, binding->size);
       write->pBufferInfo = bufferInfo;
       break;
     case GPUBindKindTexture:
@@ -1010,9 +1030,14 @@ vk__writeDescriptorBuffer(void                          *context,
         return;
       }
 
+      if (binding->offset & 3u) {
+        writeContext->valid = false;
+        return;
+      }
+
       addressInfo.sType   = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT;
       addressInfo.address = binding->buffer->_gpuAddress + binding->offset;
-      addressInfo.range   = binding->size;
+      addressInfo.range   = vk__wordRange(binding->buffer, binding->offset, binding->size);
       addressInfo.format  = VK_FORMAT_UNDEFINED;
 
       if (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {

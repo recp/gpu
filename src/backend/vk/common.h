@@ -182,6 +182,10 @@ typedef struct GPUAdapterVk {
   bool                                                  storageBuffer16BitAccess;
   bool                                                  uniformAndStorageBuffer16BitAccess;
   bool                                                  storageInputOutput16;
+  bool                                                  storagePushConstant16;
+  bool                                                  storageBuffer8BitAccess;
+  bool                                                  uniformAndStorageBuffer8BitAccess;
+  bool                                                  storagePushConstant8;
   bool                                                  vulkanMemoryModel;
   bool                                                  descriptorIndexing;
   bool                                                  boundedDescriptorIndexing;

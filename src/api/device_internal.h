@@ -60,6 +60,16 @@ typedef struct GPURayTracingLimits {
   uint32_t maxHitAttributeSizeBytes;
 } GPURayTracingLimits;
 
+/* 8- and 16-bit data a device keeps narrow, by class (USL's spv_* storage
+ * atoms); storage buffers' 16-bit is uslStorageF16, stage I/O uslIOF16 */
+enum {
+  GPU_USL_NARROW_UNIFORM16 = 1u << 0,
+  GPU_USL_NARROW_PUSH16    = 1u << 1,
+  GPU_USL_NARROW_STORAGE8  = 1u << 2,
+  GPU_USL_NARROW_UNIFORM8  = 1u << 3,
+  GPU_USL_NARROW_PUSH8     = 1u << 4
+};
+
 struct GPUDevice {
   GPUInstance                *inst;
   GPUAdapter                 *adapter;
@@ -108,6 +118,7 @@ struct GPUDevice {
   bool                        uslHalfRoundtrip;
   bool                        uslBareConversions; /* spirv_bare_conversions: Qualcomm's compiler */
   bool                        uslStorageF16;
+  uint8_t                     uslNarrowStorage; /* GPU_USL_NARROW_*: classes keeping 8/16-bit data narrow */
   bool                        uslIOF16;
   bool                        uslCubeGradFixup;
   bool                        transientConfigured;

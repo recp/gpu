@@ -349,8 +349,9 @@ vk_bufferCreateInfo(GPUDevice                 *device,
     outInfo->usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
   }
 
+  /* whole 32-bit words: bindings round their ranges up to one (descriptor.c) */
   outInfo->sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  outInfo->size        = info->sizeBytes;
+  outInfo->size        = (info->sizeBytes + 3u) & ~(VkDeviceSize)3u;
   outInfo->sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
   return GPU_OK;

@@ -737,8 +737,12 @@ vk_getLimits(const GPUAdapter *__restrict adapter,
                                                            native->maxDescriptorSetUniformBuffersDynamic);
   outLimits->maxDynamicStorageBuffers        = vk_limitU32(outLimits->maxDynamicStorageBuffers,
                                                            native->maxDescriptorSetStorageBuffersDynamic);
-  outLimits->minUniformBufferOffsetAlignment = native->minUniformBufferOffsetAlignment;
-  outLimits->minStorageBufferOffsetAlignment = native->minStorageBufferOffsetAlignment;
+  /* at least a 32-bit word: USL keeps 8/16-bit data in words where the
+   * device can't store it narrow (descriptor.c refuses other offsets) */
+  outLimits->minUniformBufferOffsetAlignment = native->minUniformBufferOffsetAlignment < 4u
+                                                 ? 4u : native->minUniformBufferOffsetAlignment;
+  outLimits->minStorageBufferOffsetAlignment = native->minStorageBufferOffsetAlignment < 4u
+                                                 ? 4u : native->minStorageBufferOffsetAlignment;
   outLimits->maxColorAttachments             = vk_limitU32(outLimits->maxColorAttachments,
                                                            native->maxColorAttachments);
   outLimits->maxComputeWorkgroupSizeX        = native->maxComputeWorkGroupSize[0];
@@ -936,6 +940,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   VkPhysicalDeviceFeatures2KHR                 float16Features2     = {0};
   VkPhysicalDevice16BitStorageFeatures         storage16Features    = {0};
   VkPhysicalDeviceFeatures2                    storage16Features2   = {0};
+  VkPhysicalDevice8BitStorageFeatures          storage8Features     = {0};
+  VkPhysicalDeviceFeatures2                    storage8Features2    = {0};
   VkPhysicalDeviceVulkanMemoryModelFeatures    memoryModelFeatures  = {0};
   VkPhysicalDeviceFeatures2                    memoryModelFeatures2 = {0};
   VkPhysicalDeviceShaderAtomicInt64Features    atomic64Features     = {0};
@@ -1057,6 +1063,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool float16Core;
   bool storage16Extension;
   bool storage16Core;
+  bool storage8Extension;
   bool memoryModelExtension;
   bool memoryModelCore;
   bool atomic64Extension;
@@ -1199,6 +1206,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   float16Core               = false;
   storage16Extension        = false;
   storage16Core             = false;
+  storage8Extension         = false;
   memoryModelExtension      = false;
   memoryModelCore           = false;
   atomic64Extension         = false;
@@ -1345,6 +1353,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       if (!strcmp(VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
                   extensions[i].extensionName)) {
         storage16Extension = true;
+      }
+
+      if (!strcmp(VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
+                  extensions[i].extensionName)) {
+        storage8Extension = true;
       }
 
       if (!strcmp(VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME,
@@ -1767,13 +1780,38 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     adapterVk->storageBuffer16BitAccess           = storage16Features.storageBuffer16BitAccess;
     adapterVk->uniformAndStorageBuffer16BitAccess = storage16Features.uniformAndStorageBuffer16BitAccess;
     adapterVk->storageInputOutput16               = storage16Features.storageInputOutput16;
+    adapterVk->storagePushConstant16              = storage16Features.storagePushConstant16;
 
     if ((adapterVk->storageBuffer16BitAccess
          || adapterVk->uniformAndStorageBuffer16BitAccess
-         || adapterVk->storageInputOutput16)
+         || adapterVk->storageInputOutput16
+         || adapterVk->storagePushConstant16)
         && !storage16Core
         && !vk_addDeviceExtension(adapterVk,
                                   VK_KHR_16BIT_STORAGE_EXTENSION_NAME)) {
+      goto fail;
+    }
+  }
+
+  /* 8-bit data in storage buffers, uniform blocks and push constants: USL
+   * keeps it narrow where the device has it, else in 32-bit words at the
+   * same bytes (no atom, the same host layout) */
+  if (getFeatures2 && (float16Core || storage8Extension)) {
+    storage8Features.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES;
+    storage8Features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    storage8Features2.pNext = &storage8Features;
+    getFeatures2(raw, &storage8Features2);
+
+    adapterVk->storageBuffer8BitAccess           = storage8Features.storageBuffer8BitAccess;
+    adapterVk->uniformAndStorageBuffer8BitAccess = storage8Features.uniformAndStorageBuffer8BitAccess;
+    adapterVk->storagePushConstant8              = storage8Features.storagePushConstant8;
+
+    if ((adapterVk->storageBuffer8BitAccess
+         || adapterVk->uniformAndStorageBuffer8BitAccess
+         || adapterVk->storagePushConstant8)
+        && !float16Core
+        && !vk_addDeviceExtension(adapterVk,
+                                  VK_KHR_8BIT_STORAGE_EXTENSION_NAME)) {
       goto fail;
     }
   }
@@ -2859,6 +2897,7 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   VkPhysicalDeviceDynamicRenderingFeaturesKHR         dynamicFeatures          = {0};
   VkPhysicalDeviceShaderFloat16Int8Features           float16Features          = {0};
   VkPhysicalDevice16BitStorageFeatures                storage16Features        = {0};
+  VkPhysicalDevice8BitStorageFeatures                 storage8Features         = {0};
   VkPhysicalDeviceVulkanMemoryModelFeatures           memoryModelFeatures      = {0};
   VkPhysicalDeviceShaderAtomicInt64Features           atomic64Features         = {0};
 #ifdef VK_EXT_shader_atomic_float
@@ -3250,14 +3289,27 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
      * (SPIR-V before 1.3) */
     if (adapterVk->storageBuffer16BitAccess
         || adapterVk->uniformAndStorageBuffer16BitAccess
-        || adapterVk->storageInputOutput16) {
+        || adapterVk->storageInputOutput16
+        || adapterVk->storagePushConstant16) {
       storage16Features.sType                              = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
       storage16Features.pNext                              = (void *)deviceCI.pNext;
       storage16Features.storageBuffer16BitAccess           = adapterVk->storageBuffer16BitAccess;
       storage16Features.uniformAndStorageBuffer16BitAccess = adapterVk->uniformAndStorageBuffer16BitAccess;
       storage16Features.storageInputOutput16               = adapterVk->storageInputOutput16;
+      storage16Features.storagePushConstant16              = adapterVk->storagePushConstant16;
       deviceCI.pNext                                       = &storage16Features;
     }
+  }
+
+  if (adapterVk->storageBuffer8BitAccess
+      || adapterVk->uniformAndStorageBuffer8BitAccess
+      || adapterVk->storagePushConstant8) {
+    storage8Features.sType                             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES;
+    storage8Features.pNext                             = (void *)deviceCI.pNext;
+    storage8Features.storageBuffer8BitAccess           = adapterVk->storageBuffer8BitAccess;
+    storage8Features.uniformAndStorageBuffer8BitAccess = adapterVk->uniformAndStorageBuffer8BitAccess;
+    storage8Features.storagePushConstant8              = adapterVk->storagePushConstant8;
+    deviceCI.pNext                                     = &storage8Features;
   }
 #ifdef VK_EXT_shader_atomic_float
   if (adapterVk->floatAtomicAdd) {
@@ -3538,6 +3590,11 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   device->uslFloatControls2 = adapterVk->floatControls2;
   device->uslStorageF16     = storage16Features.storageBuffer16BitAccess == VK_TRUE;
   device->uslIOF16          = storage16Features.storageInputOutput16 == VK_TRUE;
+  device->uslNarrowStorage  = (storage16Features.uniformAndStorageBuffer16BitAccess ? GPU_USL_NARROW_UNIFORM16 : 0u)
+                            | (storage16Features.storagePushConstant16 ? GPU_USL_NARROW_PUSH16 : 0u)
+                            | (storage8Features.storageBuffer8BitAccess ? GPU_USL_NARROW_STORAGE8 : 0u)
+                            | (storage8Features.uniformAndStorageBuffer8BitAccess ? GPU_USL_NARROW_UNIFORM8 : 0u)
+                            | (storage8Features.storagePushConstant8 ? GPU_USL_NARROW_PUSH8 : 0u);
   device->uslHalfRoundtrip  = uslVulkanHalfRoundtrip(adapterVk->props.vendorID,
                                                      adapterVk->props.deviceID,
                                                      adapterVk->props.driverVersion);

@@ -152,6 +152,12 @@ static const char *const gpu_spirvRteAtoms[] = {
  * accepted (32 until USL raised it) */
 #define GPU_USL_TARGET_ATOMS 64u
 
+/* by GPU_USL_NARROW_* bit */
+static const char *const gpu_spirvNarrowAtoms[] = {
+  "spv_uniform_and_storage_buffer16_bit_access", "spv_storage_push_constant16",
+  "spv_storage_buffer8_bit_access", "spv_uniform_and_storage_buffer8_bit_access", "spv_storage_push_constant8"
+};
+
 static const uint32_t gpu_floatAtomicFeatures[] = {
   USL_SEMANTIC_FEATURE_ID_BUFFER_F32_ATOMIC_ADD,
   USL_SEMANTIC_FEATURE_ID_WORKGROUP_F32_ATOMIC_ADD
@@ -2892,6 +2898,14 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
     if (device->uslIOF16
         && us_cap_atom_text(&targetAtoms[targetAtomCount++], "spv_storage_input_output16") != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;
+    }
+
+    /* without one, USL packs that class's narrow data in 32-bit words */
+    for (floatModeIndex = 0u; floatModeIndex < GPU_ARRAY_LEN(gpu_spirvNarrowAtoms); ++floatModeIndex) {
+      if ((device->uslNarrowStorage & (1u << floatModeIndex))
+          && us_cap_atom_text(&targetAtoms[targetAtomCount++], gpu_spirvNarrowAtoms[floatModeIndex]) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
     }
 
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
