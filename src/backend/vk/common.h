@@ -343,6 +343,13 @@ typedef struct GPUDeviceVk {
 #endif
   bool                                           classicRenderLockInitialized;
   GPURetireList                                  retire;      /* destroyed objects work may still use (api/retire) */
+  struct GPUBindGroupLayoutVk                   *orphanLayouts; /* destroyed with groups left (impl/descriptor.c) */
+#if defined(_WIN32) || defined(WIN32)
+  CRITICAL_SECTION                               orphanLock;
+#else
+  pthread_mutex_t                                orphanLock;
+#endif
+  bool                                           orphanLockInitialized;
 } GPUDeviceVk;
 
 typedef struct GPUBufferVk {
@@ -459,8 +466,13 @@ typedef struct GPUBindGroupLayoutVk {
 #ifdef VK_EXT_descriptor_buffer
   GPUDescriptorBufferChunkVk *descriptorChunks;
   GPUDescriptorBindingVk     *descriptorBindings;
-  GPUDeviceVk                *gpuDevice;
 #endif
+  GPUDeviceVk                *gpuDevice;
+  struct GPUBindGroupLayoutVk *orphanPrev; /* destroyed, its groups not all gone: the device's list */
+  struct GPUBindGroupLayoutVk *orphanNext;
+  GPURetired                  retired;
+  uint32_t                    liveGroups; /* under poolLock */
+  bool                        destroyed;  /* under poolLock: the last group frees it */
   uint32_t                   *dynamicOrder;
   VkSampler                  *immutableSamplers;
   VkDevice                    device;
@@ -507,6 +519,7 @@ typedef struct GPUBindGroupVk {
   VkDeviceSize                descriptorOffset;
   uint32_t                    descriptorSlot;
 #endif
+  GPURetired                  retired;
 } GPUBindGroupVk;
 
 typedef struct GPUDescriptorStateVk {
@@ -735,8 +748,10 @@ struct GPUTextureViewVk {
 };
 
 typedef struct GPUSamplerVk {
-  VkDevice  device;
-  VkSampler sampler;
+  GPUDeviceVk *gpuDevice;
+  GPURetired   retired;
+  VkDevice     device;
+  VkSampler    sampler;
 } GPUSamplerVk;
 
 typedef struct GPUShaderLayoutVk {

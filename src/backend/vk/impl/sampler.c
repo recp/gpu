@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 #include "../../../api/sampler_internal.h"
 
 #include <us/compiler.h>
@@ -114,8 +115,9 @@ vk__createSampler(GPUDevice *device, const VkSamplerCreateInfo *info, GPUSampler
     return GPU_ERROR_OUT_OF_MEMORY;
   }
 
-  native         = (GPUSamplerVk *)(sampler + 1);
-  native->device = deviceVk->device;
+  native            = (GPUSamplerVk *)(sampler + 1);
+  native->gpuDevice = deviceVk;
+  native->device    = deviceVk->device;
 
   if (vkCreateSampler(native->device,
                       info,
@@ -210,6 +212,24 @@ vk_createSampler(GPUApi          *__restrict api,
                            outSampler);
 }
 
+static void
+vk__releaseSampler(void *context, void *owner) {
+  GPUSampler   *sampler;
+  GPUSamplerVk *native;
+
+  GPU__UNUSED(context);
+  sampler = owner;
+  native  = sampler->_priv;
+
+  if (native && native->device && native->sampler) {
+    vkDestroySampler(native->device, native->sampler, NULL);
+  }
+
+  free(sampler);
+}
+
+/* kept until the work given before it finishes (impl/retire.c): its
+ * descriptors there still name it */
 GPU_HIDE
 void
 vk_destroySampler(GPUSampler *__restrict sampler) {
@@ -221,11 +241,12 @@ vk_destroySampler(GPUSampler *__restrict sampler) {
 
   native = sampler->_priv;
 
-  if (native && native->device && native->sampler) {
-    vkDestroySampler(native->device, native->sampler, NULL);
+  if (!native || !native->gpuDevice) {
+    vk__releaseSampler(NULL, sampler);
+    return;
   }
 
-  free(sampler);
+  vk_retire(native->gpuDevice, &native->retired, sampler, vk__releaseSampler);
 }
 
 GPU_HIDE

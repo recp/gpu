@@ -363,6 +363,11 @@ vk_retire(GPUDeviceVk       *deviceVk,
           void              *owner,
           GPURetireReleaseFn release);
 
+/* after vk_finishRetire: layouts destroyed while groups never destroyed kept them */
+GPU_HIDE
+void
+vk_destroyOrphanLayouts(GPUDeviceVk *deviceVk);
+
 /* the queue finished its work up to serial (and so all before it) */
 GPU_HIDE
 void

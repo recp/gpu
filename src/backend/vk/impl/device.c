@@ -3014,6 +3014,16 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
 
   deviceVk->classicRenderLockInitialized = true;
 #endif
+#if defined(_WIN32) || defined(WIN32)
+  InitializeCriticalSection(&deviceVk->orphanLock);
+  deviceVk->orphanLockInitialized = true;
+#else
+  if (pthread_mutex_init(&deviceVk->orphanLock, NULL) != 0) {
+    goto err;
+  }
+
+  deviceVk->orphanLockInitialized = true;
+#endif
 
   if (!vk_initRetire(deviceVk)) {
     goto err;
@@ -3922,6 +3932,7 @@ err:
     }
 
     vk_finishRetire(deviceVk);
+    vk_destroyOrphanLayouts(deviceVk);
 
     if (deviceVk->createdQueues) {
       for (cleanupIndex = 0; cleanupIndex < deviceVk->nCreatedQueues; cleanupIndex++) {
@@ -3942,6 +3953,14 @@ err:
       DeleteCriticalSection(&deviceVk->classicRenderLock);
 #else
       pthread_mutex_destroy(&deviceVk->classicRenderLock);
+#endif
+    }
+
+    if (deviceVk->orphanLockInitialized) {
+#if defined(_WIN32) || defined(WIN32)
+      DeleteCriticalSection(&deviceVk->orphanLock);
+#else
+      pthread_mutex_destroy(&deviceVk->orphanLock);
 #endif
     }
 
@@ -3974,6 +3993,7 @@ vk_destroyDevice(GPUDevice * __restrict device) {
     /* idle: what was destroyed while in use goes, before the queues (their
      * last waits reclaim) and its memory's pool */
     vk_finishRetire(deviceVk);
+    vk_destroyOrphanLayouts(deviceVk);
 
     if (deviceVk->createdQueues) {
       for (i = 0; i < deviceVk->nCreatedQueues; i++) {
@@ -3994,6 +4014,14 @@ vk_destroyDevice(GPUDevice * __restrict device) {
       DeleteCriticalSection(&deviceVk->classicRenderLock);
 #else
       pthread_mutex_destroy(&deviceVk->classicRenderLock);
+#endif
+    }
+
+    if (deviceVk->orphanLockInitialized) {
+#if defined(_WIN32) || defined(WIN32)
+      DeleteCriticalSection(&deviceVk->orphanLock);
+#else
+      pthread_mutex_destroy(&deviceVk->orphanLock);
 #endif
     }
 

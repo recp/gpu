@@ -15,6 +15,7 @@
  */
 
 #include "../common.h"
+#include "../impl.h"
 #include "../../../api/buffer_internal.h"
 #include "../../../api/descr/descriptor_internal.h"
 #include "../../../api/image_buffer_internal.h"
@@ -527,24 +528,72 @@ vk__allocateDescriptorSet(GPUBindGroupLayoutVk *layout,
   return gpuResult;
 }
 
+/* under the layout's lock */
 static void
 vk__freeDescriptorSet(GPUBindGroupVk *group) {
   GPUBindGroupLayoutVk *layout;
 
-  layout = group ? group->layout : NULL;
+  layout = group->layout;
 
-  if (!layout || !group->pool || !group->set) {
+  if (!group->pool || !group->set) {
     return;
   }
 
-  vk__descriptorPoolLock(layout);
   (void)vkFreeDescriptorSets(layout->device,
                              group->pool->pool,
                              1u,
                              &group->set);
-  vk__descriptorPoolUnlock(layout);
   group->set  = VK_NULL_HANDLE;
   group->pool = NULL;
+}
+
+static void
+vk__orphanLock(GPUDeviceVk *deviceVk) {
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(&deviceVk->orphanLock);
+#else
+  pthread_mutex_lock(&deviceVk->orphanLock);
+#endif
+}
+
+static void
+vk__orphanUnlock(GPUDeviceVk *deviceVk) {
+#if defined(_WIN32) || defined(WIN32)
+  LeaveCriticalSection(&deviceVk->orphanLock);
+#else
+  pthread_mutex_unlock(&deviceVk->orphanLock);
+#endif
+}
+
+/* a destroyed layout whose groups aren't all gone: on the device's list
+ * until its last group goes (or the device does) */
+static void
+vk__orphanLink(GPUBindGroupLayoutVk *layout, bool link) {
+  GPUDeviceVk *deviceVk;
+
+  deviceVk = layout->gpuDevice;
+
+  if (!deviceVk || !deviceVk->orphanLockInitialized) {
+    return;
+  }
+
+  vk__orphanLock(deviceVk);
+  if (link) {
+    layout->orphanPrev = NULL;
+    layout->orphanNext = deviceVk->orphanLayouts;
+    if (layout->orphanNext)
+      layout->orphanNext->orphanPrev = layout;
+    deviceVk->orphanLayouts = layout;
+  } else {
+    if (layout->orphanPrev)
+      layout->orphanPrev->orphanNext = layout->orphanNext;
+    else
+      deviceVk->orphanLayouts = layout->orphanNext;
+    if (layout->orphanNext)
+      layout->orphanNext->orphanPrev = layout->orphanPrev;
+    layout->orphanPrev = layout->orphanNext = NULL;
+  }
+  vk__orphanUnlock(deviceVk);
 }
 
 #ifdef VK_EXT_descriptor_buffer
@@ -702,20 +751,19 @@ vk__allocateDescriptorSlot(GPUDevice            *device,
   return GPU_OK;
 }
 
+/* under the layout's lock */
 static void
 vk__freeDescriptorSlot(GPUBindGroupVk *group) {
   GPUBindGroupLayoutVk *layout;
 
-  layout = group ? group->layout : NULL;
+  layout = group->layout;
 
-  if (!layout || !group->descriptorChunk
+  if (!group->descriptorChunk
       || group->descriptorSlot >= layout->descriptorSlotCapacity) {
     return;
   }
 
-  vk__descriptorPoolLock(layout);
   group->descriptorChunk->usedSlots &= ~(1ull << group->descriptorSlot);
-  vk__descriptorPoolUnlock(layout);
   group->descriptorChunk  = NULL;
   group->descriptorOffset = 0u;
   group->descriptorSlot   = 0u;
@@ -1189,17 +1237,78 @@ vk__writeImmutableDescriptorBuffer(DescriptorBufferWriteVk    *context) {
 
 #endif
 
+/* the group's descriptors back to its layout, now; the layout too when it
+ * was destroyed and this was its last group */
 static void
 vk__destroyBindGroupState(GPUBindGroupVk *native) {
+  GPUBindGroupLayoutVk *layout;
+  bool                  layoutGoes;
+
   if (!native) {
     return;
   }
 
+  if (!(layout = native->layout)) {
+    free(native);
+    return;
+  }
+
+  vk__descriptorPoolLock(layout);
   vk__freeDescriptorSet(native);
 #ifdef VK_EXT_descriptor_buffer
   vk__freeDescriptorSlot(native);
 #endif
+  layoutGoes = --layout->liveGroups == 0u && layout->destroyed;
+  vk__descriptorPoolUnlock(layout);
   free(native);
+
+  if (layoutGoes) {
+    vk__orphanLink(layout, false);
+    vk__destroyBindGroupLayoutState(layout);
+  }
+}
+
+static void
+vk__releaseBindGroup(void *context, void *owner) {
+  GPU__UNUSED(context);
+  vk__destroyBindGroupState(owner);
+}
+
+/* the layout's own release, once work given before its destroy is done:
+ * it goes now unless groups made with it are left (the last frees it) */
+static void
+vk__releaseBindGroupLayout(void *context, void *owner) {
+  GPUBindGroupLayoutVk *layout;
+  bool                  goes;
+
+  GPU__UNUSED(context);
+  layout = owner;
+
+  vk__descriptorPoolLock(layout);
+  layout->destroyed = true;
+  goes              = layout->liveGroups == 0u;
+  if (!goes)
+    vk__orphanLink(layout, true);
+  vk__descriptorPoolUnlock(layout);
+
+  if (goes)
+    vk__destroyBindGroupLayoutState(layout);
+}
+
+GPU_HIDE
+void
+vk_destroyOrphanLayouts(GPUDeviceVk *deviceVk) {
+  GPUBindGroupLayoutVk *layout;
+
+  if (!deviceVk || !deviceVk->orphanLockInitialized)
+    return;
+
+  /* the device idle and its retire list empty: what is here kept groups the
+   * caller never destroyed; those groups go unusable with the device */
+  while ((layout = deviceVk->orphanLayouts)) {
+    deviceVk->orphanLayouts = layout->orphanNext;
+    vk__destroyBindGroupLayoutState(layout);
+  }
 }
 
 #ifdef VK_EXT_descriptor_buffer
@@ -1823,15 +1932,25 @@ vk_createBindGroupLayout(GPUDevice          *device,
   return GPU_OK;
 }
 
+/* kept until the work given before it finishes and its groups are gone:
+ * their descriptors live in its pools and chunks */
 GPU_HIDE
 void
 vk_destroyBindGroupLayout(GPUBindGroupLayout *layout) {
-  if (!layout) {
+  GPUBindGroupLayoutVk *native;
+
+  if (!layout || !(native = layout->_native)) {
     return;
   }
 
-  vk__destroyBindGroupLayoutState(layout->_native);
   layout->_native = NULL;
+
+  if (!native->gpuDevice || !native->poolLockInitialized) {
+    vk__destroyBindGroupLayoutState(native);
+    return;
+  }
+
+  vk_retire(native->gpuDevice, &native->retired, native, vk__releaseBindGroupLayout);
 }
 
 GPU_HIDE
@@ -2274,6 +2393,9 @@ vk_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
 
   native->layout = layoutVk;
   native->device = deviceVk->device;
+  vk__descriptorPoolLock(layoutVk);
+  layoutVk->liveGroups++; /* vk__destroyBindGroupState counts it out */
+  vk__descriptorPoolUnlock(layoutVk);
   result         = vk__allocateDescriptorSet(layoutVk,
                                              &native->pool,
                                              &native->set);
@@ -2401,15 +2523,26 @@ vk_updateBindGroup(GPUBindGroup            *group,
   return true;
 }
 
+/* its descriptor set or descriptor-buffer slot is kept until the work given
+ * before its destroy finishes: a group made meanwhile would write over
+ * descriptors the GPU still reads */
 GPU_HIDE
 void
 vk_destroyBindGroup(GPUBindGroup *group) {
-  if (!group) {
+  GPUBindGroupVk *native;
+
+  if (!group || !(native = group->_native)) {
     return;
   }
 
-  vk__destroyBindGroupState(group->_native);
   group->_native = NULL;
+
+  if (!native->layout || !native->layout->gpuDevice) {
+    vk__destroyBindGroupState(native);
+    return;
+  }
+
+  vk_retire(native->layout->gpuDevice, &native->retired, native, vk__releaseBindGroup);
 }
 
 GPU_HIDE

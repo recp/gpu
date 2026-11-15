@@ -1642,6 +1642,160 @@ destroy_while_in_use(GPUDevice *device,
   return ok;
 }
 
+static uint32_t
+retired_count(const GPUDeviceVk *deviceVk) {
+  const GPURetired *node;
+  uint32_t          count;
+
+  for (count = 0u, node = deviceVk->retire.head; node; node = node->next)
+    count++;
+  return count;
+}
+
+/* samplers, bind groups and their layouts destroyed while the queue still
+ * uses them wait for that work, as buffers do: a group's descriptor set or
+ * slot, a layout's pools and chunks are what the next ones are given. A
+ * layout destroyed before its group waits for the group, which frees it. */
+static int
+destroy_bindings_while_in_use(GPUDevice *device, GPUQueue *queue) {
+  GPUBindGroupLayoutEntry      layoutEntries[2] = {0};
+  GPUBindGroupLayoutCreateInfo layoutInfo       = {0};
+  GPUBindGroupEntry            groupEntries[2]  = {0};
+  GPUBindGroupCreateInfo       groupInfo        = {0};
+  GPUBufferCreateInfo          bufferInfo       = {0};
+  GPUSamplerCreateInfo         samplerInfo      = {0};
+  GPUDeviceVk                 *deviceVk;
+  GPUQueueVk                  *native;
+  GPUBindGroupLayout          *layout;
+  GPUBindGroup                *group;
+  GPUSampler                  *sampler;
+  GPUBuffer                   *uniform;
+  GPUBuffer                   *kept;
+  uint32_t                     values[64];
+  uint32_t                     readback[64];
+  uint32_t                     validationBefore;
+  uint32_t                     i;
+  int                          ok;
+
+  native   = queue ? queue->_priv : NULL;
+  deviceVk = device ? device->_priv : NULL;
+  layout   = NULL;
+  group    = NULL;
+  sampler  = NULL;
+  uniform  = NULL;
+  kept     = NULL;
+
+  if (!native || !deviceVk || !device->inst) {
+    return 0;
+  }
+
+  validationBefore              = device->inst->validationError;
+  device->inst->validationError = 0u;
+
+  for (i = 0u; i < 64u; i++) {
+    values[i] = UINT32_C(0x5A000000) + i;
+  }
+
+  memset(readback, 0, sizeof(readback));
+  bufferInfo.chain.sType          = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize     = sizeof(bufferInfo);
+  bufferInfo.label                = "vulkan-bindings-destroyed-in-use";
+  bufferInfo.sizeBytes            = sizeof(values);
+  bufferInfo.usage                = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+  samplerInfo.chain.sType         = GPU_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  samplerInfo.chain.structSize    = sizeof(samplerInfo);
+  samplerInfo.label               = "vulkan-bindings-destroyed-in-use";
+  samplerInfo.desc.minFilter      = GPU_FILTER_LINEAR;
+  samplerInfo.desc.magFilter      = GPU_FILTER_LINEAR;
+  samplerInfo.desc.mipFilter      = GPU_MIP_FILTER_LINEAR;
+  samplerInfo.desc.addressU       = GPU_ADDRESS_MODE_REPEAT;
+  samplerInfo.desc.addressV       = GPU_ADDRESS_MODE_REPEAT;
+  samplerInfo.desc.addressW       = GPU_ADDRESS_MODE_REPEAT;
+  layoutEntries[0].binding        = 0u;
+  layoutEntries[0].bindingType    = GPU_BINDING_UNIFORM_BUFFER;
+  layoutEntries[0].visibility     = GPU_SHADER_STAGE_COMPUTE_BIT;
+  layoutEntries[0].arrayCount     = 1u;
+  layoutEntries[1].binding        = 1u;
+  layoutEntries[1].bindingType    = GPU_BINDING_SAMPLER;
+  layoutEntries[1].visibility     = GPU_SHADER_STAGE_COMPUTE_BIT;
+  layoutEntries[1].arrayCount     = 1u;
+  layoutInfo.chain.sType          = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize     = sizeof(layoutInfo);
+  layoutInfo.label                = "vulkan-bindings-destroyed-in-use";
+  layoutInfo.entryCount           = 2u;
+  layoutInfo.pEntries             = layoutEntries;
+  groupEntries[0].binding         = 0u;
+  groupEntries[0].bindingType     = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntries[0].buffer.size     = sizeof(values);
+  groupEntries[1].binding         = 1u;
+  groupEntries[1].bindingType     = GPU_BINDING_SAMPLER;
+  groupInfo.chain.sType           = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize      = sizeof(groupInfo);
+  groupInfo.label                 = "vulkan-bindings-destroyed-in-use";
+  groupInfo.entryCount            = 2u;
+  groupInfo.pEntries              = groupEntries;
+
+  ok = GPUCreateBuffer(device, &bufferInfo, &uniform) == GPU_OK && uniform;
+  /* written by the queue's transfer batch, as destroy_while_in_use's are */
+  bufferInfo.usage = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
+  ok = ok && GPUCreateBuffer(device, &bufferInfo, &kept) == GPU_OK && kept
+       && GPUCreateSampler(device, &samplerInfo, false, &sampler) == GPU_OK && sampler
+       && GPUCreateBindGroupLayout(device, &layoutInfo, &layout) == GPU_OK && layout;
+
+  if (ok) {
+    groupEntries[0].buffer.buffer = uniform;
+    groupEntries[1].sampler       = sampler;
+    groupInfo.layout              = layout;
+    ok = GPUCreateBindGroup(device, &groupInfo, &group) == GPU_OK && group
+         && GPUQueueWaitIdle(queue) == GPU_OK;
+  }
+
+  /* destroyed while a transfer batch records: all three wait for it */
+  ok = ok && GPUQueueWriteBuffer(queue, kept, 0u, values, sizeof(values)) == GPU_OK
+       && native->transferOpen;
+  GPUDestroyBindGroup(group);
+  GPUDestroyBindGroupLayout(layout);
+  GPUDestroySampler(sampler);
+  group   = NULL;
+  layout  = NULL;
+  sampler = NULL;
+  ok      = ok && retired_count(deviceVk) == 3u;
+  if (!ok)
+    fprintf(stderr, "bindings destroyed in use: %u waiting, 3 expected\n", retired_count(deviceVk));
+  ok = ok && GPUQueueReadBuffer(queue, kept, 0u, readback, sizeof(readback)) == GPU_OK
+       && memcmp(readback, values, sizeof(values)) == 0
+       && deviceVk->retire.head == NULL && deviceVk->orphanLayouts == NULL;
+
+  /* a layout destroyed before its group: kept for the group, freed with it */
+  ok = ok && GPUQueueWaitIdle(queue) == GPU_OK
+       && GPUCreateSampler(device, &samplerInfo, false, &sampler) == GPU_OK && sampler
+       && GPUCreateBindGroupLayout(device, &layoutInfo, &layout) == GPU_OK && layout;
+
+  if (ok) {
+    groupEntries[1].sampler = sampler;
+    groupInfo.layout        = layout;
+    ok = GPUCreateBindGroup(device, &groupInfo, &group) == GPU_OK && group;
+  }
+
+  GPUDestroyBindGroupLayout(layout);
+  layout = NULL;
+  ok     = ok && deviceVk->retire.head == NULL && deviceVk->orphanLayouts != NULL;
+  GPUDestroyBindGroup(group);
+  group = NULL;
+  ok    = ok && deviceVk->orphanLayouts == NULL
+          && device->inst->validationError == 0u;
+
+  GPUDestroyBindGroup(group);
+  GPUDestroyBindGroupLayout(layout);
+  GPUDestroySampler(sampler);
+  GPUDestroyBuffer(uniform);
+  GPUDestroyBuffer(kept);
+  (void)GPUQueueWaitIdle(queue);
+  device->inst->validationError |= validationBefore;
+
+  return ok;
+}
+
 int
 main(void) {
   GPUInstanceCreateInfo  instanceInfo  = {0};
@@ -1793,6 +1947,8 @@ main(void) {
                large_staging_goes_back(device, graphics, fence));
   VULKAN_CHECK("destroy while in use",
                destroy_while_in_use(device, graphics, fence));
+  VULKAN_CHECK("bindings destroyed while in use",
+               destroy_bindings_while_in_use(device, graphics));
   VULKAN_CHECK("timestamp roundtrip",
                timestamp_roundtrip(device, graphics, fence));
   VULKAN_CHECK("frame time roundtrip",
