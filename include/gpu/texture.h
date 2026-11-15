@@ -175,6 +175,15 @@ GPUResult
 GPUGetTextureInfo(GPUTexture     *__restrict texture,
                   GPUTextureInfo *__restrict outInfo);
 
+/* the texture's memory made resident ahead of its first use, on a worker: nothing is queued and nothing waits (a use
+ * that comes first maps it as it would). Its first command buffer otherwise maps all of it, whatever it touches: a
+ * 32 MB RGBA32F texture's ~8 M instructions, ~1 ms CPU on an M-series Mac. Metal: a residency set's request (macOS 15,
+ * iOS 18). Nothing to do where memory is resident once bound, when the texture is made: Vulkan, D3D12 (committed and
+ * placed resources resident from creation), WebGPU, CUDA. safe on any thread */
+GPU_EXPORT
+void
+GPUMakeTextureResident(GPUTexture *__restrict texture);
+
 GPU_EXPORT
 GPUResult
 GPUCreateTextureView(GPUTexture                     *__restrict texture,

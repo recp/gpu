@@ -1316,6 +1316,16 @@ check_resource_validation(GPUDevice *device) {
     return 0;
   }
 
+  /* residency ahead of use: nothing for none, twice for the same texture changes nothing it reads back */
+  GPUMakeTextureResident(NULL);
+  GPUMakeTextureResident(texture);
+  GPUMakeTextureResident(texture);
+  if (GPUGetTextureInfo(texture, &queriedTextureInfo) != GPU_OK || queriedTextureInfo.usage != textureInfo.usage) {
+    fprintf(stderr, "texture residency changed the texture\n");
+    GPUDestroyTexture(texture);
+    return 0;
+  }
+
   region.width        = 4u;
   region.height       = 4u;
   region.depth        = 1u;

@@ -536,6 +536,44 @@ mt_createTexture(GPUDevice                  *__restrict device,
   return GPU_OK;
 }
 
+/* GPUMakeTextureResident: the texture (or the heap it lies in) in a residency set whose request is made on a worker,
+ * the set let go after it (the request is a hint kept for the memory's life, as the pool's first heaps have it) */
+static void
+mt_makeTextureResident(GPUTexture *__restrict texture) {
+#if MT_HAS_METAL4
+  GPUTextureMT *native;
+  id<MTLDevice> device;
+  id            allocation;
+
+  if (!texture || !(native = texture->_priv) || !native->texture || texture->_memoryless)
+    return;
+
+  if (@available(macOS 15.0, iOS 18.0, *)) {
+    device     = native->texture.device;
+    allocation = native->texture.heap ? (id)native->texture.heap : (id)native->texture;
+    /* the block keeps the device and the memory until it's run */
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      MTLResidencySetDescriptor *setDesc;
+      id<MTLResidencySet>        set;
+
+      setDesc = [MTLResidencySetDescriptor new];
+      set     = [device newResidencySetWithDescriptor:setDesc error:nil];
+      [setDesc release];
+
+      if (!set)
+        return;
+
+      [set addAllocation:allocation];
+      [set commit];
+      [set requestResidency];
+      [set release];
+    });
+  }
+#else
+  (void)texture;
+#endif
+}
+
 GPU_HIDE
 void
 mt_destroyTexture(GPUTexture *__restrict texture) {
@@ -944,4 +982,5 @@ mt_initTexture(GPUTextureApi *api) {
   api->write       = mt_writeTexture;
   api->linearAlignment = mt_linearTextureAlignment;
   api->fromBuffer      = mt_textureFromBuffer;
+  api->makeResident    = mt_makeTextureResident;
 }

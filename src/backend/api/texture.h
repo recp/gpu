@@ -54,6 +54,9 @@ typedef struct GPUTextureApi {
   GPUResult (*fromBuffer)(GPUDevice                        *device,
                           const GPUBufferTextureCreateInfo *info,
                           GPUTexture                      **outTexture);
+
+  /* GPUMakeTextureResident; NULL: nothing to do (memory resident once bound, when the texture is made) */
+  void (*makeResident)(GPUTexture *texture);
 } GPUTextureApi;
 
 #ifdef __cplusplus

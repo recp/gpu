@@ -461,6 +461,17 @@ GPUDestroyTexture(GPUTexture *__restrict texture) {
 }
 
 GPU_EXPORT
+void
+GPUMakeTextureResident(GPUTexture *__restrict texture) {
+  GPUApi *api;
+
+  if (!texture || !(api = deviceApi(texture->device)) || !api->texture.makeResident)
+    return;
+
+  api->texture.makeResident(texture);
+}
+
+GPU_EXPORT
 GPUResult
 GPUGetTextureInfo(GPUTexture     *__restrict texture,
                   GPUTextureInfo *__restrict outInfo) {
