@@ -3019,6 +3019,13 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
       }
     }
 
+    /* wave ops for USL's own use (half stores paired across lanes), apart
+     * from the subgroups an app enables for its own shaders */
+    if (device->adapter && GPUIsFeatureSupported(device->adapter, GPU_FEATURE_SUBGROUPS)
+        && us_cap_atom_text(&targetAtoms[targetAtomCount++], "hlsl_wave_ops") != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SUBGROUPS)) {
       if (us_cap_atom_init(&targetAtoms[targetAtomCount++],
                            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
