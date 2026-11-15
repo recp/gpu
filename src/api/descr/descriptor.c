@@ -45,8 +45,9 @@ bindingViewResolve(GPUBindGroupBindingView *view) {
          || imageBufferBindingView(view);
 }
 
+/* one 64-bit word into the hash: a multiply each (bindGroupHash finishes it) */
 #define GPU_BIND_GROUP_HASH(HASH, VALUE) \
-  bindGroupHashBytes((HASH), &(VALUE), sizeof(VALUE))
+  (((HASH) ^ (uint64_t)(VALUE)) * 0x9e3779b97f4a7c15ull)
 
 enum {
   GPU_BIND_GROUP_CACHE_CAPACITY       = 256u,
@@ -165,44 +166,37 @@ bindGroupCacheUnlock(BindGroupCache    *cache) {
  * 0 means none yet. One atomic add per object, the rest is a load */
 static uint64_t gpu_bindUidNext;
 
-static uint64_t
-bindGroupUid(uint64_t *slot) {
+/* an object's first binding: a new id, the first of racing threads' wins */
+static GPU_NOINLINE uint64_t
+bindGroupUidNew(uint64_t *slot) {
   uint64_t uid;
 #if defined(_MSC_VER) && !defined(__clang__)
-  if ((uid = (uint64_t)InterlockedCompareExchange64((volatile LONG64 *)slot, 0, 0)) != 0u)
-    return uid;
+  LONG64 old;
+
   uid = (uint64_t)InterlockedIncrement64((volatile LONG64 *)&gpu_bindUidNext);
-  {
-    LONG64 old = InterlockedCompareExchange64((volatile LONG64 *)slot, (LONG64)uid, 0);
-    return old ? (uint64_t)old : uid;
-  }
+  old = InterlockedCompareExchange64((volatile LONG64 *)slot, (LONG64)uid, 0);
+  return old ? (uint64_t)old : uid;
 #else
   uint64_t expected;
 
-  if ((uid = __atomic_load_n(slot, __ATOMIC_ACQUIRE)) != 0u)
-    return uid;
-
   uid      = __atomic_add_fetch(&gpu_bindUidNext, 1u, __ATOMIC_RELAXED);
   expected = 0u;
-  if (!__atomic_compare_exchange_n(slot, &expected, uid, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+  if (!__atomic_compare_exchange_n(slot, &expected, uid, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
     uid = expected;
   return uid;
 #endif
 }
 
-static uint64_t
-bindGroupHashBytes(uint64_t hash, const void *data, size_t size) {
-  const uint8_t *bytes;
-  size_t         i;
-
-  bytes = data;
-
-  for (i = 0u; i < size; i++) {
-    hash ^= bytes[i];
-    hash *= 1099511628211ull;
-  }
-
-  return hash;
+/* the id is only a number, set once from 0: a plain (relaxed) load */
+static GPU_INLINE uint64_t
+bindGroupUid(uint64_t *slot) {
+  uint64_t uid;
+#if defined(_MSC_VER) && !defined(__clang__)
+  uid = (uint64_t)*(volatile const LONG64 *)slot; /* aligned: one read */
+#else
+  uid = __atomic_load_n(slot, __ATOMIC_RELAXED);
+#endif
+  return uid ? uid : bindGroupUidNew(slot);
 }
 
 static uint64_t
@@ -217,8 +211,7 @@ bindGroupHash(const GPUBindGroupPriv *priv) {
 
   for (i = 0u; i < priv->count; i++) {
     binding = &priv->bindings[i];
-    hash    = GPU_BIND_GROUP_HASH(hash, binding->binding);
-    hash    = GPU_BIND_GROUP_HASH(hash, binding->arrayIndex);
+    hash    = GPU_BIND_GROUP_HASH(hash, binding->binding | ((uint64_t)binding->arrayIndex << 32));
     hash    = GPU_BIND_GROUP_HASH(hash, binding->kind);
     hash    = GPU_BIND_GROUP_HASH(hash, binding->uid);
 
@@ -228,6 +221,9 @@ bindGroupHash(const GPUBindGroupPriv *priv) {
     }
   }
 
+  hash ^= hash >> 33;
+  hash *= 0xff51afd7ed558ccdull;
+  hash ^= hash >> 33;
   return hash;
 }
 
@@ -4214,7 +4210,7 @@ GPUResult
 GPUCreateBindGroup(GPUDevice                    *device,
                    const GPUBindGroupCreateInfo *info,
                    GPUBindGroup                **outGroup) {
-  GPUBindGroupBindingPriv        stackBindings[GPU_BIND_GROUP_CANDIDATE_STACK_SIZE] = {0};
+  GPUBindGroupBindingPriv        stackBindings[GPU_BIND_GROUP_CANDIDATE_STACK_SIZE];
   GPUBindGroupPriv               candidate = {0};
   uint32_t                       kindCounts[GPUBindKindCount] = {0};
   GPUBindGroup                  *cached;
@@ -4300,6 +4296,7 @@ GPUCreateBindGroup(GPUDevice                    *device,
     }
   } else {
     candidateBindings = stackBindings;
+    memset(stackBindings, 0, (size_t)runtimeCount * sizeof(*stackBindings)); /* the used ones only */
   }
 
   cursor = 0u;
