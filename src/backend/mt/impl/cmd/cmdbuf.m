@@ -694,6 +694,7 @@ mt_carryPendingBarrier(GPUCommandBuffer *cmdb) {
   native->pendingVisibility   = 0u;
 }
 
+#if MT_HAS_METAL4
 static bool
 mt__fullBarriers(void) {
   static int cached = -1;
@@ -705,6 +706,7 @@ mt__fullBarriers(void) {
 
   return cached != 0;
 }
+#endif
 
 GPU_HIDE
 void
@@ -780,12 +782,14 @@ mt_applyPendingBarrier(GPUCommandBuffer *cmdb,
 
   /* GPU_METAL_FULL_BARRIERS=1, a debug aid: every encoder waits for all the
    * work before it with every write made visible, to tell a missing barrier
-   * from other faults */
+   * from other faults (Metal 4's, where the SDK has it) */
+#if MT_HAS_METAL4
   if (native->mode == MTCommandMode4 && mt__fullBarriers()) {
     native->pendingAfterStages  = (uint64_t)MTLStageAll;
     native->pendingBeforeStages = (uint64_t)MTLStageAll;
     native->pendingVisibility  |= MTL4VisibilityOptionDevice;
   }
+#endif
 
   if (native->pendingAfterStages == 0 || native->pendingBeforeStages == 0) {
     return;
