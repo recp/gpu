@@ -178,9 +178,9 @@ main(int argc, char **argv) {
         fmaMask       = test < 64u ? test & 7u : 7u;
         denormMask    = test < 64u ? 0u : (test - 64u) >> 3u;
         rteMask       = test < 64u ? 0u : test & 7u;
-        modern        = strict && controls2 && mask == 7u;
+        modern        = strict && controls2 && mask == 7u; /* float_controls2's defaults: strict only */
         library       = NULL;
-        expectedMask  = strict && !modern ? mask : 0u;
+        expectedMask  = !modern ? mask : 0u; /* relaxed asks for the offered modes too */
         expectedModes = (expectedMask & 1u) + ((expectedMask >> 1u) & 1u) + ((expectedMask >> 2u) & 1u);
         expectedFma   = (fmaMask & 1u) + ((fmaMask >> 1u) & 1u) + ((fmaMask >> 2u) & 1u);
 
@@ -200,8 +200,7 @@ main(int argc, char **argv) {
         if (result != GPU_ERROR_BACKEND_FAILURE || library || calls != 1u
             || !valid || observedMask != expectedMask || observedModes != expectedModes
             || observedFma != fmaMask || observedFmaCount != expectedFma
-            || observedDenorm != (strict ? denormMask : 0u)
-            || observedRTE != (strict ? rteMask : 0u)
+            || observedDenorm != denormMask || observedRTE != rteMask
             || observedHalfFence != (strict && device.uslHalfRoundtrip ? 1u : 0u)
             || observedDefaults != (modern ? 3u : 0u)) {
           fprintf(stderr, "float controls round %u mask %u fma %u: result=%d calls=%u mask=%u modes=%u fma=%u/%u\n",
