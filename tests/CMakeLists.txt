@@ -589,11 +589,18 @@ if(GPU_BUILD_TESTS)
   gpu_add_usl_fixtures(GPU_FLOAT_ATOMIC_FIXTURES vulkan api-float-atomics
     "${PROJECT_SOURCE_DIR}/tests/api/float_atomic_buffer.usl"
     "${PROJECT_SOURCE_DIR}/tests/api/float_atomic_workgroup.usl")
+  # the strict runs' bytecode made strict: the source compiler folds as it runs
+  set(GPU_USL_FIXTURE_STRICT_IEEE ON)
+  gpu_add_usl_fixtures(GPU_FLOAT_ATOMIC_STRICT_FIXTURES vulkan api-float-atomics-strict
+    "${PROJECT_SOURCE_DIR}/tests/api/float_atomic_buffer.usl"
+    "${PROJECT_SOURCE_DIR}/tests/api/float_atomic_workgroup.usl")
+  unset(GPU_USL_FIXTURE_STRICT_IEEE)
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   add_executable(gpu-float-atomics-test
     ${PROJECT_SOURCE_DIR}/tests/api/float_atomics.c
     ${PROJECT_SOURCE_DIR}/tests/api/runner.c
-    ${GPU_FLOAT_ATOMIC_FIXTURES})
+    ${GPU_FLOAT_ATOMIC_FIXTURES}
+    ${GPU_FLOAT_ATOMIC_STRICT_FIXTURES})
   target_include_directories(gpu-float-atomics-test PRIVATE "${GPU_USL_ROOT}/us/include")
   target_link_libraries(gpu-float-atomics-test PRIVATE gpu)
   if(TARGET gpu-test-runtime-stage)
@@ -618,11 +625,16 @@ if(GPU_BUILD_TESTS)
   foreach(backend IN LISTS floatAtomicBackends)
     foreach(domain buffer workgroup)
       if(domain STREQUAL "buffer")
-        list(GET GPU_FLOAT_ATOMIC_FIXTURES 0 fixture)
+        set(fixtureIndex 0)
       else()
-        list(GET GPU_FLOAT_ATOMIC_FIXTURES 1 fixture)
+        set(fixtureIndex 1)
       endif()
       foreach(mode strict relaxed)
+        if(mode STREQUAL "strict")
+          list(GET GPU_FLOAT_ATOMIC_STRICT_FIXTURES ${fixtureIndex} fixture)
+        else()
+          list(GET GPU_FLOAT_ATOMIC_FIXTURES ${fixtureIndex} fixture)
+        endif()
         set(testName "${backend}-float-atomic-${domain}-${mode}")
         add_test(NAME ${testName} COMMAND gpu-float-atomics-test ${backend} ${fixture} ${domain})
         if(mode STREQUAL "strict")
@@ -641,10 +653,15 @@ if(GPU_BUILD_TESTS)
     set(GPU_USL_FIXTURE_TARGET_CAPS vulkan1_3,shader_f16)
     gpu_add_usl_fixtures(GPU_FLOAT_CONTROLS_FIXTURE vulkan api-float-controls
       "${PROJECT_SOURCE_DIR}/tests/api/float_controls.usl")
+    set(GPU_USL_FIXTURE_STRICT_IEEE ON)
+    gpu_add_usl_fixtures(GPU_FLOAT_CONTROLS_STRICT_FIXTURE vulkan api-float-controls-strict
+      "${PROJECT_SOURCE_DIR}/tests/api/float_controls.usl")
+    unset(GPU_USL_FIXTURE_STRICT_IEEE)
     unset(GPU_USL_FIXTURE_TARGET_CAPS)
     add_executable(gpu-float-controls-test
       ${PROJECT_SOURCE_DIR}/tests/api/float_controls.c
-      ${GPU_FLOAT_CONTROLS_FIXTURE})
+      ${GPU_FLOAT_CONTROLS_FIXTURE}
+      ${GPU_FLOAT_CONTROLS_STRICT_FIXTURE})
     target_include_directories(gpu-float-controls-test PRIVATE
       "${GPU_USL_ROOT}/us/include"
       "${GPU_USL_ROOT}/us/deps/SPIRV-Headers/include")
@@ -658,7 +675,7 @@ if(GPU_BUILD_TESTS)
       target_compile_options(gpu-float-controls-test PRIVATE -Wall -Wextra -Werror)
     endif()
     add_test(NAME api-float-controls
-      COMMAND gpu-float-controls-test ${GPU_FLOAT_CONTROLS_FIXTURE})
+      COMMAND gpu-float-controls-test ${GPU_FLOAT_CONTROLS_STRICT_FIXTURE})
     add_test(NAME api-float-controls-relaxed
       COMMAND gpu-float-controls-test ${GPU_FLOAT_CONTROLS_FIXTURE} relaxed)
     set_tests_properties(api-float-controls PROPERTIES

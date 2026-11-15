@@ -77,6 +77,11 @@ if((GPU_BUILD_TOOLS OR GPU_BUILD_TESTS OR GPU_BUILD_SAMPLES OR GPU_BUILD_BENCHMA
         "USL_TARGET_CAPS=${GPU_USL_FIXTURE_TARGET_CAPS}"
       )
     endif()
+    # a test that runs strict needs its bytecode made strict: the source
+    # compiler folds under the mode it runs in, and the runtime can't undo it
+    if(GPU_USL_FIXTURE_STRICT_IEEE)
+      list(APPEND targetCapsEnvironment USL_STRICT_IEEE=1)
+    endif()
     set(outputs)
     foreach(source IN ITEMS ${ARGN})
       get_filename_component(name "${source}" NAME_WE)
