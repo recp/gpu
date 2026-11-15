@@ -147,6 +147,11 @@ static const char *const gpu_spirvRteAtoms[] = {
   "spirv_rte_f16", "spirv_rte_f32", "spirv_rte_f64"
 };
 
+/* room for every target atom createShaderLibraryFromUSLImpl can add: about
+ * 45 on a Vulkan device with every feature, more than USL_RUNTIME_TARGET_MAX_ATOMS
+ * accepted (32 until USL raised it) */
+#define GPU_USL_TARGET_ATOMS 64u
+
 static const uint32_t gpu_floatAtomicFeatures[] = {
   USL_SEMANTIC_FEATURE_ID_BUFFER_F32_ATOMIC_ADD,
   USL_SEMANTIC_FEATURE_ID_WORKGROUP_F32_ATOMIC_ADD
@@ -2725,7 +2730,7 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
   USCompileOutput             compileOutput       = {0};
   USLCompileOptions           compileOptions;
   USLTargetSpec               target;
-  USLCapabilityAtomDesc       targetAtoms[USL_RUNTIME_TARGET_MAX_ATOMS];
+  USLCapabilityAtomDesc       targetAtoms[GPU_USL_TARGET_ATOMS];
   USCompileInput              compileInput;
   GPUApi                     *api;
   const char                 *payloadBackend;
@@ -3226,6 +3231,15 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
                          0u) != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
+  }
+
+  /* more atoms than USL takes: an answer, not a crash (the array above
+   * holds every one this function can add) */
+  if (targetAtomCount > USL_RUNTIME_TARGET_MAX_ATOMS) {
+    if (getenv("GPU_USL_LOG"))
+      fprintf(stderr, "GPU: USL takes %u target atoms, this device names %u\n",
+              (unsigned)USL_RUNTIME_TARGET_MAX_ATOMS, (unsigned)targetAtomCount);
+    return GPU_ERROR_UNSUPPORTED;
   }
 
   if (targetAtomCount > 0u
