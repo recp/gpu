@@ -371,6 +371,8 @@ mt_setRenderPipelineState(GPURenderPassEncoder   *rce,
 
       [native->modern setRenderPipelineState:state->render];
       [native->modern setDepthStencilState:state->depthStencil];
+      mt_holdObject(rce->_cmdb, state->render);
+      mt_holdObject(rce->_cmdb, state->depthStencil);
       [native->modern setCullMode:(MTLCullMode)cullMode];
       [native->modern setFrontFacingWinding:winding];
     }

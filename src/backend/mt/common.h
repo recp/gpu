@@ -504,6 +504,12 @@ mt_setArgumentSampler(GPUCommandBuffer *cmdb,
                       GPUSampler      *sampler,
                       uint32_t         index);
 
+/* kept (retained) until the command buffer's work is done: what a Metal 4
+ * encoder is given, which it doesn't retain itself */
+GPU_HIDE
+void
+mt_holdObject(GPUCommandBuffer *cmdb, id object);
+
 GPU_HIDE
 void
 mt_setArgumentAccelerationStructure(GPUCommandBuffer            *cmdb,

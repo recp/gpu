@@ -199,6 +199,7 @@ mt_bindTilePipeline(GPURenderPassEncoder *pass, GPUTilePipeline *pipeline) {
         [native->modern setArgumentTable:native->tileArguments->table atStages:MTLRenderStageTile];
       }
       [native->modern setRenderPipelineState:(id<MTLRenderPipelineState>)pipeline->native];
+      mt_holdObject(pass->_cmdb, (id)pipeline->native);
       return GPU_OK;
     }
     return GPU_ERROR_UNSUPPORTED;

@@ -381,6 +381,7 @@ mt_setComputePipelineState(GPUComputePassEncoder   *enc,
   if (native->modern) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
       [native->modern setComputePipelineState:(id<MTLComputePipelineState>)state->_priv];
+      mt_holdObject(enc->_cmdb, (id)state->_priv);
     }
   } else
 #endif

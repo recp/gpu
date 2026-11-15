@@ -378,17 +378,21 @@ mt__holdView(GPUCommandBuffer *cmdb, const MTTextureViewSlot *slot) {
   native->heldViews[native->heldViewCount++] = *slot;
 }
 
-static void
-mt__holdObject(GPUCommandBuffer *cmdb, id object) {
+GPU_HIDE
+void
+mt_holdObject(GPUCommandBuffer *cmdb, id object) {
   MTCommandBuffer *native;
   id              *grown;
   uint32_t         capacity;
+  uint32_t         i;
 
   if (!object || !(native = mt_commandBuffer(cmdb)))
     return;
 
-  if (native->heldObjectCount && native->heldObjects[native->heldObjectCount - 1u] == object)
-    return;
+  /* the last few: a pass sets the same pipeline, depth state and samplers over and over */
+  for (i = native->heldObjectCount; i > 0u && i + 4u > native->heldObjectCount; i--)
+    if (native->heldObjects[i - 1u] == object)
+      return;
 
   if (native->heldObjectCount == native->heldObjectCapacity) {
     capacity = native->heldObjectCapacity ? native->heldObjectCapacity * 2u : 16u;
@@ -463,7 +467,7 @@ mt_setArgumentSampler(GPUCommandBuffer *cmdb,
       setSamplerState:resourceID
               atIndex:index];
     state->samplerMask |= (uint16_t)(1u << index);
-    mt__holdObject(cmdb, (id)sampler->_priv);
+    mt_holdObject(cmdb, (id)sampler->_priv);
   }
 #else
   GPU__UNUSED(cmdb);
