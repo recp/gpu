@@ -37,6 +37,7 @@ struct GPUPipelineLayout {
   GPUDevice *_device;
   void      *_native;
   void      *_priv;
+  uint64_t   _uid; /* the pipeline cache's key (api/uid_internal.h) */
 };
 
 typedef enum GPUBindKind {

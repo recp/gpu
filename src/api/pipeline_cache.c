@@ -24,6 +24,7 @@
 #include "compile_pool_internal.h"
 #include "ray_internal.h"
 #include "render/pipeline_internal.h"
+#include "uid_internal.h"
 
 #if !defined(_WIN32) && !defined(WIN32)
 #  include <pthread.h>
@@ -274,6 +275,19 @@ pipelineKeyWriteConstants(PipelineKeyWriter      *writer,
   }
 }
 
+/* by id, not address: a library or layout made where a destroyed one lived
+ * must not get the old one's pipelines (another library's code under the
+ * same entry name, a pipeline made for other bindings) */
+static uint64_t
+pipelineKeyLayout(GPUPipelineLayout *layout) {
+  return layout ? gpuObjectUid(&layout->_uid) : 0u;
+}
+
+static uint64_t
+pipelineKeyLibrary(GPUShaderLibrary *library) {
+  return library ? gpuObjectUid(&library->_uid) : 0u;
+}
+
 static void
 pipelineKeyWriteRenderInfo(PipelineKeyWriter                 *writer,
                            const GPURenderPipelineCreateInfo *info) {
@@ -281,15 +295,15 @@ pipelineKeyWriteRenderInfo(PipelineKeyWriter                 *writer,
   const GPUVertexBufferLayout *bufferLayout;
   const GPUVertexAttribute    *attribute;
   const GPUColorTargetState   *target;
-  uintptr_t                    layout;
-  uintptr_t                    library;
+  uint64_t                     layout;
+  uint64_t                     library;
   uint32_t                     pipelineType;
   uint32_t                     i;
   uint32_t                     j;
   uint32_t                     k;
 
-  layout       = (uintptr_t)info->layout;
-  library      = (uintptr_t)info->library;
+  layout       = pipelineKeyLayout(info->layout);
+  library      = pipelineKeyLibrary(info->library);
   mesh         = pipelineMesh(info->chain.pNext);
   pipelineType = mesh ? GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT
                       : GPU_STRUCTURE_TYPE_NONE;
@@ -352,11 +366,11 @@ static void
 pipelineKeyWriteComputeInfo(PipelineKeyWriter                  *writer,
                             const GPUComputePipelineCreateInfo *info,
                             size_t                              entrySize) {
-  uintptr_t layout;
-  uintptr_t library;
+  uint64_t layout;
+  uint64_t library;
 
-  layout  = (uintptr_t)info->layout;
-  library = (uintptr_t)info->library;
+  layout  = pipelineKeyLayout(info->layout);
+  library = pipelineKeyLibrary(info->library);
   GPU_PIPELINE_KEY_WRITE(writer, layout);
   GPU_PIPELINE_KEY_WRITE(writer, library);
   pipelineKeyWrite(writer, info->entryPoint, entrySize);
@@ -367,12 +381,12 @@ static void
 pipelineKeyWriteRayInfo(PipelineKeyWriter                        *writer,
                         const GPURayTracingPipelineCreateInfoEXT *info) {
   const GPURayTracingShaderGroupEXT *group;
-  uintptr_t                          layout;
-  uintptr_t                          library;
+  uint64_t                           layout;
+  uint64_t                           library;
   uint32_t                           i;
 
-  layout  = (uintptr_t)info->layout;
-  library = (uintptr_t)info->library;
+  layout  = pipelineKeyLayout(info->layout);
+  library = pipelineKeyLibrary(info->library);
   GPU_PIPELINE_KEY_WRITE(writer, layout);
   GPU_PIPELINE_KEY_WRITE(writer, library);
   GPU_PIPELINE_KEY_WRITE(writer, info->groupCount);
@@ -395,11 +409,11 @@ pipelineKeyWriteRayInfo(PipelineKeyWriter                        *writer,
 static void
 pipelineKeyWriteGraphInfo(PipelineKeyWriter                    *writer,
                           const GPUExecutionGraphCreateInfoEXT *info) {
-  uintptr_t layout;
-  uintptr_t library;
+  uint64_t layout;
+  uint64_t library;
 
-  layout  = (uintptr_t)info->layout;
-  library = (uintptr_t)info->library;
+  layout  = pipelineKeyLayout(info->layout);
+  library = pipelineKeyLibrary(info->library);
   GPU_PIPELINE_KEY_WRITE(writer, layout);
   GPU_PIPELINE_KEY_WRITE(writer, library);
   pipelineKeyWriteOptionalString(writer, info->graphName);
@@ -489,7 +503,7 @@ buildComputePipelineKey(const GPUComputePipelineCreateInfo *info,
   outKey->ownsData = false;
 
   entrySize = strlen(info->entryPoint) + 1u;
-  size      = 2u * sizeof(uintptr_t) + sizeof(uint32_t);
+  size      = 2u * sizeof(uint64_t) + sizeof(uint32_t);
 
   if (entrySize > SIZE_MAX - size) {
     return false;

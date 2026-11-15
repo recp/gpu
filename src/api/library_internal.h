@@ -136,6 +136,7 @@ struct GPUShaderLibrary {
   GPUShaderReflection             _reflection;
   uint64_t                        _payloadHash; /* USL's, as GPU_USL_LOG printed it; 0 unknown */
   uint64_t                        _payloadSize; /* the backend code it was made from */
+  uint64_t                        _uid;         /* the pipeline cache's key (api/uid_internal.h) */
   uint32_t                        _constantCount;
   bool                            _constantIdsDense;
   bool                            _payloadBinary;

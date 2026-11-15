@@ -23,6 +23,12 @@
 #include "api/pipeline_cache_internal.h"
 #include "api/ray_internal.h"
 #include "api/render/pipeline_internal.h"
+#include "api/descr/descriptor_internal.h"
+#include "api/library_internal.h"
+
+/* keys hold a library's and a layout's id, not their address */
+static GPUPipelineLayout keyLayout  = {._uid = 0x1234u};
+static GPUShaderLibrary  keyLibrary = {._uid = 0x5678u};
 
 #define KEY_FIELD(FIELD) \
   appendBytes(expected, &size, &(FIELD), sizeof(FIELD))
@@ -168,8 +174,8 @@ checkRenderKey(GPUPipelineCache *cache,
   char                         storage[1025];
   const GPUDepthStencilState  *state;
   char                        *name;
-  uintptr_t                    layout;
-  uintptr_t                    library;
+  uint64_t                     layout;
+  uint64_t                     library;
   size_t                       size;
   uint32_t                     activeCount;
   uint32_t                     pipelineType;
@@ -259,8 +265,8 @@ checkRenderKey(GPUPipelineCache *cache,
   stencil.stencilReadMask   = 0xabcdu;
   stencil.stencilWriteMask  = 0xf0u;
 
-  info.layout                   = (GPUPipelineLayout *)(uintptr_t)0x1234u;
-  info.library                  = (GPUShaderLibrary *)(uintptr_t)0x5678u;
+  info.layout                   = &keyLayout;
+  info.library                  = &keyLibrary;
   info.vertexEntry              = name;
   info.fragmentEntry            = name;
   info.vertex.bufferLayoutCount = attributeCount ? 2u : 0u;
@@ -280,8 +286,8 @@ checkRenderKey(GPUPipelineCache *cache,
   memcpy(&originalInfo, &info, sizeof(info));
 
   size         = 0u;
-  layout       = (uintptr_t)info.layout;
-  library      = (uintptr_t)info.library;
+  layout       = keyLayout._uid;
+  library      = keyLibrary._uid;
   activeMesh   = mode && depth < 3u;
   activeCount  = depth + (uint32_t)(mode != 0u) < 3u ? count : 0u;
   pipelineType = activeMesh ? GPU_STRUCTURE_TYPE_MESH_PIPELINE_EXT : GPU_STRUCTURE_TYPE_NONE;
@@ -386,8 +392,8 @@ checkRayKey(GPUPipelineCache *cache, uint32_t count, uint32_t nameSize, uint32_t
   uint8_t                             expected[32768];
   char                                storage[129];
   char                               *name;
-  uintptr_t                           layout;
-  uintptr_t                           library;
+  uint64_t                            layout;
+  uint64_t                            library;
   size_t                              size;
   uint32_t                            i;
   uint32_t                            bits;
@@ -409,8 +415,8 @@ checkRayKey(GPUPipelineCache *cache, uint32_t count, uint32_t nameSize, uint32_t
 
   memcpy(original, groups, sizeof(groups));
 
-  info.layout                   = (GPUPipelineLayout *)(uintptr_t)0x1234u;
-  info.library                  = (GPUShaderLibrary *)(uintptr_t)0x5678u;
+  info.layout                   = &keyLayout;
+  info.library                  = &keyLibrary;
   info.pGroups                  = groups;
   info.groupCount               = count;
   info.maxRecursionDepth        = 3u;
@@ -418,8 +424,8 @@ checkRayKey(GPUPipelineCache *cache, uint32_t count, uint32_t nameSize, uint32_t
   info.maxHitAttributeSizeBytes = 8u;
 
   size    = 0u;
-  layout  = (uintptr_t)info.layout;
-  library = (uintptr_t)info.library;
+  layout  = keyLayout._uid;
+  library = keyLibrary._uid;
   KEY_FIELD(layout);
   KEY_FIELD(library);
   KEY_FIELD(info.groupCount);
@@ -453,8 +459,8 @@ checkGraphKey(GPUPipelineCache *cache, uint32_t nameSize) {
   uint8_t                         expected[2048];
   char                            storage[1025];
   char                           *name;
-  uintptr_t                       layout;
-  uintptr_t                       library;
+  uint64_t                        layout;
+  uint64_t                        library;
   size_t                          size;
 
   name = storage + 1u;
@@ -464,13 +470,13 @@ checkGraphKey(GPUPipelineCache *cache, uint32_t nameSize) {
     name[nameSize - 1u] = '\0';
   }
 
-  info.layout    = (GPUPipelineLayout *)(uintptr_t)0x1234u;
-  info.library   = (GPUShaderLibrary *)(uintptr_t)0x5678u;
+  info.layout    = &keyLayout;
+  info.library   = &keyLibrary;
   info.graphName = nameSize ? name : NULL;
 
   size    = 0u;
-  layout  = (uintptr_t)info.layout;
-  library = (uintptr_t)info.library;
+  layout  = keyLayout._uid;
+  library = keyLibrary._uid;
   KEY_FIELD(layout);
   KEY_FIELD(library);
   appendOptional(expected, &size, info.graphName);
@@ -526,8 +532,8 @@ checkKey(GPUPipelineCache *cache,
   uint8_t                      expected[4096];
   char                         name[1024];
   GPUComputePipeline          *pipeline = NULL;
-  uintptr_t                    layout;
-  uintptr_t                    library;
+  uint64_t                     layout;
+  uint64_t                     library;
   size_t                       size;
   uint64_t                     hash;
   uint32_t                     activeCount;
@@ -560,8 +566,8 @@ checkKey(GPUPipelineCache *cache,
   constants.pConstants       = values;
   constants.constantCount    = count;
   info.chain.pNext           = &constants.chain;
-  info.layout                = (GPUPipelineLayout *)(uintptr_t)0x1234u;
-  info.library               = (GPUShaderLibrary *)(uintptr_t)0x5678u;
+  info.layout                = &keyLayout;
+  info.library               = &keyLibrary;
   info.entryPoint            = name;
 
   for (i = 0u; i < depth; i++) {
@@ -571,8 +577,8 @@ checkKey(GPUPipelineCache *cache,
   }
 
   size        = 0u;
-  layout      = (uintptr_t)info.layout;
-  library     = (uintptr_t)info.library;
+  layout      = keyLayout._uid;
+  library     = keyLibrary._uid;
   activeCount = depth < 3u ? count : 0u;
   KEY_FIELD(layout);
   KEY_FIELD(library);
@@ -665,6 +671,13 @@ checkInvalid(GPUPipelineCache *cache) {
 }
 
 /* only the real cache writer/find path runs; native creation stays unused. */
+uint64_t
+gpuObjectUidNew(uint64_t *slot) {
+  (void)slot;
+  unexpectedCalls++; /* the fixtures carry ids */
+  return 0u;
+}
+
 GPUShaderFunction*
 shaderFunction(GPUShaderLibrary *library, const char *name) {
   (void)library;

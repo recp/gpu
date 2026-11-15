@@ -25,6 +25,7 @@
 #include "../sampler_internal.h"
 #include "../sampler_feedback_internal.h"
 #include "../texture_internal.h"
+#include "../uid_internal.h"
 #include "../image_buffer_internal.h"
 #include "descriptor_internal.h"
 
@@ -166,9 +167,9 @@ bindGroupCacheUnlock(BindGroupCache    *cache) {
  * 0 means none yet. One atomic add per object, the rest is a load */
 static uint64_t gpu_bindUidNext;
 
-/* an object's first binding: a new id, the first of racing threads' wins */
-static GPU_NOINLINE uint64_t
-bindGroupUidNew(uint64_t *slot) {
+GPU_HIDE GPU_NOINLINE
+uint64_t
+gpuObjectUidNew(uint64_t *slot) {
   uint64_t uid;
 #if defined(_MSC_VER) && !defined(__clang__)
   LONG64 old;
@@ -185,18 +186,6 @@ bindGroupUidNew(uint64_t *slot) {
     uid = expected;
   return uid;
 #endif
-}
-
-/* the id is only a number, set once from 0: a plain (relaxed) load */
-static GPU_INLINE uint64_t
-bindGroupUid(uint64_t *slot) {
-  uint64_t uid;
-#if defined(_MSC_VER) && !defined(__clang__)
-  uid = (uint64_t)*(volatile const LONG64 *)slot; /* aligned: one read */
-#else
-  uid = __atomic_load_n(slot, __ATOMIC_RELAXED);
-#endif
-  return uid ? uid : bindGroupUidNew(slot);
 }
 
 static uint64_t
@@ -4374,24 +4363,24 @@ GPUCreateBindGroup(GPUDevice                    *device,
           binding->buffer = entry->buffer.buffer;
           binding->offset = entry->buffer.offset;
           binding->size   = entry->buffer.size;
-          binding->uid    = binding->buffer ? bindGroupUid(&binding->buffer->_uid) : 0u;
+          binding->uid    = binding->buffer ? gpuObjectUid(&binding->buffer->_uid) : 0u;
           break;
         case GPUBindKindTexture:
           binding->textureView = entry->textureView;
-          binding->uid         = binding->textureView ? bindGroupUid(&binding->textureView->_uid) : 0u;
+          binding->uid         = binding->textureView ? gpuObjectUid(&binding->textureView->_uid) : 0u;
           break;
         case GPUBindKindSampler:
           binding->sampler = entry->sampler;
-          binding->uid     = binding->sampler ? bindGroupUid(&binding->sampler->_uid) : 0u;
+          binding->uid     = binding->sampler ? gpuObjectUid(&binding->sampler->_uid) : 0u;
           break;
         case GPUBindKindSamplerFeedback:
           binding->samplerFeedback = entry->samplerFeedback;
-          binding->uid             = binding->samplerFeedback ? bindGroupUid(&binding->samplerFeedback->_uid) : 0u;
+          binding->uid             = binding->samplerFeedback ? gpuObjectUid(&binding->samplerFeedback->_uid) : 0u;
           break;
         case GPUBindKindAccelerationStructure:
           binding->accelerationStructure = entry->accelerationStructure;
           binding->uid                   = binding->accelerationStructure
-                                             ? bindGroupUid(&binding->accelerationStructure->_uid) : 0u;
+                                             ? gpuObjectUid(&binding->accelerationStructure->_uid) : 0u;
           break;
         default:
           if (heapCandidate) {
@@ -4403,7 +4392,7 @@ GPUCreateBindGroup(GPUDevice                    *device,
   }
 
   candidate.layout             = layout;
-  candidate.layoutUid          = bindGroupUid(&layout->_uid);
+  candidate.layoutUid          = gpuObjectUid(&layout->_uid);
   candidate.bindings           = candidateBindings;
   candidate.count              = runtimeCount;
   candidate.dynamicOffsetCount = 0u;

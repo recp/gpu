@@ -707,6 +707,108 @@ cache_fail:
   return 0;
 }
 
+/* a library made where a destroyed one lived, through the cache holding the
+ * destroyed one's pipeline: keyed by address, the cache gave that pipeline
+ * back (another library's code under the same entry name); by id, a compile */
+static int
+check_compute_cache_reused_library(GPUDevice *device, const char *bytecodePath) {
+  const char                  *label      = "api-compute-reused-library";
+  GPUPipelineLayoutCreateInfo  layoutInfo = {0};
+  GPUPipelineCacheCreateInfo   cacheInfo  = {0};
+  GPUComputePipelineCreateInfo info       = {0};
+  GPUCacheStats                before     = {0};
+  GPUCacheStats                after      = {0};
+  GPUShaderLibrary            *spare[64];
+  GPUShaderLibrary            *library    = NULL;
+  GPUPipelineLayout           *layout     = NULL;
+  GPUPipelineCache            *cache      = NULL;
+  GPUComputePipeline          *pipeline   = NULL;
+  const void                  *oldAddress;
+  uint32_t                     spareCount = 0u;
+  int                          ok         = 0;
+
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.label            = label;
+  cacheInfo.chain.sType       = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  cacheInfo.chain.structSize  = sizeof(cacheInfo);
+  cacheInfo.label             = label;
+  cacheInfo.maxEntries        = 4u;
+
+  if (!create_compute_usl_library(device, bytecodePath, &library)
+      || GPUCreatePipelineLayout(device, &layoutInfo, &layout) != GPU_OK || !layout
+      || GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
+    fprintf(stderr, "%s: setup failed\n", label);
+    goto cleanup;
+  }
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.label            = label;
+  info.library          = library;
+  info.layout           = layout;
+  info.entryPoint       = "api_cs";
+  info.cache            = cache;
+
+  if (GPUCreateComputePipeline(device, &info, &pipeline) != GPU_OK || !pipeline
+      || GPUWaitComputePipeline(pipeline) != GPU_OK) {
+    fprintf(stderr, "%s: first pipeline failed\n", label);
+    goto cleanup;
+  }
+
+  GPUDestroyComputePipeline(pipeline);
+  pipeline   = NULL;
+  oldAddress = library;
+  GPUDestroyShaderLibrary(library);
+  library = NULL;
+
+  while (spareCount < 64u) {
+    if (!create_compute_usl_library(device, bytecodePath, &library)) {
+      fprintf(stderr, "%s: library failed\n", label);
+      goto cleanup;
+    }
+
+    if ((const void *)library == oldAddress)
+      break;
+
+    spare[spareCount++] = library;
+    library             = NULL;
+  }
+
+  if (!library) {
+    printf("%s: the allocator never reused the address, skipped\n", label);
+    ok = 1;
+    goto cleanup;
+  }
+
+  info.library = library;
+
+  if (GPUGetCacheStats(device, &before) != GPU_OK
+      || GPUCreateComputePipeline(device, &info, &pipeline) != GPU_OK || !pipeline
+      || GPUWaitComputePipeline(pipeline) != GPU_OK
+      || GPUGetCacheStats(device, &after) != GPU_OK) {
+    fprintf(stderr, "%s: second pipeline failed\n", label);
+    goto cleanup;
+  }
+
+  if (after.pipelineHits != before.pipelineHits
+      || after.pipelineMisses - before.pipelineMisses != 1u) {
+    fprintf(stderr, "%s: the new library got the destroyed one's cached pipeline\n", label);
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  GPUDestroyComputePipeline(pipeline);
+  while (spareCount > 0u)
+    GPUDestroyShaderLibrary(spare[--spareCount]);
+  GPUDestroyShaderLibrary(library);
+  GPUDestroyPipelineCache(cache);
+  GPUDestroyPipelineLayout(layout);
+  return ok;
+}
+
 static int
 check_compute_dispatch_validation_calls(GPUDevice *device) {
   GPUBindGroupLayoutEntry      entry      = {0};
@@ -1394,6 +1496,7 @@ gpu_test_compute(GPUDevice *device, const char *bytecodePath) {
 
   ok                    = check_compute_pass_validation(device)
                           && check_compute_pipeline_validation(device, bytecodePath)
+                          && check_compute_cache_reused_library(device, bytecodePath)
                           && check_compute_dispatch_validation_calls(device)
                           && check_compute_push_constant_shadowing_calls(device)
                           && check_compute_readback(device, bytecodePath);
@@ -1403,6 +1506,7 @@ gpu_test_compute(GPUDevice *device, const char *bytecodePath) {
     ok = GPUSetPipelineCompileThreads(device, 3u) == GPU_OK
          && GPUWaitComputePipeline(NULL) == GPU_ERROR_INVALID_ARGUMENT
          && check_compute_pipeline_validation(device, bytecodePath)
+         && check_compute_cache_reused_library(device, bytecodePath)
          && check_compute_readback(device, bytecodePath);
     (void)GPUSetPipelineCompileThreads(device, 0u);
     if (!ok)
