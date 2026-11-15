@@ -27,7 +27,8 @@
 typedef enum ComputeReadbackMode {
   COMPUTE_READBACK_DIRECT = 0,
   COMPUTE_READBACK_INDIRECT,
-  COMPUTE_READBACK_MULTI_INDIRECT
+  COMPUTE_READBACK_MULTI_INDIRECT,
+  COMPUTE_READBACK_REUSED_ADDRESS /* direct, into a buffer made where a destroyed one lived */
 } ComputeReadbackMode;
 
 typedef struct DispatchArgs {
@@ -966,11 +967,13 @@ check_compute_readback_case(GPUDevice          *device,
   const uint32_t              *expectedWords;
   const uint32_t               expectedSingle[4] = {1u, 2u, 3u, 4u};
   const uint32_t               expectedMulti[4] = {1u, 2u, 3u, 4u};
-  const int                    indirect = mode != COMPUTE_READBACK_DIRECT;
   const int                    multi = mode == COMPUTE_READBACK_MULTI_INDIRECT;
+  const int                    indirect = mode == COMPUTE_READBACK_INDIRECT || multi;
+  const int                    reused = mode == COMPUTE_READBACK_REUSED_ADDRESS;
   const char                  *label = multi ? "api-compute-multi-indirect"
                                          : (indirect ? "api-compute-indirect"
-                                              : "api-compute-direct");
+                                              : (reused ? "api-compute-reused-address"
+                                                   : "api-compute-direct"));
   GPUQueue                    *queue;
   GPUShaderLibrary            *library = NULL;
   GPUShaderReflection          reflection = {0};
@@ -980,6 +983,9 @@ check_compute_readback_case(GPUDevice          *device,
   GPUBuffer                   *outputBuffer = NULL;
   GPUBuffer                   *argsBuffer = NULL;
   GPUBindGroup                *bindGroup = NULL;
+  GPUBindGroup                *held = NULL;
+  GPUBuffer                   *spare[64];
+  uint32_t                     spareCount = 0u;
   GPUCommandBuffer            *cmdb = NULL;
   GPUCommandBuffer            *buffers[1];
   GPUComputePassEncoder       *computePass = NULL;
@@ -1080,8 +1086,67 @@ check_compute_readback_case(GPUDevice          *device,
                                 GPU_BUFFER_USAGE_COPY_SRC |
                                 GPU_BUFFER_USAGE_COPY_DST;
 
-  if (GPUCreateBuffer(device, &bufferInfo, &outputBuffer) != GPU_OK
-      || !outputBuffer
+  /* the group outlives its buffer, as an app may let it; the output is a
+   * buffer made at the destroyed one's address. Where a group bakes its
+   * descriptors (Vulkan sets, D3D12 tables, WebGPU, Metal argument buffers) a
+   * cache keyed by address gave back the old group and the dispatch wrote the
+   * destroyed buffer; Metal's plain buffer binds read the pointer at bind */
+  if (reused) {
+    GPUBindGroupEntry      heldEntry = {0};
+    GPUBindGroupCreateInfo heldInfo  = {0};
+    GPUBufferCreateInfo    otherInfo;
+    const void            *oldAddress;
+    GPUBuffer             *candidate;
+
+    heldEntry.binding         = 0u;
+    heldEntry.bindingType     = GPU_BINDING_STORAGE_BUFFER;
+    heldEntry.buffer.size     = sizeof(readWords);
+    heldInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+    heldInfo.chain.structSize = sizeof(heldInfo);
+    heldInfo.label            = label;
+    heldInfo.layout           = bindGroupLayout;
+    heldInfo.entryCount       = 1u;
+    heldInfo.pEntries         = &heldEntry;
+
+    if (GPUCreateBuffer(device, &bufferInfo, &outputBuffer) != GPU_OK || !outputBuffer
+        || !(heldEntry.buffer.buffer = outputBuffer)
+        || GPUCreateBindGroup(device, &heldInfo, &held) != GPU_OK || !held) {
+      fprintf(stderr, "failed to create %s first buffer and group\n", label);
+      goto cleanup;
+    }
+
+    oldAddress = outputBuffer;
+    GPUDestroyBuffer(outputBuffer);
+    outputBuffer = NULL;
+
+    /* another size: the new buffer's memory comes from elsewhere, so the old
+     * group's writes can't land in it by chance (a pool hands the freed range
+     * to the next buffer of the same size) */
+    otherInfo           = bufferInfo;
+    otherInfo.sizeBytes = 64u * 1024u;
+
+    while (spareCount < 64u) {
+      candidate = NULL;
+      if (GPUCreateBuffer(device, &otherInfo, &candidate) != GPU_OK || !candidate) {
+        fprintf(stderr, "failed to create %s buffer\n", label);
+        goto cleanup;
+      }
+      if ((const void *)candidate == oldAddress) {
+        outputBuffer = candidate;
+        break;
+      }
+      spare[spareCount++] = candidate;
+    }
+
+    if (!outputBuffer) {
+      printf("%s: the allocator never reused the address, skipped\n", label);
+      ok = 1;
+      goto cleanup;
+    }
+  }
+
+  if ((!outputBuffer
+       && (GPUCreateBuffer(device, &bufferInfo, &outputBuffer) != GPU_OK || !outputBuffer))
       || GPUQueueWriteBuffer(queue,
                              outputBuffer,
                              0u,
@@ -1228,8 +1293,11 @@ cleanup:
 
   GPUDestroyFence(fence);
   GPUDestroyBindGroup(bindGroup);
+  GPUDestroyBindGroup(held);
   GPUDestroyBuffer(argsBuffer);
   GPUDestroyBuffer(outputBuffer);
+  while (spareCount > 0u)
+    GPUDestroyBuffer(spare[--spareCount]);
   GPUDestroyComputePipeline(pipeline);
   GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyBindGroupLayout(bindGroupLayout);
@@ -1248,6 +1316,9 @@ check_compute_readback(GPUDevice *device, const char *bytecodePath) {
                                         bytecodePath)
          && check_compute_readback_case(device,
                                         COMPUTE_READBACK_MULTI_INDIRECT,
+                                        bytecodePath)
+         && check_compute_readback_case(device,
+                                        COMPUTE_READBACK_REUSED_ADDRESS,
                                         bytecodePath);
 }
 
