@@ -159,6 +159,37 @@ bindGroupCacheUnlock(BindGroupCache    *cache) {
 #endif
 }
 
+/* the cache's key for an object: an id given at its first binding that never
+ * repeats, so one made where a destroyed object lived can't meet a cached
+ * group that bound the old one (addresses do repeat). Objects are calloc'd:
+ * 0 means none yet. One atomic add per object, the rest is a load */
+static uint64_t gpu_bindUidNext;
+
+static uint64_t
+bindGroupUid(uint64_t *slot) {
+  uint64_t uid;
+#if defined(_MSC_VER) && !defined(__clang__)
+  if ((uid = (uint64_t)InterlockedCompareExchange64((volatile LONG64 *)slot, 0, 0)) != 0u)
+    return uid;
+  uid = (uint64_t)InterlockedIncrement64((volatile LONG64 *)&gpu_bindUidNext);
+  {
+    LONG64 old = InterlockedCompareExchange64((volatile LONG64 *)slot, (LONG64)uid, 0);
+    return old ? (uint64_t)old : uid;
+  }
+#else
+  uint64_t expected;
+
+  if ((uid = __atomic_load_n(slot, __ATOMIC_ACQUIRE)) != 0u)
+    return uid;
+
+  uid      = __atomic_add_fetch(&gpu_bindUidNext, 1u, __ATOMIC_RELAXED);
+  expected = 0u;
+  if (!__atomic_compare_exchange_n(slot, &expected, uid, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+    uid = expected;
+  return uid;
+#endif
+}
+
 static uint64_t
 bindGroupHashBytes(uint64_t hash, const void *data, size_t size) {
   const uint8_t *bytes;
@@ -177,47 +208,23 @@ bindGroupHashBytes(uint64_t hash, const void *data, size_t size) {
 static uint64_t
 bindGroupHash(const GPUBindGroupPriv *priv) {
   const GPUBindGroupBindingPriv *binding;
-  uintptr_t                      layout;
   uint64_t                       hash;
-  uintptr_t                      resource;
   uint32_t                       i;
 
-  layout = (uintptr_t)priv->layout;
-  hash   = 14695981039346656037ull;
-  hash   = GPU_BIND_GROUP_HASH(hash, layout);
-  hash   = GPU_BIND_GROUP_HASH(hash, priv->count);
+  hash = 14695981039346656037ull;
+  hash = GPU_BIND_GROUP_HASH(hash, priv->layoutUid);
+  hash = GPU_BIND_GROUP_HASH(hash, priv->count);
 
   for (i = 0u; i < priv->count; i++) {
     binding = &priv->bindings[i];
     hash    = GPU_BIND_GROUP_HASH(hash, binding->binding);
     hash    = GPU_BIND_GROUP_HASH(hash, binding->arrayIndex);
     hash    = GPU_BIND_GROUP_HASH(hash, binding->kind);
+    hash    = GPU_BIND_GROUP_HASH(hash, binding->uid);
 
-    switch (binding->kind) {
-      case GPUBindKindBuffer:
-        resource = (uintptr_t)binding->buffer;
-        hash     = GPU_BIND_GROUP_HASH(hash, resource);
-        hash     = GPU_BIND_GROUP_HASH(hash, binding->offset);
-        hash     = GPU_BIND_GROUP_HASH(hash, binding->size);
-        break;
-      case GPUBindKindTexture:
-        resource = (uintptr_t)binding->textureView;
-        hash     = GPU_BIND_GROUP_HASH(hash, resource);
-        break;
-      case GPUBindKindSampler:
-        resource = (uintptr_t)binding->sampler;
-        hash     = GPU_BIND_GROUP_HASH(hash, resource);
-        break;
-      case GPUBindKindSamplerFeedback:
-        resource = (uintptr_t)binding->samplerFeedback;
-        hash     = GPU_BIND_GROUP_HASH(hash, resource);
-        break;
-      case GPUBindKindAccelerationStructure:
-        resource = (uintptr_t)binding->accelerationStructure;
-        hash     = GPU_BIND_GROUP_HASH(hash, resource);
-        break;
-      default:
-        break;
+    if (binding->kind == GPUBindKindBuffer) {
+      hash = GPU_BIND_GROUP_HASH(hash, binding->offset);
+      hash = GPU_BIND_GROUP_HASH(hash, binding->size);
     }
   }
 
@@ -232,7 +239,7 @@ bindGroupPrivsEqual(const GPUBindGroupPriv *a,
   uint32_t                       i;
 
   if (!a || !b || a->hash != b->hash
-      || a->layout != b->layout || a->count != b->count) {
+      || a->layoutUid != b->layoutUid || a->count != b->count) {
     return false;
   }
 
@@ -240,43 +247,17 @@ bindGroupPrivsEqual(const GPUBindGroupPriv *a,
     aBinding = &a->bindings[i];
     bBinding = &b->bindings[i];
 
+    /* ids, not addresses: an address repeats after a destroy */
     if (aBinding->binding != bBinding->binding
         || aBinding->arrayIndex != bBinding->arrayIndex
-        || aBinding->kind != bBinding->kind) {
+        || aBinding->kind != bBinding->kind
+        || aBinding->uid != bBinding->uid || !aBinding->uid) {
       return false;
     }
 
-    switch (aBinding->kind) {
-      case GPUBindKindBuffer:
-        if (aBinding->buffer != bBinding->buffer
-            || aBinding->offset != bBinding->offset
-            || aBinding->size != bBinding->size) {
-          return false;
-        }
-        break;
-      case GPUBindKindTexture:
-        if (aBinding->textureView != bBinding->textureView) {
-          return false;
-        }
-        break;
-      case GPUBindKindSampler:
-        if (aBinding->sampler != bBinding->sampler) {
-          return false;
-        }
-        break;
-      case GPUBindKindSamplerFeedback:
-        if (aBinding->samplerFeedback != bBinding->samplerFeedback) {
-          return false;
-        }
-        break;
-      case GPUBindKindAccelerationStructure:
-        if (aBinding->accelerationStructure !=
-            bBinding->accelerationStructure) {
-          return false;
-        }
-        break;
-      default:
-        return false;
+    if (aBinding->kind == GPUBindKindBuffer
+        && (aBinding->offset != bBinding->offset || aBinding->size != bBinding->size)) {
+      return false;
     }
   }
 
@@ -4396,18 +4377,24 @@ GPUCreateBindGroup(GPUDevice                    *device,
           binding->buffer = entry->buffer.buffer;
           binding->offset = entry->buffer.offset;
           binding->size   = entry->buffer.size;
+          binding->uid    = binding->buffer ? bindGroupUid(&binding->buffer->_uid) : 0u;
           break;
         case GPUBindKindTexture:
           binding->textureView = entry->textureView;
+          binding->uid         = binding->textureView ? bindGroupUid(&binding->textureView->_uid) : 0u;
           break;
         case GPUBindKindSampler:
           binding->sampler = entry->sampler;
+          binding->uid     = binding->sampler ? bindGroupUid(&binding->sampler->_uid) : 0u;
           break;
         case GPUBindKindSamplerFeedback:
           binding->samplerFeedback = entry->samplerFeedback;
+          binding->uid             = binding->samplerFeedback ? bindGroupUid(&binding->samplerFeedback->_uid) : 0u;
           break;
         case GPUBindKindAccelerationStructure:
           binding->accelerationStructure = entry->accelerationStructure;
+          binding->uid                   = binding->accelerationStructure
+                                             ? bindGroupUid(&binding->accelerationStructure->_uid) : 0u;
           break;
         default:
           if (heapCandidate) {
@@ -4419,6 +4406,7 @@ GPUCreateBindGroup(GPUDevice                    *device,
   }
 
   candidate.layout             = layout;
+  candidate.layoutUid          = bindGroupUid(&layout->_uid);
   candidate.bindings           = candidateBindings;
   candidate.count              = runtimeCount;
   candidate.dynamicOffsetCount = 0u;

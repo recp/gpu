@@ -25,6 +25,7 @@ struct GPUSampler {
   void          *_priv;
   uint64_t       _gpuResourceID;
   GPUSamplerDesc desc;
+  uint64_t       _uid; /* the bind group cache's key (descr/descriptor.c): never repeats, 0 until first bound */
 };
 
 static inline const GPUSamplerLODClamp*

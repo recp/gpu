@@ -56,6 +56,7 @@ struct GPUTextureView {
   uint32_t           baseArrayLayer;
   uint32_t           arrayLayerCount;
   bool               _ownsNative;
+  uint64_t           _uid; /* the bind group cache's key (descr/descriptor.c): never repeats, 0 until first bound */
 };
 
 GPU_HIDE

@@ -27,6 +27,7 @@ struct GPUSamplerFeedbackMapEXT {
   GPUSamplerFeedbackModeEXT       mode;
   uint32_t                        mipRegionWidth;
   uint32_t                        mipRegionHeight;
+  uint64_t                        _uid; /* the bind group cache's key (descr/descriptor.c): never repeats, 0 until first bound */
 };
 
 #endif /* gpu_sampler_feedback_internal_h */

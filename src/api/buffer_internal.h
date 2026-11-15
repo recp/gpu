@@ -34,6 +34,7 @@ struct GPUBuffer {
   GPUBufferUsageFlags          usage;
   bool                         _sparse;
   bool                         _hostImported;
+  uint64_t                     _uid; /* the bind group cache's key (descr/descriptor.c): never repeats, 0 until first bound */
 };
 
 GPU_HIDE

@@ -24,6 +24,7 @@ struct GPUAccelerationStructureEXT {
   GPUDevice                      *device;
   uint64_t                        sizeBytes;
   GPUAccelerationStructureTypeEXT type;
+  uint64_t                        _uid; /* the bind group cache's key (descr/descriptor.c): never repeats, 0 until first bound */
 };
 
 struct GPUAccelerationStructurePassEncoderEXT {

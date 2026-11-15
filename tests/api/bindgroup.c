@@ -1530,6 +1530,112 @@ cleanup:
   return ok;
 }
 
+/* a buffer made where a destroyed one lived must not meet a cached group
+ * that bound the destroyed one: the cache keys objects by ids that never
+ * repeat, not by address. Skipped if the allocator never reuses the address */
+static int
+check_bind_group_cache_reused_address(GPUDevice *device) {
+  GPUBindGroupLayoutEntry      entry      = {0};
+  GPUBindGroupLayoutCreateInfo layoutInfo = {0};
+  GPUBindGroupEntry            groupEntry = {0};
+  GPUBindGroupCreateInfo       groupInfo  = {0};
+  GPUBufferCreateInfo          bufferInfo = {0};
+  GPUCacheStats                stats;
+  GPUBindGroupLayout          *layout = NULL;
+  GPUBindGroup                *held   = NULL;
+  GPUBindGroup                *fresh  = NULL;
+  GPUBindGroup                *again  = NULL;
+  GPUBuffer                   *spare[64];
+  GPUBuffer                   *buffer = NULL;
+  const void                  *oldAddress;
+  uint64_t                     misses;
+  uint32_t                     spareCount = 0u, i;
+  int                          ok = 0;
+
+  entry.binding               = 0u;
+  entry.bindingType           = GPU_BINDING_UNIFORM_BUFFER;
+  entry.visibility            = GPU_SHADER_STAGE_FRAGMENT_BIT;
+  entry.arrayCount            = 1u;
+  layoutInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize = sizeof(layoutInfo);
+  layoutInfo.entryCount       = 1u;
+  layoutInfo.pEntries         = &entry;
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.sizeBytes        = 64u;
+  bufferInfo.usage            = GPU_BUFFER_USAGE_UNIFORM | GPU_BUFFER_USAGE_COPY_DST;
+  groupEntry.binding          = 0u;
+  groupEntry.bindingType      = GPU_BINDING_UNIFORM_BUFFER;
+  groupEntry.buffer.size      = 64u;
+  groupInfo.chain.sType       = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  groupInfo.chain.structSize  = sizeof(groupInfo);
+  groupInfo.entryCount        = 1u;
+  groupInfo.pEntries          = &groupEntry;
+
+  if (GPUCreateBindGroupLayout(device, &layoutInfo, &layout) != GPU_OK || !layout
+      || GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
+    fprintf(stderr, "bind group cache reuse setup failed\n");
+    goto cleanup;
+  }
+
+  groupInfo.layout         = layout;
+  groupEntry.buffer.buffer = buffer;
+  if (GPUCreateBindGroup(device, &groupInfo, &held) != GPU_OK || !held) {
+    fprintf(stderr, "bind group cache reuse group failed\n");
+    goto cleanup;
+  }
+
+  /* the group outlives its buffer, as an app may let it */
+  oldAddress = buffer;
+  GPUDestroyBuffer(buffer);
+  buffer = NULL;
+
+  while (spareCount < 64u) {
+    if (GPUCreateBuffer(device, &bufferInfo, &buffer) != GPU_OK || !buffer) {
+      fprintf(stderr, "bind group cache reuse buffer failed\n");
+      goto cleanup;
+    }
+    if ((const void *)buffer == oldAddress)
+      break;
+    spare[spareCount++] = buffer;
+    buffer = NULL;
+  }
+
+  if (!buffer) {
+    printf("bind group cache reuse: the allocator never reused the address, skipped\n");
+    ok = 1;
+    goto cleanup;
+  }
+
+  GPUResetStats(device);
+  groupEntry.buffer.buffer = buffer;
+  if (GPUCreateBindGroup(device, &groupInfo, &fresh) != GPU_OK || !fresh || fresh == held
+      || GPUGetCacheStats(device, &stats) != GPU_OK || stats.bindGroupHits != 0u) {
+    fprintf(stderr, "bind group cache gave a group of a destroyed buffer to one made at its address\n");
+    goto cleanup;
+  }
+
+  misses = stats.bindGroupMisses;
+  if (GPUCreateBindGroup(device, &groupInfo, &again) != GPU_OK || again != fresh
+      || GPUGetCacheStats(device, &stats) != GPU_OK || stats.bindGroupHits != 1u
+      || stats.bindGroupMisses != misses) {
+    fprintf(stderr, "bind group cache did not reuse the new buffer's group\n");
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  GPUDestroyBindGroup(again);
+  GPUDestroyBindGroup(fresh);
+  GPUDestroyBindGroup(held);
+  GPUDestroyBuffer(buffer);
+  for (i = 0u; i < spareCount; i++)
+    GPUDestroyBuffer(spare[i]);
+  GPUDestroyBindGroupLayout(layout);
+  return ok;
+}
+
 static int
 check_bind_group_cache(GPUDevice *device) {
   GPUBindGroupLayoutEntry      entry      = {0};
@@ -2002,7 +2108,7 @@ gpu_test_bindgroup(GPUDevice *device) {
          && (!bindgroup_test_selected("arrays")
              || check_binding_arrays(device))
          && (!bindgroup_test_selected("cache")
-             || check_bind_group_cache(device))
+             || (check_bind_group_cache(device) && check_bind_group_cache_reused_address(device)))
          && (!bindgroup_test_selected("metal-limits")
              || check_metal_pipeline_binding_limits(device));
 }

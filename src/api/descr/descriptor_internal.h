@@ -23,6 +23,7 @@ struct GPUBindGroupLayout {
   GPUDevice *_device;
   void      *_native;
   void      *_priv;
+  uint64_t   _uid; /* the bind group cache's key (descr/descriptor.c): never repeats, 0 until first bound */
 };
 
 struct GPUBindGroup {
@@ -68,6 +69,7 @@ typedef struct GPUBindGroupBindingPriv {
     GPUSamplerFeedbackMapEXT    *samplerFeedback;
     GPUAccelerationStructureEXT *accelerationStructure;
   };
+  uint64_t    uid; /* the bound object's _uid: the cache's key */
   uint32_t    binding;
   uint32_t    arrayIndex;
   uint32_t    layoutEntryIndex;
@@ -78,6 +80,7 @@ typedef struct GPUBindGroupBindingPriv {
 
 typedef struct GPUBindGroupPriv {
   GPUBindGroupLayout      *layout;
+  uint64_t                 layoutUid; /* the layout's _uid: the cache's key */
   GPUBindGroupBindingPriv *bindings;
   GPUBindGroupBindingPriv *singleBuffer;
   uint64_t                *updateScratch;
