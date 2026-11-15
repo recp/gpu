@@ -70,6 +70,14 @@ enum {
   GPU_USL_NARROW_PUSH8     = 1u << 4
 };
 
+/* subgroup operations compute stages have, for USL's own use (its spv_*
+ * subgroup atoms: packed 8/16-bit stores paired across lanes), apart from
+ * GPU_FEATURE_SUBGROUPS an app enables for its own shaders */
+enum {
+  GPU_USL_SUBGROUP_BALLOT  = 1u << 0,
+  GPU_USL_SUBGROUP_SHUFFLE = 1u << 1
+};
+
 struct GPUDevice {
   GPUInstance                *inst;
   GPUAdapter                 *adapter;
@@ -119,6 +127,7 @@ struct GPUDevice {
   bool                        uslQualcommCompiler; /* its quirk atoms: spirv_bare_conversions, spirv_guard_mul_shift */
   bool                        uslStorageF16;
   uint8_t                     uslNarrowStorage; /* GPU_USL_NARROW_*: classes keeping 8/16-bit data narrow */
+  uint8_t                     uslSubgroupOps;   /* GPU_USL_SUBGROUP_* */
   bool                        uslIOF16;
   bool                        uslCubeGradFixup;
   bool                        transientConfigured;

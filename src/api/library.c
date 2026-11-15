@@ -158,6 +158,11 @@ static const char *const gpu_spirvNarrowAtoms[] = {
   "spv_storage_buffer8_bit_access", "spv_uniform_and_storage_buffer8_bit_access", "spv_storage_push_constant8"
 };
 
+/* by GPU_USL_SUBGROUP_* bit */
+static const char *const gpu_spirvSubgroupAtoms[] = {
+  "spv_subgroup_ballot", "spv_subgroup_shuffle"
+};
+
 static const uint32_t gpu_floatAtomicFeatures[] = {
   USL_SEMANTIC_FEATURE_ID_BUFFER_F32_ATOMIC_ADD,
   USL_SEMANTIC_FEATURE_ID_WORKGROUP_F32_ATOMIC_ADD
@@ -2907,6 +2912,15 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
     for (floatModeIndex = 0u; floatModeIndex < GPU_ARRAY_LEN(gpu_spirvNarrowAtoms); ++floatModeIndex) {
       if ((device->uslNarrowStorage & (1u << floatModeIndex))
           && us_cap_atom_text(&targetAtoms[targetAtomCount++], gpu_spirvNarrowAtoms[floatModeIndex]) != USLOk) {
+        return GPU_ERROR_BACKEND_FAILURE;
+      }
+    }
+
+    /* with both, packed stores that neighbouring lanes share a word of are
+     * written by one lane */
+    for (floatModeIndex = 0u; floatModeIndex < GPU_ARRAY_LEN(gpu_spirvSubgroupAtoms); ++floatModeIndex) {
+      if ((device->uslSubgroupOps & (1u << floatModeIndex))
+          && us_cap_atom_text(&targetAtoms[targetAtomCount++], gpu_spirvSubgroupAtoms[floatModeIndex]) != USLOk) {
         return GPU_ERROR_BACKEND_FAILURE;
       }
     }

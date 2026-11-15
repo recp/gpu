@@ -3597,6 +3597,10 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
                             | (storage8Features.storageBuffer8BitAccess ? GPU_USL_NARROW_STORAGE8 : 0u)
                             | (storage8Features.uniformAndStorageBuffer8BitAccess ? GPU_USL_NARROW_UNIFORM8 : 0u)
                             | (storage8Features.storagePushConstant8 ? GPU_USL_NARROW_PUSH8 : 0u);
+  /* core since 1.1: nothing to enable */
+  device->uslSubgroupOps    = (adapterVk->subgroupStages & VK_SHADER_STAGE_COMPUTE_BIT) == 0u ? 0u
+                            : ((adapterVk->subgroupOperations & VK_SUBGROUP_FEATURE_BALLOT_BIT) ? GPU_USL_SUBGROUP_BALLOT : 0u)
+                            | ((adapterVk->subgroupOperations & VK_SUBGROUP_FEATURE_SHUFFLE_BIT) ? GPU_USL_SUBGROUP_SHUFFLE : 0u);
   device->uslHalfRoundtrip  = uslVulkanHalfRoundtrip(adapterVk->props.vendorID,
                                                      adapterVk->props.deviceID,
                                                      adapterVk->props.driverVersion);
