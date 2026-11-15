@@ -92,6 +92,23 @@ vk_hasTimestampCapability(const GPUAdapterVk *adapter) {
   return adapter && adapter->props.limits.timestampComputeAndGraphics;
 }
 
+/* the widths (f16 1, f32 2, f64 4) a float mode is asked for: all it's
+ * offered for where each width is set on its own; where widths can't be set
+ * apart, those set together only if it's offered for every one of them a
+ * shader can use (all of them, or f16 with f64 under 32_BIT_ONLY) */
+
+static uint8_t
+vk_floatModeWidths(uint8_t offered, uint8_t independence, uint8_t usable) {
+  uint8_t tied;
+
+  if (independence == VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL)
+    return offered;
+
+  tied = independence == VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY ? (uint8_t)(usable & 5u) : usable;
+
+  return (offered & tied) == tied ? offered : (uint8_t)(offered & ~tied);
+}
+
 static uint32_t
 vk_uslTargetProfile(const GPUAdapter *adapter) {
   const GPUInstanceVk *instanceVk;
@@ -1700,6 +1717,8 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       adapterVk->roundingRTE              = (floatControls.shaderRoundingModeRTEFloat16 ? 1u : 0u) |
         (floatControls.shaderRoundingModeRTEFloat32 ? 2u : 0u) |
         (floatControls.shaderRoundingModeRTEFloat64 ? 4u : 0u);
+      adapterVk->denormIndependence       = (uint8_t)floatControls.denormBehaviorIndependence;
+      adapterVk->roundingIndependence     = (uint8_t)floatControls.roundingModeIndependence;
 
       if ((adapterVk->signedZeroInfNanPreserve || adapterVk->denormPreserve
            || adapterVk->roundingRTE) && !spirv14Core
@@ -3020,6 +3039,7 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   uint32_t createdPlanIndex;
   uint32_t queueIndex;
   uint32_t cleanupIndex;
+  uint8_t  floatWidths;
 #if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
   bool maintenance5Required;
 #endif
@@ -3638,8 +3658,9 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   }
 #endif
   device->uslFloatPreserve  = adapterVk->signedZeroInfNanPreserve;
-  device->uslDenormPreserve = adapterVk->denormPreserve;
-  device->uslRoundingRTE    = adapterVk->roundingRTE;
+  floatWidths               = 2u | (adapterVk->shaderFloat16 ? 1u : 0u) | (adapterVk->features.shaderFloat64 ? 4u : 0u);
+  device->uslDenormPreserve = vk_floatModeWidths(adapterVk->denormPreserve, adapterVk->denormIndependence, floatWidths);
+  device->uslRoundingRTE    = vk_floatModeWidths(adapterVk->roundingRTE, adapterVk->roundingIndependence, floatWidths);
   device->uslFloatControls2 = adapterVk->floatControls2;
   device->uslStorageF16     = storage16Features.storageBuffer16BitAccess == VK_TRUE;
   device->uslIOF16          = storage16Features.storageInputOutput16 == VK_TRUE;
