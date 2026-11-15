@@ -568,7 +568,9 @@ check_resources(GPUDevice *device, GPUShaderLibrary *library, uint32_t samples) 
     {0x2c00, 0x3000, 0x3400, 0x3800}, {0x3400, 0x2c00, 0x3000, 0x2800}
   };
   const uint32_t              choices[5] = {0u, 1u, 0u, 0u, 1u};
-  GPUShaderLayout            *layout = NULL, *other = NULL;
+  GPUShaderLayout            *layout = NULL;
+  GPUBindGroupLayout         *other[3] = {NULL};
+  uint32_t                    otherCount = 3u;
   GPURenderPipeline          *draw = NULL;
   GPUTilePipeline            *pipeline = NULL, *idle = NULL, *rejected = NULL;
   GPUTilePipelineCreateInfo  *shortInfo = NULL;
@@ -595,8 +597,11 @@ check_resources(GPUDevice *device, GPUShaderLibrary *library, uint32_t samples) 
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
   REQUIRE(create_target(device, samples, &target));
   REQUIRE(GPUCreateShaderLayout(device, library, &layout) == GPU_OK);
-  REQUIRE(GPUCreateShaderLayout(device, library, &other) == GPU_OK);
   REQUIRE(layout->bindGroupLayoutCount == 3u);
+  /* another layout with the same entries; a library's shader layouts are
+   * one object, so these come from reflection */
+  REQUIRE(GPUCreateBindGroupLayoutsFromReflection(device, library, &otherCount, other) == GPU_OK
+          && otherCount == 3u && other[1] != layout->bindGroupLayouts[1]);
 
   tile.chain.sType                    = GPU_STRUCTURE_TYPE_TILE_PIPELINE_CREATE_INFO;
   tile.chain.structSize               = sizeof(tile);
@@ -661,7 +666,7 @@ check_resources(GPUDevice *device, GPUShaderLibrary *library, uint32_t samples) 
   groupInfo.pEntries         = entries;
   groupInfo.entryCount       = 2u;
   REQUIRE(GPUCreateBindGroup(device, &groupInfo, &buffers) == GPU_OK);
-  groupInfo.layout = other->bindGroupLayouts[1];
+  groupInfo.layout = other[1];
   REQUIRE(GPUCreateBindGroup(device, &groupInfo, &wrongBuffers) == GPU_OK);
 
   textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
@@ -840,7 +845,8 @@ cleanup:
   GPUDestroyTextureView(view);
   GPUDestroyTexture(texture);
   GPUDestroyBuffer(buffer);
-  GPUDestroyShaderLayout(other);
+  for (i = 0u; i < 3u; i++)
+    GPUDestroyBindGroupLayout(other[i]);
   GPUDestroyShaderLayout(layout);
   GPUDestroyTextureView(target.multisampleView);
   GPUDestroyTexture(target.multisample);

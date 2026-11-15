@@ -137,6 +137,7 @@ struct GPUShaderLibrary {
   uint64_t                        _payloadHash; /* USL's, as GPU_USL_LOG printed it; 0 unknown */
   uint64_t                        _payloadSize; /* the backend code it was made from */
   uint64_t                        _uid;         /* the pipeline cache's key (api/uid_internal.h) */
+  void                           *_shaderLayout; /* GPUCreateShaderLayout's, shared (descr/descriptor.c) */
   uint32_t                        _constantCount;
   bool                            _constantIdsDense;
   bool                            _payloadBinary;
@@ -145,6 +146,11 @@ struct GPUShaderLibrary {
 struct GPUShaderFunction {
   void *_priv;
 };
+
+/* the library's hold on its shared shader layout let go (its destroy) */
+GPU_HIDE
+void
+shaderLibraryReleaseLayout(GPUShaderLibrary *library);
 
 GPU_HIDE
 GPUShaderFunction*

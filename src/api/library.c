@@ -4234,6 +4234,7 @@ GPUDestroyShaderLibrary(GPUShaderLibrary *library) {
 
   /* background compiles read it */
   compilePoolDrain(library->_device);
+  shaderLibraryReleaseLayout(library);
   clearShaderUSLSource(library);
   clearShaderMetadata(library);
 

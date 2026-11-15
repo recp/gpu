@@ -4100,85 +4100,22 @@ GPUCreatePipelineLayoutFromReflection(GPUDevice                 *device,
   return GPUCreatePipelineLayout(device, &info, outLayout);
 }
 
-GPU_EXPORT
-GPUResult
-GPUCreateShaderLayout(GPUDevice              *device,
-                      const GPUShaderLibrary *library,
-                      GPUShaderLayout       **outLayout) {
+/* a library's shader layout is made once and shared: it comes from the
+ * library's reflection alone, so every caller's would be equal, and one
+ * object lets pipelines made for different users of a library meet in the
+ * pipeline cache (two renderers asking for one pipeline compile it once).
+ * The library holds one reference until it is destroyed */
+typedef struct GPUShaderLayoutShared {
+  GPUShaderLayout layout; /* first: what callers hold */
+  uint32_t        refs;
+} GPUShaderLayoutShared;
+
+static void
+shaderLayoutFree(GPUShaderLayoutShared *shared) {
   GPUShaderLayout *layout;
-  uint32_t         layoutCount;
-  GPUResult        rc;
+  uint32_t         i;
 
-  if (!outLayout) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  *outLayout = NULL;
-
-  if (!device || !library || library->_device != device) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  if (!(layout = calloc(1, sizeof(*layout)))) {
-    return GPU_ERROR_OUT_OF_MEMORY;
-  }
-
-  layoutCount = 0u;
-  rc          = GPUCreateBindGroupLayoutsFromReflection(device, library, &layoutCount, NULL);
-
-  if (rc != GPU_OK) {
-    free(layout);
-    return rc;
-  }
-
-  if (layoutCount > 0u) {
-    if ((size_t)layoutCount > SIZE_MAX / sizeof(*layout->bindGroupLayouts)) {
-      free(layout);
-      return GPU_ERROR_OUT_OF_MEMORY;
-    }
-
-    if (!(layout->bindGroupLayouts = calloc(layoutCount,
-                                            sizeof(*layout->bindGroupLayouts)))) {
-      free(layout);
-      return GPU_ERROR_OUT_OF_MEMORY;
-    }
-
-    rc = GPUCreateBindGroupLayoutsFromReflection(device,
-                                                 library,
-                                                 &layoutCount,
-                                                 layout->bindGroupLayouts);
-
-    if (rc != GPU_OK) {
-      GPUDestroyShaderLayout(layout);
-      return rc;
-    }
-  }
-
-  layout->bindGroupLayoutCount = layoutCount;
-  rc = GPUCreatePipelineLayoutFromReflection(device,
-                                             library,
-                                             layout->bindGroupLayoutCount,
-                                             layout->bindGroupLayouts,
-                                             &layout->pipelineLayout);
-
-  if (rc != GPU_OK) {
-    GPUDestroyShaderLayout(layout);
-    return rc;
-  }
-
-  *outLayout = layout;
-
-  return GPU_OK;
-}
-
-GPU_EXPORT
-void
-GPUDestroyShaderLayout(GPUShaderLayout *layout) {
-  uint32_t i;
-
-  if (!layout) {
-    return;
-  }
+  layout = &shared->layout;
 
   if (layout->pipelineLayout) {
     GPUDestroyPipelineLayout(layout->pipelineLayout);
@@ -4191,7 +4128,171 @@ GPUDestroyShaderLayout(GPUShaderLayout *layout) {
   }
 
   free(layout->bindGroupLayouts);
-  free(layout);
+  free(shared);
+}
+
+static GPUShaderLayoutShared*
+shaderLayoutOf(GPUShaderLibrary *library) {
+#if defined(_MSC_VER) && !defined(__clang__)
+  return InterlockedCompareExchangePointer(&library->_shaderLayout, NULL, NULL);
+#else
+  return __atomic_load_n(&library->_shaderLayout, __ATOMIC_ACQUIRE);
+#endif
+}
+
+/* mine, or the one another thread made meanwhile */
+static GPUShaderLayoutShared*
+shaderLayoutInstall(GPUShaderLibrary *library, GPUShaderLayoutShared *mine) {
+  void *other;
+
+#if defined(_MSC_VER) && !defined(__clang__)
+  other = InterlockedCompareExchangePointer(&library->_shaderLayout, mine, NULL);
+#else
+  other = NULL;
+  if (__atomic_compare_exchange_n(&library->_shaderLayout, &other, mine, false,
+                                  __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+    other = NULL;
+#endif
+
+  return other ? other : mine;
+}
+
+static void
+shaderLayoutRetain(GPUShaderLayoutShared *shared) {
+#if defined(_MSC_VER) && !defined(__clang__)
+  InterlockedIncrement((volatile LONG *)&shared->refs);
+#else
+  __atomic_add_fetch(&shared->refs, 1u, __ATOMIC_RELAXED);
+#endif
+}
+
+static bool
+shaderLayoutRelease(GPUShaderLayoutShared *shared) {
+#if defined(_MSC_VER) && !defined(__clang__)
+  return InterlockedDecrement((volatile LONG *)&shared->refs) == 0;
+#else
+  return __atomic_sub_fetch(&shared->refs, 1u, __ATOMIC_ACQ_REL) == 0u;
+#endif
+}
+
+GPU_EXPORT
+GPUResult
+GPUCreateShaderLayout(GPUDevice              *device,
+                      const GPUShaderLibrary *library,
+                      GPUShaderLayout       **outLayout) {
+  GPUShaderLayoutShared *shared;
+  GPUShaderLayoutShared *installed;
+  GPUShaderLibrary      *owner;
+  GPUShaderLayout       *layout;
+  uint32_t               layoutCount;
+  GPUResult              rc;
+
+  if (!outLayout) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outLayout = NULL;
+
+  if (!device || !library || library->_device != device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  /* its layout slot is a cache, not the library's contents */
+  owner = (GPUShaderLibrary *)(uintptr_t)library;
+
+  if ((shared = shaderLayoutOf(owner))) {
+    shaderLayoutRetain(shared);
+    *outLayout = &shared->layout;
+    return GPU_OK;
+  }
+
+  if (!(shared = calloc(1, sizeof(*shared)))) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  layout      = &shared->layout;
+  layoutCount = 0u;
+  rc          = GPUCreateBindGroupLayoutsFromReflection(device, library, &layoutCount, NULL);
+
+  if (rc != GPU_OK) {
+    free(shared);
+    return rc;
+  }
+
+  if (layoutCount > 0u) {
+    if ((size_t)layoutCount > SIZE_MAX / sizeof(*layout->bindGroupLayouts)) {
+      free(shared);
+      return GPU_ERROR_OUT_OF_MEMORY;
+    }
+
+    if (!(layout->bindGroupLayouts = calloc(layoutCount,
+                                            sizeof(*layout->bindGroupLayouts)))) {
+      free(shared);
+      return GPU_ERROR_OUT_OF_MEMORY;
+    }
+
+    rc = GPUCreateBindGroupLayoutsFromReflection(device,
+                                                 library,
+                                                 &layoutCount,
+                                                 layout->bindGroupLayouts);
+
+    if (rc != GPU_OK) {
+      shaderLayoutFree(shared);
+      return rc;
+    }
+  }
+
+  layout->bindGroupLayoutCount = layoutCount;
+  rc = GPUCreatePipelineLayoutFromReflection(device,
+                                             library,
+                                             layout->bindGroupLayoutCount,
+                                             layout->bindGroupLayouts,
+                                             &layout->pipelineLayout);
+
+  if (rc != GPU_OK) {
+    shaderLayoutFree(shared);
+    return rc;
+  }
+
+  /* the library's hold and the caller's */
+  shared->refs = 2u;
+
+  if ((installed = shaderLayoutInstall(owner, shared)) != shared) {
+    shaderLayoutFree(shared);
+    shaderLayoutRetain(installed);
+    shared = installed;
+  }
+
+  *outLayout = &shared->layout;
+
+  return GPU_OK;
+}
+
+GPU_EXPORT
+void
+GPUDestroyShaderLayout(GPUShaderLayout *layout) {
+  GPUShaderLayoutShared *shared;
+
+  if (!layout) {
+    return;
+  }
+
+  shared = (GPUShaderLayoutShared *)(void *)layout;
+
+  if (shaderLayoutRelease(shared)) {
+    shaderLayoutFree(shared);
+  }
+}
+
+GPU_HIDE
+void
+shaderLibraryReleaseLayout(GPUShaderLibrary *library) {
+  GPUShaderLayoutShared *shared;
+
+  if ((shared = shaderLayoutOf(library))) {
+    library->_shaderLayout = NULL;
+    GPUDestroyShaderLayout(&shared->layout);
+  }
 }
 
 GPU_EXPORT

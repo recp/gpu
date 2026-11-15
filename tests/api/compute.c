@@ -809,6 +809,98 @@ cleanup:
   return ok;
 }
 
+/* two shader layouts of one library are one object, so pipelines made with
+ * each meet in the pipeline cache: one compile (two renderers sharing a
+ * library); a destroy lets go of one hold, and the layout outlives its library */
+static int
+check_compute_shared_shader_layout(GPUDevice *device, const char *bytecodePath) {
+  const char                  *label     = "api-compute-shared-layout";
+  GPUPipelineCacheCreateInfo   cacheInfo = {0};
+  GPUComputePipelineCreateInfo info      = {0};
+  GPUCacheStats                before    = {0};
+  GPUCacheStats                after     = {0};
+  GPUShaderLibrary            *library   = NULL;
+  GPUShaderLayout             *first     = NULL;
+  GPUShaderLayout             *second    = NULL;
+  GPUPipelineCache            *cache     = NULL;
+  GPUComputePipeline          *pipelines[3] = {NULL, NULL, NULL};
+  uint32_t                     i;
+  int                          ok        = 0;
+
+  cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  cacheInfo.chain.structSize = sizeof(cacheInfo);
+  cacheInfo.label            = label;
+  cacheInfo.maxEntries       = 4u;
+
+  if (!create_compute_usl_library(device, bytecodePath, &library)
+      || GPUCreateShaderLayout(device, library, &first) != GPU_OK || !first
+      || GPUCreateShaderLayout(device, library, &second) != GPU_OK || !second
+      || GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
+    fprintf(stderr, "%s: setup failed\n", label);
+    goto cleanup;
+  }
+
+  if (first != second || !first->pipelineLayout) {
+    fprintf(stderr, "%s: two shader layouts of one library aren't one\n", label);
+    goto cleanup;
+  }
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.label            = label;
+  info.library          = library;
+  info.entryPoint       = "api_indirect_cs";
+  info.cache            = cache;
+
+  if (GPUGetCacheStats(device, &before) != GPU_OK) {
+    goto cleanup;
+  }
+
+  /* back to back: the second while the first may still be compiling */
+  for (i = 0u; i < 2u; i++) {
+    info.layout = (i ? second : first)->pipelineLayout;
+    if (GPUCreateComputePipeline(device, &info, &pipelines[i]) != GPU_OK || !pipelines[i]) {
+      fprintf(stderr, "%s: pipeline %u failed\n", label, i);
+      goto cleanup;
+    }
+  }
+
+  if (GPUWaitComputePipeline(pipelines[0]) != GPU_OK
+      || GPUWaitComputePipeline(pipelines[1]) != GPU_OK
+      || GPUGetCacheStats(device, &after) != GPU_OK
+      || after.pipelineCompiles - before.pipelineCompiles != 1u
+      || after.pipelineHits - before.pipelineHits != 1u) {
+    fprintf(stderr,
+            "%s: two layouts' creates made %llu compiles and %llu cache hits, expected 1 and 1\n",
+            label,
+            (unsigned long long)(after.pipelineCompiles - before.pipelineCompiles),
+            (unsigned long long)(after.pipelineHits - before.pipelineHits));
+    goto cleanup;
+  }
+
+  /* one hold let go: the layout still works for the other */
+  GPUDestroyShaderLayout(first);
+  first       = NULL;
+  info.layout = second->pipelineLayout;
+
+  if (GPUCreateComputePipeline(device, &info, &pipelines[2]) != GPU_OK || !pipelines[2]
+      || GPUWaitComputePipeline(pipelines[2]) != GPU_OK) {
+    fprintf(stderr, "%s: the layout's other hold doesn't work\n", label);
+    goto cleanup;
+  }
+
+  ok = 1;
+
+cleanup:
+  for (i = 0u; i < 3u; i++)
+    GPUDestroyComputePipeline(pipelines[i]);
+  GPUDestroyShaderLayout(first);
+  GPUDestroyPipelineCache(cache);
+  GPUDestroyShaderLibrary(library);
+  GPUDestroyShaderLayout(second); /* after its library */
+  return ok;
+}
+
 static int
 check_compute_dispatch_validation_calls(GPUDevice *device) {
   GPUBindGroupLayoutEntry      entry      = {0};
@@ -1497,6 +1589,7 @@ gpu_test_compute(GPUDevice *device, const char *bytecodePath) {
   ok                    = check_compute_pass_validation(device)
                           && check_compute_pipeline_validation(device, bytecodePath)
                           && check_compute_cache_reused_library(device, bytecodePath)
+                          && check_compute_shared_shader_layout(device, bytecodePath)
                           && check_compute_dispatch_validation_calls(device)
                           && check_compute_push_constant_shadowing_calls(device)
                           && check_compute_readback(device, bytecodePath);
@@ -1507,6 +1600,7 @@ gpu_test_compute(GPUDevice *device, const char *bytecodePath) {
          && GPUWaitComputePipeline(NULL) == GPU_ERROR_INVALID_ARGUMENT
          && check_compute_pipeline_validation(device, bytecodePath)
          && check_compute_cache_reused_library(device, bytecodePath)
+         && check_compute_shared_shader_layout(device, bytecodePath)
          && check_compute_readback(device, bytecodePath);
     (void)GPUSetPipelineCompileThreads(device, 0u);
     if (!ok)
