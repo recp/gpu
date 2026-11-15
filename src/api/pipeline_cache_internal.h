@@ -32,6 +32,16 @@ typedef struct GPUPipelineCacheKey {
   uint8_t  inlineData[GPU_PIPELINE_CACHE_INLINE_KEY_SIZE];
 } GPUPipelineCacheKey;
 
+/* a compute pipeline compiled on the device's threads for a cache: identical
+ * creates made meanwhile share that compile (compute.c) */
+typedef struct GPUPipelineCacheInflight GPUPipelineCacheInflight;
+
+struct GPUPipelineCacheInflight {
+  GPUPipelineCacheInflight *next;
+  GPUPipelineCacheKey       key;
+  uint32_t                  refs; /* the creates sharing it */
+};
+
 struct GPUPipelineCache {
   GPUDevice              *device;
   void                   *_sync;
@@ -43,6 +53,7 @@ struct GPUPipelineCache {
   GPUPipelineCompileJob  *jobs;
   GPUPipelineCompileJob  *queueHead;
   GPUPipelineCompileJob  *queueTail;
+  GPUPipelineCacheInflight *inflight;
   GPUCacheStats           stats;
   uint64_t                maxEntries;
   uint64_t                entryCount;
@@ -92,6 +103,23 @@ GPUComputePipeline*
 pipelineCacheStoreCompute(GPUPipelineCache    *cache,
                           GPUPipelineCacheKey *key,
                           GPUComputePipeline  *pipeline);
+
+/* a background compute compile about to start: *outPipeline when the cache
+ * holds it, *outShared when an identical one is compiling (its refs then
+ * count this create too), else mine is compiling until
+ * pipelineCacheEndCompute */
+GPU_HIDE
+GPUResult
+pipelineCacheBeginCompute(GPUPipelineCache                   *cache,
+                          const GPUComputePipelineCreateInfo *info,
+                          GPUPipelineCacheInflight           *mine,
+                          GPUComputePipeline                **outPipeline,
+                          GPUPipelineCacheInflight          **outShared);
+
+/* mine compiled (and in the cache): how many creates joined it */
+GPU_HIDE
+uint32_t
+pipelineCacheEndCompute(GPUPipelineCache *cache, GPUPipelineCacheInflight *mine);
 
 GPU_HIDE
 GPUResult

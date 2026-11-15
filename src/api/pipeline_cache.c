@@ -1238,6 +1238,80 @@ pipelineCacheStoreCompute(GPUPipelineCache    *cache,
 
 GPU_HIDE
 GPUResult
+pipelineCacheBeginCompute(GPUPipelineCache                   *cache,
+                          const GPUComputePipelineCreateInfo *info,
+                          GPUPipelineCacheInflight           *mine,
+                          GPUComputePipeline                **outPipeline,
+                          GPUPipelineCacheInflight          **outShared) {
+  GPUPipelineCacheEntry    *entry;
+  GPUPipelineCacheInflight *other;
+
+  *outPipeline = NULL;
+  *outShared   = NULL;
+
+  if (!buildComputePipelineKey(info, &mine->key)) {
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  pipelineCacheLock(cache);
+
+  if ((entry = pipelineCacheFindEntry(cache, &mine->key, GPU_PIPELINE_CACHE_COMPUTE))) {
+    *outPipeline = entry->pipeline;
+    retainComputePipeline(*outPipeline);
+  } else {
+    for (other = cache->inflight; other; other = other->next) {
+      if (other->key.hash == mine->key.hash && other->key.size == mine->key.size
+          && memcmp(other->key.data, mine->key.data, mine->key.size) == 0) {
+        break;
+      }
+    }
+
+    if (!other) {
+      mine->refs      = 1u;
+      mine->next      = cache->inflight;
+      cache->inflight = mine;
+      pipelineCacheUnlock(cache);
+      return GPU_OK;
+    }
+
+    /* listed, so compiling: its creates let it go only once it is done */
+    other->refs++;
+    *outShared = other;
+  }
+
+  cache->stats.pipelineHits++;
+  deviceCacheCounterAdd(&cache->device->cacheStats.pipelineHits, 1u);
+  pipelineCacheUnlock(cache);
+  pipelineCacheReleaseKey(&mine->key);
+
+  return GPU_OK;
+}
+
+GPU_HIDE
+uint32_t
+pipelineCacheEndCompute(GPUPipelineCache *cache, GPUPipelineCacheInflight *mine) {
+  GPUPipelineCacheInflight **link;
+  uint32_t                   joined;
+
+  pipelineCacheLock(cache);
+
+  for (link = &cache->inflight; *link && *link != mine; link = &(*link)->next) {}
+
+  if (*link) {
+    *link = mine->next;
+  }
+
+  joined = mine->refs - 1u;
+  pipelineCacheUnlock(cache);
+
+  mine->next = NULL;
+  pipelineCacheReleaseKey(&mine->key);
+
+  return joined;
+}
+
+GPU_HIDE
+GPUResult
 pipelineCacheFindRay(GPUPipelineCache                         *cache,
                      const GPURayTracingPipelineCreateInfoEXT *info,
                      GPUPipelineCacheKey                      *outKey,

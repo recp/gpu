@@ -28,6 +28,8 @@
 #include "query_internal.h"
 #include "ray_internal.h"
 
+#include <stddef.h>
+
 #if !GPU_BUILD_WITH_VALIDATION
 #  define computeValidationError(pass, message) ((void)0)
 #  define computeBindingsComplete(pass) true
@@ -523,25 +525,49 @@ createComputePipeline(GPUDevice                          *__restrict device,
 }
 
 /* a compute pipeline compiled on the device's threads: the caller gets a
- * placeholder at once, whose compiled pipeline its uses wait for */
+ * placeholder at once, whose compiled pipeline its uses wait for. with a
+ * cache, identical creates made while it compiles get placeholders of the
+ * same job (inflight.refs counts them) */
 
 typedef struct ComputeCompileJob {
   GPUCompileTask               task;
   GPUComputePipelineCreateInfo info;
   GPUPreparedConstants         prepared;
+  GPUPipelineCacheInflight     inflight;
   GPUDevice                   *device;
   GPUComputePipeline          *result;
   char                        *entryPoint;
   char                        *label;
   GPUResult                    status;
+  bool                         shared; /* in its cache's inflight list */
 } ComputeCompileJob;
 
 static void
 computeCompileRun(GPUCompileTask *task) {
   ComputeCompileJob *job;
+  uint32_t           joined;
 
   job         = (ComputeCompileJob *)task;
   job->status = createComputePipeline(job->device, &job->info, &job->result);
+
+  /* later creates find it in the cache; each placeholder that joined holds
+   * the pipeline as the first one does */
+  if (job->shared) {
+    joined = pipelineCacheEndCompute(job->info.cache, &job->inflight);
+
+    for (; job->status == GPU_OK && joined; joined--)
+      retainComputePipeline(job->result);
+  }
+}
+
+/* the last placeholder of a job lets it go */
+static bool
+computeCompileRelease(ComputeCompileJob *job) {
+#if defined(_MSC_VER) && !defined(__clang__)
+  return InterlockedDecrement((volatile LONG *)&job->inflight.refs) == 0;
+#else
+  return __atomic_sub_fetch(&job->inflight.refs, 1u, __ATOMIC_ACQ_REL) == 0u;
+#endif
 }
 
 static void
@@ -576,9 +602,12 @@ computeCompileDeferred(GPUDevice                          *device,
   const GPUIntersectionFunctionPipelineEXT *intersection;
   const char                               *entries[1];
   GPUComputePipeline                       *shell;
+  GPUComputePipeline                       *cached;
+  GPUPipelineCacheInflight                 *running;
   ComputeCompileJob                        *job;
   GPUResult                                 result;
   uint32_t                                  requiredBindGroupMask;
+  bool                                      submit;
 
   if ((result = computePipelineChecks(device, info, &intersection)) != GPU_OK)
     return computePipelineReport(device, info, result);
@@ -611,6 +640,29 @@ computeCompileDeferred(GPUDevice                          *device,
   job->info.label       = job->label;
   job->device           = device;
   job->task.run         = computeCompileRun;
+  job->inflight.refs    = 1u;
+  submit                = true;
+
+  /* one compiled is in the cache; one compiling (two renderers asking for
+   * one pipeline) is shared, not compiled again */
+  if (job->info.cache
+      && pipelineCacheBeginCompute(job->info.cache, &job->info, &job->inflight,
+                                   &cached, &running) == GPU_OK) {
+    if (cached || running) {
+      computeCompileFree(job);
+
+      if (cached) {
+        free(shell);
+        *outPipeline = cached;
+        return GPU_OK;
+      }
+
+      job    = (ComputeCompileJob *)(void *)((char *)running - offsetof(ComputeCompileJob, inflight));
+      submit = false;
+    } else {
+      job->shared = true;
+    }
+  }
 
   shell->_api                   = deviceApi(device);
   shell->_device                = device;
@@ -619,7 +671,8 @@ computeCompileDeferred(GPUDevice                          *device,
   shell->_refCount              = 1u;
   shell->_compile               = job;
 
-  compilePoolSubmit(device, &job->task);
+  if (submit)
+    compilePoolSubmit(device, &job->task);
   *outPipeline = shell;
 
   return GPU_OK;
@@ -674,11 +727,13 @@ GPUDestroyComputePipeline(GPUComputePipeline *pipeline) {
     if (!releaseComputePipeline(pipeline))
       return;
 
-    /* the compile finished (or run here), then what it made goes */
+    /* the compile finished (or run here), then this placeholder's hold on
+     * what it made goes, and the job with the last one */
     (void)computePipelineResolve(pipeline);
     if (job->status == GPU_OK)
       GPUDestroyComputePipeline(job->result);
-    computeCompileFree(job);
+    if (computeCompileRelease(job))
+      computeCompileFree(job);
     free(pipeline);
     return;
   }

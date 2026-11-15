@@ -28,7 +28,8 @@ typedef enum ComputeReadbackMode {
   COMPUTE_READBACK_DIRECT = 0,
   COMPUTE_READBACK_INDIRECT,
   COMPUTE_READBACK_MULTI_INDIRECT,
-  COMPUTE_READBACK_REUSED_ADDRESS /* direct, into a buffer made where a destroyed one lived */
+  COMPUTE_READBACK_REUSED_ADDRESS, /* direct, into a buffer made where a destroyed one lived */
+  COMPUTE_READBACK_SHARED_COMPILE  /* direct, by the second of two creates of one pipeline */
 } ComputeReadbackMode;
 
 typedef struct DispatchArgs {
@@ -970,16 +971,22 @@ check_compute_readback_case(GPUDevice          *device,
   const int                    multi = mode == COMPUTE_READBACK_MULTI_INDIRECT;
   const int                    indirect = mode == COMPUTE_READBACK_INDIRECT || multi;
   const int                    reused = mode == COMPUTE_READBACK_REUSED_ADDRESS;
+  const int                    shared = mode == COMPUTE_READBACK_SHARED_COMPILE;
   const char                  *label = multi ? "api-compute-multi-indirect"
                                          : (indirect ? "api-compute-indirect"
                                               : (reused ? "api-compute-reused-address"
-                                                   : "api-compute-direct"));
+                                                   : (shared ? "api-compute-shared-compile"
+                                                        : "api-compute-direct")));
   GPUQueue                    *queue;
   GPUShaderLibrary            *library = NULL;
   GPUShaderReflection          reflection = {0};
   GPUBindGroupLayout          *bindGroupLayout = NULL;
   GPUPipelineLayout           *pipelineLayout = NULL;
   GPUComputePipeline          *pipeline = NULL;
+  GPUComputePipeline          *first = NULL;
+  GPUPipelineCache            *cache = NULL;
+  GPUCacheStats                statsBefore = {0};
+  GPUCacheStats                statsAfter = {0};
   GPUBuffer                   *outputBuffer = NULL;
   GPUBuffer                   *argsBuffer = NULL;
   GPUBindGroup                *bindGroup = NULL;
@@ -1068,6 +1075,27 @@ check_compute_readback_case(GPUDevice          *device,
   pipelineInfo.layout           = pipelineLayout;
   pipelineInfo.library          = library;
   pipelineInfo.entryPoint       = "api_indirect_cs";
+
+  /* two creates of one pipeline, the second while the first may still be
+   * compiling on the device's threads: one compile, shared, and the second
+   * outlives the first's destroy */
+  if (shared) {
+    GPUPipelineCacheCreateInfo cacheInfo = {0};
+
+    cacheInfo.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    cacheInfo.chain.structSize = sizeof(cacheInfo);
+    cacheInfo.label            = label;
+    cacheInfo.maxEntries       = 4u;
+
+    if (GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache
+        || !(pipelineInfo.cache = cache)
+        || GPUGetCacheStats(device, &statsBefore) != GPU_OK
+        || GPUCreateComputePipeline(device, &pipelineInfo, &first) != GPU_OK || !first) {
+      fprintf(stderr, "failed to create %s first pipeline\n", label);
+      goto cleanup;
+    }
+  }
+
   pipelineResult                = GPUCreateComputePipeline(device, &pipelineInfo, &pipeline);
 
   if (pipelineResult != GPU_OK || !pipeline) {
@@ -1076,6 +1104,23 @@ check_compute_readback_case(GPUDevice          *device,
             label,
             pipelineResult);
     goto cleanup;
+  }
+
+  if (shared) {
+    if (GPUWaitComputePipeline(pipeline) != GPU_OK || GPUWaitComputePipeline(first) != GPU_OK
+        || GPUGetCacheStats(device, &statsAfter) != GPU_OK
+        || statsAfter.pipelineCompiles - statsBefore.pipelineCompiles != 1u
+        || statsAfter.pipelineHits - statsBefore.pipelineHits != 1u) {
+      fprintf(stderr,
+              "%s: two creates made %llu compiles and %llu cache hits, expected 1 and 1\n",
+              label,
+              (unsigned long long)(statsAfter.pipelineCompiles - statsBefore.pipelineCompiles),
+              (unsigned long long)(statsAfter.pipelineHits - statsBefore.pipelineHits));
+      goto cleanup;
+    }
+
+    GPUDestroyComputePipeline(first);
+    first = NULL;
   }
 
   bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1298,7 +1343,9 @@ cleanup:
   GPUDestroyBuffer(outputBuffer);
   while (spareCount > 0u)
     GPUDestroyBuffer(spare[--spareCount]);
+  GPUDestroyComputePipeline(first);
   GPUDestroyComputePipeline(pipeline);
+  GPUDestroyPipelineCache(cache);
   GPUDestroyPipelineLayout(pipelineLayout);
   GPUDestroyBindGroupLayout(bindGroupLayout);
   GPUFreeShaderReflection(&reflection);
@@ -1319,6 +1366,9 @@ check_compute_readback(GPUDevice *device, const char *bytecodePath) {
                                         bytecodePath)
          && check_compute_readback_case(device,
                                         COMPUTE_READBACK_REUSED_ADDRESS,
+                                        bytecodePath)
+         && check_compute_readback_case(device,
+                                        COMPUTE_READBACK_SHARED_COMPILE,
                                         bytecodePath);
 }
 
