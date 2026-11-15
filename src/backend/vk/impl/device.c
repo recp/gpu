@@ -450,6 +450,12 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
     return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
   }
 
+#ifdef VK_EXT_external_memory_host
+  if (strcmp(name, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME) == 0) {
+    return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_BUFFER_HOST_MEMORY_EXT);
+  }
+#endif
+
 #ifdef VK_EXT_image_view_min_lod
   if (strcmp(name, VK_EXT_IMAGE_VIEW_MIN_LOD_EXTENSION_NAME) == 0) {
     return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_TEXTURE_VIEW_MIN_LOD);
@@ -1060,6 +1066,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   bool descriptorExtension;
   bool subgroupSizeControl;
   bool float16Extension;
+  bool hostMemoryExtension;
   bool float16Core;
   bool storage16Extension;
   bool storage16Core;
@@ -1203,6 +1210,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
   descriptorExtension       = false;
   subgroupSizeControl       = false;
   float16Extension          = false;
+  hostMemoryExtension       = false;
   float16Core               = false;
   storage16Extension        = false;
   storage16Core             = false;
@@ -1343,6 +1351,11 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
 
       VK__ADD_EXT_IF(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
                      float16Extension = true);
+#ifdef VK_EXT_external_memory_host
+      if (!strcmp(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME, extensions[i].extensionName)) {
+        hostMemoryExtension = true;
+      }
+#endif
 
 #ifdef VK_EXT_image_view_min_lod
       if (!strcmp(VK_EXT_IMAGE_VIEW_MIN_LOD_EXTENSION_NAME, extensions[i].extensionName)) {
@@ -1763,6 +1776,32 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
                            && adapterVk->props.apiVersion >= VK_API_VERSION_1_1
                            && spirv14Extension
                            && shaderFloatControlsExtension;
+#endif
+#ifdef VK_EXT_external_memory_host
+  /* host memory imported as buffers (GPU_FEATURE_BUFFER_HOST_MEMORY_EXT: memory the caller lends, written in place);
+     its external memory is Vulkan 1.1's */
+  if (hostMemoryExtension && instanceVk && instanceVk->apiVersion >= VK_API_VERSION_1_1
+      && adapterVk->props.apiVersion >= VK_API_VERSION_1_1) {
+    VkPhysicalDeviceExternalMemoryHostPropertiesEXT hostProperties = {0};
+    VkPhysicalDeviceProperties2                     hostProperties2 = {0};
+    PFN_vkGetPhysicalDeviceProperties2              getHostProperties;
+
+    getHostProperties = (PFN_vkGetPhysicalDeviceProperties2)vkGetInstanceProcAddr(instanceVk->inst,
+                                                                                  "vkGetPhysicalDeviceProperties2");
+    hostProperties.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT;
+    hostProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    hostProperties2.pNext = &hostProperties;
+    if (getHostProperties) {
+      getHostProperties(raw, &hostProperties2);
+    }
+
+    if (hostProperties.minImportedHostPointerAlignment > 0u
+        && (hostProperties.minImportedHostPointerAlignment & (hostProperties.minImportedHostPointerAlignment - 1u)) == 0u
+        && vk_addDeviceExtension(adapterVk, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME)) {
+      adapterVk->hostMemoryImport     = true;
+      adapterVk->hostPointerAlignment = hostProperties.minImportedHostPointerAlignment;
+    }
+  }
 #endif
   if (getFeatures2 && (float16Core || float16Extension)) {
     float16Features.sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
@@ -2709,6 +2748,8 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->computeDerivativeLinear;
     case GPU_FEATURE_BUFFER_DEVICE_ADDRESS:
       return adapterVk->bufferDeviceAddress;
+    case GPU_FEATURE_BUFFER_HOST_MEMORY_EXT:
+      return adapterVk->hostMemoryImport;
     case GPU_FEATURE_TEXTURE_VIEW_MIN_LOD:
       return adapterVk->imageViewMinLod;
     case GPU_FEATURE_INDIRECT_MEMORY_COPY:
@@ -3627,6 +3668,13 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
 #ifdef VK_KHR_shader_untyped_pointers
   deviceVk->shaderUntypedPointers = adapterVk->shaderUntypedPointers;
   device->uslUntypedPointers      = deviceVk->shaderUntypedPointers;
+#endif
+#ifdef VK_EXT_external_memory_host
+  if (adapterVk->hostMemoryImport && vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_BUFFER_HOST_MEMORY_EXT)) {
+    deviceVk->getMemoryHostPointerProperties = (PFN_vkGetMemoryHostPointerPropertiesEXT)
+      vkGetDeviceProcAddr(deviceVk->device, "vkGetMemoryHostPointerPropertiesEXT");
+    deviceVk->hostPointerAlignment = adapterVk->hostPointerAlignment;
+  }
 #endif
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
   if (adapterVk->presentWait) {

@@ -198,6 +198,8 @@ typedef struct GPUAdapterVk {
   bool                                                  vrsAttachment;
   bool                                                  presentWait;
   bool                                                  timelineSemaphore;
+  bool                                                  hostMemoryImport;     /* VK_EXT_external_memory_host */
+  VkDeviceSize                                          hostPointerAlignment; /* its minImportedHostPointerAlignment */
   bool                                                  synchronization2;
   bool                                                  externalInterop;
   bool                                                  rayQuery;
@@ -241,6 +243,10 @@ typedef struct GPUDeviceVk {
   PFN_vkCmdEndRenderingKHR                       endRendering;
   PFN_vkCmdPipelineBarrier2KHR                   pipelineBarrier2;
   PFN_vkGetBufferDeviceAddress                   getBufferDeviceAddress;
+#ifdef VK_EXT_external_memory_host
+  PFN_vkGetMemoryHostPointerPropertiesEXT        getMemoryHostPointerProperties; /* host memory imported (NULL: none) */
+#endif
+  VkDeviceSize                                   hostPointerAlignment;
 #ifdef VK_EXT_descriptor_buffer
   PFN_vkGetDescriptorSetLayoutSizeEXT            getDescriptorSetLayoutSize;
   PFN_vkGetDescriptorSetLayoutBindingOffsetEXT   getDescriptorSetLayoutBindingOffset;
@@ -365,6 +371,7 @@ typedef struct GPUBufferVk {
   bool           sparse;
   bool           deviceMapped; /* device-local memory mapped too: queue writes there keep the queue's order */
   bool           stagedReads;  /* device-local memory the host maps uncached: reads copy to cached staging */
+  bool           imported;     /* the caller's pages (GPUBufferHostMemoryEXT): `mapped` is theirs, never unmapped */
 } GPUBufferVk;
 
 typedef struct GPUHeapVk {

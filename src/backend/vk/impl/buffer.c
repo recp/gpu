@@ -19,6 +19,12 @@
 #include "../../../api/buffer_internal.h"
 #include "../../../api/suballoc_internal.h"
 
+#if defined(_WIN32)
+#  include <windows.h>
+#else
+#  include <unistd.h>
+#endif
+
 static void
 vk__destroyBufferState(GPUBufferVk *native);
 
@@ -103,7 +109,7 @@ vk__destroyBufferState(GPUBufferVk *native) {
     return;
   }
 
-  if (native->ownsMemory && native->mapped && native->memory) {
+  if (native->ownsMemory && native->mapped && native->memory && !native->imported) {
     vkUnmapMemory(native->device, native->memory);
   }
 
@@ -720,6 +726,132 @@ vk_wrapBuffer(GPUDevice                 *device,
   return GPU_OK;
 }
 
+#ifdef VK_EXT_external_memory_host
+static size_t
+vk__hostPageSize(void) {
+#if defined(_WIN32)
+  SYSTEM_INFO info;
+
+  GetSystemInfo(&info);
+  return info.dwPageSize;
+#else
+  long size = sysconf(_SC_PAGESIZE);
+
+  return size > 0 ? (size_t)size : 0u;
+#endif
+}
+
+/* the caller's pages as a buffer (GPUBufferHostMemoryEXT, VK_EXT_external_memory_host): the GPU reads and writes
+ * them in place, nothing copied; imported into a host-coherent type the pointer allows, so what the GPU wrote is
+ * read there once its work is waited for (none such: unsupported, the caller copies). The pages stay the caller's,
+ * freed by them after the buffer is destroyed */
+static GPUResult
+vk__importBuffer(GPUDevice                    *__restrict device,
+                 const GPUBufferCreateInfo    *__restrict info,
+                 const GPUBufferHostMemoryEXT *__restrict host,
+                 GPUBuffer                   **__restrict outBuffer) {
+  GPUBufferVk                       state          = {0};
+  VkBufferCreateInfo                bufferInfo     = {0};
+  VkExternalMemoryBufferCreateInfo  external       = {0};
+  VkImportMemoryHostPointerInfoEXT  import         = {0};
+  VkMemoryHostPointerPropertiesEXT  pointer        = {0};
+  VkMemoryAllocateFlagsInfo         allocationFlags = {0};
+  VkMemoryAllocateInfo              allocationInfo = {0};
+  VkMemoryRequirements              requirements;
+  VkMemoryPropertyFlags             memoryFlags;
+  GPUDeviceVk                      *deviceVk;
+  VkDeviceSize                      align;
+  uint32_t                          memoryTypeIndex;
+  size_t                            page;
+  GPUResult                         result;
+
+  deviceVk = device->_priv;
+  align    = deviceVk->hostPointerAlignment;
+  page     = vk__hostPageSize();
+
+  /* whole pages, as on Metal; a driver that imports only coarser ranges can't take these (the caller copies) */
+  if (page == 0u || (uintptr_t)host->pData % page != 0u || host->allocationSize % page != 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  if (!deviceVk->getMemoryHostPointerProperties || align == 0u
+      || ((uintptr_t)host->pData & (uintptr_t)(align - 1u)) != 0u
+      || (host->allocationSize & (align - 1u)) != 0u) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  if (vk_bufferCreateInfo(device, info, &bufferInfo) != GPU_OK) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  external.sType       = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO;
+  external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+  bufferInfo.pNext     = &external;
+  state.device         = deviceVk->device;
+
+  if (vkCreateBuffer(state.device, &bufferInfo, NULL, &state.buffer) != VK_SUCCESS) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  vkGetBufferMemoryRequirements(state.device, state.buffer, &requirements);
+  pointer.sType = VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT;
+
+  if (deviceVk->getMemoryHostPointerProperties(state.device,
+                                               VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
+                                               host->pData,
+                                               &pointer) != VK_SUCCESS
+      || requirements.size > host->allocationSize
+      || !vk_findMemoryType(device,
+                            requirements.memoryTypeBits & pointer.memoryTypeBits,
+                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                            VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+                            &memoryTypeIndex,
+                            &memoryFlags)) {
+    vk__destroyBufferState(&state);
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  import.sType                   = VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT;
+  import.handleType              = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+  import.pHostPointer            = host->pData;
+  allocationInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocationInfo.pNext           = &import;
+  allocationInfo.allocationSize  = host->allocationSize;
+  allocationInfo.memoryTypeIndex = memoryTypeIndex;
+
+  if ((bufferInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0u) {
+    allocationFlags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+    allocationFlags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+    import.pNext          = &allocationFlags;
+  }
+
+  if (vkAllocateMemory(state.device, &allocationInfo, NULL, &state.memory) != VK_SUCCESS) {
+    vk__destroyBufferState(&state);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  state.ownsMemory = true;
+
+  if (vkBindBufferMemory(state.device, state.buffer, state.memory, 0u) != VK_SUCCESS) {
+    vk__destroyBufferState(&state);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  state.mapped         = host->pData;
+  state.imported       = true;
+  state.coherent       = true;
+  state.allocationSize = host->allocationSize;
+
+  if ((result = vk_wrapBuffer(device, info, &bufferInfo, &state, outBuffer)) == GPU_OK) {
+    (*outBuffer)->_hostMemory     = host->pData;
+    (*outBuffer)->_hostImported   = true;
+    (*outBuffer)->_allocationSize = host->allocationSize;
+  }
+
+  return result;
+}
+#endif
+
 GPU_HIDE
 GPUResult
 vk_createBuffer(GPUDevice                 *__restrict device,
@@ -730,6 +862,12 @@ vk_createBuffer(GPUDevice                 *__restrict device,
                                           GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT;
   GPUResult                 result;
   bool                      hostVisible;
+
+#ifdef VK_EXT_external_memory_host
+  if (info && info->chain.pNext) {
+    return device ? vk__importBuffer(device, info, info->chain.pNext, outBuffer) : GPU_ERROR_INVALID_ARGUMENT;
+  }
+#endif
 
   hostVisible = info && (info->usage & deviceLocal) == 0u;
   result      = vk__createBuffer(device, info, hostVisible ? VK_BUFFER_HOST_WRITE : VK_BUFFER_DEVICE, outBuffer);
