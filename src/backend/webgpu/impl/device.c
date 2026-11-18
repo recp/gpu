@@ -939,6 +939,10 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
                   (1ull << GPU_FEATURE_INDIRECT_DRAW) |
                   (1ull << GPU_FEATURE_DESCRIPTOR_INDEXING);
 
+  if (GPUIsFeatureSupported(adapter, GPU_FEATURE_FRAME_PACER)) {
+    supportedMask |= 1ull << GPU_FEATURE_FRAME_PACER;
+  }
+
   if (webgpu_supportsFeature(adapter, GPU_FEATURE_TIMESTAMPS)) {
     supportedMask |= 1ull << GPU_FEATURE_TIMESTAMPS;
   }

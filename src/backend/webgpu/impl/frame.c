@@ -16,18 +16,12 @@
 
 #include "../common.h"
 #include "../impl.h"
+#include "../../../api/pacer_internal.h"
 
-static GPUFrame*
-webgpu_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
-  WGPUSurfaceTexture  surfaceTexture = WGPU_SURFACE_TEXTURE_INIT;
-  GPUSwapchainWebGPU *native;
-
-  GPU__UNUSED(api);
-  native = webgpuSwapchain(swapchain);
-
-  if (!native || native->acquired) {
-    return NULL;
-  }
+/* the surface's texture as the frame's target; frame->drawable is left as it is */
+static bool
+webgpu__acquireTexture(GPUSwapchain *swapchain, GPUSwapchainWebGPU *native) {
+  WGPUSurfaceTexture surfaceTexture = WGPU_SURFACE_TEXTURE_INIT;
 
   wgpuSurfaceGetCurrentTexture(native->surface, &surfaceTexture);
 
@@ -49,7 +43,7 @@ webgpu_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
         break;
     }
 
-    return NULL;
+    return false;
   }
 
   native->currentTexture = surfaceTexture.texture;
@@ -57,10 +51,9 @@ webgpu_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
   if (!(native->currentView = wgpuTextureCreateView(native->currentTexture, NULL))) {
     wgpuTextureRelease(native->currentTexture);
     native->currentTexture = NULL;
-    return NULL;
+    return false;
   }
 
-  memset(&native->frame, 0, sizeof(native->frame));
   memset(&native->texture, 0, sizeof(native->texture));
   memset(&native->view, 0, sizeof(native->view));
 
@@ -81,17 +74,73 @@ webgpu_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
   native->view.mipLevelCount   = 1u;
   native->view.arrayLayerCount = 1u;
 
-  native->frame._priv      = native;
   native->frame.target     = &native->texture;
   native->frame.targetView = &native->view;
-  native->frame.drawable   = native->currentTexture;
-  native->acquired         = true;
 
   if (surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal) {
     swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SUBOPTIMAL);
   }
 
+  return true;
+}
+
+static GPUFrame*
+webgpu_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
+  GPUSwapchainWebGPU *native;
+
+  GPU__UNUSED(api);
+  native = webgpuSwapchain(swapchain);
+
+  if (!native || native->acquired) {
+    return NULL;
+  }
+
+  memset(&native->frame, 0, sizeof(native->frame));
+  if (!webgpu__acquireTexture(swapchain, native)) {
+    return NULL;
+  }
+
+  native->frame._priv    = native;
+  native->frame.drawable = native->currentTexture;
+  native->acquired       = true;
+
   return &native->frame;
+}
+
+/* a pacer's tick: the texture is taken at the frame's first use. A browser
+ * presents the canvas's texture once it has been asked for (cleared, if
+ * nothing was drawn), and a native surface's would wait for a present: a tick
+ * that draws nothing asks for none */
+static GPUFrame*
+webgpu_beginDrawable(GPUApi *api, GPUSwapchain *swapchain, void *pacer) {
+  GPUSwapchainWebGPU *native;
+
+  GPU__UNUSED(api);
+  GPU__UNUSED(pacer);
+  native = webgpuSwapchain(swapchain);
+
+  if (!native || native->acquired) {
+    return NULL;
+  }
+
+  memset(&native->frame, 0, sizeof(native->frame));
+  native->frame._priv       = native;
+  native->frame.drawable    = native;
+  native->frame.targetState = GPU_FRAME_TARGET_PENDING;
+  native->acquired          = true;
+
+  return &native->frame;
+}
+
+static bool
+webgpu_acquireDrawable(GPUApi *api, GPUFrame *frame) {
+  GPUSwapchainWebGPU *native;
+
+  GPU__UNUSED(api);
+  native = frame->_priv;
+
+  return native && native->acquired && !native->currentTexture
+         && webgpu__acquireTexture(frame->swapchain, native);
 }
 
 static void
@@ -120,6 +169,9 @@ webgpu_endFrame(GPUApi *api, GPUFrame *frame) {
 
 void
 webgpu_initFrame(GPUFrameApi *api) {
-  api->beginFrame = webgpu_beginFrame;
-  api->endFrame   = webgpu_endFrame;
+  api->beginFrame      = webgpu_beginFrame;
+  api->endFrame        = webgpu_endFrame;
+  api->beginDrawable   = webgpu_beginDrawable;
+  api->acquireDrawable = webgpu_acquireDrawable;
+  framePacerUseClock(api);
 }
