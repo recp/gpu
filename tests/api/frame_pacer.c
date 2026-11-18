@@ -63,7 +63,9 @@ typedef struct PacerTest {
   double         lastTick;
   double         intervals[INTERVAL_CAPACITY];
   uint32_t       intervalCount;
-  double         refresh;     /* the display's period, from the ticks */
+  double         refreshes[INTERVAL_CAPACITY]; /* the ticks' refreshInterval */
+  uint32_t       refreshCount;
+  double         refresh;     /* the display's period: the idle ticks' median refreshInterval */
   PacerSample    samples[SAMPLE_CAPACITY];
   GPUFrameFeedback *feedbacks[SAMPLE_CAPACITY];
   uint32_t       sampleCount;
@@ -261,8 +263,8 @@ tick(GPUFrame *frame, const GPUFrameTiming *timing, void *user) {
   if (state->lastTick > 0.0 && state->intervalCount < INTERVAL_CAPACITY)
     state->intervals[state->intervalCount++] = now - state->lastTick;
   state->lastTick = now;
-  if (timing->refreshInterval > 0.0 && (state->refresh <= 0.0 || timing->refreshInterval < state->refresh))
-    state->refresh = timing->refreshInterval;
+  if (timing->refreshInterval > 0.0 && state->refreshCount < INTERVAL_CAPACITY)
+    state->refreshes[state->refreshCount++] = timing->refreshInterval;
 
   if (!frame)
     return;
@@ -356,6 +358,7 @@ reset_counts(PacerTest *state, uint32_t phase) {
   state->ticks         = 0u;
   state->lastTick      = 0.0;
   state->intervalCount = 0u;
+  state->refreshCount  = 0u;
 }
 
 static int
@@ -404,16 +407,19 @@ display_times(PacerTest *state, double *times, uint32_t capacity) {
 
 static bool
 check_cadence(PacerTest *state, const char *what, double seconds, double expectRate) {
-  double   intervals[INTERVAL_CAPACITY], median, rate;
+  double   intervals[INTERVAL_CAPACITY], median, rate, refresh;
   uint32_t n;
 
+  n = state->refreshCount;
+  memcpy(intervals, state->refreshes, n * sizeof(*intervals));
+  refresh = percentile(intervals, n, 0.5);
   n = state->intervalCount;
   memcpy(intervals, state->intervals, n * sizeof(*intervals));
   median = percentile(intervals, n, 0.5);
   rate   = state->ticks / seconds;
-  printf("pacer: %s: %u ticks in %.2f s (%.1f/s), interval median %.2f ms p10 %.2f p90 %.2f, display %.2f ms\n",
+  printf("pacer: %s: %u ticks in %.2f s (%.1f/s), interval median %.2f ms p10 %.2f p90 %.2f, refresh interval %.2f ms\n",
          what, state->ticks, seconds, rate, median * 1e3, percentile(intervals, n, 0.1) * 1e3,
-         percentile(intervals, n, 0.9) * 1e3, state->refresh * 1e3);
+         percentile(intervals, n, 0.9) * 1e3, refresh * 1e3);
   /* ticks near the expected rate; a loaded machine may miss a few */
   return n > 4u && rate > expectRate * 0.6 && rate < expectRate * 1.15
          && fabs(median * expectRate - 1.0) < 0.2;
@@ -595,6 +601,12 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
   ok = begin_rejected(state.swapchain);
   start = pacerHostNow();
   pacerHostPump(1.0);
+  {
+    double refreshes[INTERVAL_CAPACITY];
+
+    memcpy(refreshes, state.refreshes, state.refreshCount * sizeof(*refreshes));
+    state.refresh = percentile(refreshes, state.refreshCount, 0.5);
+  }
   rate = state.refresh > 0.0 ? 1.0 / state.refresh : 60.0;
   ok = ok && check_cadence(&state, "idle ticks", pacerHostNow() - start, rate) && !state.failed;
   unconsumed = true;
