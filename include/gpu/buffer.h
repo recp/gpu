@@ -38,7 +38,14 @@ enum {
 
   GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT   = 1u << 7,
   GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT = 1u << 8,
-  GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT                 = 1u << 9
+  GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT                 = 1u << 9,
+
+  /* the host reads what the GPU wrote (copies, query resolves): host-cached
+   * memory where the device has it, mapped for the buffer's life, so after
+   * the writing work's fence GPUGetBufferHostAddress reads it with no copy.
+   * Combines with COPY_DST only. NULL host address where mapping is
+   * asynchronous (WebGPU): GPUQueueReadBuffer reads it there. */
+  GPU_BUFFER_USAGE_HOST_READ = 1u << 10
 };
 
 typedef struct GPUBufferCreateInfo {

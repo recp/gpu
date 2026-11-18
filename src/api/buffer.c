@@ -33,13 +33,21 @@ validateBufferCreateInfo(const GPUDevice           *device,
                                        GPU_BUFFER_USAGE_INDIRECT |
                                        GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
                                        GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT |
-                                       GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
+                                       GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT |
+                                       GPU_BUFFER_USAGE_HOST_READ;
 
   if (!device || !info || info->sizeBytes == 0u || info->usage == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
   if ((info->usage & ~known) != 0u) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  /* readback memory takes copies only: a readback heap (DX12) and a
+   * map-read buffer (WebGPU) can be nothing else */
+  if ((info->usage & GPU_BUFFER_USAGE_HOST_READ) != 0u
+      && (info->usage & ~(GPU_BUFFER_USAGE_HOST_READ | GPU_BUFFER_USAGE_COPY_DST)) != 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
@@ -215,9 +223,10 @@ GPUQueueReadBuffer(GPUQueue  *__restrict queue,
   GPUApi   *api;
   GPUResult result;
 
+  /* a host-read buffer is read where it lives, no copy out of it */
   if (!queue || !buff || !outData || sizeBytes == 0
       || commandQueueDevice(queue) != buff->device
-      || !bufferHasUsage(buff, GPU_BUFFER_USAGE_COPY_SRC)
+      || !(bufferHasUsage(buff, GPU_BUFFER_USAGE_COPY_SRC) || bufferHasUsage(buff, GPU_BUFFER_USAGE_HOST_READ))
       || !bufferRangeValid(buff, srcOffset, sizeBytes)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
