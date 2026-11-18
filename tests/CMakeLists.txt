@@ -699,6 +699,30 @@ if(GPU_BUILD_TESTS)
     endif()
   endif()
 
+  if(GPU_USL_ROOT AND EXISTS "${GPU_USL_ROOT}/us/deps/SPIRV-Headers/include/spirv/unified1/spirv.h")
+    set(GPU_USL_FIXTURE_TARGET_CAPS vulkan1_3,shader_int64,shader_f64)
+    gpu_add_usl_fixtures(GPU_WIDE64_FIXTURE vulkan api-wide64
+      "${PROJECT_SOURCE_DIR}/tests/api/wide64.usl")
+    unset(GPU_USL_FIXTURE_TARGET_CAPS)
+    add_executable(gpu-wide64-test
+      ${PROJECT_SOURCE_DIR}/tests/api/wide64.c
+      ${GPU_WIDE64_FIXTURE})
+    target_include_directories(gpu-wide64-test PRIVATE
+      "${GPU_USL_ROOT}/us/include"
+      "${GPU_USL_ROOT}/us/deps/SPIRV-Headers/include")
+    target_link_libraries(gpu-wide64-test PRIVATE gpu)
+    set_target_properties(gpu-wide64-test PROPERTIES
+      C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+      target_compile_definitions(gpu-wide64-test PRIVATE _CRT_SECURE_NO_WARNINGS)
+      target_compile_options(gpu-wide64-test PRIVATE /W4 /WX)
+    else()
+      target_compile_options(gpu-wide64-test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME api-wide64 COMMAND gpu-wide64-test ${GPU_WIDE64_FIXTURE})
+    set_tests_properties(api-wide64 PROPERTIES LABELS "usl;spirv;wide64" TIMEOUT 60)
+  endif()
+
   add_executable(gpu-public-layout-test
     ${PROJECT_SOURCE_DIR}/tests/api/layout.c
   )

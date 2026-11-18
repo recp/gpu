@@ -78,6 +78,13 @@ enum {
   GPU_USL_SUBGROUP_SHUFFLE = 1u << 1
 };
 
+/* 64-bit types a device's shaders run natively, for USL: on a target that
+ * names its device, a type without its bit is emulated in 32-bit words */
+enum {
+  GPU_USL_WIDE_INT64 = 1u << 0,
+  GPU_USL_WIDE_F64   = 1u << 1
+};
+
 struct GPUDevice {
   GPUInstance                *inst;
   GPUAdapter                 *adapter;
@@ -128,6 +135,8 @@ struct GPUDevice {
   bool                        uslStorageF16;
   uint8_t                     uslNarrowStorage; /* GPU_USL_NARROW_*: classes keeping 8/16-bit data narrow */
   uint8_t                     uslSubgroupOps;   /* GPU_USL_SUBGROUP_* */
+  uint8_t                     uslWide64;        /* GPU_USL_WIDE_* */
+  bool                        uslPortabilitySubset; /* VK_KHR_portability_subset: 64-bit division in words */
   bool                        uslIOF16;
   bool                        uslCubeGradFixup;
   bool                        transientConfigured;

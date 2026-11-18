@@ -1364,7 +1364,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
       VK__ADD_EXT_IF(VK_KHR_SWAPCHAIN_EXTENSION_NAME,
                      adapter->supportsSwapchain = true);
 
-      VK__ADD_EXT_IF("VK_KHR_portability_subset", (void)NULL);
+      VK__ADD_EXT_IF("VK_KHR_portability_subset", adapterVk->portabilitySubset = true);
 
       VK__ADD_EXT_IF(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
                      float16Extension = true);
@@ -3308,6 +3308,9 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
 
   coreFeatures.independentBlend  = adapterVk->features.independentBlend;
   coreFeatures.shaderFloat64     = adapterVk->features.shaderFloat64;
+  /* native 64-bit integers wherever the device has them: USL emulates them
+   * in 32-bit words otherwise */
+  coreFeatures.shaderInt64       = adapterVk->features.shaderInt64;
 
   /* storage writes from render stages, and storage images of every format SPIR-V names */
   coreFeatures.fragmentStoresAndAtomics          = adapterVk->features.fragmentStoresAndAtomics;
@@ -3677,6 +3680,9 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
                                                      adapterVk->props.deviceID,
                                                      adapterVk->props.driverVersion);
   device->uslQualcommCompiler = adapterVk->qualcommCompiler;
+  device->uslWide64           = (coreFeatures.shaderInt64 ? GPU_USL_WIDE_INT64 : 0u)
+                              | (coreFeatures.shaderFloat64 ? GPU_USL_WIDE_F64 : 0u);
+  device->uslPortabilitySubset = adapterVk->portabilitySubset;
 #ifdef VK_EXT_shader_atomic_float
   device->uslFloatAtomicAdd = (floatAtomicFeatures.shaderBufferFloat32AtomicAdd ? 1u : 0u) |
                             (floatAtomicFeatures.shaderSharedFloat32AtomicAdd ? 2u : 0u);

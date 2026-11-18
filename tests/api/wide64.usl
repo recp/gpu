@@ -1,0 +1,8 @@
+kern(64) wide64_values(inout a: [ulong] #buffer(0), inout b: [double] #buffer(1), gid: uint3 #global_id) {
+  let x = a[2u * gid.x]
+  let y = a[2u * gid.x + 1u]
+  let d = y == 0 ? ulong(7) : y
+  a[2u * gid.x] = x * d + (x >> ulong(3))
+  a[2u * gid.x + 1u] = x / d
+  b[gid.x] = b[gid.x] * 1.5 + 0.25
+}

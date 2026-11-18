@@ -162,6 +162,7 @@ main(int argc, char **argv) {
   device._api                      = &api;
   device.uslTargetProfile          = USL_TARGET_PROFILE_VULKAN_1_3;
   device.enabledFeatureMask        = UINT64_C(1) << GPU_FEATURE_SHADER_F16;
+  device.uslWide64                 = GPU_USL_WIDE_INT64 | GPU_USL_WIDE_F64; /* f64 natively: its modes are tested */
   info.chain.sType                 = GPU_STRUCTURE_TYPE_SHADER_LIBRARY_CREATE_INFO;
   info.chain.structSize            = sizeof(info);
   info.sourceKind                  = GPU_SHADER_SOURCE_USL_BYTECODE;

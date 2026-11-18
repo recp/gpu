@@ -139,6 +139,32 @@ static const char *const gpu_spirvFmaAtoms[] = {
   "spirv_fma_f16", "spirv_fma_f32", "spirv_fma_f64"
 };
 
+/* the 64-bit types a device runs natively (GPU_USL_WIDE_*), as USL's
+ * semantic features: on a target naming its device USL emulates the others
+ * in 32-bit words */
+static GPUResult
+uslWide64Atoms(const GPUDevice *device, USLCapabilityAtomDesc *atoms, uint32_t *count) {
+  if ((device->uslWide64 & GPU_USL_WIDE_INT64)
+      && us_cap_atom_init(&atoms[(*count)++],
+                          USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+                          USL_SEMANTIC_FEATURE_ID_SHADER_INT64,
+                          0u,
+                          0u) != USLOk) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if ((device->uslWide64 & GPU_USL_WIDE_F64)
+      && us_cap_atom_init(&atoms[(*count)++],
+                          USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+                          USL_SEMANTIC_FEATURE_ID_SHADER_F64,
+                          0u,
+                          0u) != USLOk) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  return GPU_OK;
+}
+
 /* a USL float mode's name, for GPU_USL_LOG */
 static const char*
 uslFloatModeName(uint32_t flags) {
@@ -2935,6 +2961,17 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
       }
     }
 
+    if (uslWide64Atoms(device, targetAtoms, &targetAtomCount) != GPU_OK) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
+    /* MoltenVK: native Int64, but 64-bit division in 32-bit words, which runs
+     * 2-23x faster on Apple GPUs */
+    if (device->uslPortabilitySubset
+        && us_cap_atom_text(&targetAtoms[targetAtomCount++], "vk_khr_portability_subset") != USLOk) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
     if (GPUIsFeatureEnabled(device, GPU_FEATURE_SHADER_F16)) {
       if (us_cap_atom_init(&targetAtoms[targetAtomCount++],
                            USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
@@ -3027,6 +3064,12 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
                            0u) != USLOk) {
         return GPU_ERROR_BACKEND_FAILURE;
       }
+    }
+
+    /* the 64-bit types the backend found native (D3D12_OPTIONS' double ops,
+     * OPTIONS1's Int64ShaderOps with SM 6.0) */
+    if (uslWide64Atoms(device, targetAtoms, &targetAtomCount) != GPU_OK) {
+      return GPU_ERROR_BACKEND_FAILURE;
     }
 
     /* wave ops for USL's own use (half stores paired across lanes), apart

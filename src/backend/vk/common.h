@@ -179,6 +179,7 @@ typedef struct GPUAdapterVk {
   uint8_t                                               roundingIndependence;
   bool                                                  floatControls2;
   bool                                                  qualcommCompiler; /* Qualcomm's own shader compiler, quirks and all */
+  bool                                                  portabilitySubset; /* VK_KHR_portability_subset (MoltenVK) */
   bool                                                  dynamicRendering;
   bool                                                  shaderFloat16;
   bool                                                  storageBuffer16BitAccess;
