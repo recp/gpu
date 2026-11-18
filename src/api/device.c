@@ -1226,9 +1226,14 @@ finalizeDevice(GPUAdapter *adapter,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  device->inst    = adapter->inst;
-  device->adapter = adapter;
-  device->_api    = api;
+  /* a backend may have set these and started work that reads them (Vulkan
+   * warms its memory pool on a thread): written only where they differ */
+  if (device->inst != adapter->inst)
+    device->inst = adapter->inst;
+  if (device->adapter != adapter)
+    device->adapter = adapter;
+  if (device->_api != api)
+    device->_api = api;
 
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_VARIABLE_RATE_SHADING)) != 0u
       && GPUGetVRSCapabilitiesEXT(adapter, &device->vrsCapabilities) != GPU_OK) {
