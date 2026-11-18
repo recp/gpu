@@ -35,8 +35,17 @@ enum {
   VK_POOL_MAPPED    = 1u << 10
 };
 
-#define VK_POOL_FIRST_BLOCK   ((uint64_t)8u << 20)
-#define VK_POOL_LARGEST_BLOCK ((uint64_t)64u << 20)
+/* Android: small blocks, none made ahead, so less memory is held for the same first frames. GPU_POOL_FIRST_KB,
+ * GPU_POOL_LARGEST_KB and GPU_POOL_WARM override both (measuring) */
+#if defined(__ANDROID__)
+#  define VK_POOL_FIRST_BLOCK   ((uint64_t)2u << 20)
+#  define VK_POOL_LARGEST_BLOCK ((uint64_t)8u << 20)
+#  define VK_POOL_WARM          false
+#else
+#  define VK_POOL_FIRST_BLOCK   ((uint64_t)8u << 20)
+#  define VK_POOL_LARGEST_BLOCK ((uint64_t)64u << 20)
+#  define VK_POOL_WARM          true
+#endif
 #define VK_POOL_MAX_RESOURCE  ((uint64_t)4u << 20)
 
 static bool
@@ -92,6 +101,19 @@ vk__poolDestroyBlock(void *user, uint32_t key, uint64_t handle, void *mapped) {
   vkFreeMemory(deviceVk->device, memory, NULL);
 }
 
+/* a block size from the environment in KB (GPU_POOL_FIRST_KB, GPU_POOL_LARGEST_KB: measuring a device's memory
+ * against its first frames), else the default; a power of two from 64 KB */
+static uint64_t
+vk__poolSize(const char *name, uint64_t fallback) {
+  const char *env;
+  uint64_t    kb, size;
+
+  if (!(env = getenv(name)) || !(kb = strtoull(env, NULL, 10)) || kb < 64u || kb > ((uint64_t)1u << 22))
+    return fallback;
+  for (size = (uint64_t)64u << 10; size < (kb << 10); size <<= 1u) {}
+  return size;
+}
+
 GPU_HIDE
 void
 vk_initResourcePool(GPUDeviceVk *deviceVk) {
@@ -109,8 +131,10 @@ vk_initResourcePool(GPUDeviceVk *deviceVk) {
   info.createBlock      = vk__poolCreateBlock;
   info.destroyBlock     = vk__poolDestroyBlock;
   info.user             = deviceVk;
-  info.firstBlockSize   = VK_POOL_FIRST_BLOCK;
-  info.largestBlockSize = VK_POOL_LARGEST_BLOCK;
+  info.firstBlockSize   = vk__poolSize("GPU_POOL_FIRST_KB", VK_POOL_FIRST_BLOCK);
+  info.largestBlockSize = vk__poolSize("GPU_POOL_LARGEST_KB", VK_POOL_LARGEST_BLOCK);
+  if (info.largestBlockSize < info.firstBlockSize)
+    info.largestBlockSize = info.firstBlockSize;
   info.maxResourceSize  = VK_POOL_MAX_RESOURCE;
 
   if (!gpuSubInit(pool, &info)) {
@@ -278,7 +302,11 @@ vk_warmResourcePool(GPUDevice *device) {
   GPUDeviceVk *deviceVk;
   VKPoolWarm  *warm;
 
+  const char  *env;
+
+  /* GPU_POOL_WARM=0|1 (measuring): first blocks ahead of the first resources or not, else VK_POOL_WARM */
   if (!device || !(deviceVk = device->_priv) || !deviceVk->resourcePool
+      || !((env = getenv("GPU_POOL_WARM")) ? strcmp(env, "0") != 0 : VK_POOL_WARM)
       || !(warm = calloc(1, sizeof(*warm))))
     return;
 
