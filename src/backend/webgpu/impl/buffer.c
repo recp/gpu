@@ -57,6 +57,10 @@ webgpu_bufferUsage(GPUBufferUsageFlags usage) {
   if (usage & GPU_BUFFER_USAGE_COPY_SRC)
     result |= WGPUBufferUsage_CopySrc;
 
+  /* map-read combines with copy-destination alone */
+  if (usage & GPU_BUFFER_USAGE_HOST_READ)
+    return WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
+
   if (usage & GPU_BUFFER_USAGE_COPY_DST) {
     result |= WGPUBufferUsage_CopyDst | WGPUBufferUsage_QueryResolve;
   }
@@ -192,6 +196,80 @@ webgpu_writeBuffer(GPUQueue   *__restrict queue,
   return GPU_OK;
 }
 
+#if !defined(__EMSCRIPTEN__)
+/* maps [offset, offset + size) of a map-read buffer, waits for it and copies
+ * sizeBytes from prefix bytes in; mapping waits for the work given before
+ * that writes the buffer */
+static GPUResult
+webgpu_mapRead(GPUDevice  *device,
+               WGPUBuffer  buffer,
+               uint64_t    offset,
+               uint64_t    size,
+               uint64_t    prefix,
+               void       *outData,
+               uint64_t    sizeBytes) {
+  WGPUBufferMapCallbackInfo callbackInfo = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
+#if !GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  WGPUFutureWaitInfo        waitInfo = WGPU_FUTURE_WAIT_INFO_INIT;
+  GPUInstanceWebGPU        *instance;
+  WGPUWaitStatus            waitStatus;
+#else
+  GPUDeviceWebGPU          *native;
+#endif
+  WebGPUBufferMapRequest    mapRequest = {0};
+  const uint8_t            *mapped;
+  int                       mapStatus;
+
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  if (!(native = webgpuDevice(device)) || !native->device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  callbackInfo.mode      = WGPUCallbackMode_AllowSpontaneous;
+#else
+  instance = webgpuInstance(device->inst);
+
+  if (!instance || !instance->instance) {
+    return GPU_ERROR_UNSUPPORTED;
+  }
+
+  callbackInfo.mode      = WGPUCallbackMode_WaitAnyOnly;
+#endif
+  callbackInfo.callback  = webgpu_bufferMapped;
+  callbackInfo.userdata1 = &mapRequest;
+#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  wgpuBufferMapAsync(buffer, WGPUMapMode_Read, (size_t)offset, (size_t)size, callbackInfo);
+
+  do {
+    wgpuDevicePoll(native->device, true, NULL);
+    mapStatus = atomic_load_explicit(&mapRequest.status, memory_order_acquire);
+  } while (mapStatus == 0);
+#else
+  waitInfo.future = wgpuBufferMapAsync(buffer, WGPUMapMode_Read, (size_t)offset, (size_t)size, callbackInfo);
+  waitStatus      = wgpuInstanceWaitAny(instance->instance, 1u, &waitInfo, UINT64_MAX);
+  mapStatus       = atomic_load_explicit(&mapRequest.status, memory_order_acquire);
+
+  if (waitStatus != WGPUWaitStatus_Success || !waitInfo.completed) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+#endif
+
+  if (mapStatus != WGPUMapAsyncStatus_Success) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if (!(mapped = wgpuBufferGetConstMappedRange(buffer, (size_t)offset, (size_t)size))) {
+    wgpuBufferUnmap(buffer);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  memcpy(outData, mapped + prefix, (size_t)sizeBytes);
+  wgpuBufferUnmap(buffer);
+
+  return GPU_OK;
+}
+#endif
+
 static GPUResult
 webgpu_readBuffer(GPUQueue  *__restrict queue,
                   GPUBuffer *__restrict buffer,
@@ -199,34 +277,18 @@ webgpu_readBuffer(GPUQueue  *__restrict queue,
                   void      *__restrict outData,
                   uint64_t              sizeBytes) {
 #if !defined(__EMSCRIPTEN__)
-  WGPUBufferDescriptor         bufferInfo   = WGPU_BUFFER_DESCRIPTOR_INIT;
-  WGPUCommandEncoderDescriptor encoderInfo  = WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
-  WGPUCommandBufferDescriptor  commandInfo  = WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT;
-  WGPUBufferMapCallbackInfo    callbackInfo = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
-#if !GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  WGPUFutureWaitInfo           waitInfo = WGPU_FUTURE_WAIT_INFO_INIT;
-#endif
-  WebGPUBufferMapRequest       mapRequest = {0};
+  WGPUBufferDescriptor         bufferInfo  = WGPU_BUFFER_DESCRIPTOR_INIT;
+  WGPUCommandEncoderDescriptor encoderInfo = WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
+  WGPUCommandBufferDescriptor  commandInfo = WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT;
   GPUDevice                   *device;
   GPUDeviceWebGPU             *native;
   WGPUCommandEncoder           encoder;
   WGPUCommandBuffer            command;
   WGPUBuffer                   staging;
-#if !GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  GPUInstanceWebGPU           *instance;
-#endif
-  const uint8_t               *mapped;
-#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  WGPUSubmissionIndex          submission;
-#endif
   uint64_t                     copyOffset;
   uint64_t                     copySize;
   uint64_t                     prefix;
-#if !GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  WGPUWaitStatus               waitStatus;
-#endif
   GPUResult                    result;
-  int                          mapStatus;
 
   device = commandQueueDevice(queue);
   native = webgpuDevice(device);
@@ -236,12 +298,19 @@ webgpu_readBuffer(GPUQueue  *__restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 #if GPU_WEBGPU_PROVIDER_DAWN
-  instance = webgpuInstance(device->inst);
-
-  if (!instance || !instance->instance || !instance->timedWaitAny) {
+  if (!webgpuInstance(device->inst) || !webgpuInstance(device->inst)->timedWaitAny) {
     return GPU_ERROR_UNSUPPORTED;
   }
 #endif
+
+  /* a map-read buffer (HOST_READ) maps itself: offsets in 8s, sizes in 4s */
+  if ((buffer->usage & GPU_BUFFER_USAGE_HOST_READ) != 0u) {
+    copyOffset = srcOffset & ~UINT64_C(7);
+    prefix     = srcOffset - copyOffset;
+    copySize   = (prefix + sizeBytes + 3u) & ~UINT64_C(3);
+
+    return webgpu_mapRead(device, buffer->_priv, copyOffset, copySize, prefix, outData, sizeBytes);
+  }
 
   copyOffset = srcOffset & ~UINT64_C(3);
   prefix     = srcOffset - copyOffset;
@@ -278,61 +347,10 @@ webgpu_readBuffer(GPUQueue  *__restrict queue,
     goto cleanup_staging;
   }
 
-#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  submission = wgpuQueueSubmitForIndex(native->queue, 1u, &command);
-#else
   wgpuQueueSubmit(native->queue, 1u, &command);
-#endif
   wgpuCommandBufferRelease(command);
+  result = webgpu_mapRead(device, staging, 0u, copySize, prefix, outData, sizeBytes);
 
-#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  callbackInfo.mode      = WGPUCallbackMode_AllowSpontaneous;
-#else
-  callbackInfo.mode      = WGPUCallbackMode_WaitAnyOnly;
-#endif
-  callbackInfo.callback  = webgpu_bufferMapped;
-  callbackInfo.userdata1 = &mapRequest;
-#if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-  wgpuBufferMapAsync(staging,
-                     WGPUMapMode_Read,
-                     0u,
-                     (size_t)copySize,
-                     callbackInfo);
-  do {
-    wgpuDevicePoll(native->device, true, &submission);
-    mapStatus = atomic_load_explicit(&mapRequest.status,
-                                     memory_order_acquire);
-  } while (mapStatus == 0);
-#else
-  waitInfo.future = wgpuBufferMapAsync(staging,
-                                       WGPUMapMode_Read,
-                                       0u,
-                                       (size_t)copySize,
-                                       callbackInfo);
-  waitStatus = wgpuInstanceWaitAny(instance->instance,
-                                   1u,
-                                   &waitInfo,
-                                   UINT64_MAX);
-  mapStatus = atomic_load_explicit(&mapRequest.status, memory_order_acquire);
-
-  if (waitStatus != WGPUWaitStatus_Success || !waitInfo.completed) {
-    goto cleanup_staging;
-  }
-#endif
-
-  if (mapStatus != WGPUMapAsyncStatus_Success) {
-    goto cleanup_staging;
-  }
-
-  if (!(mapped = wgpuBufferGetConstMappedRange(staging, 0u, (size_t)copySize))) {
-    goto cleanup_unmap;
-  }
-
-  memcpy(outData, mapped + prefix, (size_t)sizeBytes);
-  result = GPU_OK;
-
-cleanup_unmap:
-  wgpuBufferUnmap(staging);
 cleanup_staging:
   wgpuBufferDestroy(staging);
   wgpuBufferRelease(staging);

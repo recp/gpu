@@ -144,7 +144,9 @@ webgpu_resolveQuerySet(GPUCommandBuffer *cmdb,
   resultBytes = (uint64_t)queryCount * sizeof(uint64_t);
   destination = dstBuffer->_priv;
 
-  if ((dstOffset & 255u) != 0u) {
+  /* a map-read buffer (HOST_READ) takes copies only */
+  if ((dstOffset & 255u) != 0u
+      || (dstBuffer->usage & GPU_BUFFER_USAGE_HOST_READ) != 0u) {
     if (!(destination = webgpu_queryScratch(command, resultBytes))) {
       return;
     }
