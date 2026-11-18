@@ -287,7 +287,7 @@ vk_acquireDrawable(GPUApi *api, GPUFrame *frame) {
   VkResult        result;
   uint64_t        timeout;
   uint32_t        imageIndex;
-  double          left, period;
+  double          left;
 
   GPU__UNUSED(api);
 
@@ -297,18 +297,14 @@ vk_acquireDrawable(GPUApi *api, GPUFrame *frame) {
     return swapchain && swapchain->imageAcquired;
   }
 
-  /* a paced frame waits for an image only as long as its latency allows: an
-   * image comes free as the display takes the next frame, so none free near
-   * the frame's start means the display is a frame behind; drawing anyway
-   * would keep it behind for good (one frame queued per refresh). Without
-   * one the frame goes undrawn and the queue drains. Latency two waits up to
-   * a refresh more. A grace covers the image freed just after the refresh */
+  /* a paced frame was begun because the display can take it (the tick's
+   * checks): its image is waited for as a drawn frame's must be, until a
+   * backstop of a few refreshes past its deadline (Android's queue frees a
+   * buffer only at SurfaceFlinger's next latch) */
   timeout = UINT64_MAX;
   if (frame->deadline > 0.0) {
-    period  = frame->targetPresentTime - frame->deadline;
-    period  = period > 0.0 && period < 0.05 ? period : 1.0 / 60.0;
-    left    = frame->deadline - period - pacerHostSeconds();
-    timeout = (uint64_t)(((left > 0.0 ? left : 0.0) + 0.003) * 1e9);
+    left    = frame->deadline - pacerHostSeconds();
+    timeout = (uint64_t)(((left > 0.0 ? left : 0.0) + 0.1) * 1e9);
   }
 
   sync       = &swapchain->frameSync[swapchain->frameIndex];

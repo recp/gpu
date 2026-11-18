@@ -99,8 +99,8 @@ typedef struct GPUFramePacerCreateInfo {
  * per-thread event loop to post to: there ticks come on a thread of the
  * pacer's own and pacer calls may come from any thread. A tick's frame acquires
  * its image at its first use (target, view or presentation), so one that draws
- * nothing presents nothing; an image not free within the frame's latency means
- * the display is behind, and the frame then has no target.
+ * nothing presents nothing. A display behind the latency (Vulkan with present
+ * wait, DXGI's queue) gives a NULL frame, as Metal does without a drawable.
  * callback frames are borrowed for that callback only; NULL means skip encoding.
  * finish/submit normally; an unconsumed frame is released on callback return.
  * destroying the pacer in its callback is supported. the device must outlive it.
