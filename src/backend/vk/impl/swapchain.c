@@ -789,6 +789,7 @@ vk_destroySwapchain(GPUSwapchain *swapchainObj) {
   swapchain = swapchainObj->_priv;
 
   if (swapchain) {
+    vk_settleAcquiredFrame(swapchain);
     (void)vk__waitResourcesIdle(swapchain);
     vk__destroyResources(swapchain);
     free(swapchain);

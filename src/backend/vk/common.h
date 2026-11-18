@@ -845,6 +845,7 @@ struct GPUSwapchainVk {
   bool              frameActive;
   bool              frameScheduled;
   bool              frameSubmitted;
+  bool              imageAcquired;   /* a paced frame acquires at its first use */
 };
 
 typedef struct GPUShaderLibraryVk {
@@ -1053,6 +1054,14 @@ vk_restoreFrameFence(GPUSwapchainVk *swapchain, GPUFrameSyncVk *sync);
 GPU_HIDE
 bool
 vk_waitFrameCompletion(GPUFrameSyncVk *sync);
+
+GPU_HIDE
+bool
+vk_frameCompletionDone(GPUFrameSyncVk *sync);
+
+GPU_HIDE
+void
+vk_settleAcquiredFrame(GPUSwapchainVk *swapchain);
 
 GPU_HIDE
 VkResult

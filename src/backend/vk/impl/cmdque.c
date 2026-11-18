@@ -1267,6 +1267,26 @@ vk_waitFrameCompletion(GPUFrameSyncVk *sync) {
   return completed;
 }
 
+/* without waiting: the slot's command buffers all retired */
+GPU_HIDE
+bool
+vk_frameCompletionDone(GPUFrameSyncVk *sync) {
+  GPUQueueVk *queue;
+  bool        completed;
+
+  queue = sync && sync->swapchain ? sync->swapchain->queue : NULL;
+
+  if (!queue) {
+    return false;
+  }
+
+  vk__queueLock(queue);
+  completed = sync->pendingCommandCount == 0u;
+  vk__queueUnlock(queue);
+
+  return completed;
+}
+
 GPU_HIDE
 void
 vk_waitSwapchainIdle(GPUSwapchainVk *swapchain) {
