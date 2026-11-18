@@ -43,20 +43,15 @@ vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
   submitInfo.pSignalSemaphores    = &renderFinished;
   vk_queueSubmitLock(swapchain->queue);
   result = vkQueueSubmit(swapchain->queue->queRaw, 1u, &submitInfo, sync->fence);
+  vk_queueSubmitUnlock(swapchain->queue);
 
   if (result != VK_SUCCESS) {
-    vk_queueSubmitUnlock(swapchain->queue);
     vk_setSwapchainStatus(swapchain, result);
     (void)vk_restoreFrameFence(swapchain, sync);
     return false;
   }
 
-  result = vk_presentSwapchain(swapchain,
-                               swapchain->queue->queRaw,
-                               renderFinished,
-                               swapchain->acquiredImageIndex);
-  vk_queueSubmitUnlock(swapchain->queue);
-
+  result = vk_presentFrame(swapchain, swapchain->queue, renderFinished, swapchain->acquiredImageIndex);
   return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
 }
 
@@ -177,6 +172,7 @@ vk_beginFrame(GPUApi *api, GPUSwapchain *swapchainObj) {
     return NULL;
   }
 
+  vk_presentsIssued(swapchain);
   imageIndex = 0u;
   result     = vkAcquireNextImageKHR(swapchain->device,
                                      swapchain->swapchain,
@@ -218,8 +214,9 @@ vk__displayBehind(GPUSwapchainVk *swapchain, uint32_t latency) {
   VkResult     result;
 
   device = swapchain->gpuDevice ? swapchain->gpuDevice->_priv : NULL;
-  if (!device || !device->presentWait || !device->waitForPresent || swapchain->lastPresentId <= latency) {
-    return false;
+  if (!device || !device->presentWait || !device->waitForPresent || !vk_presenterIdle(swapchain)
+      || swapchain->lastPresentId <= latency) {
+    return false; /* a present still being made: no look now */
   }
 
   vk_queueSubmitLock(swapchain->queue);
@@ -307,6 +304,7 @@ vk_acquireDrawable(GPUApi *api, GPUFrame *frame) {
     timeout = (uint64_t)(((left > 0.0 ? left : 0.0) + 0.1) * 1e9);
   }
 
+  vk_presentsIssued(swapchain);
   sync       = &swapchain->frameSync[swapchain->frameIndex];
   imageIndex = 0u;
   result     = vkAcquireNextImageKHR(swapchain->device,

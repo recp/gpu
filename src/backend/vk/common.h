@@ -347,10 +347,15 @@ typedef struct GPUDeviceVk {
 #endif
 #if defined(_WIN32) || defined(WIN32)
   CRITICAL_SECTION                               classicRenderLock;
+  CRITICAL_SECTION                               presentLock;      /* presentQueue's calls */
 #else
   pthread_mutex_t                                classicRenderLock;
+  pthread_mutex_t                                presentLock;
 #endif
+  VkQueue                                        presentQueue;     /* the graphics family's queue past GPU-C's, NULL: none */
   bool                                           classicRenderLockInitialized;
+  bool                                           presentLockInitialized;
+  bool                                           presentThread;    /* swapchains present on a thread of their own */
   GPURetireList                                  retire;      /* destroyed objects work may still use (api/retire) */
   struct GPUBindGroupLayoutVk                   *orphanLayouts; /* destroyed with groups left (impl/descriptor.c) */
 #if defined(_WIN32) || defined(WIN32)
@@ -846,6 +851,7 @@ struct GPUSwapchainVk {
   bool              frameScheduled;
   bool              frameSubmitted;
   bool              imageAcquired;   /* a paced frame acquires at its first use */
+  struct GPUPresenterVk *presenter; /* presents off the submitting thread; NULL: in the submit */
 };
 
 typedef struct GPUShaderLibraryVk {
@@ -1062,6 +1068,23 @@ vk_frameCompletionDone(GPUFrameSyncVk *sync);
 GPU_HIDE
 void
 vk_settleAcquiredFrame(GPUSwapchainVk *swapchain);
+
+/* the frame's present: queued for the swapchain's present thread, or made now
+ * on `queue` (under its submit lock) without one */
+GPU_HIDE
+VkResult
+vk_presentFrame(GPUSwapchainVk *swapchain, GPUQueueVk *queue, VkSemaphore wait, uint32_t imageIndex);
+
+/* every queued present issued: before the swapchain is acquired from, waited
+ * on, resized or destroyed (calls on it are externally synchronized) */
+GPU_HIDE
+void
+vk_presentsIssued(GPUSwapchainVk *swapchain);
+
+/* nothing queued or in progress, looked at without waiting */
+GPU_HIDE
+bool
+vk_presenterIdle(GPUSwapchainVk *swapchain);
 
 GPU_HIDE
 VkResult

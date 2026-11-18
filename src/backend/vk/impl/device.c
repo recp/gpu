@@ -3039,7 +3039,9 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   uint32_t createdPlanIndex;
   uint32_t queueIndex;
   uint32_t cleanupIndex;
+  uint32_t presentPlan;
   uint8_t  floatWidths;
+  const char *presentEnv;
 #if defined(VK_KHR_pipeline_binary) || defined(VK_AMDX_shader_enqueue)
   bool maintenance5Required;
 #endif
@@ -3068,12 +3070,19 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
 #if defined(_WIN32) || defined(WIN32)
   InitializeCriticalSection(&deviceVk->classicRenderLock);
   deviceVk->classicRenderLockInitialized = true;
+  InitializeCriticalSection(&deviceVk->presentLock);
+  deviceVk->presentLockInitialized = true;
 #else
   if (pthread_mutex_init(&deviceVk->classicRenderLock, NULL) != 0) {
     goto err;
   }
 
   deviceVk->classicRenderLockInitialized = true;
+  if (pthread_mutex_init(&deviceVk->presentLock, NULL) != 0) {
+    goto err;
+  }
+
+  deviceVk->presentLockInitialized = true;
 #endif
 #if defined(_WIN32) || defined(WIN32)
   InitializeCriticalSection(&deviceVk->orphanLock);
@@ -3251,20 +3260,41 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
     }
   }
 
-  queuePriorities = calloc(maxQueueCount, sizeof(*queuePriorities));
+  /* swapchains present on a thread of their own (swapchain.c): on by default
+   * where presenting blocks the caller (Android's queueBuffer); the graphics
+   * family's next queue, where it has one, takes the presents */
+  presentEnv              = getenv("GPU_VULKAN_PRESENT_THREAD");
+#if defined(__ANDROID__)
+  deviceVk->presentThread = !presentEnv || strcmp(presentEnv, "0") != 0;
+#else
+  deviceVk->presentThread = presentEnv && strcmp(presentEnv, "1") == 0;
+#endif
+  presentPlan = UINT32_MAX;
+  if (deviceVk->presentThread) {
+    for (planIndex = 0; planIndex < planCount; planIndex++) {
+      if ((plans[planIndex].bits & VK_QUEUE_GRAPHICS_BIT)
+          && adapterVk->queueFamilyProps[plans[planIndex].familyIndex].queueCount > plans[planIndex].count) {
+        presentPlan = planIndex;
+        break;
+      }
+    }
+  }
+
+  queuePriorities = calloc(maxQueueCount + 1u, sizeof(*queuePriorities));
 
   if (!queuePriorities || totalQueueCount == 0u) {
     goto err;
   }
 
-  for (priorityIndex = 0; priorityIndex < maxQueueCount; priorityIndex++) {
+  for (priorityIndex = 0; priorityIndex <= maxQueueCount; priorityIndex++) {
     queuePriorities[priorityIndex] = 1.0f;
   }
 
   for (nativeQueueIndex = 0; nativeQueueIndex < planCount; nativeQueueIndex++) {
     queues[nativeQueueIndex].sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queues[nativeQueueIndex].queueFamilyIndex = plans[nativeQueueIndex].familyIndex;
-    queues[nativeQueueIndex].queueCount       = plans[nativeQueueIndex].count;
+    queues[nativeQueueIndex].queueCount       = plans[nativeQueueIndex].count
+                                                + (nativeQueueIndex == presentPlan ? 1u : 0u);
     queues[nativeQueueIndex].pQueuePriorities = queuePriorities;
   }
 
@@ -3627,6 +3657,11 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
     fprintf(stderr, "vkCreateDevice failed: %d\n", result);
 #endif
     goto err;
+  }
+
+  if (presentPlan != UINT32_MAX) {
+    vkGetDeviceQueue(deviceVk->device, plans[presentPlan].familyIndex,
+                     plans[presentPlan].count, &deviceVk->presentQueue);
   }
 
   deviceVk->maxDrawIndirectCount = adapterVk->props.limits.maxDrawIndirectCount;
@@ -4031,6 +4066,14 @@ err:
 #endif
     }
 
+    if (deviceVk->presentLockInitialized) {
+#if defined(_WIN32) || defined(WIN32)
+      DeleteCriticalSection(&deviceVk->presentLock);
+#else
+      pthread_mutex_destroy(&deviceVk->presentLock);
+#endif
+    }
+
     if (deviceVk->orphanLockInitialized) {
 #if defined(_WIN32) || defined(WIN32)
       DeleteCriticalSection(&deviceVk->orphanLock);
@@ -4089,6 +4132,14 @@ vk_destroyDevice(GPUDevice * __restrict device) {
       DeleteCriticalSection(&deviceVk->classicRenderLock);
 #else
       pthread_mutex_destroy(&deviceVk->classicRenderLock);
+#endif
+    }
+
+    if (deviceVk->presentLockInitialized) {
+#if defined(_WIN32) || defined(WIN32)
+      DeleteCriticalSection(&deviceVk->presentLock);
+#else
+      pthread_mutex_destroy(&deviceVk->presentLock);
 #endif
     }
 

@@ -96,13 +96,7 @@ vk__dropTransferSerial(GPUQueueVk *queue, GPUTransferSlotVk *slot) {
 
 static VkResult
 vk__queuePresent(GPUQueueVk *queue, GPUSwapchainVk *swapchain, VkSemaphore wait, uint32_t imageIndex) {
-  VkResult result;
-
-  vk_queueSubmitLock(queue);
-  result = vk_presentSwapchain(swapchain, queue->queRaw, wait, imageIndex);
-  vk_queueSubmitUnlock(queue);
-
-  return result;
+  return vk_presentFrame(swapchain, queue, wait, imageIndex);
 }
 
 /* GPU_FEATURE_THREADED_UPLOADS: the queue operations GPU-C serializes */

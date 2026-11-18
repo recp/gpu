@@ -468,12 +468,279 @@ vk__waitPresent(GPUSwapchainVk *swapchain) {
   return false;
 }
 
+/* presents on a thread of the swapchain's own. vkQueuePresentKHR can block for
+ * long: Android's swapchain connects the window as an EGL producer, so
+ * queueBuffer waits for the previous frame's GPU work and for SurfaceFlinger's
+ * binder reply (milliseconds a frame on phones, on the thread that finished
+ * the frame). The submit queues the present here and returns. The
+ * present goes to the graphics family's next queue where the device has one
+ * (a present blocked in queueBuffer then holds no queue a submit needs), else
+ * to the frame's queue under its submit lock. Presents keep their order; an
+ * acquire, resize or destroy first waits for queued presents to be issued,
+ * as calls on one swapchain must not overlap. On by default on Android;
+ * GPU_VULKAN_PRESENT_THREAD=0/1 chooses anywhere */
+enum { GPU_VK_PRESENT_RING = 8u };
+
+typedef struct GPUPresenterVk {
+  GPUSwapchainVk    *swapchain;
+#if defined(_WIN32) || defined(WIN32)
+  HANDLE             thread;
+  CRITICAL_SECTION   lock;
+  CONDITION_VARIABLE changed;
+#else
+  pthread_t          thread;
+  pthread_mutex_t    lock;
+  pthread_cond_t     changed;
+#endif
+  VkSemaphore        waits[GPU_VK_PRESENT_RING];
+  uint32_t           images[GPU_VK_PRESENT_RING];
+  uint32_t           head;
+  uint32_t           count;
+  bool               presenting;
+  bool               stopping;
+} GPUPresenterVk;
+
+static void
+vk__presenterLock(GPUPresenterVk *presenter) {
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(&presenter->lock);
+#else
+  pthread_mutex_lock(&presenter->lock);
+#endif
+}
+
+static void
+vk__presenterUnlock(GPUPresenterVk *presenter) {
+#if defined(_WIN32) || defined(WIN32)
+  LeaveCriticalSection(&presenter->lock);
+#else
+  pthread_mutex_unlock(&presenter->lock);
+#endif
+}
+
+static void
+vk__presenterWait(GPUPresenterVk *presenter) {
+#if defined(_WIN32) || defined(WIN32)
+  SleepConditionVariableCS(&presenter->changed, &presenter->lock, INFINITE);
+#else
+  pthread_cond_wait(&presenter->changed, &presenter->lock);
+#endif
+}
+
+static void
+vk__presenterSignal(GPUPresenterVk *presenter) {
+#if defined(_WIN32) || defined(WIN32)
+  WakeAllConditionVariable(&presenter->changed);
+#else
+  pthread_cond_broadcast(&presenter->changed);
+#endif
+}
+
+/* now, on the present queue: the device's own, or the frame's under its lock */
+static VkResult
+vk__presentNow(GPUSwapchainVk *swapchain, GPUQueueVk *queue, VkSemaphore wait, uint32_t imageIndex) {
+  GPUDeviceVk *device;
+  VkResult     result;
+
+  device = swapchain->gpuDevice ? swapchain->gpuDevice->_priv : NULL;
+  if (device && device->presentQueue && swapchain->presenter) {
+#if defined(_WIN32) || defined(WIN32)
+    EnterCriticalSection(&device->presentLock);
+    result = vk_presentSwapchain(swapchain, device->presentQueue, wait, imageIndex);
+    LeaveCriticalSection(&device->presentLock);
+#else
+    pthread_mutex_lock(&device->presentLock);
+    result = vk_presentSwapchain(swapchain, device->presentQueue, wait, imageIndex);
+    pthread_mutex_unlock(&device->presentLock);
+#endif
+    return result;
+  }
+
+  vk_queueSubmitLock(queue);
+  result = vk_presentSwapchain(swapchain, queue->queRaw, wait, imageIndex);
+  vk_queueSubmitUnlock(queue);
+  return result;
+}
+
+#if defined(_WIN32) || defined(WIN32)
+static DWORD WINAPI
+#else
+static void*
+#endif
+vk__presenterRun(void *user) {
+  GPUPresenterVk *presenter;
+  VkSemaphore     wait;
+  uint32_t        imageIndex;
+
+  presenter = user;
+#if defined(__APPLE__)
+  pthread_setname_np("gpu-present");
+#elif defined(__ANDROID__)
+  pthread_setname_np(pthread_self(), "gpu-present");
+#endif
+  vk__presenterLock(presenter);
+  for (;;) {
+    while (!presenter->count && !presenter->stopping) {
+      vk__presenterWait(presenter);
+    }
+
+    if (!presenter->count) {
+      break; /* stopping, every present issued */
+    }
+
+    wait                  = presenter->waits[presenter->head];
+    imageIndex            = presenter->images[presenter->head];
+    presenter->head       = (presenter->head + 1u) % GPU_VK_PRESENT_RING;
+    presenter->count--;
+    presenter->presenting = true;
+    vk__presenterUnlock(presenter);
+
+    (void)vk__presentNow(presenter->swapchain, presenter->swapchain->queue, wait, imageIndex);
+
+    vk__presenterLock(presenter);
+    presenter->presenting = false;
+    vk__presenterSignal(presenter);
+  }
+
+  vk__presenterUnlock(presenter);
+#if defined(_WIN32) || defined(WIN32)
+  return 0;
+#else
+  return NULL;
+#endif
+}
+
+static void
+vk__createPresenter(GPUSwapchainVk *swapchain) {
+  GPUPresenterVk *presenter;
+  GPUDeviceVk    *device;
+
+  device = swapchain->gpuDevice ? swapchain->gpuDevice->_priv : NULL;
+  if (!device || !device->presentThread || !(presenter = calloc(1u, sizeof(*presenter)))) {
+    return;
+  }
+
+  presenter->swapchain = swapchain;
+#if defined(_WIN32) || defined(WIN32)
+  InitializeCriticalSection(&presenter->lock);
+  InitializeConditionVariable(&presenter->changed);
+  if (!(presenter->thread = CreateThread(NULL, 0u, vk__presenterRun, presenter, 0u, NULL))) {
+    DeleteCriticalSection(&presenter->lock);
+    free(presenter);
+    return;
+  }
+#else
+  if (pthread_mutex_init(&presenter->lock, NULL) != 0) {
+    free(presenter);
+    return;
+  }
+
+  if (pthread_cond_init(&presenter->changed, NULL) != 0) {
+    pthread_mutex_destroy(&presenter->lock);
+    free(presenter);
+    return;
+  }
+
+  if (pthread_create(&presenter->thread, NULL, vk__presenterRun, presenter) != 0) {
+    pthread_cond_destroy(&presenter->changed);
+    pthread_mutex_destroy(&presenter->lock);
+    free(presenter);
+    return;
+  }
+#endif
+
+  swapchain->presenter = presenter;
+}
+
+static void
+vk__destroyPresenter(GPUSwapchainVk *swapchain) {
+  GPUPresenterVk *presenter;
+
+  if (!(presenter = swapchain->presenter)) {
+    return;
+  }
+
+  vk__presenterLock(presenter);
+  presenter->stopping = true;
+  vk__presenterSignal(presenter);
+  vk__presenterUnlock(presenter);
+#if defined(_WIN32) || defined(WIN32)
+  WaitForSingleObject(presenter->thread, INFINITE);
+  CloseHandle(presenter->thread);
+  DeleteCriticalSection(&presenter->lock);
+#else
+  pthread_join(presenter->thread, NULL);
+  pthread_cond_destroy(&presenter->changed);
+  pthread_mutex_destroy(&presenter->lock);
+#endif
+  free(presenter);
+  swapchain->presenter = NULL;
+}
+
+GPU_HIDE
+VkResult
+vk_presentFrame(GPUSwapchainVk *swapchain, GPUQueueVk *queue, VkSemaphore wait, uint32_t imageIndex) {
+  GPUPresenterVk *presenter;
+
+  if (!(presenter = swapchain->presenter)) {
+    return vk__presentNow(swapchain, queue, wait, imageIndex);
+  }
+
+  vk__presenterLock(presenter);
+  while (presenter->count == GPU_VK_PRESENT_RING) {
+    vk__presenterWait(presenter);
+  }
+
+  presenter->waits[(presenter->head + presenter->count) % GPU_VK_PRESENT_RING]  = wait;
+  presenter->images[(presenter->head + presenter->count) % GPU_VK_PRESENT_RING] = imageIndex;
+  presenter->count++;
+  vk__presenterSignal(presenter);
+  vk__presenterUnlock(presenter);
+
+  /* its result reaches the swapchain's status */
+  return VK_SUCCESS;
+}
+
+GPU_HIDE
+void
+vk_presentsIssued(GPUSwapchainVk *swapchain) {
+  GPUPresenterVk *presenter;
+
+  if (!swapchain || !(presenter = swapchain->presenter)) {
+    return;
+  }
+
+  vk__presenterLock(presenter);
+  while (presenter->count || presenter->presenting) {
+    vk__presenterWait(presenter);
+  }
+
+  vk__presenterUnlock(presenter);
+}
+
+GPU_HIDE
+bool
+vk_presenterIdle(GPUSwapchainVk *swapchain) {
+  GPUPresenterVk *presenter;
+  bool            idle;
+
+  if (!swapchain || !(presenter = swapchain->presenter)) {
+    return true;
+  }
+
+  vk__presenterLock(presenter);
+  idle = !presenter->count && !presenter->presenting;
+  vk__presenterUnlock(presenter);
+  return idle;
+}
+
 static bool
 vk__waitResourcesIdle(GPUSwapchainVk *swapchain) {
   if (!swapchain || !swapchain->device) {
     return false;
   }
 
+  vk_presentsIssued(swapchain);
   vk_waitSwapchainIdle(swapchain);
 
   return vk__waitPresent(swapchain) || vkDeviceWaitIdle(swapchain->device) == VK_SUCCESS;
@@ -720,6 +987,7 @@ vk_createSwapchain(GPUApi                       *__restrict api,
     return NULL;
   }
 
+  vk__createPresenter(swapchain);
   return swapchainObj;
 }
 
@@ -756,6 +1024,7 @@ vk_resizeSwapchain(GPUSwapchain *swapchainObj, GPUExtent2D size) {
   replacement.requestedImageCount = swapchain->requestedImageCount;
   replacement.gpuFormat           = swapchain->gpuFormat;
   replacement.presentMode         = swapchain->presentMode;
+  replacement.presenter           = swapchain->presenter; /* idle: waited for above */
   replacementObj                  = *swapchainObj;
   replacementObj._priv            = &replacement;
 
@@ -791,6 +1060,7 @@ vk_destroySwapchain(GPUSwapchain *swapchainObj) {
   if (swapchain) {
     vk_settleAcquiredFrame(swapchain);
     (void)vk__waitResourcesIdle(swapchain);
+    vk__destroyPresenter(swapchain);
     vk__destroyResources(swapchain);
     free(swapchain);
   }

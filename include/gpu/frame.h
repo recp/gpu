@@ -177,7 +177,11 @@ GPU_EXPORT
 void
 GPUPresent(GPUCommandBuffer *cmdb, GPUFrame *frame);
 
-/* schedules, submits, and consumes a frame with one command buffer. */
+/* schedules, submits, and consumes a frame with one command buffer.
+ * Vulkan can present on a thread of the swapchain's, off the caller (on by
+ * default on Android, where a present blocks in queueBuffer; set
+ * GPU_VULKAN_PRESENT_THREAD=0 or 1 to choose): the present's outcome then
+ * reaches GPUGetSwapchainStatus, not this result. */
 GPU_EXPORT
 GPUResult
 GPUFinishFrame(GPUQueue         *__restrict cmdq,
