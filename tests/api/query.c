@@ -477,6 +477,335 @@ cleanup:
   return ok;
 }
 
+/* HOST_READ buffers: bytes copied and timestamps resolved into them (where
+ * the adapter has timestamps) are read through the mapping once the fence
+ * signals, with no GPUQueueReadBuffer, the same buffers reused across
+ * submits (WebGPU, whose mapping is asynchronous, reads them with
+ * GPUQueueReadBuffer) */
+static int
+check_host_read_timestamps(GPUAdapter *adapter) {
+  enum { RUNS = 2, QUERIES = 4, WORDS = 1 + QUERIES, COPY_BYTES = 64 };
+  GPUDevice                   *device      = NULL;
+  GPUQueue                    *queue       = NULL;
+  GPUCommandBuffer            *cmdb        = NULL;
+  GPUQuerySet                 *set         = NULL;
+  GPUBuffer                   *results     = NULL;
+  GPUBuffer                   *copied      = NULL;
+  GPUBuffer                   *source      = NULL;
+  GPUBuffer                   *rejected    = NULL;
+  GPUTexture                  *target      = NULL;
+  GPUTextureView              *targetView  = NULL;
+  GPUFence                    *fence       = NULL;
+  GPUComputePassEncoder       *computePass = NULL;
+  GPURenderPassEncoder        *renderPass  = NULL;
+  GPUTransferPassEncoder      *copyPass    = NULL;
+  GPUCommandBuffer            *buffers[1];
+  GPUDeviceCreateInfo          deviceInfo      = {0};
+  GPUQuerySetCreateInfo        queryInfo       = {0};
+  GPUBufferCreateInfo          bufferInfo      = {0};
+  GPUTextureCreateInfo         textureInfo     = {0};
+  GPUTextureViewCreateInfo     viewInfo        = {0};
+  GPUQueueSubmitInfo           submitInfo      = {0};
+  GPUComputePassCreateInfo     computeInfo     = {0};
+  GPURenderPassColorAttachment color           = {0};
+  GPURenderPassCreateInfo      renderInfo      = {0};
+  GPUPassTimestampWrites       timestampWrites = {0};
+  GPUBufferCopyRegion          region          = {0};
+  GPUAdapterProperties         properties      = {0};
+  GPUFeature                   timestampFeature = GPU_FEATURE_TIMESTAMPS;
+  uint64_t                     values[WORDS];
+  uint64_t                     previousEnd = 0u;
+  uint8_t                      pattern[COPY_BYTES];
+  uint8_t                      readBytes[COPY_BYTES];
+  void                        *resultsHost, *copiedHost;
+  double                       period, elapsedNs;
+  uint32_t                     run, i, first;
+  bool                         asyncMapping, timestamps;
+  int                          ok = 0;
+
+  deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.chain.structSize      = sizeof(deviceInfo);
+  deviceInfo.optional.featureCount = 1;
+  deviceInfo.optional.pFeatures    = &timestampFeature;
+
+  if (gpu_test_create_device(adapter, &deviceInfo, &device) != GPU_OK || !device
+      || !(queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0))
+      || GPUGetAdapterProperties(adapter, &properties) != GPU_OK) {
+    fprintf(stderr, "host-read device create failed\n");
+    goto cleanup;
+  }
+
+  asyncMapping = properties.backend == GPU_BACKEND_WEBGPU;
+  timestamps   = GPUIsFeatureEnabled(device, GPU_FEATURE_TIMESTAMPS);
+
+  if (!timestamps || GPUGetTimestampPeriod(queue, &period) != GPU_OK) {
+    period = 0.0;
+  }
+
+  bufferInfo.chain.sType      = GPU_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.chain.structSize = sizeof(bufferInfo);
+  bufferInfo.label            = "host-read-rejected";
+  bufferInfo.sizeBytes        = sizeof(values);
+  bufferInfo.usage            = GPU_BUFFER_USAGE_HOST_READ | GPU_BUFFER_USAGE_STORAGE;
+
+  if (GPUCreateBuffer(device, &bufferInfo, &rejected) != GPU_ERROR_INVALID_ARGUMENT || rejected) {
+    fprintf(stderr, "host-read buffer accepted storage usage\n");
+    goto cleanup;
+  }
+
+  bufferInfo.usage = GPU_BUFFER_USAGE_HOST_READ | GPU_BUFFER_USAGE_COPY_SRC;
+
+  if (GPUCreateBuffer(device, &bufferInfo, &rejected) != GPU_ERROR_INVALID_ARGUMENT || rejected) {
+    fprintf(stderr, "host-read buffer accepted copy-source usage\n");
+    goto cleanup;
+  }
+
+  bufferInfo.label = "host-read-timestamps";
+  bufferInfo.usage = GPU_BUFFER_USAGE_HOST_READ | GPU_BUFFER_USAGE_COPY_DST;
+
+  if (GPUCreateBuffer(device, &bufferInfo, &results) != GPU_OK || !results) {
+    fprintf(stderr, "host-read timestamp buffer create failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.label     = "host-read-copies";
+  bufferInfo.sizeBytes = COPY_BYTES;
+
+  if (GPUCreateBuffer(device, &bufferInfo, &copied) != GPU_OK || !copied) {
+    fprintf(stderr, "host-read copy buffer create failed\n");
+    goto cleanup;
+  }
+
+  bufferInfo.label = "host-read-source";
+  bufferInfo.usage = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
+
+  if (GPUCreateBuffer(device, &bufferInfo, &source) != GPU_OK || !source) {
+    fprintf(stderr, "host-read source buffer create failed\n");
+    goto cleanup;
+  }
+
+  resultsHost = GPUGetBufferHostAddress(results);
+  copiedHost  = GPUGetBufferHostAddress(copied);
+
+  if (!asyncMapping && (!resultsHost || !copiedHost)) {
+    fprintf(stderr, "host-read buffer has no host address\n");
+    goto cleanup;
+  }
+
+  queryInfo.chain.sType      = GPU_STRUCTURE_TYPE_QUERY_SET_CREATE_INFO;
+  queryInfo.chain.structSize = sizeof(queryInfo);
+  queryInfo.label            = "host-read-timestamps";
+  queryInfo.type             = GPU_QUERY_TIMESTAMP;
+  queryInfo.count            = QUERIES;
+
+  if (timestamps && (GPUCreateQuerySet(device, &queryInfo, &set) != GPU_OK || !set)) {
+    fprintf(stderr, "host-read timestamp query set create failed\n");
+    goto cleanup;
+  }
+
+  textureInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+  textureInfo.chain.structSize = sizeof(textureInfo);
+  textureInfo.label            = "host-read-target";
+  textureInfo.dimension        = GPU_TEXTURE_DIMENSION_2D;
+  textureInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  textureInfo.width            = 256u;
+  textureInfo.height           = 256u;
+  textureInfo.depthOrLayers    = 1u;
+  textureInfo.mipLevelCount    = 1u;
+  textureInfo.sampleCount      = 1u;
+  textureInfo.usage            = GPU_TEXTURE_USAGE_COLOR_TARGET;
+
+  viewInfo.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_VIEW_CREATE_INFO;
+  viewInfo.chain.structSize = sizeof(viewInfo);
+  viewInfo.viewType         = GPU_TEXTURE_VIEW_2D;
+  viewInfo.format           = GPU_FORMAT_RGBA8_UNORM;
+  viewInfo.mipLevelCount    = 1u;
+  viewInfo.arrayLayerCount  = 1u;
+
+  if (GPUCreateTexture(device, &textureInfo, &target) != GPU_OK || !target
+      || GPUCreateTextureView(target, &viewInfo, &targetView) != GPU_OK || !targetView
+      || GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence) {
+    fprintf(stderr, "host-read render target or fence create failed\n");
+    goto cleanup;
+  }
+
+  for (run = 0u; run < RUNS; run++) {
+    memset(values, 0xff, sizeof(values));
+
+    for (i = 0u; i < COPY_BYTES; i++) {
+      pattern[i] = (uint8_t)(i * 7u + run * 13u + 1u);
+    }
+
+    /* the host writes its mapping too: guards around the resolved range */
+    if (resultsHost) {
+      memcpy(resultsHost, values, sizeof(values));
+    } else if (GPUQueueWriteBuffer(queue, results, 0u, values, sizeof(values)) != GPU_OK) {
+      fprintf(stderr, "host-read timestamp buffer initialize failed\n");
+      goto cleanup;
+    }
+
+    if (GPUQueueWriteBuffer(queue, source, 0u, pattern, sizeof(pattern)) != GPU_OK
+        || GPUAcquireCommandBuffer(queue, "host-read-timestamps", &cmdb) != GPU_OK || !cmdb) {
+      fprintf(stderr, "host-read command buffer setup failed\n");
+      goto cleanup;
+    }
+
+    timestampWrites.querySet     = set;
+    timestampWrites.beginIndex   = 0u;
+    timestampWrites.endIndex     = 1u;
+    computeInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PASS_CREATE_INFO;
+    computeInfo.chain.structSize = sizeof(computeInfo);
+    computeInfo.label            = "host-read-compute";
+    computeInfo.timestampWrites  = timestamps ? &timestampWrites : NULL;
+
+    if (!(computePass = GPUBeginComputePassWithInfo(cmdb, &computeInfo))) {
+      fprintf(stderr, "host-read compute pass begin failed\n");
+      goto cleanup;
+    }
+
+    GPUEndComputePass(computePass);
+    computePass = NULL;
+
+    timestampWrites.beginIndex      = 2u;
+    timestampWrites.endIndex        = 3u;
+    color.view                      = targetView;
+    color.loadOp                    = GPU_LOAD_OP_CLEAR;
+    color.storeOp                   = GPU_STORE_OP_STORE;
+    color.clearColor.float32[0]     = 0.25f;
+    color.clearColor.float32[3]     = 1.0f;
+    renderInfo.chain.sType          = GPU_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderInfo.chain.structSize     = sizeof(renderInfo);
+    renderInfo.label                = "host-read-render";
+    renderInfo.timestampWrites      = timestamps ? &timestampWrites : NULL;
+    renderInfo.pColorAttachments    = &color;
+    renderInfo.colorAttachmentCount = 1u;
+
+    if (!(renderPass = GPUBeginRenderPass(cmdb, &renderInfo))) {
+      fprintf(stderr, "host-read render pass begin failed\n");
+      goto cleanup;
+    }
+
+    GPUEndRenderPass(renderPass);
+    renderPass = NULL;
+
+    if (!(copyPass = GPUBeginTransferPass(cmdb, "host-read-copy"))) {
+      fprintf(stderr, "host-read copy pass begin failed\n");
+      goto cleanup;
+    }
+
+    region.sizeBytes = COPY_BYTES;
+    GPUCopyBufferToBuffer(copyPass, source, copied, &region);
+    GPUEndTransferPass(copyPass);
+    copyPass = NULL;
+    if (timestamps) {
+      GPUResolveQuerySet(cmdb, set, 0u, QUERIES, results, sizeof(uint64_t));
+    }
+
+    buffers[0]                    = cmdb;
+    submitInfo.chain.sType        = GPU_STRUCTURE_TYPE_QUEUE_SUBMIT_INFO;
+    submitInfo.chain.structSize   = sizeof(submitInfo);
+    submitInfo.commandBufferCount = 1u;
+    submitInfo.ppCommandBuffers   = buffers;
+    submitInfo.fence              = fence;
+
+    if (GPUQueueSubmit(queue, &submitInfo) != GPU_OK) {
+      fprintf(stderr, "host-read submit failed\n");
+      cmdb = NULL;
+      goto cleanup;
+    }
+
+    cmdb = NULL;
+
+    if (GPUWaitFence(fence, 5000000000ull) != GPU_OK) {
+      fprintf(stderr, "host-read fence wait failed\n");
+      goto cleanup;
+    }
+
+    GPUResetFence(fence);
+
+    if (resultsHost) {
+      memcpy(values, resultsHost, sizeof(values));
+      memcpy(readBytes, copiedHost, sizeof(readBytes));
+    } else if (GPUQueueReadBuffer(queue, results, 0u, values, sizeof(values)) != GPU_OK
+               || GPUQueueReadBuffer(queue, copied, 0u, readBytes, sizeof(readBytes)) != GPU_OK) {
+      fprintf(stderr, "host-read readback failed\n");
+      goto cleanup;
+    }
+
+    if (memcmp(readBytes, pattern, sizeof(pattern)) != 0) {
+      fprintf(stderr, "host-read copy mismatch in run %u\n", run);
+      goto cleanup;
+    }
+
+    /* and read through the queue as well, where it lives */
+    memset(readBytes, 0, sizeof(readBytes));
+
+    if (GPUQueueReadBuffer(queue, copied, 0u, readBytes, sizeof(readBytes)) != GPU_OK
+        || memcmp(readBytes, pattern, sizeof(pattern)) != 0) {
+      fprintf(stderr, "host-read queue read mismatch in run %u\n", run);
+      goto cleanup;
+    }
+
+    if (!timestamps) {
+      if (values[0] != UINT64_MAX || values[4] != UINT64_MAX) {
+        fprintf(stderr, "host-read guards overwritten in run %u\n", run);
+        goto cleanup;
+      }
+      continue;
+    }
+
+    /* in order, under a second, after the previous run's; the empty pass's
+     * pair real (what a caller timing work between empty passes reads) and
+     * the span more than a tick, but WebGPU quantizes timestamps and may give
+     * an empty pass 0 */
+    first     = asyncMapping && values[1] == 0u && values[2] == 0u ? 3u : 1u;
+    elapsedNs = period > 0.0 ? (double)(values[4] - values[first]) * period : 0.0;
+
+    if (values[0] != UINT64_MAX || values[first] == 0u
+        || values[1] == UINT64_MAX || values[2] == UINT64_MAX
+        || values[3] == UINT64_MAX || values[4] == UINT64_MAX
+        || values[2] < values[1] || values[3] < values[2] || values[4] < values[3]
+        || (!asyncMapping && values[4] == values[1])
+        || values[first] < previousEnd || elapsedNs > 1e9) {
+      fprintf(stderr,
+              "host-read timestamps implausible in run %u: %llu, %llu, %llu, %llu, %llu "
+              "(previous end %llu, %.0f ns)\n",
+              run,
+              (unsigned long long)values[0], (unsigned long long)values[1],
+              (unsigned long long)values[2], (unsigned long long)values[3],
+              (unsigned long long)values[4], (unsigned long long)previousEnd, elapsedNs);
+      goto cleanup;
+    }
+
+    previousEnd = values[4];
+  }
+
+  ok = 1;
+
+cleanup:
+  if (computePass) {
+    GPUEndComputePass(computePass);
+  }
+  if (renderPass) {
+    GPUEndRenderPass(renderPass);
+  }
+  if (copyPass) {
+    GPUEndTransferPass(copyPass);
+  }
+  if (cmdb) {
+    (void)GPUDiscardCommandBuffer(cmdb);
+  }
+  GPUDestroyFence(fence);
+  GPUDestroyTextureView(targetView);
+  GPUDestroyTexture(target);
+  GPUDestroyBuffer(source);
+  GPUDestroyBuffer(copied);
+  GPUDestroyBuffer(results);
+  GPUDestroyQuerySet(set);
+  GPUDestroyDevice(device);
+  return ok;
+}
+
 static int
 check_pipeline_statistics_roundtrip(GPUAdapter *adapter,
                                     const char *bytecodePath) {
@@ -648,5 +977,6 @@ gpu_test_query(GPUAdapter *adapter,
   return check_query_set_create_validation(device)
          && check_query_commands_are_safe_noops()
          && check_pipeline_statistics_roundtrip(adapter, computeBytecodePath)
-         && check_timestamp_query_roundtrip(adapter);
+         && check_timestamp_query_roundtrip(adapter)
+         && check_host_read_timestamps(adapter);
 }
