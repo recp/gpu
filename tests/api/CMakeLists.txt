@@ -391,6 +391,37 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
 
 endif()
 
+# the pacer on any backend (frame_pacer.c): a window on screen, the main run loop
+if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS"
+   AND (GPU_BUILD_METAL OR GPU_BUILD_VULKAN OR GPU_BUILD_WEBGPU))
+  add_executable(gpu-frame-pacer-test frame_pacer.c frame_pacer_apple.m runner.c)
+  target_link_libraries(gpu-frame-pacer-test PRIVATE gpu)
+  gpu_link_apple_framework(gpu-frame-pacer-test AppKit "${GPU_FRAMEWORK_UI}")
+  gpu_link_apple_framework(gpu-frame-pacer-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+  gpu_link_apple_framework(gpu-frame-pacer-test QuartzCore "${GPU_FRAMEWORK_QUARTZCORE}")
+  set(gpu_frame_pacer_env "")
+  if(GPU_BUILD_VULKAN AND NOT GPU_BUILD_METAL)
+    target_compile_definitions(gpu-frame-pacer-test PRIVATE PACER_TEST_VULKAN=1)
+    target_include_directories(gpu-frame-pacer-test PRIVATE ${PROJECT_SOURCE_DIR}/src)
+    target_link_libraries(gpu-frame-pacer-test PRIVATE Vulkan::Vulkan)
+    if(EXISTS "${GPU_VULKAN_ICD}")
+      set(gpu_frame_pacer_env "VK_ICD_FILENAMES=${GPU_VULKAN_ICD}")
+    endif()
+  endif()
+
+  add_test(NAME frame-pacer COMMAND gpu-frame-pacer-test)
+  set_tests_properties(frame-pacer PROPERTIES
+    ENVIRONMENT "${gpu_frame_pacer_env}"
+    SKIP_RETURN_CODE 77 LABELS "frame-pacer;onscreen" TIMEOUT 40 RUN_SERIAL TRUE)
+elseif(WIN32 AND (GPU_BUILD_DX12 OR GPU_BUILD_VULKAN OR GPU_BUILD_WEBGPU))
+  add_executable(gpu-frame-pacer-test frame_pacer.c frame_pacer_win32.c runner.c)
+  target_link_libraries(gpu-frame-pacer-test PRIVATE gpu)
+  gpu_enable_c11_atomics(gpu-frame-pacer-test)
+  add_test(NAME frame-pacer COMMAND gpu-frame-pacer-test)
+  set_tests_properties(frame-pacer PROPERTIES
+    SKIP_RETURN_CODE 77 LABELS "frame-pacer;onscreen" TIMEOUT 40 RUN_SERIAL TRUE)
+endif()
+
 if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   add_executable(gpu-metal-renderpass-lifetime-test metal_renderpass_lifetime.m)
 

@@ -27,6 +27,35 @@ if(GPU_BUILD_ANDROID_TESTS)
     -Wextra
     -Werror
   )
+
+  # the pacer on Android: an AImageReader for a window, ticks through ALooper
+  add_executable(gpu-android-frame-pacer-test
+    ${PROJECT_SOURCE_DIR}/tests/api/frame_pacer.c
+    ${PROJECT_SOURCE_DIR}/tests/api/runner.c
+    ${PROJECT_SOURCE_DIR}/tests/android/frame_pacer.c
+  )
+  target_compile_definitions(gpu-android-frame-pacer-test PRIVATE PACER_TEST_VULKAN=1)
+  target_include_directories(gpu-android-frame-pacer-test PRIVATE
+    "${PROJECT_SOURCE_DIR}/src"
+    "${PROJECT_SOURCE_DIR}/tests/api"
+  )
+  target_link_libraries(gpu-android-frame-pacer-test PRIVATE
+    gpu
+    Vulkan::Vulkan
+    android
+    mediandk
+    log
+  )
+  set_target_properties(gpu-android-frame-pacer-test PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED YES
+    C_EXTENSIONS NO
+  )
+  target_compile_options(gpu-android-frame-pacer-test PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+  )
 endif()
 
 function(gpu_enable_c11_atomics target)
