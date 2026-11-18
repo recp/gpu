@@ -556,6 +556,10 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
 
   state.swapchain = GPUCreateSwapchainDefault(device, state.surface, 96u, 96u);
   state.queue     = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+#if defined(PACER_TEST_VULKAN)
+  printf("pacer: vulkan presents %s\n", !((GPUDeviceVk *)device->_priv)->presentThread ? "in the submit"
+         : ((GPUDeviceVk *)device->_priv)->presentQueue ? "on a thread, own queue" : "on a thread, the frame's queue");
+#endif
   ok = state.swapchain && state.queue && make_pacer(&state, 1u, 0.0f);
   if (!ok) {
     fprintf(stderr, "pacer: setup failed\n");
