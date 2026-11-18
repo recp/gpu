@@ -94,6 +94,7 @@ typedef struct VKPipelineCache {
 #endif
   VkDevice               device;
   VkPipelineCache        cache;
+  GPUCacheFileStamp      stored; /* the file read or written last; under its lock */
 #if defined(_WIN32) || defined(WIN32)
   CRITICAL_SECTION       lock;
   SRWLOCK                compileLock;
@@ -160,13 +161,19 @@ vk_endCompile(GPUPipelineCache *cache) {
     vk__compileShared(native, false);
 }
 
+/* stamp: which file was read (NULL: not asked) */
+
 static void*
-vk__readCache(const char *path, size_t *outSize) {
+vk__readCache(const char *path, size_t *outSize, GPUCacheFileStamp *stamp) {
   void *data;
   FILE *file;
   long  size;
 
   *outSize = 0u;
+
+  if (stamp) {
+    stamp->valid = false;
+  }
 
   if (!(file = fopen(path, "rb"))) {
     return NULL;
@@ -185,6 +192,10 @@ vk__readCache(const char *path, size_t *outSize) {
     free(data);
     fclose(file);
     return NULL;
+  }
+
+  if (stamp) {
+    (void)cacheFileStampOf(file, stamp);
   }
 
   fclose(file);
@@ -278,7 +289,7 @@ vk_createCache(GPUDevice                        *device,
   }
 #endif
 
-  initialData                = vk__readCache(native->path, &initialSize);
+  initialData                = vk__readCache(native->path, &initialSize, &native->stored);
   createInfo.sType           = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
   createInfo.initialDataSize = initialSize;
   createInfo.pInitialData    = initialData;
@@ -346,14 +357,71 @@ vk_createCache(GPUDevice                        *device,
   return GPU_OK;
 }
 
+/* merging into the cache is exclusive of compiles using it (its dstCache is
+ * externally synchronized); reading its data is not, the cache is
+ * synchronized inside */
+
+static void
+vk__excludeCompiles(VKPipelineCache *native, bool begin) {
+#if defined(_WIN32) || defined(WIN32)
+  if (begin) {
+    AcquireSRWLockExclusive(&native->compileLock);
+    EnterCriticalSection(&native->lock);
+  } else {
+    LeaveCriticalSection(&native->lock);
+    ReleaseSRWLockExclusive(&native->compileLock);
+  }
+#else
+  if (begin) {
+    pthread_rwlock_wrlock(&native->compileLock);
+    pthread_mutex_lock(&native->lock);
+  } else {
+    pthread_mutex_unlock(&native->lock);
+    pthread_rwlock_unlock(&native->compileLock);
+  }
+#endif
+}
+
+/* whether a pipeline used the cache since the last store, cleared or set */
+
+static bool
+vk__markUsed(VKPipelineCache *native, bool used) {
+  bool was;
+
+#if defined(_WIN32) || defined(WIN32)
+  EnterCriticalSection(&native->lock);
+#else
+  pthread_mutex_lock(&native->lock);
+#endif
+  was          = native->used;
+  native->used = used;
+#if defined(_WIN32) || defined(WIN32)
+  LeaveCriticalSection(&native->lock);
+#else
+  pthread_mutex_unlock(&native->lock);
+#endif
+
+  return was;
+}
+
+/* under the file's lock: what another writer put there merged in, read and
+ * parsed outside the cache's locks, only the merge inside. the file this
+ * cache read or wrote last holds nothing it lacks, so it isn't merged again,
+ * nor waits for compiles in flight */
+
 static void
 vk__mergeStoredCache(VKPipelineCache *native) {
   VkPipelineCacheCreateInfo createInfo = {0};
   VkPipelineCache           storedCache;
+  GPUCacheFileStamp         now;
   void                     *data;
   size_t                    dataSize;
 
-  if (!(data = vk__readCache(native->path, &dataSize))) {
+  if (cacheFileStampAt(native->path, &now) && cacheFileSame(&now, &native->stored)) {
+    return;
+  }
+
+  if (!(data = vk__readCache(native->path, &dataSize, NULL))) {
     return;
   }
 
@@ -367,15 +435,20 @@ vk__mergeStoredCache(VKPipelineCache *native) {
                             NULL,
                             &storedCache) == VK_SUCCESS
       && storedCache) {
+    vk__excludeCompiles(native, true);
     (void)vkMergePipelineCaches(native->device,
                                 native->cache,
                                 1u,
                                 &storedCache);
+    vk__excludeCompiles(native, false);
     vkDestroyPipelineCache(native->device, storedCache, NULL);
   }
 
   free(data);
 }
+
+/* compiles go on meanwhile: one after the mark is cleared marks it again,
+ * for the next store. two stores of a path take turns on its lock file */
 
 static bool
 vk__storeCache(VKPipelineCache *native) {
@@ -387,11 +460,12 @@ vk__storeCache(VKPipelineCache *native) {
   VkResult          result;
   bool              written;
 
-  if (!native || !native->used) {
+  if (!native || !vk__markUsed(native, false)) {
     return false;
   }
 
   if (!cacheFileBegin(native->path, &guard)) {
+    (void)vk__markUsed(native, true);
     return false;
   }
 
@@ -404,11 +478,13 @@ vk__storeCache(VKPipelineCache *native) {
 
   if (result != VK_SUCCESS || dataSize == 0u) {
     cacheFileEnd(&guard);
+    (void)vk__markUsed(native, true);
     return false;
   }
 
   if (!(data = malloc(dataSize))) {
     cacheFileEnd(&guard);
+    (void)vk__markUsed(native, true);
     return false;
   }
 
@@ -420,12 +496,14 @@ vk__storeCache(VKPipelineCache *native) {
   if (result != VK_SUCCESS) {
     free(data);
     cacheFileEnd(&guard);
+    (void)vk__markUsed(native, true);
     return false;
   }
 
   if (!(temporaryPath = cacheFileTemporaryPath(native->path, native))) {
     cacheFileEnd(&guard);
     free(data);
+    (void)vk__markUsed(native, true);
     return false;
   }
 
@@ -437,8 +515,11 @@ vk__storeCache(VKPipelineCache *native) {
   }
 
   if (written) {
-    if (!cacheFileReplace(temporaryPath, native->path)) {
+    if (cacheFileReplace(temporaryPath, native->path)) {
+      (void)cacheFileStampAt(native->path, &native->stored);
+    } else {
       remove(temporaryPath);
+      written = false;
     }
   } else {
     remove(temporaryPath);
@@ -447,6 +528,9 @@ vk__storeCache(VKPipelineCache *native) {
   free(temporaryPath);
   free(data);
   cacheFileEnd(&guard);
+
+  if (!written)
+    (void)vk__markUsed(native, true);
 
   return written;
 }
@@ -457,27 +541,9 @@ static GPUResult
 vk_flushCache(GPUPipelineCache *cache) {
   VKPipelineCache *native;
 
-  if (!(native = vk__nativeCache(cache))) {
-    return GPU_OK;
+  if ((native = vk__nativeCache(cache))) {
+    (void)vk__storeCache(native);
   }
-  /* merging into the cache is exclusive of compiles using it */
-#if defined(_WIN32) || defined(WIN32)
-  AcquireSRWLockExclusive(&native->compileLock);
-  EnterCriticalSection(&native->lock);
-#else
-  pthread_rwlock_wrlock(&native->compileLock);
-  pthread_mutex_lock(&native->lock);
-#endif
-  if (native->used && vk__storeCache(native)) {
-    native->used = false;
-  }
-#if defined(_WIN32) || defined(WIN32)
-  LeaveCriticalSection(&native->lock);
-  ReleaseSRWLockExclusive(&native->compileLock);
-#else
-  pthread_mutex_unlock(&native->lock);
-  pthread_rwlock_unlock(&native->compileLock);
-#endif
 
   return GPU_OK;
 }
@@ -720,7 +786,7 @@ vk__readStoredBinaries(const VKPipelineCache        *native,
     return false;
   }
 
-  set->storage = vk__readCache(path, &fileSize);
+  set->storage = vk__readCache(path, &fileSize, NULL);
   free(path);
 
   if (!set->storage || fileSize < sizeof(header)) {

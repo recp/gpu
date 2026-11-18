@@ -19,10 +19,23 @@
 
 #include "../common.h"
 
+#include <stdio.h>
+
 typedef struct GPUCacheFileGuard {
   intptr_t native;
   bool     locked;
 } GPUCacheFileGuard;
+
+/* which file a path held when it was read or written: cache files are only
+ * ever replaced whole (cacheFileReplace), so an equal stamp is the same file
+ * and a store can skip merging back what it already holds */
+typedef struct GPUCacheFileStamp {
+  uint64_t volume;
+  uint64_t index;
+  uint64_t size;
+  uint64_t time;
+  bool     valid;
+} GPUCacheFileStamp;
 
 GPU_HIDE
 bool
@@ -39,5 +52,20 @@ cacheFileTemporaryPath(const char *path, const void *identity);
 GPU_HIDE
 bool
 cacheFileReplace(const char *source, const char *destination);
+
+/* the open file's stamp (the one read), or the file at path now */
+GPU_HIDE
+bool
+cacheFileStampOf(FILE *file, GPUCacheFileStamp *stamp);
+
+GPU_HIDE
+bool
+cacheFileStampAt(const char *path, GPUCacheFileStamp *stamp);
+
+static inline bool
+cacheFileSame(const GPUCacheFileStamp *a, const GPUCacheFileStamp *b) {
+  return a->valid && b->valid && a->volume == b->volume && a->index == b->index
+         && a->size == b->size && a->time == b->time;
+}
 
 #endif /* gpu_backend_cache_file_h */

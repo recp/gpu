@@ -17,11 +17,13 @@
 #include "cache_file.h"
 
 #if defined(_WIN32) || defined(WIN32)
+# include <io.h>
 # include <process.h>
 # include <windows.h>
 #else
 # include <fcntl.h>
 # include <sys/file.h>
+# include <sys/stat.h>
 # include <unistd.h>
 #endif
 
@@ -185,5 +187,102 @@ cacheFileReplace(const char *source, const char *destination) {
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
 #else
   return rename(source, destination) == 0;
+#endif
+}
+
+#if defined(_WIN32) || defined(WIN32)
+static bool
+cacheFile__stampHandle(HANDLE handle, GPUCacheFileStamp *stamp) {
+  BY_HANDLE_FILE_INFORMATION info;
+
+  if (handle == INVALID_HANDLE_VALUE || !GetFileInformationByHandle(handle, &info))
+    return false;
+
+  stamp->volume = info.dwVolumeSerialNumber;
+  stamp->index  = (uint64_t)info.nFileIndexHigh << 32 | info.nFileIndexLow;
+  stamp->size   = (uint64_t)info.nFileSizeHigh << 32 | info.nFileSizeLow;
+  stamp->time   = (uint64_t)info.ftLastWriteTime.dwHighDateTime << 32
+                  | info.ftLastWriteTime.dwLowDateTime;
+  stamp->valid  = true;
+
+  return true;
+}
+#else
+static bool
+cacheFile__stampStat(const struct stat *st, GPUCacheFileStamp *stamp) {
+  stamp->volume = (uint64_t)st->st_dev;
+  stamp->index  = (uint64_t)st->st_ino;
+  stamp->size   = (uint64_t)st->st_size;
+#  if defined(__APPLE__)
+  stamp->time   = (uint64_t)st->st_mtimespec.tv_sec * 1000000000u
+                  + (uint64_t)st->st_mtimespec.tv_nsec;
+#  else
+  stamp->time   = (uint64_t)st->st_mtim.tv_sec * 1000000000u
+                  + (uint64_t)st->st_mtim.tv_nsec;
+#  endif
+  stamp->valid  = true;
+
+  return true;
+}
+#endif
+
+GPU_HIDE
+bool
+cacheFileStampOf(FILE *file, GPUCacheFileStamp *stamp) {
+#if !defined(_WIN32) && !defined(WIN32)
+  struct stat st;
+#endif
+
+  if (!stamp)
+    return false;
+
+  stamp->valid = false;
+
+  if (!file)
+    return false;
+
+#if defined(_WIN32) || defined(WIN32)
+  return cacheFile__stampHandle((HANDLE)_get_osfhandle(_fileno(file)), stamp);
+#else
+  return fstat(fileno(file), &st) == 0 && cacheFile__stampStat(&st, stamp);
+#endif
+}
+
+GPU_HIDE
+bool
+cacheFileStampAt(const char *path, GPUCacheFileStamp *stamp) {
+#if defined(_WIN32) || defined(WIN32)
+  HANDLE handle;
+  bool   stamped;
+#else
+  struct stat st;
+#endif
+
+  if (!stamp)
+    return false;
+
+  stamp->valid = false;
+
+  if (!path)
+    return false;
+
+#if defined(_WIN32) || defined(WIN32)
+  handle = CreateFileA(path,
+                       0u,
+                       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                       NULL,
+                       OPEN_EXISTING,
+                       FILE_ATTRIBUTE_NORMAL,
+                       NULL);
+
+  if (handle == INVALID_HANDLE_VALUE)
+    return false;
+
+  stamped = cacheFile__stampHandle(handle, stamp);
+  CloseHandle(handle);
+
+  return stamped;
+#else
+  return stat(path, &st) == 0 && cacheFile__stampStat(&st, stamp);
 #endif
 }
