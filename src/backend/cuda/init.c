@@ -16,6 +16,7 @@
 
 #include "common.h"
 #include "impl.h"
+#include "../once.h"
 
 static GPUApi cuda = {
   .backend                = GPU_BACKEND_CUDA,
@@ -23,23 +24,28 @@ static GPUApi cuda = {
   .storageAlwaysReadWrite = true
 };
 
+static void
+cuda__setup(void) {
+  cuda_initInstance(&cuda.instance);
+  cuda_initDevice(&cuda.device);
+  cuda_initQueue(&cuda.cmdque);
+  cuda_initBuffer(&cuda.buf);
+  cuda_initTexture(&cuda.texture);
+  cuda_initSampler(&cuda.sampler);
+  cuda_initDescriptor(&cuda.descriptor);
+  cuda_initMultiGPU(&cuda.multigpu);
+  cuda_initLibrary(&cuda.library);
+  cuda_initCompute(&cuda.compute);
+
+  cuda.initialized = true;
+}
+
 GPU_HIDE
 GPUApi*
 backend_cuda(void) {
-  if (!cuda.initialized) {
-    cuda_initInstance(&cuda.instance);
-    cuda_initDevice(&cuda.device);
-    cuda_initQueue(&cuda.cmdque);
-    cuda_initBuffer(&cuda.buf);
-    cuda_initTexture(&cuda.texture);
-    cuda_initSampler(&cuda.sampler);
-    cuda_initDescriptor(&cuda.descriptor);
-    cuda_initMultiGPU(&cuda.multigpu);
-    cuda_initLibrary(&cuda.library);
-    cuda_initCompute(&cuda.compute);
+  static GPUBackendOnce once = GPU_BACKEND_ONCE_INIT;
 
-    cuda.initialized = true;
-  }
+  gpuBackendOnce(&once, cuda__setup);
 
   return &cuda;
 }

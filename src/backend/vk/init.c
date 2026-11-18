@@ -16,6 +16,7 @@
 
 #include "common.h"
 #include "impl.h"
+#include "../once.h"
 
 GPUApi vk = {
   .initialized            = false,
@@ -23,39 +24,42 @@ GPUApi vk = {
   .storageAlwaysReadWrite = true
 };
 
+static void
+vk__setup(void) {
+  vk_initInstance(&vk.instance);
+  vk_initDevice(&vk.device);
+  vk_initBuff(&vk.buf);
+  vk_initMemory(&vk.memory);
+  vk_initMultiGPU(&vk.multigpu);
+  vk_initTexture(&vk.texture);
+  vk_initSampler(&vk.sampler);
+  vk_initSurface(&vk.surface);
+  vk_initCmdQue(&vk.cmdque);
+  vk_initCmdbuf(&vk.cmdbuf);
+  vk_initQuery(&vk.cmdbuf);
+  vk_initLibrary(&vk.library);
+  vk_initRenderPipeline(&vk.render);
+  vk_initRenderPass(&vk.renderPass);
+  vk_initRCE(&vk.rce);
+  vk_initCompute(&vk.compute);
+  vk_initSwapchain(&vk.swapchain);
+  vk_initFrame(&vk.frame);
+  vk_initDescriptor(&vk.descriptor);
+  vk_initPipelineCache(&vk.pipelineCache);
+  vk_initVRS(&vk.vrs);
+  vk_initRayQuery(&vk.rayQuery);
+  vk_initRayTracing(&vk.rayTracing);
+  vk_initExecutionGraph(&vk.executionGraph);
+
+  vk.initialized = true;
+}
+
 GPU_HIDE
 GPUApi*
 backend_vk(void) {
-  /* todo: init */
+  static GPUBackendOnce once = GPU_BACKEND_ONCE_INIT;
 
-  if (!vk.initialized) {
-    vk_initInstance(&vk.instance);
-    vk_initDevice(&vk.device);
-    vk_initBuff(&vk.buf);
-    vk_initMemory(&vk.memory);
-    vk_initMultiGPU(&vk.multigpu);
-    vk_initTexture(&vk.texture);
-    vk_initSampler(&vk.sampler);
-    vk_initSurface(&vk.surface);
-    vk_initCmdQue(&vk.cmdque);
-    vk_initCmdbuf(&vk.cmdbuf);
-    vk_initQuery(&vk.cmdbuf);
-    vk_initLibrary(&vk.library);
-    vk_initRenderPipeline(&vk.render);
-    vk_initRenderPass(&vk.renderPass);
-    vk_initRCE(&vk.rce);
-    vk_initCompute(&vk.compute);
-    vk_initSwapchain(&vk.swapchain);
-    vk_initFrame(&vk.frame);
-    vk_initDescriptor(&vk.descriptor);
-    vk_initPipelineCache(&vk.pipelineCache);
-    vk_initVRS(&vk.vrs);
-    vk_initRayQuery(&vk.rayQuery);
-    vk_initRayTracing(&vk.rayTracing);
-    vk_initExecutionGraph(&vk.executionGraph);
-
-    vk.initialized = true;
-  }
+  gpuBackendOnce(&once, vk__setup);
 
   return &vk;
 }

@@ -16,38 +16,44 @@
 
 #include "common.h"
 #include "impl.h"
+#include "../once.h"
 
 static GPUApi webgpu = {
   .backend = GPU_BACKEND_WEBGPU
 };
 
+static void
+webgpu__setup(void) {
+  webgpu_initDevice(&webgpu.device);
+  webgpu_initInstance(&webgpu.instance);
+  webgpu_initSurface(&webgpu.surface);
+  webgpu_initSwapchain(&webgpu.swapchain);
+  webgpu_initFrame(&webgpu.frame);
+  webgpu_initCommandQueue(&webgpu.cmdque);
+  webgpu_initCommandBuffer(&webgpu.cmdbuf);
+  webgpu_initQuery(&webgpu.cmdbuf);
+  webgpu_initBuffer(&webgpu.buf);
+  webgpu_initTexture(&webgpu.texture);
+  webgpu_initSampler(&webgpu.sampler);
+  webgpu_initLibrary(&webgpu.library);
+  webgpu_initDescriptor(&webgpu.descriptor);
+  webgpu_initPipeline(&webgpu.render);
+  webgpu_initCompute(&webgpu.compute);
+  webgpu_initRenderPass(&webgpu.renderPass);
+  webgpu_initRenderEncoder(&webgpu.rce);
+#if !GPU_WEBGPU_PROVIDER_WGPU_NATIVE
+  /* Dawn's device and a browser's are called from one thread only */
+  webgpu.callerThreadPipelines = true;
+#endif
+  webgpu.initialized = true;
+}
+
 GPU_HIDE
 GPUApi*
 backend_webgpu(void) {
-  if (!webgpu.initialized) {
-    webgpu_initDevice(&webgpu.device);
-    webgpu_initInstance(&webgpu.instance);
-    webgpu_initSurface(&webgpu.surface);
-    webgpu_initSwapchain(&webgpu.swapchain);
-    webgpu_initFrame(&webgpu.frame);
-    webgpu_initCommandQueue(&webgpu.cmdque);
-    webgpu_initCommandBuffer(&webgpu.cmdbuf);
-    webgpu_initQuery(&webgpu.cmdbuf);
-    webgpu_initBuffer(&webgpu.buf);
-    webgpu_initTexture(&webgpu.texture);
-    webgpu_initSampler(&webgpu.sampler);
-    webgpu_initLibrary(&webgpu.library);
-    webgpu_initDescriptor(&webgpu.descriptor);
-    webgpu_initPipeline(&webgpu.render);
-    webgpu_initCompute(&webgpu.compute);
-    webgpu_initRenderPass(&webgpu.renderPass);
-    webgpu_initRenderEncoder(&webgpu.rce);
-#if !GPU_WEBGPU_PROVIDER_WGPU_NATIVE
-    /* Dawn's device and a browser's are called from one thread only */
-    webgpu.callerThreadPipelines = true;
-#endif
-    webgpu.initialized = true;
-  }
+  static GPUBackendOnce once = GPU_BACKEND_ONCE_INIT;
+
+  gpuBackendOnce(&once, webgpu__setup);
 
   return &webgpu;
 }

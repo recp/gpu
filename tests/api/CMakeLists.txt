@@ -248,6 +248,30 @@ endif()
 
 add_test(NAME api-constant-lookup COMMAND gpu-constant-lookup-test)
 
+# instances made on 8 threads at once as the process's first calls: the
+# backend's one-time setup runs once (built with TSan, a race shows)
+add_executable(gpu-instance-threads-test instance_threads.c)
+
+target_link_libraries(gpu-instance-threads-test PRIVATE gpu)
+
+if(NOT WIN32)
+  find_package(Threads REQUIRED)
+  target_link_libraries(gpu-instance-threads-test PRIVATE Threads::Threads)
+endif()
+
+set_target_properties(gpu-instance-threads-test PROPERTIES
+  C_STANDARD 11
+  C_STANDARD_REQUIRED YES
+  C_EXTENSIONS NO
+)
+
+if(NOT MSVC)
+  target_compile_options(gpu-instance-threads-test PRIVATE -Wall -Wextra -Werror)
+endif()
+
+add_test(NAME api-instance-threads COMMAND gpu-instance-threads-test)
+set_tests_properties(api-instance-threads PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+
 add_executable(gpu-pipeline-key-test
   pipeline_key.c
   ${PROJECT_SOURCE_DIR}/src/api/compile_pool.c

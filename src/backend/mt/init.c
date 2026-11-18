@@ -16,45 +16,51 @@
 
 #include "common.h"
 #include "impl.h"
+#include "../once.h"
 
 static GPUApi mt = {
   .initialized = false,
   .backend     = GPU_BACKEND_METAL,
 };
 
+static void
+mt__setup(void) {
+  mt_initDevice(&mt.device);
+  mt_initRenderPipeline(&mt.render);
+  mt_initRCE(&mt.rce);
+  mt_initCompute(&mt.compute);
+  mt_initCmdBuff(&mt.cmdbuf);
+  mt_initCmdQue(&mt.cmdque);
+  mt_initBuff(&mt.buf);
+  mt_initMemory(&mt.memory);
+  mt_initMultiGPU(&mt.multigpu);
+  mt_initTexture(&mt.texture);
+  mt_initTensor(&mt.tensor);
+  mt_initTile(&mt.tile);
+  mt_initML(&mt.ml);
+  mt_initDepthStencil(&mt.depthStencil);
+  mt_initVertex(&mt.vertex);
+  mt_initLibrary(&mt.library);
+  mt_initSampler(&mt.sampler);
+  mt_initRenderPass(&mt.renderPass);
+  mt_initSwapchain(&mt.swapchain);
+  mt_initFrame(&mt.frame);
+  mt_initInstance(&mt.instance);
+  mt_initSurface(&mt.surface);
+  mt_initPipelineCache(&mt.pipelineCache);
+  mt_initVRS(&mt.vrs);
+  mt_initRayQuery(&mt.rayQuery);
+  mt_initDescriptor(&mt.descriptor);
+
+  mt.initialized = true;
+}
+
 GPU_HIDE
 GPUApi*
 backend_metal(void) {
-  if (!mt.initialized) {
-    mt_initDevice(&mt.device);
-    mt_initRenderPipeline(&mt.render);
-    mt_initRCE(&mt.rce);
-    mt_initCompute(&mt.compute);
-    mt_initCmdBuff(&mt.cmdbuf);
-    mt_initCmdQue(&mt.cmdque);
-    mt_initBuff(&mt.buf);
-    mt_initMemory(&mt.memory);
-    mt_initMultiGPU(&mt.multigpu);
-    mt_initTexture(&mt.texture);
-    mt_initTensor(&mt.tensor);
-    mt_initTile(&mt.tile);
-    mt_initML(&mt.ml);
-    mt_initDepthStencil(&mt.depthStencil);
-    mt_initVertex(&mt.vertex);
-    mt_initLibrary(&mt.library);
-    mt_initSampler(&mt.sampler);
-    mt_initRenderPass(&mt.renderPass);
-    mt_initSwapchain(&mt.swapchain);
-    mt_initFrame(&mt.frame);
-    mt_initInstance(&mt.instance);
-    mt_initSurface(&mt.surface);
-    mt_initPipelineCache(&mt.pipelineCache);
-    mt_initVRS(&mt.vrs);
-    mt_initRayQuery(&mt.rayQuery);
-    mt_initDescriptor(&mt.descriptor);
+  static GPUBackendOnce once = GPU_BACKEND_ONCE_INIT;
 
-    mt.initialized = true;
-  }
+  gpuBackendOnce(&once, mt__setup);
 
   return &mt;
 }

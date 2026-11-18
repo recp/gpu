@@ -697,14 +697,16 @@ mt_carryPendingBarrier(GPUCommandBuffer *cmdb) {
 #if MT_HAS_METAL4
 static bool
 mt__fullBarriers(void) {
-  static int cached = -1;
+  static int cached = -1; /* encoders on any thread: read and written atomically */
+  int        value;
 
-  if (cached < 0) {
+  if ((value = __atomic_load_n(&cached, __ATOMIC_RELAXED)) < 0) {
     const char *env = getenv("GPU_METAL_FULL_BARRIERS");
-    cached          = env && env[0] && env[0] != '0';
+    value           = env && env[0] && env[0] != '0';
+    __atomic_store_n(&cached, value, __ATOMIC_RELAXED);
   }
 
-  return cached != 0;
+  return value != 0;
 }
 #endif
 

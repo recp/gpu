@@ -16,6 +16,7 @@
 
 #include "common.h"
 #include "impl.h"
+#include "../once.h"
 
 GPUApi dx12 = {
   .initialized            = false,
@@ -24,44 +25,47 @@ GPUApi dx12 = {
   .reserved    = &(GPU__DX12){0}
 };
 
+static void
+dx12__setup(void) {
+  dx12_initDevice(&dx12.device);
+  dx12_initRenderPipeline(&dx12.render);
+  dx12_initCompute(&dx12.compute);
+  dx12_initRCE(&dx12.rce);
+  dx12_initCmdbuf(&dx12.cmdbuf);
+  dx12_initQuery(&dx12.cmdbuf);
+  dx12_initCmdQue(&dx12.cmdque);
+  dx12_initBuff(&dx12.buf);
+  dx12_initMemory(&dx12.memory);
+  dx12_initTexture(&dx12.texture);
+  dx12_initSampler(&dx12.sampler);
+
+  /* dx12_initDepthStencil(&dx12.depthStencil); */
+  /* dx12_initVertex(&dx12.vertex); */
+
+  dx12_initLibrary(&dx12.library);
+  dx12_initPipelineCache(&dx12.pipelineCache);
+  dx12_initRenderPass(&dx12.renderPass);
+  dx12_initSwapchain(&dx12.swapchain);
+  dx12_initFrame(&dx12.frame);
+  dx12_initDescriptor(&dx12.descriptor);
+  dx12_initInstance(&dx12.instance);
+  dx12_initSurface(&dx12.surface);
+  dx12_initVRS(&dx12.vrs);
+  dx12_initRayQuery(&dx12.rayQuery);
+  dx12_initRayTracing(&dx12.rayTracing);
+  dx12_initExecutionGraph(&dx12.executionGraph);
+  dx12_initSamplerFeedback(&dx12.samplerFeedback);
+  dx12_initMultiGPU(&dx12.multigpu);
+
+  dx12.initialized = true;
+}
+
 GPU_HIDE
 GPUApi*
 backend_dx12(void) {
-  /* todo: init */
+  static GPUBackendOnce once = GPU_BACKEND_ONCE_INIT;
 
-  if (!dx12.initialized) {
-    dx12_initDevice(&dx12.device);
-    dx12_initRenderPipeline(&dx12.render);
-    dx12_initCompute(&dx12.compute);
-    dx12_initRCE(&dx12.rce);
-    dx12_initCmdbuf(&dx12.cmdbuf);
-    dx12_initQuery(&dx12.cmdbuf);
-    dx12_initCmdQue(&dx12.cmdque);
-    dx12_initBuff(&dx12.buf);
-    dx12_initMemory(&dx12.memory);
-    dx12_initTexture(&dx12.texture);
-    dx12_initSampler(&dx12.sampler);
-
-    /* dx12_initDepthStencil(&dx12.depthStencil); */
-    /* dx12_initVertex(&dx12.vertex); */
-
-    dx12_initLibrary(&dx12.library);
-    dx12_initPipelineCache(&dx12.pipelineCache);
-    dx12_initRenderPass(&dx12.renderPass);
-    dx12_initSwapchain(&dx12.swapchain);
-    dx12_initFrame(&dx12.frame);
-    dx12_initDescriptor(&dx12.descriptor);
-    dx12_initInstance(&dx12.instance);
-    dx12_initSurface(&dx12.surface);
-    dx12_initVRS(&dx12.vrs);
-    dx12_initRayQuery(&dx12.rayQuery);
-    dx12_initRayTracing(&dx12.rayTracing);
-    dx12_initExecutionGraph(&dx12.executionGraph);
-    dx12_initSamplerFeedback(&dx12.samplerFeedback);
-    dx12_initMultiGPU(&dx12.multigpu);
-
-    dx12.initialized = true;
-  }
+  gpuBackendOnce(&once, dx12__setup);
 
   return &dx12;
 }
