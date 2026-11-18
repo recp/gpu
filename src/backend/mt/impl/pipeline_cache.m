@@ -528,10 +528,13 @@ mt_flushCache(GPUPipelineCache *cache) {
     return GPU_OK;
   }
 
+  /* a thread of the compile pool, or the app's own, may have no pool */
   if (@available(macOS 11.0, iOS 14.0, *)) {
-    os_unfair_lock_lock(&native->lock);
-    mt_storeCache(native);
-    os_unfair_lock_unlock(&native->lock);
+    @autoreleasepool {
+      os_unfair_lock_lock(&native->lock);
+      mt_storeCache(native);
+      os_unfair_lock_unlock(&native->lock);
+    }
   }
 
   return GPU_OK;
