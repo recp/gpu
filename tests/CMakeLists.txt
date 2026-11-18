@@ -686,6 +686,17 @@ if(GPU_BUILD_TESTS)
       ENVIRONMENT "USL_STRICT_IEEE=0;USL_BACKEND_STRICT_IEEE=0"
       LABELS "usl;spirv;relaxed-fp;cache"
       TIMEOUT 60)
+    # the strict fixture with no float mode named: it compiles in the one it
+    # was folded in, which the artifact records
+    add_test(NAME api-float-controls-recorded
+      COMMAND gpu-float-controls-test ${GPU_FLOAT_CONTROLS_STRICT_FIXTURE})
+    set_tests_properties(api-float-controls-recorded PROPERTIES
+      LABELS "usl;spirv;strict-ieee;cache"
+      TIMEOUT 60)
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
+      set_tests_properties(api-float-controls-recorded PROPERTIES
+        ENVIRONMENT_MODIFICATION "USL_STRICT_IEEE=unset:;USL_RELAXED_FP=unset:;USL_BACKEND_STRICT_IEEE=unset:")
+    endif()
   endif()
 
   add_executable(gpu-public-layout-test

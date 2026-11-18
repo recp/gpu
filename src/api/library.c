@@ -139,6 +139,14 @@ static const char *const gpu_spirvFmaAtoms[] = {
   "spirv_fma_f16", "spirv_fma_f32", "spirv_fma_f64"
 };
 
+/* a USL float mode's name, for GPU_USL_LOG */
+static const char*
+uslFloatModeName(uint32_t flags) {
+  return (flags & USL_COMPILE_OPTION_FLAG_STRICT_IEEE) ? "strict IEEE"
+         : (flags & USL_COMPILE_OPTION_FLAG_RELAXED_FP) ? "relaxed"
+                                                         : "the default";
+}
+
 static const char *const gpu_spirvDenormAtoms[] = {
   "spirv_denorm_f16", "spirv_denorm_f32", "spirv_denorm_f64"
 };
@@ -2753,6 +2761,8 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
   GPUResult                   rc;
   uint32_t                    targetAtomCount;
   uint32_t                    sourceCompileFlags;
+  uint32_t                    namedFloatMode;
+  uint32_t                    artifactFloatMode;
   uint32_t                    encoding;
   uint32_t                    floatModeIndex;
   uint32_t                    floatAtomicIndex;
@@ -3298,6 +3308,22 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
 
   if (us_compile_options_from_env(&compileOptions) != USLOk) {
     return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  /* the float mode: the environment's when it names one, else the one the
+   * artifact was compiled and folded in, so USL's emission and the native
+   * compiler's math below follow its folding. One named against the
+   * artifact's is the caller's choice: kept (its folding stays), and said */
+  namedFloatMode = compileOptions.flags & (USL_COMPILE_OPTION_FLAG_STRICT_IEEE
+                                           | USL_COMPILE_OPTION_FLAG_RELAXED_FP);
+
+  if (us_artifact_float_mode(bytecodeData, (size_t)bytecodeSize, &artifactFloatMode) == USLOk) {
+    if (!namedFloatMode) {
+      compileOptions.flags |= artifactFloatMode;
+    } else if (namedFloatMode != artifactFloatMode && getenv("GPU_USL_LOG")) {
+      fprintf(stderr, "GPU: USL artifact folded in %s float mode, compiled in %s as the environment names\n",
+              uslFloatModeName(artifactFloatMode), uslFloatModeName(namedFloatMode));
+    }
   }
 
   /* unrelaxed USL must not inherit a native compiler's implicit fast math. */
