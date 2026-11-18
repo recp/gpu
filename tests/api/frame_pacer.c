@@ -472,6 +472,12 @@ measure(PacerTest *state, GPUAdapter *adapter, uint32_t latency) {
       kind = "display (VK_GOOGLE_display_timing)";
     }
 #endif
+    /* a host may report the layer's history: these presents are its last */
+    if (got > state->presents) {
+      memmove(times, times + (got - state->presents), state->presents * sizeof(*times));
+      got = state->presents;
+    }
+
     if (got && got != state->presents) {
       printf("pacer: %u presents, %u times reported: not matched\n", state->presents, got);
       got = 0u;
