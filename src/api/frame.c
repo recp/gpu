@@ -76,6 +76,33 @@ frameClockElapsedMs(const GPUFrame *frame) {
   return (double)(end - start) * 1000.0 / (double)frequency;
 }
 
+static void
+frameAttachTarget(GPUFrame *frame) {
+  if (frame->target) {
+    frame->target->device = frame->device;
+  }
+
+  if (frame->targetView && frame->target) {
+    frame->targetView->_texture = frame->target;
+  }
+}
+
+GPU_HIDE
+bool
+frameAcquire(GPUFrame *frame) {
+  GPUApi *api;
+
+  if (frame->targetState == GPU_FRAME_TARGET_PENDING) {
+    api = deviceApi(frame->device);
+    frame->targetState = api && api->frame.acquireDrawable && api->frame.acquireDrawable(api, frame)
+                           ? GPU_FRAME_TARGET_READY : GPU_FRAME_TARGET_FAILED;
+    if (frame->targetState == GPU_FRAME_TARGET_READY)
+      frameAttachTarget(frame);
+  }
+
+  return frame->targetState == GPU_FRAME_TARGET_READY;
+}
+
 static GPUFrame*
 frameBegin(GPUSwapchain *swapchain, void *drawable) {
   GPUApi    *api;
@@ -107,17 +134,16 @@ frameBegin(GPUSwapchain *swapchain, void *drawable) {
   if (frame) {
     frame->_feedback             = NULL;
     frame->targetPresentTime     = 0.0;
+    frame->deadline              = 0.0;
     frame->presentationScheduled = false;
     deviceActivateFrame(device, frameIndex);
 
-    frame->device = device;
+    frame->device         = device;
+    frame->swapchain      = swapchain;
+    swapchain->activeFrame = frame;
 
-    if (frame->target) {
-      frame->target->device = frame->device;
-    }
-
-    if (frame->targetView && frame->target) {
-      frame->targetView->_texture = frame->target;
+    if (frame->targetState == GPU_FRAME_TARGET_READY) {
+      frameAttachTarget(frame);
     }
 
     frame->transientFrameIndex  = device->transientFrameIndex;
@@ -234,13 +260,13 @@ GPUDestroyFramePacer(GPUFramePacer *pacer) {
 GPU_EXPORT
 GPUTexture*
 GPUFrameGetTarget(GPUFrame *frame) {
-  return frame ? frame->target : NULL;
+  return frame && frameAcquire(frame) ? frame->target : NULL;
 }
 
 GPU_EXPORT
 GPUTextureView*
 GPUFrameGetTargetView(GPUFrame *frame) {
-  return frame ? frame->targetView : NULL;
+  return frame && frameAcquire(frame) ? frame->targetView : NULL;
 }
 
 GPU_EXPORT
@@ -264,12 +290,17 @@ GPUEndFrame(GPUFrame *frame) {
   frame->_feedback = NULL;
   frame->transientFrameActive = false;
 
+  if (frame->swapchain && frame->swapchain->activeFrame == frame) {
+    frame->swapchain->activeFrame = NULL;
+  }
+
   if (frame->device->runtimeConfig.enableStats) {
     frame->device->currentFrameStats.cpuEncodeMs = frameClockElapsedMs(frame);
   }
 
   deviceEndFrame(frame->device);
   api->frame.endFrame(api, frame);
+  frame->drawable = NULL; /* ended: a pacer finds its frame gone */
 
   if (feedback) {
     if (!scheduled)

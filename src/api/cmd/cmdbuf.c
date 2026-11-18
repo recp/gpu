@@ -38,7 +38,7 @@ schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   if (frame->_feedback && frame->presentationScheduled)
     return false;
 
-  if (!api->cmdbuf.presentDrawable)
+  if (!api->cmdbuf.presentDrawable || !frameAcquire(frame))
     return false;
 
   if (!api->cmdbuf.presentDrawable(cmdb, frame)) {

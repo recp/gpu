@@ -23,6 +23,9 @@
 struct GPUSurface {
   GPUInstance   *inst;
   void          *_priv;
+  void          *nativeHandle; /* the view, window, layer or canvas it was made from */
+  void          *display;      /* Xlib and Wayland */
+  uintptr_t      nativeWindow; /* Xlib */
   GPUSurfaceType type;
   float          scale;
 };

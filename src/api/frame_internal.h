@@ -19,19 +19,28 @@
 
 #include "../common.h"
 
+enum {
+  GPU_FRAME_TARGET_READY   = 0, /* target and targetView set */
+  GPU_FRAME_TARGET_PENDING = 1, /* a paced frame's image acquired at its first use (frameAcquire) */
+  GPU_FRAME_TARGET_FAILED  = 2
+};
+
 struct GPUFrame {
   GPUDevice        *device;
+  GPUSwapchain     *swapchain;
   void             *_priv;
   GPUTexture       *target;
   GPUTextureView   *targetView;
   void             *drawable;
   GPUFrameFeedback *_feedback;
   double            targetPresentTime;
+  double            deadline;          /* a paced frame's, host seconds; zero for a manual frame */
   uint64_t          cpuEncodeStartTicks;
   uint64_t          cpuEncodeFrequency;
   uint32_t          transientFrameIndex;
   bool              transientFrameActive;
   bool              presentationScheduled;
+  uint8_t           targetState;       /* GPU_FRAME_TARGET_*, set by the backend */
 };
 
 struct GPUFramePacer {
@@ -49,5 +58,10 @@ frameBeginDrawable(GPUSwapchain *swapchain, void *drawable);
 GPU_HIDE
 bool
 schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame);
+
+/* the target of a frame begun without one; false when it can't be had */
+GPU_HIDE
+bool
+frameAcquire(GPUFrame *frame);
 
 #endif /* gpu_frame_internal_h */

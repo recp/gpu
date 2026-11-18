@@ -162,7 +162,10 @@ GPUCreateSurface(GPUInstance                *__restrict inst,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  (*outSurface)->inst = inst;
+  (*outSurface)->inst         = inst;
+  (*outSurface)->nativeHandle = nativeInfo.nativeHandle;
+  (*outSurface)->display      = nativeInfo.display;
+  (*outSurface)->nativeWindow = nativeInfo.nativeWindow;
 
   return GPU_OK;
 }

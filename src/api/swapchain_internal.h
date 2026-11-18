@@ -24,6 +24,8 @@ struct GPUSwapchain {
   void              *_priv;
   void              *target;
   GPUFramePacer     *pacer;
+  GPUSurface        *surface;
+  GPUFrame          *activeFrame;
   float              backingScaleFactor;
   uint32_t           width;
   uint32_t           height;

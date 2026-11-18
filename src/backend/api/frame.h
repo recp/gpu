@@ -36,6 +36,8 @@ typedef struct GPUFrameApi {
   void (*destroyPacer)(GPUFramePacer *pacer);
   bool (*prepareWithPacer)(GPUFramePacer *pacer);
   GPUResult (*observe)(GPUFrame *frame, GPUFrameFeedback *feedback);
+  /* the image of a frame beginDrawable left GPU_FRAME_TARGET_PENDING: sets target/targetView */
+  bool (*acquireDrawable)(struct GPUApi *api, GPUFrame *frame);
 } GPUFrameApi;
 
 #ifdef __cplusplus

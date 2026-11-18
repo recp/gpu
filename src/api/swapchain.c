@@ -89,6 +89,7 @@ createSwapchainInternal(GPUDevice                    *__restrict device,
                                                   cmdQue,
                                                   info))) {
     swapchain->device            = device;
+    swapchain->surface           = info->surface;
     swapchain->width             = info->width;
     swapchain->height            = info->height;
     swapchain->format            = info->format;

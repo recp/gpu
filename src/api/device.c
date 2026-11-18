@@ -23,6 +23,7 @@
 #include "image_buffer_internal.h"
 #include "pass/blit_internal.h"
 #include "pipeline_cache_internal.h"
+#include "pacer_internal.h"
 #include <stddef.h>
 
 #if !defined(_WIN32) && !defined(WIN32)
@@ -273,6 +274,12 @@ adapterSupportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
 
   if (!knownFeature(feature)) {
     return false;
+  }
+
+  /* a backend pacing on the platform's clock paces wherever there is one */
+  if (feature == GPU_FEATURE_FRAME_PACER && (api = adapterApi(adapter))
+      && framePacerUsesClock(&api->frame)) {
+    return pacerClockSupported();
   }
 
   if ((api = adapterApi(adapter)) && api->device.supportsFeature) {

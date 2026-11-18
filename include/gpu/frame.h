@@ -92,6 +92,15 @@ typedef struct GPUFramePacerCreateInfo {
  * Metal detaches its display link for manual acquisition and recreates it on
  * resume with the original settings. recreation failure leaves the pacer paused
  * and reports through the device error callback.
+ * Vulkan, DX12 and WebGPU pace on the platform's clock: AChoreographer on the
+ * thread's ALooper (prepared if it has none; the thread polls it), CADisplayLink
+ * on Apple, the compositor clock or vblank delivered through the thread's
+ * message queue on Windows, requestAnimationFrame in browsers. Linux has no
+ * per-thread event loop to post to: there ticks come on a thread of the
+ * pacer's own and pacer calls may come from any thread. A tick's frame acquires
+ * its image at its first use (target, view or presentation), so one that draws
+ * nothing presents nothing; an image not free within the frame's latency means
+ * the display is behind, and the frame then has no target.
  * callback frames are borrowed for that callback only; NULL means skip encoding.
  * finish/submit normally; an unconsumed frame is released on callback return.
  * destroying the pacer in its callback is supported. the device must outlive it.
