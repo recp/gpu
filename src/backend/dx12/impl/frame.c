@@ -16,6 +16,27 @@
 
 #include "../common.h"
 #include "../impl.h"
+#include "../../../api/pacer_internal.h"
+
+static GPUFrame*
+dx12__activateFrame(GPUSwapchain     *swapchain,
+                    GPUSwapchainDX12 *native,
+                    UINT              frameIndex) {
+  GPUFrameDX12 *frame;
+
+  frame = &native->frames[frameIndex];
+  swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_READY);
+
+  native->frameIndex      = frameIndex;
+  native->frameActive     = true;
+  native->frameScheduled  = false;
+  frame->frame._priv      = native;
+  frame->frame.target     = &frame->target;
+  frame->frame.targetView = &frame->targetView;
+  frame->frame.drawable   = frame;
+
+  return &frame->frame;
+}
 
 GPU_HIDE
 GPUFrame*
@@ -55,17 +76,62 @@ dx12_beginFrame(GPUApi       *__restrict api,
     return NULL;
   }
 
-  swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_READY);
+  return dx12__activateFrame(swapchain, native, frameIndex);
+}
 
-  native->frameIndex      = frameIndex;
-  native->frameActive     = true;
-  native->frameScheduled  = false;
-  frame->frame._priv      = native;
-  frame->frame.target     = &frame->target;
-  frame->frame.targetView = &frame->targetView;
-  frame->frame.drawable   = frame;
+/* a pacer's tick: nothing waited for. The back buffer still on the GPU, or
+ * DXGI's queue more than a frame past the latency (the display behind: a
+ * frame drawn now would keep it behind), gives no frame this refresh. DXGI
+ * names the back buffer without acquiring it, so the target is set now and a
+ * frame left undrawn is simply not presented */
+static GPUFrame*
+dx12_beginDrawable(GPUApi       *__restrict api,
+                   GPUSwapchain *__restrict swapchain,
+                   void         *pacer) {
+  DXGI_FRAME_STATISTICS stats;
+  GPUSwapchainDX12     *native;
+  GPUFrameDX12         *frame;
+  UINT64                completed;
+  UINT                  frameIndex, lastPresent;
 
-  return &frame->frame;
+  GPU__UNUSED(api);
+
+  native = swapchain ? swapchain->_priv : NULL;
+
+  if (!native || !native->swapchain || !native->frames
+      || native->imageCount == 0u) {
+    swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
+    return NULL;
+  }
+
+  if (native->frameActive) {
+    return NULL;
+  }
+
+  frameIndex = native->swapchain->lpVtbl->GetCurrentBackBufferIndex(native->swapchain);
+
+  if (frameIndex >= native->imageCount) {
+    swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SURFACE_LOST);
+    return NULL;
+  }
+
+  frame = &native->frames[frameIndex];
+  if (frame->fenceValue) {
+    completed = native->queue->completionFence
+                  ? native->queue->completionFence->lpVtbl->GetCompletedValue(native->queue->completionFence)
+                  : 0u;
+    if (completed == UINT64_MAX || completed < frame->fenceValue) {
+      return NULL;
+    }
+  }
+
+  if (SUCCEEDED(native->swapchain->lpVtbl->GetLastPresentCount(native->swapchain, &lastPresent))
+      && SUCCEEDED(native->swapchain->lpVtbl->GetFrameStatistics(native->swapchain, &stats))
+      && lastPresent - stats.PresentCount > ((GPUPacer *)pacer)->latencyFrames + 1u) {
+    return NULL;
+  }
+
+  return dx12__activateFrame(swapchain, native, frameIndex);
 }
 
 GPU_HIDE
@@ -111,8 +177,10 @@ dx12_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
 GPU_HIDE
 void
 dx12_initFrame(GPUFrameApi *api) {
-  api->beginFrame = dx12_beginFrame;
-  api->endFrame   = dx12_endFrame;
+  api->beginFrame    = dx12_beginFrame;
+  api->endFrame      = dx12_endFrame;
+  api->beginDrawable = dx12_beginDrawable;
+  framePacerUseClock(api);
 }
 
 GPU_HIDE
