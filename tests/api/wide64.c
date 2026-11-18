@@ -19,16 +19,23 @@
  * uslPortabilitySubset): the SPIR-V GPU-C hands its Vulkan backend declares
  * Int64 / Float64 exactly when the device has them (USL emulates the rest in
  * 32-bit words), and divides 64-bit integers natively unless the device is
- * a portability subset (MoltenVK: in words, faster there)
+ * a portability subset; the HLSL it hands D3D12 names uint64_t / double the
+ * same way
  */
+
+#if !defined(_WIN32) && !defined(WIN32) && !defined(_POSIX_C_SOURCE)
+#  define _POSIX_C_SOURCE 200809L /* unsetenv */
+#endif
 
 #include "../../src/api/device_internal.h"
 #include "../../src/backend/api/gpudef.h"
 
 #include <spirv/unified1/spirv.h>
 #include <us/compiler.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static bool     int64Capability;
 static bool     float64Capability;
@@ -80,6 +87,40 @@ capture_binary(GPUDevice *device, const void *data, uint64_t size) {
   free(widths);
 
   /* the payload only: no native library */
+  return NULL;
+}
+
+/* how often a word stands alone in HLSL text */
+static uint32_t
+hlslWords(const char *text, size_t size, const char *word) {
+  const char *at;
+  const char *end;
+  size_t      length;
+  uint32_t    found;
+
+  length = strlen(word);
+  end    = text + size;
+  found  = 0u;
+
+  for (at = text; (size_t)(end - at) >= length; at++) {
+    if (memcmp(at, word, length) == 0
+        && (at == text || !(isalnum((unsigned char)at[-1]) || at[-1] == '_'))
+        && (at + length == end || !(isalnum((unsigned char)at[length]) || at[length] == '_'))) {
+      found++;
+    }
+  }
+
+  return found;
+}
+
+static GPUShaderLibrary*
+capture_source(GPUDevice *device, const char *source, uint64_t size, uint32_t flags) {
+  (void)device;
+  (void)flags;
+  calls++;
+  valid             = source && size > 0u;
+  int64Capability   = valid && hlslWords(source, (size_t)size, "uint64_t") > 0u;
+  float64Capability = valid && hlslWords(source, (size_t)size, "double") > 0u;
   return NULL;
 }
 
@@ -140,6 +181,35 @@ main(int argc, char **argv) {
                 expectDivide ? "some" : "none");
         ok = 0;
       }
+    }
+  }
+
+  /* D3D12's default path: HLSL text for DXC */
+#if defined(_WIN32) || defined(WIN32)
+  _putenv("GPU_DX12_NATIVE_DXIL=");
+#else
+  unsetenv("GPU_DX12_NATIVE_DXIL");
+#endif
+  api.backend                      = GPU_BACKEND_DX12;
+  api.library.newLibraryWithBinary = NULL;
+  api.library.newLibraryWithSource = capture_source;
+  device.uslTargetProfile          = USL_TARGET_PROFILE_HLSL_SM_6_6;
+  device.uslPortabilitySubset      = false;
+
+  for (wide = 0u; wide < 4u; wide++) {
+    device.uslWide64  = (uint8_t)wide;
+    int64Capability   = float64Capability = false;
+    calls             = 0u;
+    valid             = false;
+    library           = NULL;
+
+    if (GPUCreateShaderLibrary(&device, &info, &library) != GPU_ERROR_BACKEND_FAILURE || library
+        || calls != 1u || !valid
+        || int64Capability != ((wide & GPU_USL_WIDE_INT64) != 0u)
+        || float64Capability != ((wide & GPU_USL_WIDE_F64) != 0u)) {
+      fprintf(stderr, "wide64 hlsl: device bits %u: calls %u, valid %d, uint64_t %d, double %d\n",
+              wide, calls, valid, int64Capability, float64Capability);
+      ok = 0;
     }
   }
 

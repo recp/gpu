@@ -2965,8 +2965,8 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
-    /* MoltenVK: native Int64, but 64-bit division in 32-bit words, which runs
-     * 2-23x faster on Apple GPUs */
+    /* a portability-subset device: native Int64, 64-bit division in 32-bit
+     * words, the faster form there */
     if (device->uslPortabilitySubset
         && us_cap_atom_text(&targetAtoms[targetAtomCount++], "vk_khr_portability_subset") != USLOk) {
       return GPU_ERROR_BACKEND_FAILURE;

@@ -381,6 +381,39 @@ dx12_supportsAtomic64(ID3D12Device    *device,
          && options11.AtomicInt64OnDescriptorHeapResourceSupported != FALSE;
 }
 
+/* the 64-bit types its shaders run natively (GPU_USL_WIDE_*): doubles from
+ * OPTIONS, 64-bit integers from OPTIONS1 where shaders compile for SM 6.0 or
+ * later; USL emulates the rest in 32-bit words */
+static uint8_t
+dx12_wide64(ID3D12Device *device, bool sm6) {
+  D3D12_FEATURE_DATA_D3D12_OPTIONS  options  = {0};
+  D3D12_FEATURE_DATA_D3D12_OPTIONS1 options1 = {0};
+  uint8_t                           wide     = 0u;
+
+  if (!device) {
+    return 0u;
+  }
+
+  if (SUCCEEDED(device->lpVtbl->CheckFeatureSupport(device,
+                                                    D3D12_FEATURE_D3D12_OPTIONS,
+                                                    &options,
+                                                    sizeof(options)))
+      && options.DoublePrecisionFloatShaderOps != FALSE) {
+    wide |= GPU_USL_WIDE_F64;
+  }
+
+  if (sm6
+      && SUCCEEDED(device->lpVtbl->CheckFeatureSupport(device,
+                                                       D3D12_FEATURE_D3D12_OPTIONS1,
+                                                       &options1,
+                                                       sizeof(options1)))
+      && options1.Int64ShaderOps != FALSE) {
+    wide |= GPU_USL_WIDE_INT64;
+  }
+
+  return wide;
+}
+
 static bool
 dx12_supportsBindless(ID3D12Device *device) {
   D3D12_FEATURE_DATA_D3D12_OPTIONS options = {0};
@@ -1608,6 +1641,7 @@ dx12_createDevice(GPUAdapter   *__restrict adapter,
   device->_priv            = deviceDX12;
   device->adapter          = adapter;
   device->uslTargetProfile = deviceDX12->uslTargetProfile;
+  device->uslWide64        = dx12_wide64(deviceDX12->d3dDevice, deviceDX12->dxcAvailable);
 
   if (getenv("GPU_USL_LOG")) {
     shaderModel   = (uint32_t)deviceDX12->shaderModel;
