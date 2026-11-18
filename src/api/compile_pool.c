@@ -16,6 +16,7 @@
 
 #include "compile_pool_internal.h"
 #include "device_internal.h"
+#include "pipeline_cache_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -40,10 +41,13 @@ typedef struct GPUCompilePool {
   pthread_cond_t     done;
   pthread_t          threads[GPU_COMPILE_POOL_MAX_THREADS];
 #endif
+  GPUDevice         *device;
   GPUCompileTask    *head;
   GPUCompileTask    *tail;
   uint32_t           threadCount;
   uint32_t           running;
+  uint32_t           storing;  /* threads writing the device's caches */
+  bool               compiled; /* a task ran since they were written */
   bool               stop;
 } GPUCompilePool;
 
@@ -76,16 +80,21 @@ compilePool__take(GPUCompilePool *pool) {
   return task;
 }
 
-/* the task's result is published under the lock */
+/* the task's result is published under the lock. the last one run on the
+ * asking thread wakes a pool thread to write the caches; a pool thread that
+ * ran it writes them itself, next round */
 
 static void
-compilePool__run(GPUCompilePool *pool, GPUCompileTask *task) {
+compilePool__run(GPUCompilePool *pool, GPUCompileTask *task, bool asking) {
   task->run(task);
 
   POOL_LOCK(pool);
   compileTaskFinish(task);
   pool->running--;
+  pool->compiled = true;
   POOL_BROADCAST(pool, done);
+  if (asking && !pool->head && !pool->running)
+    POOL_SIGNAL(pool, work);
   POOL_UNLOCK(pool);
 }
 
@@ -103,16 +112,33 @@ compilePool__worker(void *context) {
 
   for (;;) {
     POOL_LOCK(pool);
-    while (!pool->head && !pool->stop)
+    while (!pool->head && !pool->stop && !(pool->compiled && !pool->running))
       POOL_WAIT(pool, work);
 
-    if (!(task = compilePool__take(pool))) {
+    if ((task = compilePool__take(pool))) {
+      POOL_UNLOCK(pool);
+      compilePool__run(pool, task, false);
+      continue;
+    }
+
+    if (pool->stop) {
       POOL_UNLOCK(pool);
       break;
     }
+
+    /* the queue drained: what it compiled kept on disk now, not only when
+     * the app flushes or destroys its cache (a process ended before then
+     * would compile it all again). a stopping pool leaves it to them */
+    pool->compiled = false;
+    pool->storing++;
     POOL_UNLOCK(pool);
 
-    compilePool__run(pool, task);
+    storeDevicePipelineCaches(pool->device);
+
+    POOL_LOCK(pool);
+    pool->storing--;
+    POOL_BROADCAST(pool, done);
+    POOL_UNLOCK(pool);
   }
 
 #if defined(_WIN32) || defined(WIN32)
@@ -179,6 +205,8 @@ compilePoolConfigure(GPUDevice *device, uint32_t threadCount) {
 
   if (!(pool = calloc(1u, sizeof(*pool))))
     return GPU_ERROR_OUT_OF_MEMORY;
+
+  pool->device = device;
 
 #if defined(_WIN32) || defined(WIN32)
   InitializeCriticalSection(&pool->lock);
@@ -292,7 +320,7 @@ compilePoolWait(GPUDevice *device, GPUCompileTask *task) {
       pool->running++;
       POOL_UNLOCK(pool);
 
-      compilePool__run(pool, task);
+      compilePool__run(pool, task, true);
       return;
     }
   }
@@ -313,6 +341,20 @@ compilePoolDrain(GPUDevice *device) {
 
   POOL_LOCK(pool);
   while (pool->head || pool->running)
+    POOL_WAIT(pool, done);
+  POOL_UNLOCK(pool);
+}
+
+GPU_HIDE
+void
+compilePoolWaitStores(GPUDevice *device) {
+  GPUCompilePool *pool;
+
+  if (!device || !(pool = device->_compilePool))
+    return;
+
+  POOL_LOCK(pool);
+  while (pool->storing)
     POOL_WAIT(pool, done);
   POOL_UNLOCK(pool);
 }

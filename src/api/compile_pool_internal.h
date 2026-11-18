@@ -20,6 +20,8 @@
  * GPUSetPipelineCompileThreads starts a few threads; a task queued there
  * runs on the first free one. a thread that needs a task's result and finds
  * it not started yet runs it itself, so it never waits behind others' work.
+ * once the queue drains, a pool thread writes the device's pipeline caches
+ * that keep a file (storeDevicePipelineCaches).
  */
 
 #ifndef gpu_compile_pool_internal_h
@@ -83,6 +85,12 @@ compilePoolWait(GPUDevice *device, GPUCompileTask *task);
 GPU_HIDE
 void
 compilePoolDrain(GPUDevice *device);
+
+/* no pool thread writing a cache: one taken off the device's list (its
+ * caches the threads write) can be destroyed after this */
+GPU_HIDE
+void
+compilePoolWaitStores(GPUDevice *device);
 
 GPU_HIDE
 void

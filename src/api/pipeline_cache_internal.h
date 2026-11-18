@@ -74,6 +74,12 @@ GPU_HIDE
 void
 recordPipelineCompile(GPUDevice *device, GPUPipelineCache *cache);
 
+/* the device's caches that keep a file written, as GPUFlushPipelineCache
+ * does (a compile pool thread, once its queue drained) */
+GPU_HIDE
+void
+storeDevicePipelineCaches(GPUDevice *device);
+
 GPU_HIDE
 void
 pipelineCacheReleaseKey(GPUPipelineCacheKey *key);

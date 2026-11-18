@@ -1030,17 +1030,29 @@ pipelineInfoCanCopy(const GPURenderPipelineCreateInfo *info) {
   return true;
 }
 
+/* the queue drained, what it compiled is written (as the compile pool's
+ * threads write theirs); destroying the cache joins this worker first */
+
 static void
 pipelineCacheWorkerRun(GPUPipelineCache *cache) {
   PipelineCacheSync     *sync;
   GPUPipelineCompileJob *job;
   GPURenderPipeline     *pipeline;
   GPUResult              result;
+  bool                   compiled;
 
-  sync = pipelineCacheSync(cache);
+  sync     = pipelineCacheSync(cache);
+  compiled = false;
 
   for (;;) {
     pipelineCacheLock(cache);
+
+    if (compiled && !cache->stopWorker && !cache->queueHead) {
+      pipelineCacheUnlock(cache);
+      compiled = false;
+      (void)GPUFlushPipelineCache(cache);
+      continue;
+    }
 
     while (!cache->stopWorker && !cache->queueHead) {
 #if defined(_WIN32) || defined(WIN32)
@@ -1073,6 +1085,7 @@ pipelineCacheWorkerRun(GPUPipelineCache *cache) {
     job->state    = result == GPU_OK ? GPU_PIPELINE_JOB_READY : GPU_PIPELINE_JOB_FAILED;
     pipelineCacheSignal(cache);
     pipelineCacheUnlock(cache);
+    compiled = true;
   }
 }
 
@@ -1675,6 +1688,9 @@ GPUDestroyPipelineCache(GPUPipelineCache *cache) {
     cache->device->_defaultPipelineCache = NULL;
 
   deviceCacheUnlock(cache->device);
+  /* off the list, so no pool thread starts writing it; one that began has
+   * finished after this */
+  compilePoolWaitStores(cache->device);
 
   pipelineCacheLock(cache);
   cache->stopWorker = true;
@@ -1753,6 +1769,32 @@ GPU_EXPORT
 GPUPipelineCache*
 GPUGetDefaultPipelineCache(GPUDevice *__restrict device) {
   return device ? device->_defaultPipelineCache : NULL;
+}
+
+GPU_HIDE
+void
+storeDevicePipelineCaches(GPUDevice *device) {
+  GPUPipelineCache *caches[16];
+  GPUPipelineCache *cache;
+  uint32_t          count;
+  uint32_t          i;
+
+  if (!device || !device->_pipelineCacheLock)
+    return;
+
+  /* taken under the lock, written outside it: what holds them alive is the
+   * pool's store count GPUDestroyPipelineCache waits on. beyond 16 caches the
+   * rest are written when flushed or destroyed */
+  count = 0u;
+  deviceCacheLock(device);
+  for (cache = device->_pipelineCaches; cache && count < 16u; cache = cache->deviceNext) {
+    if (cache->_priv)
+      caches[count++] = cache;
+  }
+  deviceCacheUnlock(device);
+
+  for (i = 0u; i < count; i++)
+    (void)GPUFlushPipelineCache(caches[i]);
 }
 
 GPU_EXPORT

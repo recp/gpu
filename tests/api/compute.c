@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+#  define _POSIX_C_SOURCE 199309L
+#endif
+
 #include "test.h"
 #include "../../src/api/buffer_internal.h"
 #include "../../src/api/cmdqueue_internal.h"
@@ -22,6 +26,9 @@
 
 #if defined(__APPLE__)
 #  include <sys/stat.h>
+#endif
+#if !defined(_WIN32)
+#  include <time.h>
 #endif
 
 typedef enum ComputeReadbackMode {
@@ -40,6 +47,7 @@ static uint32_t gComputeDispatchCalls;
 static uint32_t gComputeDispatchIndirectCalls;
 static uint32_t gComputeMultiDispatchIndirectCalls;
 static uint32_t gComputePushConstantCalls;
+static bool     gComputeCompileThreads; /* the pass with background compiles */
 
 static const DispatchArgs dispatchArgs = {4u, 1u, 1u};
 
@@ -188,6 +196,77 @@ cleanup:
   return ok;
 }
 
+/* the file there within about 5 s */
+static bool
+wait_for_cache_file(const char *path) {
+#if !defined(_WIN32)
+  struct timespec step = {0, 10000000l};
+#endif
+  FILE           *file;
+  uint32_t        i;
+
+  for (i = 0u; i < 500u; i++) {
+    if ((file = fopen(path, "rb"))) {
+      fclose(file);
+      return true;
+    }
+#if defined(_WIN32)
+    Sleep(10u);
+#else
+    nanosleep(&step, NULL);
+#endif
+  }
+
+  return false;
+}
+
+/* compiled in the background, the cache written once the compiles drained,
+ * with no flush or destroy; then destroyed as that write may be starting */
+static int
+check_compute_drained_cache(GPUDevice                    *device,
+                            GPUComputePipelineCreateInfo *info,
+                            GPUPipelineCacheCreateInfo   *cacheInfo,
+                            const char                   *path) {
+  GPUComputePipeline *pipeline;
+  GPUPipelineCache   *cache;
+  uint32_t            round;
+
+  for (round = 0u; round < 8u; round++) {
+    cache = NULL;
+
+    if (GPUCreatePipelineCache(device, cacheInfo, &cache) != GPU_OK || !cache) {
+      fprintf(stderr, "failed to create drained compute disk cache\n");
+      return 0;
+    }
+
+    pipeline    = NULL;
+    info->cache = cache;
+
+    if (GPUCreateComputePipeline(device, info, &pipeline) != GPU_OK
+        || !pipeline || GPUWaitComputePipeline(pipeline) != GPU_OK) {
+      fprintf(stderr, "background compute pipeline compile failed\n");
+      GPUDestroyComputePipeline(pipeline);
+      info->cache = NULL;
+      GPUDestroyPipelineCache(cache);
+      return 0;
+    }
+
+    GPUDestroyComputePipeline(pipeline);
+    info->cache = NULL;
+
+    if (round == 0u && !wait_for_cache_file(path)) {
+      fprintf(stderr, "compute pipeline cache not written once its compiles drained\n");
+      GPUDestroyPipelineCache(cache);
+      return 0;
+    }
+
+    GPUDestroyPipelineCache(cache);
+    remove(path);
+  }
+
+  return 1;
+}
+
 static int
 check_compute_disk_cache(GPUDevice                    *device,
                          GPUComputePipelineCreateInfo *info) {
@@ -266,6 +345,17 @@ check_compute_disk_cache(GPUDevice                    *device,
   ok          = 0;
   pipeline    = NULL;
   info->cache = NULL;
+
+  if (gComputeCompileThreads) {
+    GPUDestroyPipelineCache(cache);
+    cache = NULL;
+    remove(path);
+
+    if (!check_compute_drained_cache(device, info, &cacheInfo, path)
+        || GPUCreatePipelineCache(device, &cacheInfo, &cache) != GPU_OK || !cache) {
+      goto cleanup;
+    }
+  }
 
   /* through the device's default cache, its file written before destroy */
   if (GPUSetDefaultPipelineCache(device, cache) != GPU_OK || GPUGetDefaultPipelineCache(device) != cache) {
@@ -1596,6 +1686,7 @@ gpu_test_compute(GPUDevice *device, const char *bytecodePath) {
 
   /* again with pipelines compiled on background threads: binds wait for them */
   if (ok) {
+    gComputeCompileThreads = true;
     ok = GPUSetPipelineCompileThreads(device, 3u) == GPU_OK
          && GPUWaitComputePipeline(NULL) == GPU_ERROR_INVALID_ARGUMENT
          && check_compute_pipeline_validation(device, bytecodePath)
@@ -1603,6 +1694,7 @@ gpu_test_compute(GPUDevice *device, const char *bytecodePath) {
          && check_compute_shared_shader_layout(device, bytecodePath)
          && check_compute_readback(device, bytecodePath);
     (void)GPUSetPipelineCompileThreads(device, 0u);
+    gComputeCompileThreads = false;
     if (!ok)
       fprintf(stderr, "compute: background pipeline compiles failed\n");
   }
