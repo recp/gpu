@@ -33,7 +33,8 @@ dx12__validateBufferUsage(GPUBufferUsageFlags usage) {
                                   | GPU_BUFFER_USAGE_INDIRECT
                                   | GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT
                                   | GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT
-                                  | GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
+                                  | GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT
+                                  | GPU_BUFFER_USAGE_HOST_READ;
 
   if (usage == 0u || (usage & ~known) != 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -60,8 +61,10 @@ dx12__bufferAllocationSize(const GPUBufferCreateInfo *info, uint64_t *outSizeByt
 
 static D3D12_RESOURCE_STATES
 dx12__bufferInitialState(GPUBufferUsageFlags usage, bool defaultHeap) {
+  /* a readback heap's resource stays a copy destination for good */
   if (!defaultHeap) {
-    return D3D12_RESOURCE_STATE_GENERIC_READ;
+    return (usage & GPU_BUFFER_USAGE_HOST_READ) != 0u ? D3D12_RESOURCE_STATE_COPY_DEST
+                                                      : D3D12_RESOURCE_STATE_GENERIC_READ;
   }
 
   if ((usage & GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT) != 0u) {
@@ -489,7 +492,7 @@ dx12_createBuffer(GPUDevice                 *__restrict device,
   D3D12_RESOURCE_STATES  initialState;
   GPUResult              usageResult;
   HRESULT                result;
-  bool                   defaultHeap, rayInput, rayScratch, storage, unorderedAccess;
+  bool                   defaultHeap, readback, rayInput, rayScratch, storage, unorderedAccess;
 
   if (!device || !device->_priv || !info || !outBuffer
       || info->sizeBytes == 0u) {
@@ -519,9 +522,13 @@ dx12_createBuffer(GPUDevice                 *__restrict device,
   rayInput        = (info->usage & GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT) != 0u;
   rayScratch      = (info->usage & GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT) != 0u;
   unorderedAccess = storage || rayScratch;
-  defaultHeap     = unorderedAccess || rayInput || (info->usage & GPU_BUFFER_USAGE_COPY_DST) != 0u;
+  readback        = (info->usage & GPU_BUFFER_USAGE_HOST_READ) != 0u;
+  defaultHeap     = !readback
+                    && (unorderedAccess || rayInput || (info->usage & GPU_BUFFER_USAGE_COPY_DST) != 0u);
 
-  heap.Type             = defaultHeap ? D3D12_HEAP_TYPE_DEFAULT : D3D12_HEAP_TYPE_UPLOAD;
+  heap.Type             = readback      ? D3D12_HEAP_TYPE_READBACK
+                          : defaultHeap ? D3D12_HEAP_TYPE_DEFAULT
+                                        : D3D12_HEAP_TYPE_UPLOAD;
   heap.CreationNodeMask = 1u;
   heap.VisibleNodeMask  = 1u;
 
@@ -552,10 +559,11 @@ dx12_createBuffer(GPUDevice                 *__restrict device,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  /* mapped for good; a readback map says the host may read all of it */
   if (!defaultHeap) {
     result = native->resource->lpVtbl->Map(native->resource,
                                            0u,
-                                           &readRange,
+                                           readback ? NULL : &readRange,
                                            &native->mapped);
 
     if (FAILED(result) || !native->mapped) {
@@ -712,7 +720,13 @@ dx12_readBuffer(GPUQueue  *__restrict queue,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  /* a readback heap's buffer is the GPU's to write: read it once idle */
   if (native->mapped) {
+    if (native->state == D3D12_RESOURCE_STATE_COPY_DEST
+        && !dx12_waitCommandQueueIdle(queueDX12)) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
     memcpy(outData,
            (const uint8_t *)native->mapped + srcOffset,
            (size_t)sizeBytes);

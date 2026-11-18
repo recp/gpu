@@ -266,11 +266,13 @@ dx12_resolveQuerySet(GPUCommandBuffer *cmdb,
   native  = set ? set->_priv : NULL;
   buffer  = dstBuffer ? dstBuffer->_priv : NULL;
 
+  /* GPU-local, or a readback heap's (always a copy destination) */
   if (!command || !command->commandList || !native || !native->heap
-      || !buffer || !buffer->resource || !buffer->defaultHeap) {
+      || !buffer || !buffer->resource
+      || (!buffer->defaultHeap && buffer->state != D3D12_RESOURCE_STATE_COPY_DEST)) {
     if (dstBuffer && dstBuffer->device) {
       deviceRecordValidationError(dstBuffer->device,
-                                  "Direct3D 12 query resolve requires a GPU-local destination buffer");
+                                  "Direct3D 12 query resolve requires a GPU-local or readback destination buffer");
     }
     return;
   }
