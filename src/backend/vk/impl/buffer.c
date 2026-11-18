@@ -39,7 +39,8 @@ vk__bufferUsage(GPUBufferUsageFlags usage, VkBufferUsageFlags *outUsage) {
                                     GPU_BUFFER_USAGE_INDIRECT |
                                     GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
                                     GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT |
-                                    GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT;
+                                    GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT |
+                                    GPU_BUFFER_USAGE_HOST_READ;
   VkBufferUsageFlags        result;
 
   if (!outUsage || usage == 0u || (usage & ~known) != 0u) {
@@ -136,6 +137,16 @@ vk_bufferMemoryType(GPUDevice             *device,
   bool hostVisible;
 
   hostVisible = memory != VK_BUFFER_DEVICE;
+
+  /* read through the mapping with no invalidate: coherent always (every
+   * device has such a type), cached where one is also coherent */
+  if (memory == VK_BUFFER_HOST_READBACK)
+    return vk_findMemoryType(device,
+                             typeBits,
+                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                             VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+                             outIndex,
+                             outFlags);
 
   if (memory == VK_BUFFER_HOST_READ
       && vk_findMemoryType(device,
@@ -868,6 +879,10 @@ vk_createBuffer(GPUDevice                 *__restrict device,
     return device ? vk__importBuffer(device, info, info->chain.pNext, outBuffer) : GPU_ERROR_INVALID_ARGUMENT;
   }
 #endif
+
+  if (info && (info->usage & GPU_BUFFER_USAGE_HOST_READ) != 0u) {
+    return vk__createBuffer(device, info, VK_BUFFER_HOST_READBACK, outBuffer);
+  }
 
   hostVisible = info && (info->usage & deviceLocal) == 0u;
   result      = vk__createBuffer(device, info, hostVisible ? VK_BUFFER_HOST_WRITE : VK_BUFFER_DEVICE, outBuffer);

@@ -307,6 +307,10 @@ vk_resolveQuerySet(GPUCommandBuffer *cmdb,
                             dstOffset,
                             resultStride,
                             VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+
+  if ((dstBuffer->usage & GPU_BUFFER_USAGE_HOST_READ) != 0u) {
+    command->hostReads = true;
+  }
 }
 
 GPU_HIDE

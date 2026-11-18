@@ -243,6 +243,30 @@ vk__endFrameTime(GPUCommandBufferVk *native) {
                       1u);
 }
 
+/* copies and resolves into HOST_READ buffers made visible to the host once
+ * the command buffer's fence signals: a fence alone orders device access
+ * only. One barrier at the end, however many copies */
+
+static void
+vk__endRecording(GPUCommandBufferVk *native) {
+  GPUQueueVk *queue;
+  GPUDevice  *device;
+
+  if (native && native->hostReads) {
+    queue  = native->owner;
+    device = queue && queue->queue ? queue->queue->_device : NULL;
+    vk_memoryBarrier(device ? device->_priv : NULL,
+                     native->command,
+                     VK_PIPELINE_STAGE_TRANSFER_BIT,
+                     VK_PIPELINE_STAGE_HOST_BIT,
+                     VK_ACCESS_TRANSFER_WRITE_BIT,
+                     VK_ACCESS_HOST_READ_BIT);
+    native->hostReads = false;
+  }
+
+  vk__endFrameTime(native);
+}
+
 static void
 vk__recordFrameTime(GPUCommandBufferVk *native) {
   uint64_t    timestamps[2];
@@ -1141,7 +1165,7 @@ vk_submitEx(GPUQueue                   *queueHandle,
   result = VK_SUCCESS;
 
   for (uint32_t m = 0u; m < info->commandBufferCount; m++) {
-    vk__endFrameTime(natives[m]);
+    vk__endRecording(natives[m]);
     result = vkEndCommandBuffer(commands[m]);
 
     if (result != VK_SUCCESS) {
@@ -1882,6 +1906,7 @@ vk_newCommandBuffer(GPUQueue         *__restrict queue,
   native->presentFrameIndex    = 0u;
   native->frameTimeActive      = false;
   native->copyDebugLabelActive = false;
+  native->hostReads            = false;
   cmdb->_priv                  = native;
   cmdb->_queue                 = queue;
 
@@ -1948,6 +1973,7 @@ vk_discardCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
   native->presentImageIndex = 0u;
   native->presentFrameIndex = 0u;
   native->frameTimeActive   = false;
+  native->hostReads         = false;
   vk_resetGraphInitializations(native);
 
   result = vkResetCommandBuffer(native->command, 0u);
@@ -2024,7 +2050,7 @@ vk_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
     }
   }
 
-  vk__endFrameTime(native);
+  vk__endRecording(native);
   result = vkEndCommandBuffer(native->command);
 
   if (result == VK_SUCCESS) {
@@ -2145,7 +2171,7 @@ vk_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   }
 
   for (uint32_t j = 0u; j < count; j++) {
-    vk__endFrameTime(natives[j]);
+    vk__endRecording(natives[j]);
     result = vkEndCommandBuffer(commands[j]);
 
     if (result != VK_SUCCESS) {

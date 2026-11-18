@@ -675,6 +675,7 @@ struct GPUCommandBufferVk {
   uint32_t                               presentFrameIndex;
   bool                                   frameTimeActive;
   bool                                   copyDebugLabelActive;
+  bool                                   hostReads; /* wrote a HOST_READ buffer */
 };
 
 enum {
@@ -924,12 +925,15 @@ vk_freeSurfaceLists(VkSurfaceFormatKHR *formats,
 /* where a buffer lives: device-local memory (mapped as well when it's
  * host-visible anyway, as on most phones: queue writes and cached reads then
  * skip staging), host memory written by the host (coherent where offered),
- * or host memory read back (cached where offered: uncached reads are slow) */
+ * host memory read back (cached where offered: uncached reads are slow), or
+ * host memory the host reads through its mapping alone (coherent, since
+ * nothing invalidates it; cached where offered) */
 
 typedef enum VKBufferMemory {
-  VK_BUFFER_DEVICE     = 0,
-  VK_BUFFER_HOST_WRITE = 1,
-  VK_BUFFER_HOST_READ  = 2
+  VK_BUFFER_DEVICE        = 0,
+  VK_BUFFER_HOST_WRITE    = 1,
+  VK_BUFFER_HOST_READ     = 2,
+  VK_BUFFER_HOST_READBACK = 3
 } VKBufferMemory;
 
 GPU_HIDE

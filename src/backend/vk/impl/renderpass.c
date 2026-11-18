@@ -855,6 +855,10 @@ vk_copyBufferToBuffer(GPUTransferPassEncoder *pass, GPUBuffer *src, GPUBuffer *d
   copy.dstOffset = region->dstOffset;
   copy.size      = region->sizeBytes;
   vkCmdCopyBuffer(command->command, srcVk->buffer, dstVk->buffer, 1u, &copy);
+
+  if ((dst->usage & GPU_BUFFER_USAGE_HOST_READ) != 0u) {
+    command->hostReads = true;
+  }
 }
 
 static bool
@@ -1002,6 +1006,10 @@ vk_copyTextureToBuffer(GPUTransferPassEncoder           *pass,
                          buffer->buffer,
                          1u,
                          &copy);
+
+  if ((dst->usage & GPU_BUFFER_USAGE_HOST_READ) != 0u) {
+    command->hostReads = true;
+  }
 }
 
 #ifdef __APPLE__
