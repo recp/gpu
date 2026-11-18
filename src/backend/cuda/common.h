@@ -68,6 +68,7 @@ typedef struct GPUBufferCuda {
   CUexternalMemory    externalMemory;
   CUdeviceptr         address;
   struct GPUSubBlock *poolBlock; /* NULL: its own cuMemAlloc */
+  void               *host;      /* pinned and device-mapped (HOST_READ), or NULL */
   uint64_t            poolOffset;
   uint64_t            poolSize;
   GPURetired          retired; /* a pooled range waits here for the work using it */

@@ -16,6 +16,36 @@
 
 #include "../common.h"
 
+#include <string.h>
+
+/* HOST_READ: pinned host memory mapped into the device's address space, so
+ * copies land where the host reads them with no transfer of its own */
+
+static bool
+cuda__allocHostRead(GPUDeviceCuda *device, uint64_t sizeBytes, GPUBufferCuda *native) {
+  GPUCUDA *driver;
+  void    *host;
+
+  driver = native->driver;
+  host   = NULL;
+
+  if (!driver->memHostAlloc || !driver->memFreeHost || !driver->memHostGetDevicePointer
+      || cuda_push(driver, device->context) != GPU_OK) {
+    return false;
+  }
+
+  if (driver->memHostAlloc(&host, (size_t)sizeBytes, CU_MEMHOSTALLOC_DEVICEMAP) == CUDA_SUCCESS
+      && driver->memHostGetDevicePointer(&native->address, host, 0u) != CUDA_SUCCESS) {
+    (void)driver->memFreeHost(host);
+    host = NULL;
+  }
+
+  cuda_pop(driver);
+  native->host = host;
+
+  return host != NULL;
+}
+
 static GPUResult
 cuda_createBuffer(GPUDevice                 *__restrict device,
                   const GPUBufferCreateInfo *__restrict info,
@@ -34,7 +64,8 @@ cuda_createBuffer(GPUDevice                 *__restrict device,
                                        | (uint32_t)GPU_BUFFER_USAGE_STORAGE
                                        | (uint32_t)GPU_BUFFER_USAGE_COPY_SRC
                                        | (uint32_t)GPU_BUFFER_USAGE_COPY_DST
-                                       | (uint32_t)GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT);
+                                       | (uint32_t)GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT
+                                       | (uint32_t)GPU_BUFFER_USAGE_HOST_READ);
 
   if ((info->usage & ~allowedUsage) != 0u) {
     return GPU_ERROR_UNSUPPORTED;
@@ -57,6 +88,14 @@ cuda_createBuffer(GPUDevice                 *__restrict device,
   }
 
   native->driver = deviceNative->driver;
+
+  if ((info->usage & GPU_BUFFER_USAGE_HOST_READ) != 0u
+      && cuda__allocHostRead(deviceNative, info->sizeBytes, native)) {
+    buffer->_priv       = native;
+    buffer->_gpuAddress = native->address;
+    *outBuffer          = buffer;
+    return GPU_OK;
+  }
 
   if (cuda_poolAllocate(deviceNative, info->sizeBytes, native)) {
     buffer->_priv       = native;
@@ -104,7 +143,11 @@ cuda_destroyBuffer(GPUBuffer *__restrict buffer) {
 
   if (native && device
       && cuda_push(native->driver, device->context) == GPU_OK) {
-    (void)native->driver->memFree(native->address);
+    if (native->host) {
+      (void)native->driver->memFreeHost(native->host);
+    } else {
+      (void)native->driver->memFree(native->address);
+    }
 
     if (native->externalMemory && native->driver->destroyExternalMemory) {
       (void)native->driver->destroyExternalMemory(native->externalMemory);
@@ -188,7 +231,9 @@ cuda_readBuffer(GPUQueue  *__restrict queue,
 
   result = queueNative->driver->streamSynchronize(queueNative->stream);
 
-  if (result == CUDA_SUCCESS) {
+  if (result == CUDA_SUCCESS && native->host) {
+    memcpy(outData, (const uint8_t *)native->host + srcOffset, (size_t)sizeBytes);
+  } else if (result == CUDA_SUCCESS) {
     result = queueNative->driver->memcpyDtoH(outData,
                                              native->address + srcOffset,
                                              (size_t)sizeBytes);
@@ -205,10 +250,20 @@ cuda_readBuffer(GPUQueue  *__restrict queue,
   return GPU_OK;
 }
 
+static void*
+cuda_bufferContents(GPUBuffer *__restrict buffer) {
+  GPUBufferCuda *native;
+
+  native = buffer ? buffer->_priv : NULL;
+
+  return native ? native->host : NULL;
+}
+
 void
 cuda_initBuffer(GPUBufferApi *api) {
-  api->create  = cuda_createBuffer;
-  api->destroy = cuda_destroyBuffer;
-  api->write   = cuda_writeBuffer;
-  api->read    = cuda_readBuffer;
+  api->create   = cuda_createBuffer;
+  api->destroy  = cuda_destroyBuffer;
+  api->write    = cuda_writeBuffer;
+  api->read     = cuda_readBuffer;
+  api->contents = cuda_bufferContents;
 }

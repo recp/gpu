@@ -129,6 +129,11 @@ cuda__load(void) {
                      "cuDestroyExternalSemaphore");
   CUDA_LOAD_REQUIRED2(memAlloc, "cuMemAlloc_v2", "cuMemAlloc");
   CUDA_LOAD_REQUIRED2(memFree, "cuMemFree_v2", "cuMemFree");
+  CUDA_LOAD_OPTIONAL(memHostAlloc, "cuMemHostAlloc");
+  CUDA_LOAD_OPTIONAL(memFreeHost, "cuMemFreeHost");
+  cuda.memHostGetDevicePointer = (void *)cuda__symbol2(library,
+                                                       "cuMemHostGetDevicePointer_v2",
+                                                       "cuMemHostGetDevicePointer");
   CUDA_LOAD_REQUIRED2(memcpyHtoD, "cuMemcpyHtoD_v2", "cuMemcpyHtoD");
   CUDA_LOAD_REQUIRED2(memcpyDtoH, "cuMemcpyDtoH_v2", "cuMemcpyDtoH");
   CUDA_LOAD_REQUIRED(array3DCreate, "cuArray3DCreate_v2");

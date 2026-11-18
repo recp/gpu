@@ -335,6 +335,7 @@ enum {
   CUDA_JIT_ERROR_LOG_BUFFER                    = 5, /* CUjit_option */
   CUDA_JIT_ERROR_LOG_BUFFER_SIZE_BYTES         = 6,
   CU_STREAM_NON_BLOCKING                       = 1,
+  CU_MEMHOSTALLOC_DEVICEMAP                    = 0x02u,
   CU_EVENT_DISABLE_TIMING                      = 2,
   CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK    = 1,
   CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X          = 2,
@@ -393,6 +394,9 @@ typedef struct GPUCUDA {
   CUresult (CUDA_CALL *destroyExternalSemaphore)(CUexternalSemaphore externalSemaphore);
   CUresult (CUDA_CALL *memAlloc)(CUdeviceptr *address, size_t sizeBytes);
   CUresult (CUDA_CALL *memFree)(CUdeviceptr address);
+  CUresult (CUDA_CALL *memHostAlloc)(void **host, size_t sizeBytes, unsigned int flags);
+  CUresult (CUDA_CALL *memFreeHost)(void *host);
+  CUresult (CUDA_CALL *memHostGetDevicePointer)(CUdeviceptr *address, void *host, unsigned int flags);
   CUresult (CUDA_CALL *memcpyHtoD)(CUdeviceptr dst, const void *src, size_t sizeBytes);
   CUresult (CUDA_CALL *memcpyDtoH)(void *dst, CUdeviceptr src, size_t sizeBytes);
   CUresult (CUDA_CALL *array3DCreate)(CUarray *array, const CUDA_ARRAY3D_DESCRIPTOR *desc);
