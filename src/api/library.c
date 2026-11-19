@@ -3517,6 +3517,13 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
       || compileOutput.encoding != encoding
       || !compileOutput.backend_data
       || compileOutput.backend_size == 0) {
+    /* a texel attempt's failure needs no classifying: the plain compile follows */
+
+    if (texelReads) {
+      rc = GPU_ERROR_BACKEND_FAILURE;
+      goto cleanup;
+    }
+
     /* us_compile validates successful outputs; decode again only to classify
      * a failure. dxil already passed its module-wide check above. */
 
@@ -3527,8 +3534,7 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
     rc = targetSupported
            ? GPU_ERROR_BACKEND_FAILURE
            : GPU_ERROR_UNSUPPORTED;
-    if (!texelReads)
-      uslLibraryFailed(device, api, bytecodeData, (size_t)bytecodeSize, &target, compileResult, rc);
+    uslLibraryFailed(device, api, bytecodeData, (size_t)bytecodeSize, &target, compileResult, rc);
     goto cleanup;
   }
 
