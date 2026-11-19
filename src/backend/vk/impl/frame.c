@@ -233,7 +233,11 @@ vk__displayBehind(GPUSwapchainVk *swapchain, uint32_t latency) {
 }
 
 /* a pacer's tick: nothing waited for. The slot's last frame still on the GPU
- * means the display is a whole swapchain behind: no frame this refresh. The
+ * means the display is a whole swapchain behind, and the frame before still
+ * with the present thread a refresh later means its present is held back
+ * (Android's queueBuffer waits for the GPU to finish the frame before it):
+ * no frame this refresh, the thread left free instead of waiting at the
+ * acquire. The
  * image is acquired at the frame's first use (vk_acquireDrawable): Vulkan gives
  * an acquired image back only by presenting it, and a tick that draws nothing
  * would show a stale one */
@@ -259,7 +263,8 @@ vk_beginDrawable(GPUApi *api, GPUSwapchain *swapchainObj, void *pacer) {
   sync = &swapchain->frameSync[swapchain->frameIndex];
 
   if (!sync->fence || vkGetFenceStatus(swapchain->device, sync->fence) != VK_SUCCESS
-      || !vk_frameCompletionDone(sync) || vk__displayBehind(swapchain, ((GPUPacer *)pacer)->latencyFrames)) {
+      || !vk_frameCompletionDone(sync) || !vk_presenterIdle(swapchain)
+      || vk__displayBehind(swapchain, ((GPUPacer *)pacer)->latencyFrames)) {
     return NULL;
   }
 
