@@ -206,8 +206,9 @@ vk_beginFrame(GPUApi *api, GPUSwapchain *swapchainObj) {
 /* the display behind the latency: a present older than the latency's not yet
  * shown (VK_KHR_present_wait). Frames queue one per refresh, so once behind,
  * drawing on keeps it behind for good; a frame left out drains it. A refresh's
- * report gets 2 ms to arrive, under the submit lock presents take (the
- * swapchain is externally synchronized) */
+ * report gets 2 ms to arrive. The swapchain is the caller's alone meanwhile
+ * (the present thread's claim, or no frame of it being presented elsewhere):
+ * no queue lock, so submits of other threads go on */
 static bool
 vk__displayBehind(GPUSwapchainVk *swapchain, uint32_t latency) {
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
@@ -221,10 +222,8 @@ vk__displayBehind(GPUSwapchainVk *swapchain, uint32_t latency) {
   }
 
   vk_swapchainClaim(swapchain);
-  vk_queueSubmitLock(swapchain->queue);
   result = device->waitForPresent(swapchain->device, swapchain->swapchain,
                                   swapchain->lastPresentId - latency, 2000000u);
-  vk_queueSubmitUnlock(swapchain->queue);
   vk_swapchainUnclaim(swapchain);
 
   return result == VK_TIMEOUT;
