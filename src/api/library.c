@@ -948,7 +948,9 @@ bindingTypeFromUSLResource(const GPUShaderLibrary   *library,
       }
       return 1;
     case USL_RUNTIME_RESOURCE_TEXTURE:
-      *outType = GPU_BINDING_SAMPLED_TEXTURE;
+      *outType = resource->type.texture_dim == USL_RUNTIME_TEXTURE_DIM_BUFFER
+                   ? GPU_BINDING_TEXEL_BUFFER
+                   : GPU_BINDING_SAMPLED_TEXTURE;
       return 1;
     case USL_RUNTIME_RESOURCE_IMAGE:
       *outType = resource->access == USL_RUNTIME_IMAGE_ACCESS_READ
@@ -1099,6 +1101,12 @@ bindingLayoutFromUSLResource(const USLRuntimeResource    *resource,
         textureSampleTypeFromUSL(&resource->type);
       out->sampledTexture.multisampled = resource->type.is_multisampled != 0u;
       return 1;
+    case GPU_BINDING_TEXEL_BUFFER:
+      out->texelBuffer.format     = resource->type.texel_format
+                                      ? storageTextureFormatFromUSL(resource->type.texel_format)
+                                      : GPU_FORMAT_UNDEFINED;
+      out->texelBuffer.sampleType = textureSampleTypeFromUSL(&resource->type);
+      return 1;
     case GPU_BINDING_STORAGE_TEXTURE:
       if (!textureViewTypeFromUSL(resource->type.texture_dim,
                                   &out->storageTexture.viewType)) {
@@ -1150,6 +1158,9 @@ shaderResourceLayoutEqual(const GPUShaderResourceReflection *a,
              && a->storageTexture.access == b->storageTexture.access;
     case GPU_BINDING_SAMPLER:
       return a->sampler.type == b->sampler.type;
+    case GPU_BINDING_TEXEL_BUFFER:
+      return a->texelBuffer.format == b->texelBuffer.format
+             && a->texelBuffer.sampleType == b->texelBuffer.sampleType;
     default:
       return 1;
   }

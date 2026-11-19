@@ -777,6 +777,8 @@ vk_getLimits(const GPUAdapter *__restrict adapter,
   outLimits->maxComputeWorkgroupSizeY        = native->maxComputeWorkGroupSize[1];
   outLimits->maxComputeWorkgroupSizeZ        = native->maxComputeWorkGroupSize[2];
   outLimits->maxPushConstantSizeBytes        = native->maxPushConstantsSize;
+  outLimits->minTexelBufferOffsetAlignment   = native->minTexelBufferOffsetAlignment;
+  outLimits->maxTexelBufferElements          = native->maxTexelBufferElements;
   outLimits->maxSamplerAnisotropy            = adapterVk->features.samplerAnisotropy
       ? vk_limitU32(16u, (uint32_t)native->maxSamplerAnisotropy)
       : 1u;
@@ -825,6 +827,7 @@ vk_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
   outCaps->storageReadWrite = outCaps->storage;
   outCaps->blendable       = (features & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0u;
   outCaps->depthStencil    = (features & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0u;
+  outCaps->texelBuffer     = (properties.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT) != 0u;
 
   if (outCaps->colorAttachment || outCaps->depthStencil) {
     imageUsage = outCaps->depthStencil

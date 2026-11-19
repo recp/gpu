@@ -165,6 +165,11 @@ webgpu_initLayoutEntry(const GPUDevice               *device,
       entry->buffer.type             = WGPUBufferBindingType_Storage;
       entry->buffer.hasDynamicOffset = source->hasDynamicOffset;
       return true;
+    case GPU_BINDING_TEXEL_BUFFER:
+      /* USL's WGSL reads the texels from a storage array and decodes the format itself */
+      entry->buffer      = (WGPUBufferBindingLayout) WGPU_BUFFER_BINDING_LAYOUT_INIT;
+      entry->buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+      return true;
     case GPU_BINDING_SAMPLED_TEXTURE:
       entry->texture            = (WGPUTextureBindingLayout) WGPU_TEXTURE_BINDING_LAYOUT_INIT;
       entry->texture.sampleType = webgpu_textureSampleType(source->sampledTexture.sampleType);
@@ -539,6 +544,12 @@ webgpu_writeBindGroupEntry(void                          *context,
       entry->buffer = binding->buffer->_priv;
       entry->offset = binding->offset;
       entry->size   = binding->size;
+
+      /* a view of 8- or 16-bit texels: whole words, as the storage array reads them */
+      if (binding->bindingType == GPU_BINDING_TEXEL_BUFFER && (entry->size & 3u) != 0u
+          && entry->offset + ((entry->size + 3u) & ~(uint64_t)3u) <= binding->buffer->sizeBytes) {
+        entry->size = (entry->size + 3u) & ~(uint64_t)3u;
+      }
       break;
     case GPUBindKindTexture:
       if (!binding->textureView || !binding->textureView->_priv) {

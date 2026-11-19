@@ -493,6 +493,44 @@ mt_getLimits(const GPUAdapter *__restrict adapter,
   outLimits->maxSamplerAnisotropy     = 16u;
   outLimits->minSubgroupSize          = adapterMT->minSubgroupSize;
   outLimits->maxSubgroupSize          = adapterMT->maxSubgroupSize;
+
+  /* texture buffers: the largest alignment any texel format asks for; their width at the documented floor */
+  outLimits->minTexelBufferOffsetAlignment = 16u;
+  for (GPUFormat f = GPU_FORMAT_UNDEFINED + 1; f < GPU_FORMAT_COUNT; f = (GPUFormat)(f + 1)) {
+    NSUInteger align;
+
+    if (!mt_texelBufferFormat(f))
+      continue;
+
+    align = [device minimumTextureBufferAlignmentForPixelFormat:mt_format(f)];
+    if (align > outLimits->minTexelBufferOffsetAlignment)
+      outLimits->minTexelBufferOffsetAlignment = align;
+  }
+  outLimits->maxTexelBufferElements = 1u << 26;
+}
+
+GPU_HIDE
+bool
+mt_texelBufferFormat(GPUFormat format) {
+  switch (format) {
+    case GPU_FORMAT_R8_UNORM: case GPU_FORMAT_R8_SNORM: case GPU_FORMAT_R8_UINT: case GPU_FORMAT_R8_SINT:
+    case GPU_FORMAT_R16_UNORM: case GPU_FORMAT_R16_SNORM: case GPU_FORMAT_R16_UINT: case GPU_FORMAT_R16_SINT:
+    case GPU_FORMAT_R16_FLOAT:
+    case GPU_FORMAT_RG8_UNORM: case GPU_FORMAT_RG8_SNORM: case GPU_FORMAT_RG8_UINT: case GPU_FORMAT_RG8_SINT:
+    case GPU_FORMAT_R32_UINT: case GPU_FORMAT_R32_SINT: case GPU_FORMAT_R32_FLOAT:
+    case GPU_FORMAT_RG16_UNORM: case GPU_FORMAT_RG16_SNORM: case GPU_FORMAT_RG16_UINT: case GPU_FORMAT_RG16_SINT:
+    case GPU_FORMAT_RG16_FLOAT:
+    case GPU_FORMAT_RGBA8_UNORM: case GPU_FORMAT_RGBA8_SNORM: case GPU_FORMAT_RGBA8_UINT: case GPU_FORMAT_RGBA8_SINT:
+    case GPU_FORMAT_BGRA8_UNORM:
+    case GPU_FORMAT_RGB10A2_UNORM: case GPU_FORMAT_RGB10A2_UINT: case GPU_FORMAT_RG11B10_UFLOAT:
+    case GPU_FORMAT_RG32_UINT: case GPU_FORMAT_RG32_SINT: case GPU_FORMAT_RG32_FLOAT:
+    case GPU_FORMAT_RGBA16_UNORM: case GPU_FORMAT_RGBA16_SNORM: case GPU_FORMAT_RGBA16_UINT:
+    case GPU_FORMAT_RGBA16_SINT: case GPU_FORMAT_RGBA16_FLOAT:
+    case GPU_FORMAT_RGBA32_UINT: case GPU_FORMAT_RGBA32_SINT: case GPU_FORMAT_RGBA32_FLOAT:
+      return true;
+    default:
+      return false;
+  }
 }
 
 static bool
@@ -668,6 +706,8 @@ mt_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
                                         && adapterMT->depth32StencilFilterable);
     return;
   }
+
+  outCaps->texelBuffer = mt_texelBufferFormat(format);
 
   /* read and write access work at every tier; read-write needs one */
   outCaps->storage          = mt_isWritableFormat(format);

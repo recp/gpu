@@ -1082,6 +1082,9 @@ dx12_getLimits(const GPUAdapter *__restrict adapter,
   outLimits->maxSamplerAnisotropy     = 16u;
   outLimits->minSubgroupSize          = adapterDX12->minSubgroupSize;
   outLimits->maxSubgroupSize          = adapterDX12->maxSubgroupSize;
+  /* typed buffer views count elements from a whole texel; 16 keeps every format's offset whole */
+  outLimits->minTexelBufferOffsetAlignment = 16u;
+  outLimits->maxTexelBufferElements        = 1u << D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP;
 }
 
 GPU_HIDE

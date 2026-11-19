@@ -77,6 +77,7 @@ typedef struct GPUBindGroupBindingPriv {
   uint32_t    dynamicOffsetIndex;
   uint32_t    kindIndex;
   GPUBindKind kind;
+  GPUFormat   texelFormat; /* GPU_BINDING_TEXEL_BUFFER: the view's, resolved from the entry or the layout */
 } GPUBindGroupBindingPriv;
 
 typedef struct GPUBindGroupPriv {
@@ -123,6 +124,7 @@ typedef struct GPUBindGroupBindingView {
   uint32_t                kindIndex;
   GPUBindKind             kind;
   bool                    hasDynamicOffset;
+  GPUFormat               texelFormat; /* GPU_BINDING_TEXEL_BUFFER: the view's format */
 } GPUBindGroupBindingView;
 
 typedef void (*GPUBindGroupBindingFn)(void                          *ctx,

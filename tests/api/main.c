@@ -46,6 +46,15 @@ run_sampler(void *ctx) {
 }
 
 static int
+run_texel_buffer(void *ctx) {
+  const char *path;
+
+  path = getenv("GPU_TEXEL_BUFFER_USL_PATH");
+
+  return !path || gpu_test_texel_buffer(((GPUApiTestContext *)ctx)->device, path);
+}
+
+static int
 run_constants(void *ctx) {
   const char *path;
 
@@ -451,7 +460,7 @@ main(int argc, char **argv) {
   GPUInstanceCreateInfo instanceInfo  = {0};
   GPURuntimeConfig      runtimeConfig = {0};
   GPUApiTestContext     ctx;
-  GPUApiTest            tests[45];
+  GPUApiTest            tests[46];
   GPUInstance          *instance;
   GPUAdapter           *adapter;
   GPUDevice            *device;
@@ -673,6 +682,7 @@ main(int argc, char **argv) {
   tests[43] = (GPUApiTest){ "host-buffer", run_host_buffer, &ctx };
 
   tests[44] = (GPUApiTest){ "chains", run_chains, &ctx };
+  tests[45] = (GPUApiTest){ "texel-buffer", run_texel_buffer, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

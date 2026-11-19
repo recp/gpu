@@ -450,6 +450,35 @@ mt_setArgumentTexture(GPUCommandBuffer *cmdb,
 
 GPU_HIDE
 void
+mt_setArgumentTexel(GPUCommandBuffer *cmdb,
+                    MTArgumentState  *state,
+                    id                texture,
+                    GPUBuffer        *buffer,
+                    uint32_t          index) {
+#if MT_HAS_METAL4
+  if (!state || !state->table || !texture || index >= MT_ARGUMENT_TEXTURE_COUNT)
+    return;
+
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    [(id<MTL4ArgumentTable>)state->table setTexture:((id<MTLTexture>)texture).gpuResourceID atIndex:index];
+    state->textureMask[index / 64u] |= 1ull << (index % 64u);
+    /* the view's memory is the buffer's */
+    mt_useAllocation(cmdb, texture);
+    if (buffer && buffer->_priv)
+      mt_useAllocation(cmdb, (id)buffer->_priv);
+    mt_holdObject(cmdb, texture);
+  }
+#else
+  GPU__UNUSED(cmdb);
+  GPU__UNUSED(state);
+  GPU__UNUSED(texture);
+  GPU__UNUSED(buffer);
+  GPU__UNUSED(index);
+#endif
+}
+
+GPU_HIDE
+void
 mt_setArgumentSampler(GPUCommandBuffer *cmdb,
                       MTArgumentState  *state,
                       GPUSampler       *sampler,

@@ -169,6 +169,13 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     "${PROJECT_SOURCE_DIR}/tests/api/constants.usl"
   )
   add_custom_target(gpu-api-constants-fixture DEPENDS ${GPU_API_CONSTANTS_USL_FIXTURE})
+  gpu_add_usl_fixtures(
+    GPU_API_TEXEL_BUFFER_USL_FIXTURE
+    "${GPU_API_DEFAULT_BACKEND}"
+    api-texel-buffer
+    "${PROJECT_SOURCE_DIR}/tests/api/texel_buffer.usl"
+  )
+  add_custom_target(gpu-api-texel-buffer-fixture DEPENDS ${GPU_API_TEXEL_BUFFER_USL_FIXTURE})
   add_custom_target(
     gpu-api-dx12-binding-plan-fixture
     DEPENDS ${GPU_API_DX12_BINDING_PLAN_USL_FIXTURE}
@@ -910,6 +917,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/api/runtime.c
     ${PROJECT_SOURCE_DIR}/tests/api/sampler.c
     ${PROJECT_SOURCE_DIR}/tests/api/sampler_feedback.c
+    ${PROJECT_SOURCE_DIR}/tests/api/texel_buffer.c
     ${PROJECT_SOURCE_DIR}/tests/api/shader.c
     ${PROJECT_SOURCE_DIR}/tests/api/shader_f16.c
     ${PROJECT_SOURCE_DIR}/tests/api/shader_sampler.c
@@ -951,7 +959,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     target_compile_definitions(gpu-api-test PRIVATE
       "GPU_STORAGE_ACCESS_USL_PATH=\"${GPU_API_STORAGE_ACCESS_USL_FIXTURE}\"")
   endif()
-  add_dependencies(gpu-api-test gpu-api-lod-fixture gpu-api-constants-fixture)
+  add_dependencies(gpu-api-test gpu-api-lod-fixture gpu-api-constants-fixture gpu-api-texel-buffer-fixture)
   add_dependencies(gpu-api-test gpu-api-dx12-binding-plan-fixture)
   add_dependencies(gpu-api-test gpu-api-msaa-fixture)
   add_dependencies(gpu-api-test gpu-api-atomic64-fixture)
@@ -1065,6 +1073,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
   endif()
   set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
     "GPU_CONSTANTS_USL_PATH=${GPU_API_CONSTANTS_USL_FIXTURE}"
+    "GPU_TEXEL_BUFFER_USL_PATH=${GPU_API_TEXEL_BUFFER_USL_FIXTURE}"
     "GPU_LOD_USL_PATH=${GPU_API_LOD_USL_FIXTURE}"
     "GPU_MSAA_USL_PATH=${GPU_API_MSAA_USL_FIXTURE}"
     "GPU_SUBGROUP_RELATIVE_USL_PATH=${GPU_API_SUBGROUP_RELATIVE_USL_FIXTURE}"

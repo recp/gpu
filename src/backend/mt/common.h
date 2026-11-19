@@ -497,6 +497,30 @@ mt_setArgumentTexture(GPUCommandBuffer *cmdb,
                       GPUTextureView   *view,
                       uint32_t          index);
 
+/* a texel buffer's texture (a texture-buffer view of the buffer's range) in an argument table */
+GPU_HIDE
+void
+mt_setArgumentTexel(GPUCommandBuffer *cmdb,
+                    MTArgumentState  *state,
+                    id                texture,
+                    GPUBuffer        *buffer,
+                    uint32_t          index);
+
+GPU_HIDE
+void
+mt_computeTexel(GPUComputePassEncoder *enc, id texture, GPUBuffer *buffer, uint32_t index);
+
+/* the vertex, fragment, task and mesh stages in stages, or the tile stage alone */
+GPU_HIDE
+void
+mt_rceSetTexel(GPURenderPassEncoder *rce, GPUShaderStageFlags stages, bool tile, id texture, GPUBuffer *buffer,
+               uint32_t index);
+
+/* the formats Metal reads through texture buffers */
+GPU_HIDE
+bool
+mt_texelBufferFormat(GPUFormat format);
+
 GPU_HIDE
 void
 mt_setArgumentSampler(GPUCommandBuffer *cmdb,

@@ -170,7 +170,9 @@ typedef enum GPUBindingType {
   GPU_BINDING_STORAGE_TEXTURE          = 4,
   GPU_BINDING_SAMPLER                  = 5,
   GPU_BINDING_ACCELERATION_STRUCTURE   = 6,
-  GPU_BINDING_SAMPLER_FEEDBACK_EXT     = 7
+  GPU_BINDING_SAMPLER_FEEDBACK_EXT     = 7,
+  /* a read-only buffer read through a typed view of its texels (texture_buffer in USL) */
+  GPU_BINDING_TEXEL_BUFFER             = 8
 } GPUBindingType;
 
 #ifdef __cplusplus

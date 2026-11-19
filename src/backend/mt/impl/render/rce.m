@@ -756,6 +756,50 @@ mt_vertexInputBuffer(GPURenderPassEncoder *rce,
 
 GPU_HIDE
 void
+mt_rceSetTexel(GPURenderPassEncoder *rce, GPUShaderStageFlags stages, bool tile, id texture, GPUBuffer *buffer,
+               uint32_t index) {
+  MTRenderEncoder *native;
+  id<MTLTexture>   t;
+
+  if (!(native = mt_renderEncoder(rce)) || !texture)
+    return;
+
+  t = (id<MTLTexture>)texture;
+#if MT_HAS_METAL4
+  if (native->modern) {
+    if (stages & GPU_SHADER_STAGE_VERTEX_BIT)
+      mt_setArgumentTexel(rce->_cmdb, native->vertexArguments, texture, buffer, index);
+    if (stages & GPU_SHADER_STAGE_FRAGMENT_BIT)
+      mt_setArgumentTexel(rce->_cmdb, native->fragmentArguments, texture, buffer, index);
+    if (stages & GPU_SHADER_STAGE_TASK_BIT)
+      mt_setArgumentTexel(rce->_cmdb, native->taskArguments, texture, buffer, index);
+    if (stages & GPU_SHADER_STAGE_MESH_BIT)
+      mt_setArgumentTexel(rce->_cmdb, native->meshArguments, texture, buffer, index);
+    if (tile && native->tileArguments)
+      mt_setArgumentTexel(rce->_cmdb, native->tileArguments, texture, buffer, index);
+    return;
+  }
+#endif
+  GPU__UNUSED(buffer);
+  mt_holdObject(rce->_cmdb, texture);
+  if (stages & GPU_SHADER_STAGE_VERTEX_BIT)
+    [native->classic setVertexTexture:t atIndex:index];
+  if (stages & GPU_SHADER_STAGE_FRAGMENT_BIT)
+    [native->classic setFragmentTexture:t atIndex:index];
+  if (@available(macOS 13.0, iOS 16.0, *)) {
+    if (stages & GPU_SHADER_STAGE_TASK_BIT)
+      [native->classic setObjectTexture:t atIndex:index];
+    if (stages & GPU_SHADER_STAGE_MESH_BIT)
+      [native->classic setMeshTexture:t atIndex:index];
+  }
+  if (@available(macOS 11.0, iOS 11.0, *)) {
+    if (tile)
+      [native->classic setTileTexture:t atIndex:index];
+  }
+}
+
+GPU_HIDE
+void
 mt_rceSetVertexTexture(GPURenderPassEncoder *rce,
                        GPUTextureView       *view,
                        uint32_t              index) {

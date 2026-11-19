@@ -369,7 +369,8 @@ dx12__resourceTableBindingType(const GPUDeviceDX12 *device,
   return type == GPU_BINDING_SAMPLED_TEXTURE
          || type == GPU_BINDING_STORAGE_TEXTURE
          || type == GPU_BINDING_SAMPLER_FEEDBACK_EXT
-         || type == GPU_BINDING_ACCELERATION_STRUCTURE;
+         || type == GPU_BINDING_ACCELERATION_STRUCTURE
+         || type == GPU_BINDING_TEXEL_BUFFER;
 }
 
 static bool
@@ -496,6 +497,7 @@ dx12__makeLayoutPlan(GPUDeviceDX12             *device,
         case GPU_BINDING_STORAGE_TEXTURE:
         case GPU_BINDING_SAMPLER_FEEDBACK_EXT:
         case GPU_BINDING_ACCELERATION_STRUCTURE:
+        case GPU_BINDING_TEXEL_BUFFER:
           if (entries[i].hasDynamicOffset) {
             return GPU_ERROR_UNSUPPORTED;
           }
@@ -769,6 +771,22 @@ dx12__writeNullResourceDescriptor(GPUDeviceDX12                 *device,
       device->d3dDevice->lpVtbl->CreateShaderResourceView(device->d3dDevice,
                                                           NULL,
                                                           &readBufferDesc,
+                                                          handle);
+
+      return true;
+    }
+    case GPU_BINDING_TEXEL_BUFFER: {
+      D3D12_SHADER_RESOURCE_VIEW_DESC texelDesc = {0};
+
+      texelDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+      texelDesc.Format                  = entry->texelBuffer.format != GPU_FORMAT_UNDEFINED
+                                            ? dx12_format(entry->texelBuffer.format)
+                                            : dx12__nullSampledFormat(entry->texelBuffer.sampleType);
+      texelDesc.ViewDimension           = D3D12_SRV_DIMENSION_BUFFER;
+      texelDesc.Buffer.NumElements      = 1u;
+      device->d3dDevice->lpVtbl->CreateShaderResourceView(device->d3dDevice,
+                                                          NULL,
+                                                          &texelDesc,
                                                           handle);
 
       return true;
@@ -1788,6 +1806,45 @@ dx12__writeBindGroup(void                          *context,
         writeContext->valid = false;
       }
 
+      break;
+    }
+    case GPU_BINDING_TEXEL_BUFFER: {
+      D3D12_SHADER_RESOURCE_VIEW_DESC texelDesc = {0};
+      GPUFormatLayout                 texel;
+      GPUBufferDX12                  *texelBuffer;
+      uint32_t                        texelOffset;
+
+      if (binding->kind != GPUBindKindBuffer
+          || !dx12__bindGroupDescriptorOffset(writeContext->group, binding, false, &texelOffset)) {
+        writeContext->valid = false;
+        return;
+      }
+
+      if (!binding->buffer) {
+        return;
+      }
+
+      texelBuffer = binding->buffer->_priv;
+
+      if (!texelBuffer || !texelBuffer->resource || !binding->buffer->device
+          || binding->buffer->device->_priv != writeContext->group->device
+          || !gpuFormatLayout(binding->texelFormat, &texel) || texel.bytesPerBlock == 0u
+          || binding->offset % texel.bytesPerBlock != 0u || binding->size % texel.bytesPerBlock != 0u
+          || (texelDesc.Format = dx12_format(binding->texelFormat)) == DXGI_FORMAT_UNKNOWN) {
+        writeContext->valid = false;
+        return;
+      }
+
+      texelDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+      texelDesc.ViewDimension           = D3D12_SRV_DIMENSION_BUFFER;
+      texelDesc.Buffer.FirstElement     = binding->offset / texel.bytesPerBlock;
+      texelDesc.Buffer.NumElements      = (UINT)(binding->size / texel.bytesPerBlock);
+      handle = dx12_cpuDescriptor(&writeContext->group->device->resourceDescriptors,
+                                  writeContext->group->resourceOffset + texelOffset);
+      writeContext->group->device->d3dDevice->lpVtbl->CreateShaderResourceView(writeContext->group->device->d3dDevice,
+                                                                               texelBuffer->resource,
+                                                                               &texelDesc,
+                                                                               handle);
       break;
     }
     case GPU_BINDING_SAMPLED_TEXTURE: {

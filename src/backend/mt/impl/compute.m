@@ -444,6 +444,24 @@ mt_computeTexture(GPUComputePassEncoder *enc,
 
 GPU_HIDE
 void
+mt_computeTexel(GPUComputePassEncoder *enc, id texture, GPUBuffer *buffer, uint32_t index) {
+  MTComputeEncoder *native;
+
+  if (!(native = mt_computeEncoder(enc)) || !texture)
+    return;
+#if MT_HAS_METAL4
+  if (native->modern) {
+    mt_setArgumentTexel(enc->_cmdb, native->arguments, texture, buffer, index);
+    return;
+  }
+#endif
+  GPU__UNUSED(buffer);
+  mt_holdObject(enc->_cmdb, texture);
+  [native->classic setTexture:(id<MTLTexture>)texture atIndex:index];
+}
+
+GPU_HIDE
+void
 mt_computeSampler(GPUComputePassEncoder *enc,
                   GPUSampler            *sampler,
                   uint32_t               index) {

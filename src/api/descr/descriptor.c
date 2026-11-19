@@ -128,6 +128,9 @@ metalSlotKind(GPUBindKind kind);
 static GPUBindKind
 layoutEntryKind(const GPUBindGroupLayoutEntry *entry);
 
+static GPUBindKind
+metalEntryKind(const GPUBindGroupLayoutEntry *entry);
+
 static GPUBindGroupLayoutPriv*
 gpu_layoutPriv(const GPUBindGroupLayout *layout) {
   return layout ? layout->_priv : NULL;
@@ -207,6 +210,7 @@ bindGroupHash(const GPUBindGroupPriv *priv) {
     if (binding->kind == GPUBindKindBuffer) {
       hash = GPU_BIND_GROUP_HASH(hash, binding->offset);
       hash = GPU_BIND_GROUP_HASH(hash, binding->size);
+      hash = GPU_BIND_GROUP_HASH(hash, binding->texelFormat);
     }
   }
 
@@ -241,7 +245,8 @@ bindGroupPrivsEqual(const GPUBindGroupPriv *a,
     }
 
     if (aBinding->kind == GPUBindKindBuffer
-        && (aBinding->offset != bBinding->offset || aBinding->size != bBinding->size)) {
+        && (aBinding->offset != bBinding->offset || aBinding->size != bBinding->size
+            || aBinding->texelFormat != bBinding->texelFormat)) {
       return false;
     }
   }
@@ -446,6 +451,22 @@ visibilityIsValid(GPUShaderStageFlags visibility) {
   return visibility != 0u && (visibility & ~knownStages) == 0u;
 }
 
+/* the shader reads a texel view as its sample type: floats (unorm, snorm and float formats), or the
+ * format's integer kind */
+static bool
+texelFormatMatchesSampleType(GPUFormat format, GPUTextureSampleType sampleType) {
+  /* block and depth formats fail later: their texel size, and no backend reports texelBuffer for them */
+  if (format == GPU_FORMAT_UNDEFINED)
+    return false;
+
+  switch (formatNumericType(format)) {
+    case GPU_FORMAT_NUMERIC_UINT: return sampleType == GPU_TEXTURE_SAMPLE_TYPE_UINT;
+    case GPU_FORMAT_NUMERIC_SINT: return sampleType == GPU_TEXTURE_SAMPLE_TYPE_SINT;
+    default:
+      return sampleType == GPU_TEXTURE_SAMPLE_TYPE_FLOAT || sampleType == GPU_TEXTURE_SAMPLE_TYPE_UNFILTERABLE_FLOAT;
+  }
+}
+
 static int
 kindFromBindingType(GPUBindingType type, GPUBindKind *outKind) {
   if (!outKind) {
@@ -456,6 +477,7 @@ kindFromBindingType(GPUBindingType type, GPUBindKind *outKind) {
     case GPU_BINDING_UNIFORM_BUFFER:
     case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
     case GPU_BINDING_STORAGE_BUFFER:
+    case GPU_BINDING_TEXEL_BUFFER:
       *outKind = GPUBindKindBuffer;
       return 1;
     case GPU_BINDING_SAMPLED_TEXTURE:
@@ -541,6 +563,16 @@ normalizeLayoutEntry(const GPUBindGroupLayoutEntry *src,
       break;
     case GPU_BINDING_SAMPLER:
       if ((uint32_t)src->sampler.type > GPU_SAMPLER_BINDING_COMPARISON) {
+        return 0;
+      }
+      break;
+    case GPU_BINDING_TEXEL_BUFFER:
+      /* one view a binding, no dynamic offsets; a named format agrees with the sample type */
+      if (src->hasDynamicOffset || dst->arrayCount != 1u
+          || (uint32_t)src->texelBuffer.format >= GPU_FORMAT_COUNT
+          || (uint32_t)src->texelBuffer.sampleType > GPU_TEXTURE_SAMPLE_TYPE_UINT
+          || (src->texelBuffer.format != GPU_FORMAT_UNDEFINED
+              && !texelFormatMatchesSampleType(src->texelBuffer.format, src->texelBuffer.sampleType))) {
         return 0;
       }
       break;
@@ -778,6 +810,9 @@ bindingBufferUsage(GPUBindingType bindingType, GPUBufferUsageFlags *outUsage) {
     case GPU_BINDING_STORAGE_BUFFER:
       *outUsage = GPU_BUFFER_USAGE_STORAGE;
       return 1;
+    case GPU_BINDING_TEXEL_BUFFER:
+      *outUsage = GPU_BUFFER_USAGE_TEXEL;
+      return 1;
     default:
       return 0;
   }
@@ -795,6 +830,24 @@ bindGroupBufferRangeValid(const GPUBindGroupLayoutEntry *layoutEntry,
 
   if (!bindingBufferUsage(layoutEntry->bindingType, &usage)) {
     return 0;
+  }
+
+  /* a texel view: whole texels of a format the layout and the entry agree on (the device's limits and the
+   * format's support are checked where the device is known, texelBufferEntryValid) */
+  if (layoutEntry->bindingType == GPU_BINDING_TEXEL_BUFFER) {
+    GPUFormatLayout texel;
+    GPUFormat       format;
+
+    format = entry->texelFormat != GPU_FORMAT_UNDEFINED ? entry->texelFormat : layoutEntry->texelBuffer.format;
+
+    return bufferHasUsage(entry->buffer.buffer, usage)
+           && bufferRangeValid(entry->buffer.buffer, entry->buffer.offset, entry->buffer.size)
+           && format != GPU_FORMAT_UNDEFINED && (uint32_t)format < GPU_FORMAT_COUNT
+           && (layoutEntry->texelBuffer.format == GPU_FORMAT_UNDEFINED || layoutEntry->texelBuffer.format == format)
+           && texelFormatMatchesSampleType(format, layoutEntry->texelBuffer.sampleType)
+           && gpuFormatLayout(format, &texel) && texel.blockWidth == 1u && texel.blockHeight == 1u
+           && entry->buffer.size != 0u && entry->buffer.size % texel.bytesPerBlock == 0u
+           && entry->buffer.offset % texel.bytesPerBlock == 0u;
   }
 
   if (!bufferHasUsage(entry->buffer.buffer, usage)
@@ -1079,6 +1132,56 @@ bindGroupDynamicBase(const GPUBindGroupLayoutPriv *layout,
   *outBase = base;
 
   return 1;
+}
+
+/* texel entries against the device: the format reads through texel views there, the offset meets its
+ * alignment, and the view holds no more texels than it allows */
+static GPUResult
+validateTexelBufferEntries(GPUDevice                    *device,
+                           const GPUBindGroupLayoutPriv *layoutPriv,
+                           const GPUBindGroupEntry      *entries,
+                           uint32_t                      count) {
+  GPUDeviceCapabilities caps;
+  GPUFormatCapabilities formatCaps;
+  GPUFormatLayout       texel;
+  GPUFormat             format;
+  uint32_t              i;
+  uint32_t              j;
+  bool                  haveCaps;
+
+  haveCaps = false;
+
+  for (i = 0u; i < count; i++) {
+    if (entries[i].bindingType != GPU_BINDING_TEXEL_BUFFER)
+      continue;
+
+    format = entries[i].texelFormat;
+
+    for (j = 0u; format == GPU_FORMAT_UNDEFINED && layoutPriv && j < layoutPriv->count; j++)
+      if (layoutPriv->entries[j].binding == entries[i].binding
+          && layoutPriv->entries[j].bindingType == GPU_BINDING_TEXEL_BUFFER)
+        format = layoutPriv->entries[j].texelBuffer.format;
+
+    if (!haveCaps) {
+      if (GPUGetDeviceCapabilities(device, &caps) != GPU_OK)
+        return GPU_ERROR_BACKEND_FAILURE;
+      haveCaps = true;
+    }
+
+    if (format == GPU_FORMAT_UNDEFINED || !gpuFormatLayout(format, &texel) || texel.bytesPerBlock == 0u)
+      return GPU_ERROR_INVALID_ARGUMENT;
+
+    if (GPUGetFormatCapabilities(device->adapter, format, &formatCaps) != GPU_OK || !formatCaps.texelBuffer
+        || caps.limits.maxTexelBufferElements == 0u)
+      return GPU_ERROR_UNSUPPORTED;
+
+    if ((caps.limits.minTexelBufferOffsetAlignment
+         && entries[i].buffer.offset % caps.limits.minTexelBufferOffsetAlignment != 0u)
+        || entries[i].buffer.size / texel.bytesPerBlock > caps.limits.maxTexelBufferElements)
+      return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  return GPU_OK;
 }
 
 static GPUResult
@@ -1436,7 +1539,7 @@ pipelineSlotIsUsed(const GPUPipelineLayoutPriv *priv,
     }
 
     for (entryIndex = 0; entryIndex < layout->count; entryIndex++) {
-      if (metalSlotKind(layoutEntryKind(&layout->entries[entryIndex])) ==
+      if (metalSlotKind(metalEntryKind(&layout->entries[entryIndex])) ==
             metalSlotKind(kind)
           && (layout->entries[entryIndex].visibility & visibility) != 0u
           && priv->backendBindings[groupIndex][entryIndex] <= slot) {
@@ -1494,6 +1597,12 @@ metalSlotKind(GPUBindKind kind) {
            : kind;
 }
 
+/* the Metal argument table an entry's slot is in: a texel buffer binds a buffer, read through a texture slot */
+static GPUBindKind
+metalEntryKind(const GPUBindGroupLayoutEntry *entry) {
+  return entry && entry->bindingType == GPU_BINDING_TEXEL_BUFFER ? GPUBindKindTexture : layoutEntryKind(entry);
+}
+
 static int
 pipelineBindingsAreUnique(const GPUPipelineLayoutPriv *priv) {
   GPUBindGroupLayoutPriv        *layoutA;
@@ -1540,8 +1649,8 @@ pipelineBindingsAreUnique(const GPUPipelineLayoutPriv *priv) {
           b        = &layoutB->entries[entryB];
           backendB = priv->backendBindings[groupB][entryB];
 
-          if (metalSlotKind(layoutEntryKind(a)) !=
-              metalSlotKind(layoutEntryKind(b))) {
+          if (metalSlotKind(metalEntryKind(a)) !=
+              metalSlotKind(metalEntryKind(b))) {
             continue;
           }
 
@@ -1617,6 +1726,7 @@ compileDX12PipelineBindings(GPUPipelineLayoutPriv *priv) {
             case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
             case GPU_BINDING_SAMPLED_TEXTURE:
             case GPU_BINDING_ACCELERATION_STRUCTURE:
+            case GPU_BINDING_TEXEL_BUFFER:
               entryClass = GPU_DX12_REGISTER_SRV;
               break;
             case GPU_BINDING_STORAGE_BUFFER:
@@ -1732,9 +1842,9 @@ compilePipelineBindings(GPUPipelineLayoutPriv *priv,
 
         if (backend == GPU_BACKEND_METAL
             && (metalEntrySlotCount(entry) >
-               metalBindingLimit(layoutEntryKind(entry))
+               metalBindingLimit(metalEntryKind(entry))
              || backendBinding >
-               metalBindingLimit(layoutEntryKind(entry)) -
+               metalBindingLimit(metalEntryKind(entry)) -
                  metalEntrySlotCount(entry))) {
           clearPipelineBindings(priv);
           return GPU_ERROR_UNSUPPORTED;
@@ -1782,7 +1892,7 @@ compilePipelineBindings(GPUPipelineLayoutPriv *priv,
         for (uint32_t candidateIndex = 0; candidateLayout && candidateIndex < candidateLayout->count; candidateIndex++) {
           candidateEntry = &candidateLayout->entries[candidateIndex];
 
-          if (metalSlotKind(layoutEntryKind(candidateEntry)) !=
+          if (metalSlotKind(metalEntryKind(candidateEntry)) !=
                 gpu_pipelineKinds[kindIndex]
               || priv->backendBindings[candidateGroup][candidateIndex] != UINT32_MAX) {
             continue;
@@ -2033,6 +2143,9 @@ createLayoutForReflectionGroup(GPUDevice                 *device,
       case GPU_BINDING_STORAGE_BUFFER:
         entries[cursor].buffer = resource->buffer;
         break;
+      case GPU_BINDING_TEXEL_BUFFER:
+        entries[cursor].texelBuffer = resource->texelBuffer;
+        break;
       case GPU_BINDING_SAMPLED_TEXTURE:
         entries[cursor].sampledTexture = resource->sampledTexture;
         break;
@@ -2130,6 +2243,11 @@ layoutResourceTypeMatches(const GPUBindGroupLayoutEntry     *entry,
              && entry->storageTexture.access == resource->storageTexture.access;
     case GPU_BINDING_SAMPLER:
       return entry->sampler.type == resource->sampler.type;
+    case GPU_BINDING_TEXEL_BUFFER:
+      /* a layout may name the format a shader leaves open, not another one */
+      return entry->texelBuffer.sampleType == resource->texelBuffer.sampleType
+             && (resource->texelBuffer.format == GPU_FORMAT_UNDEFINED
+                 || entry->texelBuffer.format == resource->texelBuffer.format);
     default:
       return 1;
   }
@@ -2719,8 +2837,9 @@ bindGroupEachStatic(GPUPipelineLayoutPriv  *pipeline,
     switch (binding->kind) {
       case GPUBindKindBuffer:
         view.buffer = binding->buffer;
-        view.offset = binding->offset;
-        view.size   = binding->size;
+        view.offset      = binding->offset;
+        view.size        = binding->size;
+        view.texelFormat = binding->texelFormat;
         break;
       case GPUBindKindTexture:
         view.textureView = binding->textureView;
@@ -3086,8 +3205,9 @@ bindGroupEachDynamic(GPUPipelineLayout    *pipelineLayout,
     switch (binding->kind) {
       case GPUBindKindBuffer:
         view.buffer = binding->buffer;
-        view.offset = effectiveOffset;
-        view.size   = binding->size;
+        view.offset      = effectiveOffset;
+        view.size        = binding->size;
+        view.texelFormat = binding->texelFormat;
         break;
       case GPUBindKindTexture:
         view.textureView = binding->textureView;
@@ -3275,7 +3395,7 @@ pipelineLayoutBackendSlotMask(GPUPipelineLayout  *layout,
       entry   = &group->entries[entryIndex];
       binding = priv->backendBindings[groupIndex][entryIndex];
 
-      if (layoutEntryKind(entry) == kind
+      if ((api && api->backend == GPU_BACKEND_METAL ? metalEntryKind(entry) : layoutEntryKind(entry)) == kind
           && (entry->visibility & stages) != 0u
           && binding != UINT32_MAX) {
         slotCount = api && api->backend == GPU_BACKEND_METAL
@@ -3564,8 +3684,9 @@ forEachBindGroupBinding(GPUBindGroup         *group,
     switch (binding->kind) {
       case GPUBindKindBuffer:
         view.buffer = binding->buffer;
-        view.offset = binding->offset;
-        view.size   = binding->size;
+        view.offset      = binding->offset;
+        view.size        = binding->size;
+        view.texelFormat = binding->texelFormat;
         break;
       case GPUBindKindTexture:
         view.textureView = binding->textureView;
@@ -3644,8 +3765,11 @@ forEachBindGroupEntry(GPUBindGroup            *group,
     switch (binding->kind) {
       case GPUBindKindBuffer:
         view.buffer = entries[i].buffer.buffer;
-        view.offset = entries[i].buffer.offset;
-        view.size   = entries[i].buffer.size;
+        view.offset      = entries[i].buffer.offset;
+        view.size        = entries[i].buffer.size;
+        view.texelFormat = entries[i].texelFormat != GPU_FORMAT_UNDEFINED
+                             ? entries[i].texelFormat
+                             : layout->entries[layoutEntryIndex].texelBuffer.format;
         break;
       case GPUBindKindTexture:
         view.textureView = entries[i].textureView;
@@ -4365,6 +4489,9 @@ GPUCreateBindGroup(GPUDevice                    *device,
                                               count,
                                               layoutPriv->bindless);
 
+  if (validationResult == GPU_OK)
+    validationResult = validateTexelBufferEntries(device, layoutPriv, entries, count);
+
   if (validationResult != GPU_OK) {
     return validationResult;
   }
@@ -4464,6 +4591,9 @@ GPUCreateBindGroup(GPUDevice                    *device,
           binding->buffer = entry->buffer.buffer;
           binding->offset = entry->buffer.offset;
           binding->size   = entry->buffer.size;
+          binding->texelFormat = layoutEntry->bindingType != GPU_BINDING_TEXEL_BUFFER ? GPU_FORMAT_UNDEFINED
+                                 : entry->texelFormat != GPU_FORMAT_UNDEFINED ? entry->texelFormat
+                                                                              : layoutEntry->texelBuffer.format;
           binding->uid    = binding->buffer ? gpuObjectUid(&binding->buffer->_uid) : 0u;
           break;
         case GPUBindKindTexture:
@@ -4641,6 +4771,9 @@ GPUUpdateBindGroupEXT(GPUBindGroup            *group,
                                           entryCount,
                                           pEntries);
 
+  if (result == GPU_OK)
+    result = validateTexelBufferEntries(group->_device, layout, pEntries, entryCount);
+
   if (result != GPU_OK) {
     return result;
   }
@@ -4664,6 +4797,8 @@ GPUUpdateBindGroupEXT(GPUBindGroup            *group,
         binding->buffer = pEntries[i].buffer.buffer;
         binding->offset = pEntries[i].buffer.offset;
         binding->size   = pEntries[i].buffer.size;
+        if (pEntries[i].bindingType == GPU_BINDING_TEXEL_BUFFER && pEntries[i].texelFormat != GPU_FORMAT_UNDEFINED)
+          binding->texelFormat = pEntries[i].texelFormat;
         break;
       case GPUBindKindTexture:
         binding->textureView = pEntries[i].textureView;

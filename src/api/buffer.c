@@ -34,7 +34,8 @@ validateBufferCreateInfo(const GPUDevice           *device,
                                        GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
                                        GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT |
                                        GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT |
-                                       GPU_BUFFER_USAGE_HOST_READ;
+                                       GPU_BUFFER_USAGE_HOST_READ |
+                                       GPU_BUFFER_USAGE_TEXEL;
 
   if (!device || !info || info->sizeBytes == 0u || info->usage == 0u) {
     return GPU_ERROR_INVALID_ARGUMENT;

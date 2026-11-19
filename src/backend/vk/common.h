@@ -533,6 +533,9 @@ typedef struct GPUBindGroupVk {
 #endif
   VkDevice                    device;
   VkDescriptorSet             set;
+  VkBufferView               *texelViews; /* the texel buffer bindings' views (descriptor sets only) */
+  uint32_t                    texelViewCount;
+  uint32_t                    texelViewCapacity;
 #ifdef VK_EXT_descriptor_buffer
   VkDeviceSize                descriptorOffset;
   uint32_t                    descriptorSlot;

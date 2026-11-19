@@ -37,6 +37,7 @@ typedef struct GPUShaderResourceReflection {
     GPUTextureBindingLayout        sampledTexture;
     GPUStorageTextureBindingLayout storageTexture;
     GPUSamplerBindingLayout        sampler;
+    GPUTexelBufferBindingLayout    texelBuffer;
   };
   uint32_t            groupIndex;
   uint32_t            binding;

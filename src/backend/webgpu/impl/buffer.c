@@ -51,7 +51,8 @@ webgpu_bufferUsage(GPUBufferUsageFlags usage) {
   if (usage & GPU_BUFFER_USAGE_UNIFORM)
     result |= WGPUBufferUsage_Uniform;
 
-  if (usage & GPU_BUFFER_USAGE_STORAGE)
+  /* texel views are read-only storage arrays here */
+  if (usage & (GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_TEXEL))
     result |= WGPUBufferUsage_Storage;
 
   if (usage & GPU_BUFFER_USAGE_COPY_SRC)

@@ -544,6 +544,29 @@ webgpu_hasWGSLLanguageFeature(const GPUAdapter           *adapter,
 }
 #endif
 
+/* the texel formats USL's WGSL decodes from a storage array */
+static bool
+webgpu_texelBufferFormat(GPUFormat format) {
+  switch (format) {
+    case GPU_FORMAT_R8_UNORM: case GPU_FORMAT_R8_SNORM: case GPU_FORMAT_R8_UINT: case GPU_FORMAT_R8_SINT:
+    case GPU_FORMAT_R16_UNORM: case GPU_FORMAT_R16_SNORM: case GPU_FORMAT_R16_UINT: case GPU_FORMAT_R16_SINT:
+    case GPU_FORMAT_R16_FLOAT:
+    case GPU_FORMAT_RG8_UNORM: case GPU_FORMAT_RG8_SNORM: case GPU_FORMAT_RG8_UINT: case GPU_FORMAT_RG8_SINT:
+    case GPU_FORMAT_R32_UINT: case GPU_FORMAT_R32_SINT: case GPU_FORMAT_R32_FLOAT:
+    case GPU_FORMAT_RG16_UNORM: case GPU_FORMAT_RG16_SNORM: case GPU_FORMAT_RG16_UINT: case GPU_FORMAT_RG16_SINT:
+    case GPU_FORMAT_RG16_FLOAT:
+    case GPU_FORMAT_RGBA8_UNORM: case GPU_FORMAT_RGBA8_SNORM: case GPU_FORMAT_RGBA8_UINT: case GPU_FORMAT_RGBA8_SINT:
+    case GPU_FORMAT_BGRA8_UNORM: case GPU_FORMAT_RGB10A2_UINT:
+    case GPU_FORMAT_RG32_UINT: case GPU_FORMAT_RG32_SINT: case GPU_FORMAT_RG32_FLOAT:
+    case GPU_FORMAT_RGBA16_UNORM: case GPU_FORMAT_RGBA16_SNORM: case GPU_FORMAT_RGBA16_UINT:
+    case GPU_FORMAT_RGBA16_SINT: case GPU_FORMAT_RGBA16_FLOAT:
+    case GPU_FORMAT_RGBA32_UINT: case GPU_FORMAT_RGBA32_SINT: case GPU_FORMAT_RGBA32_FLOAT:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static void
 webgpu_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
                              GPUFormat                         format,
@@ -674,6 +697,8 @@ webgpu_getFormatCapabilities(const GPUAdapter      *__restrict adapter,
                                                 WGPUFeatureName_BGRA8UnormStorage);
   }
 
+  outCaps->texelBuffer = webgpu_texelBufferFormat(format);
+
   /* read-write bindings: r32 in core, more with texture-formats-tier2; GPU-C emulates the rest */
   outCaps->storageReadWrite =
     outCaps->storage
@@ -764,6 +789,9 @@ webgpu_getLimits(const GPUAdapter *adapter, GPULimits *limits) {
     limits->maxComputeWorkgroupSizeZ        = webLimits.maxComputeWorkgroupSizeZ;
     limits->maxPushConstantSizeBytes        = 256u;
     limits->maxSamplerAnisotropy            = 16u;
+    /* texel views are storage bindings here: their alignment, and their size in the widest texels */
+    limits->minTexelBufferOffsetAlignment   = webLimits.minStorageBufferOffsetAlignment;
+    limits->maxTexelBufferElements          = (uint32_t)(webLimits.maxStorageBufferBindingSize / 16u);
   }
 
   if (wgpuAdapterGetInfo(native->adapter, &info) == WGPUStatus_Success) {

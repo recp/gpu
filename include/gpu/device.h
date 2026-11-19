@@ -221,6 +221,8 @@ typedef struct GPULimits {
   uint32_t maxSamplerAnisotropy;
   uint32_t minSubgroupSize;
   uint32_t maxSubgroupSize;
+  uint64_t minTexelBufferOffsetAlignment; /* GPU_BINDING_TEXEL_BUFFER offsets */
+  uint32_t maxTexelBufferElements;        /* texels in one texel buffer view; 0: none */
 } GPULimits;
 
 typedef struct GPUAdapterCapabilities {
@@ -250,6 +252,7 @@ typedef struct GPUFormatCapabilities {
   bool                blendable;
   bool                depthStencil;
   bool                storageReadWrite; /* native read-write bindings; GPU-C emulates the rest it can */
+  bool                texelBuffer;      /* readable through a texel buffer view (GPU_BINDING_TEXEL_BUFFER) */
 } GPUFormatCapabilities;
 
 typedef struct GPUCacheStats {

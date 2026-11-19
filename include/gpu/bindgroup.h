@@ -82,6 +82,12 @@ typedef struct GPUBufferBindingLayout {
   bool     byteAddress;
 } GPUBufferBindingLayout;
 
+/* a texel buffer's view: format UNDEFINED leaves it to each bind group entry (texelFormat) */
+typedef struct GPUTexelBufferBindingLayout {
+  GPUFormat            format;
+  GPUTextureSampleType sampleType;
+} GPUTexelBufferBindingLayout;
+
 typedef struct GPUBindGroupLayoutEntry {
   GPUSamplerDesc      immutableSamplerDesc;
   union {
@@ -89,6 +95,7 @@ typedef struct GPUBindGroupLayoutEntry {
     GPUTextureBindingLayout        sampledTexture;
     GPUStorageTextureBindingLayout storageTexture;
     GPUSamplerBindingLayout        sampler;
+    GPUTexelBufferBindingLayout    texelBuffer;
   };
   GPUBindingType      bindingType;
   GPUShaderStageFlags visibility;
@@ -126,6 +133,9 @@ typedef struct GPUBindGroupEntry {
   uint32_t       binding;
   uint32_t       arrayIndex; /* 0 for non-array. */
   GPUBindingType bindingType;
+  /* GPU_BINDING_TEXEL_BUFFER: the view's format; UNDEFINED takes the layout's. buffer.offset is a multiple of
+   * minTexelBufferOffsetAlignment (and of the texel size), buffer.size of the texel size */
+  GPUFormat      texelFormat;
 } GPUBindGroupEntry;
 
 typedef struct GPUBindGroupCreateInfo {

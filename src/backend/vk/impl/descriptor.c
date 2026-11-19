@@ -119,6 +119,13 @@ vk__descriptorType(GPUBindingType    type,
       }
 
       break;
+    case GPU_BINDING_TEXEL_BUFFER:
+      if (!dynamic) {
+        *outType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+        return true;
+      }
+
+      break;
     case GPU_BINDING_ACCELERATION_STRUCTURE:
 #if defined(VK_KHR_acceleration_structure) && defined(VK_KHR_ray_query)
       if (!dynamic) {
@@ -171,6 +178,8 @@ vk__descriptorByteSize(const GPUDeviceVk *device,
       return properties->uniformBufferDescriptorSize;
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
       return properties->storageBufferDescriptorSize;
+    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+      return properties->uniformTexelBufferDescriptorSize;
 #ifdef VK_KHR_acceleration_structure
     case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
       return properties->accelerationStructureDescriptorSize;
@@ -917,9 +926,55 @@ vk__writeDescriptor(void                          *context,
         return;
       }
 
-      if (binding->offset & 3u) {
-        writeContext->valid = false;
-        return;
+      if (binding->bindingType == GPU_BINDING_TEXEL_BUFFER) {
+        VkBufferViewCreateInfo viewInfo = {0};
+        GPUBindGroupVk        *group    = writeContext->group;
+        VkBufferView          *grown;
+        uint32_t               capacity;
+
+        if (!vk_formatFromGPU(binding->texelFormat, &viewInfo.format)) {
+          writeContext->valid = false;
+          return;
+        }
+
+        if (group->texelViewCount == group->texelViewCapacity) {
+          capacity = group->texelViewCapacity ? group->texelViewCapacity * 2u : 4u;
+
+          /* writes still queued point into the array: indexes (from 1) while it moves */
+          for (uint32_t w = 0u; w < writeContext->writeCount; w++)
+            if (writeContext->writes[w].pTexelBufferView)
+              writeContext->writes[w].pTexelBufferView =
+                (const VkBufferView *)(uintptr_t)(writeContext->writes[w].pTexelBufferView - group->texelViews + 1);
+
+          if ((grown = realloc(group->texelViews, capacity * sizeof(*grown)))) {
+            group->texelViews        = grown;
+            group->texelViewCapacity = capacity;
+          }
+
+          for (uint32_t w = 0u; w < writeContext->writeCount; w++)
+            if (writeContext->writes[w].pTexelBufferView)
+              writeContext->writes[w].pTexelBufferView =
+                group->texelViews + ((uintptr_t)writeContext->writes[w].pTexelBufferView - 1u);
+
+          if (!grown) {
+            writeContext->valid = false;
+            return;
+          }
+        }
+
+        viewInfo.sType  = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
+        viewInfo.buffer = buffer->buffer;
+        viewInfo.offset = binding->offset;
+        viewInfo.range  = binding->size;
+
+        if (vkCreateBufferView(group->device, &viewInfo, NULL,
+                               &group->texelViews[group->texelViewCount]) != VK_SUCCESS) {
+          writeContext->valid = false;
+          return;
+        }
+
+        write->pTexelBufferView = &group->texelViews[group->texelViewCount++];
+        break;
       }
 
       bufferInfo->buffer = buffer->buffer;
@@ -1088,7 +1143,16 @@ vk__writeDescriptorBuffer(void                          *context,
       addressInfo.range   = vk__wordRange(binding->buffer, binding->offset, binding->size);
       addressInfo.format  = VK_FORMAT_UNDEFINED;
 
-      if (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
+      if (type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) {
+        addressInfo.range = binding->size;
+
+        if (!vk_formatFromGPU(binding->texelFormat, &addressInfo.format)) {
+          writeContext->valid = false;
+          return;
+        }
+
+        getInfo.data.pUniformTexelBuffer = &addressInfo;
+      } else if (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
         getInfo.data.pUniformBuffer = &addressInfo;
       } else {
         getInfo.data.pStorageBuffer = &addressInfo;
@@ -1253,6 +1317,11 @@ vk__destroyBindGroupState(GPUBindGroupVk *native) {
     return;
   }
 
+  for (uint32_t i = 0u; i < native->texelViewCount; i++) {
+    vkDestroyBufferView(native->device, native->texelViews[i], NULL);
+  }
+
+  free(native->texelViews);
   vk__descriptorPoolLock(layout);
   vk__freeDescriptorSet(native);
 #ifdef VK_EXT_descriptor_buffer

@@ -45,7 +45,10 @@ enum {
    * the writing work's fence GPUGetBufferHostAddress reads it with no copy.
    * Combines with COPY_DST only. NULL host address where mapping is
    * asynchronous (WebGPU): GPUQueueReadBuffer reads it there. */
-  GPU_BUFFER_USAGE_HOST_READ = 1u << 10
+  GPU_BUFFER_USAGE_HOST_READ = 1u << 10,
+
+  /* bound through texel views (GPU_BINDING_TEXEL_BUFFER) */
+  GPU_BUFFER_USAGE_TEXEL = 1u << 11
 };
 
 typedef struct GPUBufferCreateInfo {

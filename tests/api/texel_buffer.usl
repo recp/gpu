@@ -1,0 +1,13 @@
+// texel buffers: formatted views of plain buffers, each texel read whole
+kern(64) texel_read(words: texture_buffer<rgba32uint> #texture(0),
+                    halves: texture_buffer<rgba16float> #texture(1),
+                    shorts: texture_buffer<r16float> #texture(2),
+                    bytes: texture_buffer<rgba8unorm> #texture(3),
+                    wout: &mut [uint4] #buffer(4),
+                    fout: &mut [float4] #buffer(5),
+                    i: uint #global_id) {
+  wout[i] = words.read(i)
+  fout[i * 3u] = halves.read(i)
+  fout[i * 3u + 1u] = shorts.read(i)
+  fout[i * 3u + 2u] = bytes.read(i)
+}

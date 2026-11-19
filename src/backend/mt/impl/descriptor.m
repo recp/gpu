@@ -29,12 +29,14 @@ typedef struct MTBufferDescriptorArray {
 typedef struct MTBindGroup {
   uint32_t                arrayCount;
   uint32_t                layoutEntryCount;
+  id                     *texels; /* a texture-buffer view a texel binding, by layout entry; NULL with none */
   MTBufferDescriptorArray arrays[];
 } MTBindGroup;
 
 typedef struct MTBindGroupScan {
   uint32_t arrayCount;
   uint32_t layoutEntryCount;
+  uint32_t texelCount;
 } MTBindGroupScan;
 
 typedef struct MTBindGroupBuild {
@@ -121,6 +123,80 @@ mt_scanBindGroup(void *ctx, const GPUBindGroupBindingView *binding) {
   if (mt_isBufferDescriptorArray(binding) && binding->arrayIndex == 0u) {
     scan->arrayCount++;
   }
+
+  if (binding->bindingType == GPU_BINDING_TEXEL_BUFFER) {
+    scan->texelCount++;
+  }
+}
+
+/* a texture-buffer view of the binding's range (texel bindings are single, never arrays) */
+static id
+mt_newTexel(GPUDevice *device, const GPUBindGroupBindingView *binding) {
+  MTLTextureDescriptor *desc;
+  GPUFormatLayout       texel;
+  id<MTLBuffer>         buffer;
+  id<MTLDevice>         mtl;
+  MTLPixelFormat        format;
+  NSUInteger            align, rowBytes;
+
+  buffer = binding->buffer ? (id<MTLBuffer>)binding->buffer->_priv : nil;
+  mtl    = device && device->_priv ? ((GPUDeviceMT *)device->_priv)->device : nil;
+  format = mt_format(binding->texelFormat);
+
+  if (!buffer || !mtl || format == MTLPixelFormatInvalid || !gpuFormatLayout(binding->texelFormat, &texel)
+      || texel.bytesPerBlock == 0u || binding->size % texel.bytesPerBlock != 0u)
+    return nil;
+
+  @autoreleasepool {
+    desc = [MTLTextureDescriptor textureBufferDescriptorWithPixelFormat:format
+                                                                  width:(NSUInteger)(binding->size / texel.bytesPerBlock)
+                                                        resourceOptions:buffer.resourceOptions
+                                                                  usage:MTLTextureUsageShaderRead];
+    /* the row is the whole view, rounded to the format's alignment while it stays in the buffer */
+    align    = [mtl minimumTextureBufferAlignmentForPixelFormat:format];
+    rowBytes = (NSUInteger)binding->size;
+    if (align > 1u && rowBytes % align != 0u && binding->offset + (rowBytes / align + 1u) * align <= buffer.length)
+      rowBytes = (rowBytes / align + 1u) * align;
+
+    return [buffer newTextureWithDescriptor:desc offset:(NSUInteger)binding->offset bytesPerRow:rowBytes];
+  }
+}
+
+static void
+mt_buildTexels(void *ctx, const GPUBindGroupBindingView *binding) {
+  MTBindGroupBuild *build;
+
+  build = ctx;
+
+  if (!build || !binding || binding->bindingType != GPU_BINDING_TEXEL_BUFFER)
+    return;
+
+  if (!build->valid || !build->native->texels || binding->layoutEntryIndex >= build->native->layoutEntryCount
+      || build->native->texels[binding->layoutEntryIndex]
+      || !(build->native->texels[binding->layoutEntryIndex] = mt_newTexel(build->device, binding))) {
+    build->valid = false;
+  }
+}
+
+static id
+mt_texel(const MTBindGroup *native, const GPUBindGroupBindingView *binding) {
+  return native && native->texels && binding->layoutEntryIndex < native->layoutEntryCount
+           ? native->texels[binding->layoutEntryIndex]
+           : nil;
+}
+
+static void
+mt_releaseTexels(MTBindGroup *native) {
+  uint32_t i;
+
+  if (!native || !native->texels)
+    return;
+
+  for (i = 0u; i < native->layoutEntryCount; i++)
+    [native->texels[i] release];
+
+  free(native->texels);
+  native->texels = NULL;
 }
 
 static void
@@ -234,7 +310,7 @@ mt_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  if (scan.arrayCount == 0u) {
+  if (scan.arrayCount == 0u && scan.texelCount == 0u) {
     return GPU_OK;
   }
 
@@ -267,12 +343,19 @@ mt_createBindGroup(GPUDevice *device, GPUBindGroup *group) {
   build.native = native;
   build.valid  = true;
 
+  if (scan.texelCount > 0u && !(native->texels = calloc(scan.layoutEntryCount, sizeof(*native->texels)))) {
+    free(native);
+    return GPU_ERROR_OUT_OF_MEMORY;
+  }
+
   if (!forEachBindGroupBinding(group, mt_buildBindGroup, &build)
+      || (scan.texelCount > 0u && !forEachBindGroupBinding(group, mt_buildTexels, &build))
       || !build.valid) {
     for (cleanupIndex = 0u; cleanupIndex < native->arrayCount; cleanupIndex++) {
       [(id<MTLBuffer>)native->arrays[cleanupIndex].argumentBuffer._priv release];
     }
 
+    mt_releaseTexels(native);
     free(native);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -356,6 +439,7 @@ mt_destroyBindGroup(GPUBindGroup *group) {
     [(id<MTLBuffer>)native->arrays[i].argumentBuffer._priv release];
   }
 
+  mt_releaseTexels(native);
   free(native);
   group->_native = NULL;
 }
@@ -629,6 +713,11 @@ mt_bindRenderBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   }
 
   api = &bind->render->_api->rce;
+
+  if (binding->bindingType == GPU_BINDING_TEXEL_BUFFER) {
+    mt_rceSetTexel(bind->render, binding->visibility, false, mt_texel(bind->native, binding), binding->buffer, index);
+    return;
+  }
 
   record = mt_bufferDescriptorArray(bind->native,
                                     binding->layoutEntryIndex);
@@ -1002,6 +1091,19 @@ mt_bindRenderGroupStatic(GPURenderPassEncoder *pass,
     index = pipeline->backendBindings[groupIndex][binding->layoutEntryIndex] +
             binding->arrayIndex;
 
+    if (entry->bindingType == GPU_BINDING_TEXEL_BUFFER) {
+      id texel = group->_native && binding->layoutEntryIndex < ((MTBindGroup *)group->_native)->layoutEntryCount
+                     && ((MTBindGroup *)group->_native)->texels
+                   ? ((MTBindGroup *)group->_native)->texels[binding->layoutEntryIndex]
+                   : nil;
+
+      if (!texel)
+        return false;
+
+      mt_rceSetTexel(pass, entry->visibility, false, texel, binding->buffer, index);
+      continue;
+    }
+
     if ((entry->visibility & GPU_SHADER_STAGE_VERTEX_BIT) != 0u) {
       if (binding->kind == GPUBindKindBuffer && binding->buffer
           && api->vertexBuffer) {
@@ -1090,6 +1192,17 @@ mt_bindComputeBinding(void *ctx, const GPUBindGroupBindingView *binding) {
   }
 
   api = &bind->compute->_api->compute;
+
+  if (binding->bindingType == GPU_BINDING_TEXEL_BUFFER) {
+    id texel = mt_texel(bind->native, binding);
+
+    if (!texel)
+      bind->valid = false;
+    else
+      mt_computeTexel(bind->compute, texel, binding->buffer, index);
+
+    return;
+  }
 
   record = mt_bufferDescriptorArray(bind->native,
                                     binding->layoutEntryIndex);
@@ -1218,6 +1331,13 @@ mt_tileBinding(void *context, const GPUBindGroupBindingView *binding) {
   native = ctx->pass->_priv;
   index  = binding->binding + binding->arrayIndex;
   record = mt_bufferDescriptorArray(ctx->group, binding->layoutEntryIndex);
+  if (binding->bindingType == GPU_BINDING_TEXEL_BUFFER) {
+    if (!mt_texel(ctx->group, binding) || index >= MT_ARGUMENT_TEXTURE_COUNT)
+      ctx->valid = false;
+    else if (ctx->emit)
+      mt_rceSetTexel(ctx->pass, 0u, true, mt_texel(ctx->group, binding), binding->buffer, index);
+    return;
+  }
   if (!ctx->emit) {
     switch (binding->kind) {
       case GPUBindKindBuffer:

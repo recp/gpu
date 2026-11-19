@@ -40,7 +40,8 @@ vk__bufferUsage(GPUBufferUsageFlags usage, VkBufferUsageFlags *outUsage) {
                                     GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_INPUT_EXT |
                                     GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT |
                                     GPU_BUFFER_USAGE_DEVICE_ADDRESS_EXT |
-                                    GPU_BUFFER_USAGE_HOST_READ;
+                                    GPU_BUFFER_USAGE_HOST_READ |
+                                    GPU_BUFFER_USAGE_TEXEL;
   VkBufferUsageFlags        result;
 
   if (!outUsage || usage == 0u || (usage & ~known) != 0u) {
@@ -63,6 +64,10 @@ vk__bufferUsage(GPUBufferUsageFlags usage, VkBufferUsageFlags *outUsage) {
 
   if ((usage & GPU_BUFFER_USAGE_STORAGE) != 0u) {
     result |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+  }
+
+  if ((usage & GPU_BUFFER_USAGE_TEXEL) != 0u) {
+    result |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
   }
 
   if ((usage & GPU_BUFFER_USAGE_COPY_SRC) != 0u) {
@@ -868,7 +873,7 @@ GPUResult
 vk_createBuffer(GPUDevice                 *__restrict device,
                 const GPUBufferCreateInfo *__restrict info,
                 GPUBuffer                **__restrict outBuffer) {
-  const GPUBufferUsageFlags deviceLocal = GPU_BUFFER_USAGE_STORAGE |
+  const GPUBufferUsageFlags deviceLocal = GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_TEXEL |
                                           GPU_BUFFER_USAGE_COPY_DST |
                                           GPU_BUFFER_USAGE_ACCELERATION_STRUCTURE_SCRATCH_EXT;
   GPUResult                 result;

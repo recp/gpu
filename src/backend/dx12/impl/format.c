@@ -175,6 +175,8 @@ dx12_queryFormatCapabilities(const GPUAdapter *adapter) {
 
     /* storage here already needs typed loads as well as stores */
     caps->storageReadWrite = caps->storage;
+    caps->texelBuffer      = (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_BUFFER) != 0u
+                             && (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_SHADER_LOAD) != 0u;
     caps->depthStencil    = (attachmentSupport.Support1 & D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL) != 0u;
 
     if (caps->colorAttachment || caps->depthStencil) {
