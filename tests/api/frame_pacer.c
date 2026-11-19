@@ -512,9 +512,9 @@ measure(PacerTest *state, GPUAdapter *adapter, uint32_t latency) {
       missed++;
   }
 
-  printf("pacer: latency %u: %u frames, tick to deadline median %.2f ms, to target median %.2f ms p90 %.2f, "
+  printf("pacer: latency %u: %u frames of %u ticks, tick to deadline median %.2f ms, to target median %.2f ms p90 %.2f, "
          "to submitted median %.2f ms p90 %.2f\n",
-         latency, state->sampleCount, percentile(budget, state->sampleCount, 0.5) * 1e3,
+         latency, state->sampleCount, state->ticks, percentile(budget, state->sampleCount, 0.5) * 1e3,
          percentile(take, state->sampleCount, 0.5) * 1e3, percentile(take, state->sampleCount, 0.9) * 1e3,
          percentile(cpu, state->sampleCount, 0.5) * 1e3, percentile(cpu, state->sampleCount, 0.9) * 1e3);
   if (n) {
