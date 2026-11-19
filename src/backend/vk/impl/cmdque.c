@@ -16,6 +16,7 @@
 
 #include "../common.h"
 #include "../impl.h"
+#include "../../../api/frame_feedback_internal.h"
 
 enum {
   VK_SUBMIT_STACK_COUNT = 64u,
@@ -95,8 +96,12 @@ vk__dropTransferSerial(GPUQueueVk *queue, GPUTransferSlotVk *slot) {
 }
 
 static VkResult
-vk__queuePresent(GPUQueueVk *queue, GPUSwapchainVk *swapchain, VkSemaphore wait, uint32_t imageIndex) {
-  return vk_presentFrame(swapchain, queue, wait, imageIndex);
+vk__queuePresent(GPUQueueVk         *queue,
+                 GPUSwapchainVk     *swapchain,
+                 VkSemaphore         wait,
+                 uint32_t            imageIndex,
+                 GPUCommandBufferVk *command) {
+  return vk_presentFrame(swapchain, queue, wait, imageIndex, command->commandBuffer._frameFeedback);
 }
 
 /* GPU_FEATURE_THREADED_UPLOADS: the queue operations GPU-C serializes */
@@ -399,6 +404,9 @@ vk__completionLoop(GPUQueueVk *queue) {
       /* before its completion is reported: what was destroyed while it ran
        * is gone by the time a fence wait returns */
       vk_queueDone(deviceVk, queue, native->serial);
+      if (cmdb->_frameFeedback) {
+        frameFeedbackComplete(cmdb->_frameFeedback, GPU_OK, 0.0, 0.0);
+      }
     }
 
     completionSync            = native->completionSync;
@@ -1217,7 +1225,8 @@ vk_submitEx(GPUQueue                   *queueHandle,
 
   if (swapchain) {
     swapchain->frameSubmitted = true;
-    presentResult             = vk__queuePresent(queue, swapchain, renderFinished, presentNative->presentImageIndex);
+    presentResult             = vk__queuePresent(queue, swapchain, renderFinished, presentNative->presentImageIndex,
+                                                 presentNative);
 
     if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR) {
       vk__reportQueueError(info->ppCommandBuffers[0],
@@ -2093,7 +2102,7 @@ vk_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
   if (swapchain) {
     swapchain->frameSubmitted = true;
 
-    presentResult = vk__queuePresent(queue, swapchain, renderFinished, native->presentImageIndex);
+    presentResult = vk__queuePresent(queue, swapchain, renderFinished, native->presentImageIndex, native);
 
     if (presentResult != VK_SUCCESS && presentResult != VK_SUBOPTIMAL_KHR) {
       vk__reportQueueError(cmdb, "present", presentResult);

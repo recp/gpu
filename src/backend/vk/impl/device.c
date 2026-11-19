@@ -2724,6 +2724,9 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
       return adapterVk->memorylessAttachments;
     case GPU_FEATURE_SWAPCHAIN_SCALE:
       return vk_hasQueueCapability(adapterVk, VK_QUEUE_GRAPHICS_BIT);
+    case GPU_FEATURE_FRAME_FEEDBACK:
+      /* the display's time of a present: VK_GOOGLE_display_timing */
+      return adapter->supportsDisplayTiming;
     case GPU_FEATURE_COMPUTE:
       return vk_hasQueueCapability(adapterVk, VK_QUEUE_COMPUTE_BIT);
     case GPU_FEATURE_THREADED_UPLOADS:
@@ -3679,6 +3682,11 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   if (presentPlan != UINT32_MAX) {
     vkGetDeviceQueue(deviceVk->device, plans[presentPlan].familyIndex,
                      plans[presentPlan].count, &deviceVk->presentQueue);
+  }
+
+  if (adapter->supportsDisplayTiming) {
+    deviceVk->getPastTiming = (PFN_vkGetPastPresentationTimingGOOGLE)
+      vkGetDeviceProcAddr(deviceVk->device, "vkGetPastPresentationTimingGOOGLE");
   }
 
   deviceVk->maxDrawIndirectCount = adapterVk->props.limits.maxDrawIndirectCount;

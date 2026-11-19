@@ -51,7 +51,7 @@ vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
     return false;
   }
 
-  result = vk_presentFrame(swapchain, swapchain->queue, renderFinished, swapchain->acquiredImageIndex);
+  result = vk_presentFrame(swapchain, swapchain->queue, renderFinished, swapchain->acquiredImageIndex, NULL);
   return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
 }
 
@@ -172,14 +172,15 @@ vk_beginFrame(GPUApi *api, GPUSwapchain *swapchainObj) {
     return NULL;
   }
 
-  vk_presentsIssued(swapchain);
   imageIndex = 0u;
+  vk_swapchainClaim(swapchain);
   result     = vkAcquireNextImageKHR(swapchain->device,
                                      swapchain->swapchain,
                                      UINT64_MAX,
                                      sync->imageAvailable,
                                      VK_NULL_HANDLE,
                                      &imageIndex);
+  vk_swapchainUnclaim(swapchain);
   vk_setSwapchainStatus(swapchain, result);
 
   if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
@@ -219,10 +220,12 @@ vk__displayBehind(GPUSwapchainVk *swapchain, uint32_t latency) {
     return false; /* a present still being made: no look now */
   }
 
+  vk_swapchainClaim(swapchain);
   vk_queueSubmitLock(swapchain->queue);
   result = device->waitForPresent(swapchain->device, swapchain->swapchain,
                                   swapchain->lastPresentId - latency, 2000000u);
   vk_queueSubmitUnlock(swapchain->queue);
+  vk_swapchainUnclaim(swapchain);
 
   return result == VK_TIMEOUT;
 #else
@@ -309,15 +312,16 @@ vk_acquireDrawable(GPUApi *api, GPUFrame *frame) {
     timeout = (uint64_t)(((left > 0.0 ? left : 0.0) + 0.1) * 1e9);
   }
 
-  vk_presentsIssued(swapchain);
   sync       = &swapchain->frameSync[swapchain->frameIndex];
   imageIndex = 0u;
+  vk_swapchainClaim(swapchain);
   result     = vkAcquireNextImageKHR(swapchain->device,
                                      swapchain->swapchain,
                                      timeout,
                                      sync->imageAvailable,
                                      VK_NULL_HANDLE,
                                      &imageIndex);
+  vk_swapchainUnclaim(swapchain);
 
   if (result == VK_TIMEOUT || result == VK_NOT_READY) {
     return false;
@@ -389,9 +393,24 @@ vk_schedulePresent(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   return true;
 }
 
+/* frame feedback: the display's time for a watched frame's present comes back
+ * through VK_GOOGLE_display_timing (swapchain.c) */
+static GPUResult
+vk_observeFrame(GPUFrame *frame, GPUFrameFeedback *feedback) {
+  GPUDeviceVk *device;
+
+  if (!frame || !frame->drawable || !feedback || !frame->device) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  device = frame->device->_priv;
+  return device && device->getPastTiming ? GPU_OK : GPU_ERROR_UNSUPPORTED;
+}
+
 GPU_HIDE
 void
 vk_initFrame(GPUFrameApi *api) {
+  api->observe         = vk_observeFrame;
   api->beginFrame      = vk_beginFrame;
   api->endFrame        = vk_endFrame;
   api->beginDrawable   = vk_beginDrawable;

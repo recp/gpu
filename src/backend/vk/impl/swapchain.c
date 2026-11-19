@@ -15,6 +15,13 @@
  */
 
 #include "../common.h"
+#include "../../../api/frame_feedback_internal.h"
+#if defined(__APPLE__)
+#  include <pthread/qos.h>
+#elif defined(__ANDROID__)
+#  include <sys/resource.h>
+#  include <unistd.h>
+#endif
 
 static const VkCompositeAlphaFlagBitsKHR vk_compositeAlphaModes[] = {
   VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
@@ -475,10 +482,11 @@ vk__waitPresent(GPUSwapchainVk *swapchain) {
  * the frame). The submit queues the present here and returns. The
  * present goes to the graphics family's next queue where the device has one
  * (a present blocked in queueBuffer then holds no queue a submit needs), else
- * to the frame's queue under its submit lock. Presents keep their order; an
- * acquire, resize or destroy first waits for queued presents to be issued,
- * as calls on one swapchain must not overlap. On by default on Android;
- * GPU_VULKAN_PRESENT_THREAD=0/1 chooses anywhere */
+ * to the frame's queue under its submit lock. Presents keep their order. Calls
+ * on one swapchain must not overlap: an acquire, a present-wait, a resize or
+ * a destroy claims it (vk_swapchainClaim) once the queued presents are issued,
+ * and the thread presents or reads timings only while it isn't claimed. On by
+ * default on Android; GPU_VULKAN_PRESENT_THREAD=0/1 chooses anywhere */
 enum { GPU_VK_PRESENT_RING = 8u };
 
 typedef struct GPUPresenterVk {
@@ -493,10 +501,11 @@ typedef struct GPUPresenterVk {
   pthread_cond_t     changed;
 #endif
   VkSemaphore        waits[GPU_VK_PRESENT_RING];
+  GPUFrameFeedback  *feedbacks[GPU_VK_PRESENT_RING];
   uint32_t           images[GPU_VK_PRESENT_RING];
   uint32_t           head;
   uint32_t           count;
-  bool               presenting;
+  bool               busy;     /* the swapchain in use: a present, a timing read, or claimed */
   bool               stopping;
 } GPUPresenterVk;
 
@@ -518,12 +527,26 @@ vk__presenterUnlock(GPUPresenterVk *presenter) {
 #endif
 }
 
-static void
-vk__presenterWait(GPUPresenterVk *presenter) {
+/* false when `ms` passed first (zero: no limit) */
+static bool
+vk__presenterWait(GPUPresenterVk *presenter, uint32_t ms) {
 #if defined(_WIN32) || defined(WIN32)
-  SleepConditionVariableCS(&presenter->changed, &presenter->lock, INFINITE);
+  return SleepConditionVariableCS(&presenter->changed, &presenter->lock, ms ? ms : INFINITE) != 0;
 #else
-  pthread_cond_wait(&presenter->changed, &presenter->lock);
+  struct timespec until;
+
+  if (!ms) {
+    return pthread_cond_wait(&presenter->changed, &presenter->lock) == 0;
+  }
+
+  clock_gettime(CLOCK_REALTIME, &until);
+  until.tv_nsec += (long)ms * 1000000L;
+  if (until.tv_nsec >= 1000000000L) {
+    until.tv_sec  += until.tv_nsec / 1000000000L;
+    until.tv_nsec %= 1000000000L;
+  }
+
+  return pthread_cond_timedwait(&presenter->changed, &presenter->lock, &until) == 0;
 #endif
 }
 
@@ -536,9 +559,110 @@ vk__presenterSignal(GPUPresenterVk *presenter) {
 #endif
 }
 
+/* frame feedback on Vulkan: a frame watched (GPUCreateFrameFeedback) presents
+ * with a VK_GOOGLE_display_timing id, and the display's time for it comes
+ * from vkGetPastPresentationTimingGOOGLE, read after each present and, on the
+ * present thread, every few milliseconds while some are still pending. The
+ * times are the presentation engine's: CLOCK_MONOTONIC on Android and Linux,
+ * the host clock of the frame timing on Apple. A present older than one
+ * reported and never reported itself is presentation unavailable */
+
+static void
+vk__timingPop(GPUSwapchainVk *swapchain, double time) {
+  GPUFrameFeedback *feedback;
+
+  feedback = swapchain->timingFeedbacks[swapchain->timingHead];
+  swapchain->timingFeedbacks[swapchain->timingHead] = NULL;
+  swapchain->timingHead = (swapchain->timingHead + 1u) % GPU_VK_TIMING_RING;
+  swapchain->timingCount--;
+  frameFeedbackPresent(feedback, time);
+  frameFeedbackRelease(feedback);
+}
+
+static uint32_t
+vk__timingPush(GPUSwapchainVk *swapchain, GPUFrameFeedback *feedback) {
+  uint32_t slot;
+
+  if (swapchain->timingCount == GPU_VK_TIMING_RING) {
+    vk__timingPop(swapchain, 0.0);
+  }
+
+  if (++swapchain->timingNextId == 0u) {
+    swapchain->timingNextId = 1u;
+  }
+
+  slot = (swapchain->timingHead + swapchain->timingCount) % GPU_VK_TIMING_RING;
+  frameFeedbackRetain(feedback);
+  swapchain->timingFeedbacks[slot] = feedback;
+  swapchain->timingIds[slot]       = swapchain->timingNextId;
+  swapchain->timingCount++;
+  return swapchain->timingNextId;
+}
+
+/* the newest one, its present refused */
+static void
+vk__timingDrop(GPUSwapchainVk *swapchain) {
+  uint32_t slot;
+
+  slot = (swapchain->timingHead + swapchain->timingCount - 1u) % GPU_VK_TIMING_RING;
+  swapchain->timingCount--;
+  frameFeedbackPresent(swapchain->timingFeedbacks[slot], 0.0);
+  frameFeedbackRelease(swapchain->timingFeedbacks[slot]);
+  swapchain->timingFeedbacks[slot] = NULL;
+}
+
+static void
+vk__timingsRead(GPUSwapchainVk *swapchain) {
+  VkPastPresentationTimingGOOGLE past[GPU_VK_TIMING_RING];
+  GPUDeviceVk                   *device;
+  VkResult                       result;
+  uint32_t                       count, i;
+
+  device = swapchain->gpuDevice ? swapchain->gpuDevice->_priv : NULL;
+  if (!swapchain->timingCount || !device || !device->getPastTiming || !swapchain->swapchain) {
+    return;
+  }
+
+  do {
+    count  = GPU_VK_TIMING_RING;
+    result = device->getPastTiming(swapchain->device, swapchain->swapchain, &count, past);
+    if (result != VK_SUCCESS && result != VK_INCOMPLETE) {
+      return;
+    }
+
+    for (i = 0u; i < count && swapchain->timingCount; i++) {
+      if (!past[i].presentID) {
+        continue; /* a present no one watched */
+      }
+
+      while (swapchain->timingCount && swapchain->timingIds[swapchain->timingHead] != past[i].presentID
+             && (uint32_t)(past[i].presentID - swapchain->timingIds[swapchain->timingHead]) < 0x80000000u) {
+        vk__timingPop(swapchain, 0.0); /* older, never reported */
+      }
+
+      if (swapchain->timingCount && swapchain->timingIds[swapchain->timingHead] == past[i].presentID) {
+        vk__timingPop(swapchain, (double)past[i].actualPresentTime * 1e-9);
+      }
+    }
+  } while (result == VK_INCOMPLETE && count > 0u);
+}
+
+/* what is still pending gets its time where it came, else none */
+static void
+vk__timingsFinish(GPUSwapchainVk *swapchain) {
+  vk__timingsRead(swapchain);
+  while (swapchain->timingCount) {
+    vk__timingPop(swapchain, 0.0);
+  }
+}
+
 /* now, on the present queue: the device's own, or the frame's under its lock */
 static VkResult
-vk__presentNow(GPUSwapchainVk *swapchain, GPUQueueVk *queue, VkSemaphore wait, uint32_t imageIndex) {
+vk__presentNow(GPUSwapchainVk   *swapchain,
+               GPUQueueVk       *queue,
+               VkSemaphore       wait,
+               uint32_t          imageIndex,
+               GPUFrameFeedback *feedback) {
   GPUDeviceVk *device;
   VkResult     result;
 
@@ -546,19 +670,20 @@ vk__presentNow(GPUSwapchainVk *swapchain, GPUQueueVk *queue, VkSemaphore wait, u
   if (device && device->presentQueue && swapchain->presenter) {
 #if defined(_WIN32) || defined(WIN32)
     EnterCriticalSection(&device->presentLock);
-    result = vk_presentSwapchain(swapchain, device->presentQueue, wait, imageIndex);
+    result = vk_presentSwapchain(swapchain, device->presentQueue, wait, imageIndex, feedback);
     LeaveCriticalSection(&device->presentLock);
 #else
     pthread_mutex_lock(&device->presentLock);
-    result = vk_presentSwapchain(swapchain, device->presentQueue, wait, imageIndex);
+    result = vk_presentSwapchain(swapchain, device->presentQueue, wait, imageIndex, feedback);
     pthread_mutex_unlock(&device->presentLock);
 #endif
-    return result;
+  } else {
+    vk_queueSubmitLock(queue);
+    result = vk_presentSwapchain(swapchain, queue->queRaw, wait, imageIndex, feedback);
+    vk_queueSubmitUnlock(queue);
   }
 
-  vk_queueSubmitLock(queue);
-  result = vk_presentSwapchain(swapchain, queue->queRaw, wait, imageIndex);
-  vk_queueSubmitUnlock(queue);
+  vk__timingsRead(swapchain);
   return result;
 }
 
@@ -568,37 +693,66 @@ static DWORD WINAPI
 static void*
 #endif
 vk__presenterRun(void *user) {
-  GPUPresenterVk *presenter;
-  VkSemaphore     wait;
-  uint32_t        imageIndex;
+  GPUPresenterVk   *presenter;
+  GPUFrameFeedback *feedback;
+  VkSemaphore       wait;
+  uint32_t          imageIndex;
+  bool              present, read;
 
   presenter = user;
+  wait       = VK_NULL_HANDLE;
+  feedback   = NULL;
+  imageIndex = 0u;
+  /* a present is part of a frame: it runs at the display's urgency */
 #if defined(__APPLE__)
   pthread_setname_np("gpu-present");
+  pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 #elif defined(__ANDROID__)
   pthread_setname_np(pthread_self(), "gpu-present");
+  (void)setpriority(PRIO_PROCESS, (id_t)gettid(), -4); /* Android's display priority; refused stays as is */
 #endif
   vk__presenterLock(presenter);
   for (;;) {
-    while (!presenter->count && !presenter->stopping) {
-      vk__presenterWait(presenter);
+    /* idle with timings pending: a read every few milliseconds */
+    read = false;
+    while ((!presenter->count || presenter->busy) && !presenter->stopping) {
+      if (!vk__presenterWait(presenter, presenter->swapchain->timingCount ? 8u : 0u)
+          && !presenter->busy && !presenter->count && presenter->swapchain->timingCount) {
+        read = true;
+        break;
+      }
     }
 
-    if (!presenter->count) {
-      break; /* stopping, every present issued */
+    if (presenter->stopping && !presenter->count) {
+      break; /* every present issued */
     }
 
-    wait                  = presenter->waits[presenter->head];
-    imageIndex            = presenter->images[presenter->head];
-    presenter->head       = (presenter->head + 1u) % GPU_VK_PRESENT_RING;
-    presenter->count--;
-    presenter->presenting = true;
+    present = presenter->count && !presenter->busy;
+    if (present) {
+      wait       = presenter->waits[presenter->head];
+      feedback   = presenter->feedbacks[presenter->head];
+      imageIndex = presenter->images[presenter->head];
+      presenter->feedbacks[presenter->head] = NULL;
+      presenter->head = (presenter->head + 1u) % GPU_VK_PRESENT_RING;
+      presenter->count--;
+    } else if (!read) {
+      continue;
+    }
+
+    presenter->busy = true;
     vk__presenterUnlock(presenter);
 
-    (void)vk__presentNow(presenter->swapchain, presenter->swapchain->queue, wait, imageIndex);
+    if (present) {
+      (void)vk__presentNow(presenter->swapchain, presenter->swapchain->queue, wait, imageIndex, feedback);
+      if (feedback) {
+        frameFeedbackRelease(feedback);
+      }
+    } else {
+      vk__timingsRead(presenter->swapchain);
+    }
 
     vk__presenterLock(presenter);
-    presenter->presenting = false;
+    presenter->busy = false;
     vk__presenterSignal(presenter);
   }
 
@@ -679,20 +833,31 @@ vk__destroyPresenter(GPUSwapchainVk *swapchain) {
 
 GPU_HIDE
 VkResult
-vk_presentFrame(GPUSwapchainVk *swapchain, GPUQueueVk *queue, VkSemaphore wait, uint32_t imageIndex) {
+vk_presentFrame(GPUSwapchainVk   *swapchain,
+                GPUQueueVk       *queue,
+                VkSemaphore       wait,
+                uint32_t          imageIndex,
+                GPUFrameFeedback *feedback) {
   GPUPresenterVk *presenter;
+  uint32_t        slot;
 
   if (!(presenter = swapchain->presenter)) {
-    return vk__presentNow(swapchain, queue, wait, imageIndex);
+    return vk__presentNow(swapchain, queue, wait, imageIndex, feedback);
+  }
+
+  if (feedback) {
+    frameFeedbackRetain(feedback); /* the command buffer's goes at its completion */
   }
 
   vk__presenterLock(presenter);
   while (presenter->count == GPU_VK_PRESENT_RING) {
-    vk__presenterWait(presenter);
+    vk__presenterWait(presenter, 0u);
   }
 
-  presenter->waits[(presenter->head + presenter->count) % GPU_VK_PRESENT_RING]  = wait;
-  presenter->images[(presenter->head + presenter->count) % GPU_VK_PRESENT_RING] = imageIndex;
+  slot = (presenter->head + presenter->count) % GPU_VK_PRESENT_RING;
+  presenter->waits[slot]     = wait;
+  presenter->feedbacks[slot] = feedback;
+  presenter->images[slot]    = imageIndex;
   presenter->count++;
   vk__presenterSignal(presenter);
   vk__presenterUnlock(presenter);
@@ -703,7 +868,7 @@ vk_presentFrame(GPUSwapchainVk *swapchain, GPUQueueVk *queue, VkSemaphore wait, 
 
 GPU_HIDE
 void
-vk_presentsIssued(GPUSwapchainVk *swapchain) {
+vk_swapchainClaim(GPUSwapchainVk *swapchain) {
   GPUPresenterVk *presenter;
 
   if (!swapchain || !(presenter = swapchain->presenter)) {
@@ -711,10 +876,26 @@ vk_presentsIssued(GPUSwapchainVk *swapchain) {
   }
 
   vk__presenterLock(presenter);
-  while (presenter->count || presenter->presenting) {
-    vk__presenterWait(presenter);
+  while (presenter->count || presenter->busy) {
+    vk__presenterWait(presenter, 0u);
   }
 
+  presenter->busy = true;
+  vk__presenterUnlock(presenter);
+}
+
+GPU_HIDE
+void
+vk_swapchainUnclaim(GPUSwapchainVk *swapchain) {
+  GPUPresenterVk *presenter;
+
+  if (!swapchain || !(presenter = swapchain->presenter)) {
+    return;
+  }
+
+  vk__presenterLock(presenter);
+  presenter->busy = false;
+  vk__presenterSignal(presenter);
   vk__presenterUnlock(presenter);
 }
 
@@ -729,7 +910,7 @@ vk_presenterIdle(GPUSwapchainVk *swapchain) {
   }
 
   vk__presenterLock(presenter);
-  idle = !presenter->count && !presenter->presenting;
+  idle = !presenter->count && !presenter->busy;
   vk__presenterUnlock(presenter);
   return idle;
 }
@@ -740,7 +921,6 @@ vk__waitResourcesIdle(GPUSwapchainVk *swapchain) {
     return false;
   }
 
-  vk_presentsIssued(swapchain);
   vk_waitSwapchainIdle(swapchain);
 
   return vk__waitPresent(swapchain) || vkDeviceWaitIdle(swapchain->device) == VK_SUCCESS;
@@ -874,17 +1054,21 @@ vk__createResources(GPUSwapchain  *swapchainObj,
 
 GPU_HIDE
 VkResult
-vk_presentSwapchain(GPUSwapchainVk *swapchain,
-                    VkQueue         queue,
-                    VkSemaphore     waitSemaphore,
-                    uint32_t        imageIndex) {
-  VkPresentInfoKHR info   = {0};
+vk_presentSwapchain(GPUSwapchainVk   *swapchain,
+                    VkQueue           queue,
+                    VkSemaphore       waitSemaphore,
+                    uint32_t          imageIndex,
+                    GPUFrameFeedback *feedback) {
+  VkPresentInfoKHR         info      = {0};
+  VkPresentTimesInfoGOOGLE timesInfo = {0};
+  VkPresentTimeGOOGLE      time      = {0};
+  GPUDeviceVk             *timing;
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
-  VkPresentIdKHR   idInfo = {0};
-  GPUDeviceVk     *device;
-  uint64_t         presentId;
+  VkPresentIdKHR           idInfo    = {0};
+  GPUDeviceVk             *device;
+  uint64_t                 presentId;
 #endif
-  VkResult         result;
+  VkResult                 result;
 
   if (!swapchain || !queue || !waitSemaphore || imageIndex >= swapchain->imageCount) {
     return VK_ERROR_INITIALIZATION_FAILED;
@@ -908,8 +1092,24 @@ vk_presentSwapchain(GPUSwapchainVk *swapchain,
   }
 #endif
 
+  /* a watched frame's present carries an id its display time comes back by */
+  timing = feedback && swapchain->gpuDevice ? swapchain->gpuDevice->_priv : NULL;
+  if (timing && timing->getPastTiming) {
+    time.presentID            = vk__timingPush(swapchain, feedback);
+    timesInfo.sType           = VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE;
+    timesInfo.pNext           = info.pNext;
+    timesInfo.swapchainCount  = 1u;
+    timesInfo.pTimes          = &time;
+    info.pNext                = &timesInfo;
+  } else if (feedback) {
+    frameFeedbackPresent(feedback, 0.0);
+  }
+
   result = vkQueuePresentKHR(queue, &info);
   vk_setSwapchainStatus(swapchain, result);
+  if (time.presentID && result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+    vk__timingDrop(swapchain);
+  }
 #if defined(VK_KHR_present_id) && defined(VK_KHR_present_wait)
   if (device && device->presentWait) {
     if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
@@ -1009,9 +1209,13 @@ vk_resizeSwapchain(GPUSwapchain *swapchainObj, GPUExtent2D size) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  vk_swapchainClaim(swapchain);
   if (!vk__waitResourcesIdle(swapchain)) {
+    vk_swapchainUnclaim(swapchain);
     return GPU_ERROR_BACKEND_FAILURE;
   }
+
+  vk__timingsFinish(swapchain); /* the old VkSwapchainKHR answers no more */
 
   memset(&replacement, 0, sizeof(replacement));
   replacement.gpuDevice           = swapchain->gpuDevice;
@@ -1024,7 +1228,7 @@ vk_resizeSwapchain(GPUSwapchain *swapchainObj, GPUExtent2D size) {
   replacement.requestedImageCount = swapchain->requestedImageCount;
   replacement.gpuFormat           = swapchain->gpuFormat;
   replacement.presentMode         = swapchain->presentMode;
-  replacement.presenter           = swapchain->presenter; /* idle: waited for above */
+  replacement.presenter           = swapchain->presenter; /* claimed above */
   replacementObj                  = *swapchainObj;
   replacementObj._priv            = &replacement;
 
@@ -1032,6 +1236,7 @@ vk_resizeSwapchain(GPUSwapchain *swapchainObj, GPUExtent2D size) {
                            size.width,
                            size.height,
                            swapchain->swapchain)) {
+    vk_swapchainUnclaim(swapchain);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -1043,6 +1248,7 @@ vk_resizeSwapchain(GPUSwapchain *swapchainObj, GPUExtent2D size) {
     swapchain->nativeViews[i].swapchain = swapchain;
   }
 
+  vk_swapchainUnclaim(swapchain);
   return GPU_OK;
 }
 
@@ -1059,8 +1265,10 @@ vk_destroySwapchain(GPUSwapchain *swapchainObj) {
 
   if (swapchain) {
     vk_settleAcquiredFrame(swapchain);
+    vk_swapchainClaim(swapchain);
     (void)vk__waitResourcesIdle(swapchain);
     vk__destroyPresenter(swapchain);
+    vk__timingsFinish(swapchain);
     vk__destroyResources(swapchain);
     free(swapchain);
   }

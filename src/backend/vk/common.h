@@ -354,6 +354,7 @@ typedef struct GPUDeviceVk {
   pthread_mutex_t                                presentLock;
 #endif
   VkQueue                                        presentQueue;     /* the graphics family's queue past GPU-C's, NULL: none */
+  PFN_vkGetPastPresentationTimingGOOGLE          getPastTiming;    /* VK_GOOGLE_display_timing: frame feedback */
   bool                                           classicRenderLockInitialized;
   bool                                           presentLockInitialized;
   bool                                           presentThread;    /* swapchains present on a thread of their own */
@@ -559,6 +560,8 @@ typedef struct GPUSemaphoreVk {
 typedef struct GPUQueueVk         GPUQueueVk;
 typedef struct GPUCommandBufferVk GPUCommandBufferVk;
 typedef struct GPUSwapchainVk     GPUSwapchainVk;
+
+enum { GPU_VK_TIMING_RING = 16u }; /* watched presents awaiting their display time */
 typedef struct GPUFrameSyncVk     GPUFrameSyncVk;
 typedef struct GPUTextureViewVk   GPUTextureViewVk;
 
@@ -854,6 +857,11 @@ struct GPUSwapchainVk {
   bool              frameSubmitted;
   bool              imageAcquired;   /* a paced frame acquires at its first use */
   struct GPUPresenterVk *presenter; /* presents off the submitting thread; NULL: in the submit */
+  struct GPUFrameFeedback *timingFeedbacks[GPU_VK_TIMING_RING]; /* by present id, oldest first */
+  uint32_t          timingIds[GPU_VK_TIMING_RING];
+  uint32_t          timingHead;
+  uint32_t          timingCount;
+  uint32_t          timingNextId;
 };
 
 typedef struct GPUShaderLibraryVk {
@@ -1075,16 +1083,25 @@ void
 vk_settleAcquiredFrame(GPUSwapchainVk *swapchain);
 
 /* the frame's present: queued for the swapchain's present thread, or made now
- * on `queue` (under its submit lock) without one */
+ * on `queue` (under its submit lock) without one; a watched frame's feedback */
 GPU_HIDE
 VkResult
-vk_presentFrame(GPUSwapchainVk *swapchain, GPUQueueVk *queue, VkSemaphore wait, uint32_t imageIndex);
+vk_presentFrame(GPUSwapchainVk          *swapchain,
+                GPUQueueVk              *queue,
+                VkSemaphore              wait,
+                uint32_t                 imageIndex,
+                struct GPUFrameFeedback *feedback);
 
-/* every queued present issued: before the swapchain is acquired from, waited
- * on, resized or destroyed (calls on it are externally synchronized) */
+/* the swapchain to the caller alone, once every queued present is issued:
+ * around an acquire, a present-wait, a resize or destroy (calls on one
+ * swapchain are externally synchronized); nothing without a present thread */
 GPU_HIDE
 void
-vk_presentsIssued(GPUSwapchainVk *swapchain);
+vk_swapchainClaim(GPUSwapchainVk *swapchain);
+
+GPU_HIDE
+void
+vk_swapchainUnclaim(GPUSwapchainVk *swapchain);
 
 /* nothing queued or in progress, looked at without waiting */
 GPU_HIDE
@@ -1093,10 +1110,11 @@ vk_presenterIdle(GPUSwapchainVk *swapchain);
 
 GPU_HIDE
 VkResult
-vk_presentSwapchain(GPUSwapchainVk *swapchain,
-                    VkQueue         queue,
-                    VkSemaphore     waitSemaphore,
-                    uint32_t        imageIndex);
+vk_presentSwapchain(GPUSwapchainVk          *swapchain,
+                    VkQueue                  queue,
+                    VkSemaphore              waitSemaphore,
+                    uint32_t                 imageIndex,
+                    struct GPUFrameFeedback *feedback);
 
 /* a VkQueue is used by one thread at a time: submits, presents and sparse
  * binds hold its queue's submit lock (recursive) */
