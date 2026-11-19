@@ -480,8 +480,12 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
   }
 #endif
 
+  /* wherever offered: without 16-bit arithmetic USL keeps buffers of
+   * 16-bit lanes native through it */
   if (strcmp(name, VK_KHR_16BIT_STORAGE_EXTENSION_NAME) == 0) {
-    return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
+    return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16)
+           || (adapter && (adapter->storageBuffer16BitAccess || adapter->uniformAndStorageBuffer16BitAccess
+                           || adapter->storagePushConstant16));
   }
 
   if (strcmp(name, VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME) == 0) {
@@ -3401,21 +3405,23 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
     float16Features.shaderFloat16 = VK_TRUE;
     float16Features.shaderInt8    = adapterVk->shaderInt8;
     deviceCI.pNext                = &float16Features;
+  }
 
-    /* half in uniform blocks too, and in the Uniform class's buffer blocks
-     * (SPIR-V before 1.3) */
-    if (adapterVk->storageBuffer16BitAccess
-        || adapterVk->uniformAndStorageBuffer16BitAccess
-        || adapterVk->storageInputOutput16
-        || adapterVk->storagePushConstant16) {
-      storage16Features.sType                              = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
-      storage16Features.pNext                              = (void *)deviceCI.pNext;
-      storage16Features.storageBuffer16BitAccess           = adapterVk->storageBuffer16BitAccess;
-      storage16Features.uniformAndStorageBuffer16BitAccess = adapterVk->uniformAndStorageBuffer16BitAccess;
-      storage16Features.storageInputOutput16               = adapterVk->storageInputOutput16;
-      storage16Features.storagePushConstant16              = adapterVk->storagePushConstant16;
-      deviceCI.pNext                                       = &storage16Features;
-    }
+  /* 16-bit storage wherever offered: half and 16-bit integers in buffers,
+   * uniform blocks (and the Uniform class's buffer blocks before SPIR-V
+   * 1.3) and push constants, with 16-bit arithmetic or without it (USL
+   * then computes in 32 bits and loads and stores the lanes) */
+  if (adapterVk->storageBuffer16BitAccess
+      || adapterVk->uniformAndStorageBuffer16BitAccess
+      || adapterVk->storageInputOutput16
+      || adapterVk->storagePushConstant16) {
+    storage16Features.sType                              = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES;
+    storage16Features.pNext                              = (void *)deviceCI.pNext;
+    storage16Features.storageBuffer16BitAccess           = adapterVk->storageBuffer16BitAccess;
+    storage16Features.uniformAndStorageBuffer16BitAccess = adapterVk->uniformAndStorageBuffer16BitAccess;
+    storage16Features.storageInputOutput16               = adapterVk->storageInputOutput16;
+    storage16Features.storagePushConstant16              = adapterVk->storagePushConstant16;
+    deviceCI.pNext                                       = &storage16Features;
   }
 
   if (adapterVk->storageBuffer8BitAccess
