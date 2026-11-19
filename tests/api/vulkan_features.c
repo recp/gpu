@@ -26,9 +26,12 @@ static VkBool32 requestedStorage;
 static VkBool32 requestedF16;
 static uint32_t creates;
 static uint32_t modules;
+static bool     lastFloat16; /* the last module declared the Float16 capability */
 
+/* every library compiles: without shader_f16 USL emulates halves in 32-bit
+ * words, so only native halves declare Float16 */
 static void
-check_library(GPUDevice *device, const char *path, bool supported) {
+check_library(GPUDevice *device, const char *path, bool nativeHalves) {
   GPUShaderLibraryCreateInfo info = {0};
   GPUShaderLibrary          *library = NULL;
   void                      *bytes;
@@ -42,10 +45,11 @@ check_library(GPUDevice *device, const char *path, bool supported) {
   info.sourceSize       = size;
   info.disableDiskCache = true;
   before                = modules;
+  lastFloat16           = false;
   result                = GPUCreateShaderLibrary(device, &info, &library);
-  assert(result == (supported ? GPU_OK : GPU_ERROR_UNSUPPORTED));
-  assert((library != NULL) == supported);
-  assert(modules == before + (supported ? 1u : 0u));
+  assert(result == GPU_OK && library);
+  assert(modules == before + 1u);
+  assert(lastFloat16 == nativeHalves);
   GPUDestroyShaderLibrary(library);
   free(bytes);
 }
@@ -56,8 +60,23 @@ vkCreateShaderModule(VkDevice                         device,
                      const VkAllocationCallbacks     *allocator,
                      VkShaderModule                  *module) {
   PFN_vkCreateShaderModule create;
+  const uint32_t          *code;
+  size_t                   count;
+  size_t                   at;
+  uint32_t                 length;
 
   modules++;
+  code        = info->pCode;
+  count       = info->codeSize / sizeof(*code);
+  lastFloat16 = false;
+
+  /* OpCapability (17) Float16 (9) */
+  for (at = 5u; at < count; at += length) {
+    if (!(length = code[at] >> 16u))
+      break;
+    if ((code[at] & 0xffffu) == 17u && length == 2u && at + 1u < count && code[at + 1u] == 9u)
+      lastFloat16 = true;
+  }
   create = (PFN_vkCreateShaderModule)dlsym(RTLD_NEXT, "vkCreateShaderModule");
   assert(create && create != vkCreateShaderModule);
 
@@ -139,11 +158,12 @@ main(int argc, char **argv) {
   assert(requestedIO == (native && supportedIO));
   assert(requestedStorage == (native && supportedStorage));
   assert(requestedF16 == native);
-  /* half stage values need shader_f16; without storageInputOutput16 they travel as f32. */
+  /* half code: native halves with shader_f16 (stage values as f32 without
+   * storageInputOutput16), halves in 32-bit words without it */
   check_library(device, argv[2], native);
   check_library(device, argv[3], native);
 
-  check_library(device, argv[4], true);
+  check_library(device, argv[4], false);
   printf("{\"f16\":%u,\"requestedF16\":%u,\"supportedIO\":%u,\"requestedIO\":%u,"
          "\"requestedStorage\":%u,\"creates\":%u,\"modules\":%u}\n",
          native, requestedF16, supportedIO, requestedIO, requestedStorage, creates, modules);
