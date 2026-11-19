@@ -162,12 +162,23 @@ vk_bufferMemoryType(GPUDevice             *device,
                            outFlags))
     return true;
 
-  return vk_findMemoryType(device,
-                           typeBits,
-                           hostVisible ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                           hostVisible ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0u,
-                           outIndex,
-                           outFlags);
+  /* an integrated GPU's memory is the host's: a device buffer there where the host sees it too, as every buffer is
+   * on Metal, so a write into a new one is a copy into its mapping, not a staging buffer, a copy command and a
+   * submit (vk_writeBuffer keeps the queue's order for one in use) */
+  {
+    GPUAdapterVk *adapterVk = device && device->adapter ? device->adapter->_priv : NULL;
+    bool          unified   = !hostVisible && adapterVk
+                              && adapterVk->props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
+
+    return vk_findMemoryType(device,
+                             typeBits,
+                             hostVisible ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                             hostVisible ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                             : unified   ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                                         : 0u,
+                             outIndex,
+                             outFlags);
+  }
 }
 
 static GPUResult
