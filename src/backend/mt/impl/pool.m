@@ -244,10 +244,11 @@ mt_placeResource(GPUDeviceMT          *deviceMT,
   resource = nil;
   os_unfair_lock_lock(&pool->lock);
 
+  /* placed straight in each heap, the newest first: one where it doesn't fit gives nil. asking each heap's largest
+     free range first walked its free list (most of a small buffer's create once a heap held thousands) */
   for (i = pool->count[kind]; i > 0u && !resource; i--) {
-    heap = pool->heaps[kind][i - 1u];
-    if ([heap maxAvailableSizeWithAlignment:sizeAndAlign.align] >= sizeAndAlign.size)
-      resource = mt_placeIn(heap, desc, length);
+    heap     = pool->heaps[kind][i - 1u];
+    resource = mt_placeIn(heap, desc, length);
   }
 
   if (!resource && pool->count[kind] == MT_POOL_MAX_HEAPS) {
