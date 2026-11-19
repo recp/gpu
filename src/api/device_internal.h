@@ -82,7 +82,12 @@ enum {
  * names its device, a type without its bit is emulated in 32-bit words */
 enum {
   GPU_USL_WIDE_INT64 = 1u << 0,
-  GPU_USL_WIDE_F64   = 1u << 1
+  GPU_USL_WIDE_F64   = 1u << 1,
+
+  /* native 8/16-bit integer arithmetic (uslNarrowInt): USL emulates the
+   * others in 32-bit values */
+  GPU_USL_INT8  = 1u << 0,
+  GPU_USL_INT16 = 1u << 1
 };
 
 struct GPUDevice {
@@ -136,6 +141,7 @@ struct GPUDevice {
   uint8_t                     uslNarrowStorage; /* GPU_USL_NARROW_*: classes keeping 8/16-bit data narrow */
   uint8_t                     uslSubgroupOps;   /* GPU_USL_SUBGROUP_* */
   uint8_t                     uslWide64;        /* GPU_USL_WIDE_* */
+  uint8_t                     uslNarrowInt;     /* GPU_USL_INT8, GPU_USL_INT16 */
   bool                        uslPortabilitySubset; /* VK_KHR_portability_subset: 64-bit division in words */
   bool                        uslIOF16;
   bool                        uslCubeGradFixup;

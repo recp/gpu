@@ -182,6 +182,7 @@ typedef struct GPUAdapterVk {
   bool                                                  portabilitySubset; /* VK_KHR_portability_subset */
   bool                                                  dynamicRendering;
   bool                                                  shaderFloat16;
+  bool                                                  shaderInt8;
   bool                                                  storageBuffer16BitAccess;
   bool                                                  uniformAndStorageBuffer16BitAccess;
   bool                                                  storageInputOutput16;

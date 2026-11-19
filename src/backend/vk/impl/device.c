@@ -463,8 +463,9 @@ vk_extensionEnabled(const GPUAdapterVk *adapter,
   executionGraph     = vk_featureEnabled(enabledFeatureMask,
                                          GPU_FEATURE_EXECUTION_GRAPH);
 
+  /* also for 8-bit integers, which USL otherwise keeps in 32-bit values */
   if (strcmp(name, VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME) == 0) {
-    return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16);
+    return vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16) || (adapter && adapter->shaderInt8);
   }
 
 #ifdef VK_EXT_external_memory_host
@@ -1829,6 +1830,7 @@ vk_newAdapter(GPUInstance * __restrict inst, VkPhysicalDevice raw) {
     getFeatures2(raw, &float16Features2);
 
     adapterVk->shaderFloat16 = float16Features.shaderFloat16;
+    adapterVk->shaderInt8    = float16Features.shaderInt8;
   }
 
   if (getFeatures2 && (storage16Core || storage16Extension)) {
@@ -3358,8 +3360,8 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
     coreFeatures.shaderInt64 = VK_TRUE;
   }
 
-  if (vk_featureEnabled(enabledFeatureMask, GPU_FEATURE_SHADER_F16)
-      && adapterVk->features.shaderInt16) {
+  /* native 16-bit integers wherever offered: USL emulates them otherwise */
+  if (adapterVk->features.shaderInt16) {
     coreFeatures.shaderInt16 = VK_TRUE;
   }
 
@@ -3385,10 +3387,19 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   }
 #endif
 
+  /* native 8-bit integers wherever offered, as for 16-bit ones */
+  if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) == 0u && adapterVk->shaderInt8) {
+    float16Features.sType      = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
+    float16Features.pNext      = (void *)deviceCI.pNext;
+    float16Features.shaderInt8 = VK_TRUE;
+    deviceCI.pNext             = &float16Features;
+  }
+
   if ((enabledFeatureMask & (1ull << GPU_FEATURE_SHADER_F16)) != 0u) {
     float16Features.sType         = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
     float16Features.pNext         = (void *)deviceCI.pNext;
     float16Features.shaderFloat16 = VK_TRUE;
+    float16Features.shaderInt8    = adapterVk->shaderInt8;
     deviceCI.pNext                = &float16Features;
 
     /* half in uniform blocks too, and in the Uniform class's buffer blocks
@@ -3717,6 +3728,8 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   device->uslQualcommCompiler = adapterVk->qualcommCompiler;
   device->uslWide64           = (coreFeatures.shaderInt64 ? GPU_USL_WIDE_INT64 : 0u)
                               | (coreFeatures.shaderFloat64 ? GPU_USL_WIDE_F64 : 0u);
+  device->uslNarrowInt        = (coreFeatures.shaderInt16 ? GPU_USL_INT16 : 0u)
+                              | (float16Features.shaderInt8 ? GPU_USL_INT8 : 0u);
   device->uslPortabilitySubset = adapterVk->portabilitySubset;
 #ifdef VK_EXT_shader_atomic_float
   device->uslFloatAtomicAdd = (floatAtomicFeatures.shaderBufferFloat32AtomicAdd ? 1u : 0u) |

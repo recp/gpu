@@ -2965,6 +2965,22 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
+    /* native 8/16-bit integers; USL keeps the others in 32-bit values */
+    if (((device->uslNarrowInt & GPU_USL_INT8)
+         && us_cap_atom_init(&targetAtoms[targetAtomCount++],
+                             USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+                             USL_SEMANTIC_FEATURE_ID_SHADER_INT8,
+                             0u,
+                             0u) != USLOk)
+        || ((device->uslNarrowInt & GPU_USL_INT16)
+            && us_cap_atom_init(&targetAtoms[targetAtomCount++],
+                                USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE,
+                                USL_SEMANTIC_FEATURE_ID_SHADER_INT16,
+                                0u,
+                                0u) != USLOk)) {
+      return GPU_ERROR_BACKEND_FAILURE;
+    }
+
     /* a portability-subset device: native Int64, 64-bit division in 32-bit
      * words, the faster form there */
     if (device->uslPortabilitySubset
