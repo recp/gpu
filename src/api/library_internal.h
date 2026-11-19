@@ -154,6 +154,24 @@ GPU_HIDE
 GPUShaderLibrary *
 shaderLibraryForLayout(GPUShaderLibrary *library, GPUPipelineLayout *layout);
 
+/* texel reads: whether the library reads any array through views; its USL bytecode (kept for texel reads); a
+ * library compiled from that bytecode without the atom (the plain module a range views can't hold runs on) */
+GPU_HIDE
+bool
+shaderLibraryTexelReads(const GPUShaderLibrary *library);
+
+GPU_HIDE
+bool
+shaderLibraryBytecode(const GPUShaderLibrary *library, const void **outData, uint64_t *outSize, bool *outNoDiskCache);
+
+GPU_HIDE
+GPUResult
+shaderLibraryCreatePlain(GPUDevice        *device,
+                         const void       *bytecode,
+                         uint64_t          bytecodeSize,
+                         bool              disableDiskCache,
+                         GPUShaderLibrary **outLibrary);
+
 /* the library's hold on its shared shader layout let go (its destroy) */
 GPU_HIDE
 void

@@ -4,7 +4,8 @@ kern(64) texel_reads(w: [uint4] #buffer(0),
                      s: [float] #buffer(2),
                      wout: &mut [uint4] #buffer(3),
                      fout: &mut [float4] #buffer(4),
+                     h: [half] #buffer(5),
                      i: uint #global_id) {
   wout[i] = w[i]
-  fout[i] = float4(x[i]) + float4(s[i])
+  fout[i] = float4(x[i]) + float4(s[i]) + float4(float(h[i]))
 }

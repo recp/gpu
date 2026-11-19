@@ -36,6 +36,7 @@ struct GPUComputePipeline {
   GPUShaderStageFlags  _pushConstantStages;
   uint32_t             _refCount;
   struct ComputeCompileJob *_compile; /* set once: compiled on the device's threads */
+  struct ComputeTexelTwin  *_texelTwin; /* texel reads: its plain twin for ranges views can't hold */
 };
 
 /* the compiled pipeline behind one made for a background compile (waits

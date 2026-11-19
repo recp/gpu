@@ -713,6 +713,227 @@ GPUWaitComputePipeline(GPUComputePipeline *pipeline) {
   return pipeline->_compile->status;
 }
 
+/* texel reads per bound range: what a pipeline reading through views needs to run the plain module instead. Its
+ * layout twins are made with it; the plain library and pipeline at the first dispatch with a range a view can't
+ * hold (a group marked texelPlain), then kept */
+typedef struct ComputeTexelTwin {
+  GPUDevice          *device;
+  void               *bytecode;
+  uint64_t            bytecodeSize;
+  char               *entryPoint;
+  GPUConstant        *constants;
+  uint32_t            constantCount;
+  bool                disableDiskCache;
+  GPUPipelineLayout  *layout;                                   /* the pipeline layout over the plain group layouts */
+  GPUBindGroupLayout *groupLayouts[GPU_ENCODER_MAX_BIND_GROUPS]; /* the plain copies; NULL where none had views */
+  GPUShaderLibrary   *library;
+  GPUComputePipeline *pipeline;
+} ComputeTexelTwin;
+
+static void
+computeTexelTwinFree(ComputeTexelTwin *twin) {
+  uint32_t i;
+
+  if (!twin)
+    return;
+
+  if (twin->pipeline)
+    GPUDestroyComputePipeline(twin->pipeline);
+  if (twin->library)
+    GPUDestroyShaderLibrary(twin->library);
+  if (twin->layout)
+    GPUDestroyPipelineLayout(twin->layout);
+  for (i = 0u; i < GPU_ENCODER_MAX_BIND_GROUPS; i++)
+    if (twin->groupLayouts[i])
+      GPUDestroyBindGroupLayout(twin->groupLayouts[i]);
+
+  free(twin->bytecode);
+  free(twin->entryPoint);
+  free(twin->constants);
+  free(twin);
+}
+
+static ComputeTexelTwin *
+computeTexelTwinPrepare(GPUDevice *device, const GPUComputePipelineCreateInfo *info) {
+  GPUPipelineLayoutCreateInfo   layoutInfo = {0};
+  GPUBindGroupLayout           *groups[GPU_ENCODER_MAX_BIND_GROUPS];
+  const GPUPipelineLayoutPriv  *pipeline;
+  const GPUPipelineConstants   *constants = NULL;
+  const GPUChainedStruct       *chain;
+  ComputeTexelTwin             *twin;
+  const void                   *bytecode;
+  uint64_t                      size;
+  bool                          noDiskCache;
+  uint32_t                      i;
+
+  if (!(pipeline = info->layout->_priv) || pipeline->bindGroupLayoutCount > GPU_ENCODER_MAX_BIND_GROUPS
+      || !shaderLibraryBytecode(info->library, &bytecode, &size, &noDiskCache) || !size
+      || !(twin = calloc(1u, sizeof(*twin))))
+    return NULL;
+
+  for (chain = info->chain.pNext; chain; chain = chain->pNext)
+    if (chain->sType == GPU_STRUCTURE_TYPE_PIPELINE_CONSTANTS)
+      constants = (const GPUPipelineConstants *)chain;
+
+  twin->device           = device;
+  twin->bytecodeSize     = size;
+  twin->disableDiskCache = noDiskCache;
+  twin->constantCount    = constants ? constants->constantCount : 0u;
+
+  if (!(twin->bytecode = malloc((size_t)size)) || !(twin->entryPoint = malloc(strlen(info->entryPoint) + 1u))
+      || (twin->constantCount && (!constants->pConstants
+                                  || !(twin->constants = malloc(twin->constantCount * sizeof(GPUConstant)))))) {
+    computeTexelTwinFree(twin);
+    return NULL;
+  }
+
+  memcpy(twin->bytecode, bytecode, (size_t)size);
+  memcpy(twin->entryPoint, info->entryPoint, strlen(info->entryPoint) + 1u);
+
+  if (twin->constantCount)
+    memcpy(twin->constants, constants->pConstants, twin->constantCount * sizeof(GPUConstant));
+
+  for (i = 0u; i < pipeline->bindGroupLayoutCount; i++) {
+    groups[i] = pipeline->bindGroupLayouts[i];
+
+    if (groups[i] && bindGroupLayoutHasTexelViews(groups[i])) {
+      if (!(twin->groupLayouts[i] = bindGroupLayoutPlainCopy(groups[i]))) {
+        computeTexelTwinFree(twin);
+        return NULL;
+      }
+
+      groups[i] = twin->groupLayouts[i];
+    }
+  }
+
+  layoutInfo.chain.sType           = GPU_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  layoutInfo.chain.structSize      = sizeof(layoutInfo);
+  layoutInfo.ppBindGroupLayouts    = groups;
+  layoutInfo.bindGroupLayoutCount  = pipeline->bindGroupLayoutCount;
+  layoutInfo.pushConstantSizeBytes = pipeline->pushConstantSizeBytes;
+  layoutInfo.pushConstantStages    = pipeline->pushConstantStages;
+
+  if (GPUCreatePipelineLayout(device, &layoutInfo, &twin->layout) != GPU_OK) {
+    twin->layout = NULL;
+    computeTexelTwinFree(twin);
+    return NULL;
+  }
+
+  return twin;
+}
+
+/* the twin's pipeline, made at the first dispatch that needs it (the library and pipeline together, once) */
+static GPUComputePipeline *
+computeTexelTwinPipeline(ComputeTexelTwin *twin) {
+  GPUComputePipelineCreateInfo info      = {0};
+  GPUPipelineConstants         constants = {0};
+  GPUShaderLibrary            *library   = NULL;
+  GPUComputePipeline          *pipeline  = NULL;
+  GPUComputePipeline          *expected;
+
+#if defined(_MSC_VER) && !defined(__clang__)
+  if ((pipeline = InterlockedCompareExchangePointer((PVOID volatile *)&twin->pipeline, NULL, NULL)))
+    return computePipelineResolve(pipeline);
+#else
+  if ((pipeline = __atomic_load_n(&twin->pipeline, __ATOMIC_ACQUIRE)))
+    return computePipelineResolve(pipeline);
+#endif
+
+  if (shaderLibraryCreatePlain(twin->device, twin->bytecode, twin->bytecodeSize, twin->disableDiskCache, &library)
+        != GPU_OK || !library)
+    return NULL;
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.library          = library;
+  info.layout           = twin->layout;
+  info.entryPoint       = twin->entryPoint;
+
+  if (twin->constantCount) {
+    constants.chain.sType      = GPU_STRUCTURE_TYPE_PIPELINE_CONSTANTS;
+    constants.chain.structSize = sizeof(constants);
+    constants.pConstants       = twin->constants;
+    constants.constantCount    = twin->constantCount;
+    info.chain.pNext           = &constants.chain;
+  }
+
+  if (GPUCreateComputePipeline(twin->device, &info, &pipeline) != GPU_OK || !pipeline) {
+    GPUDestroyShaderLibrary(library);
+    return NULL;
+  }
+
+  expected = NULL;
+#if defined(_MSC_VER) && !defined(__clang__)
+  if ((expected = InterlockedCompareExchangePointer((PVOID volatile *)&twin->pipeline, pipeline, NULL)) != NULL) {
+#else
+  if (!__atomic_compare_exchange_n(&twin->pipeline, &expected, pipeline, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+#endif
+    GPUDestroyComputePipeline(pipeline);
+    GPUDestroyShaderLibrary(library);
+    return computePipelineResolve(expected);
+  }
+
+  twin->library = library; /* published with the pipeline: one creator gets here */
+  return computePipelineResolve(pipeline);
+}
+
+/* before a dispatch: a required group whose range a view can't hold runs the plain twin, every bound group as its
+ * plain twin; once none does, the pipeline and groups the app bound come back */
+static bool
+computeTexelRoute(GPUComputePassEncoder *pass, GPUApi *api) {
+  ComputeTexelTwin   *twin = pass->_texelTwin;
+  GPUComputePipeline *pipeline;
+  GPUBindGroup       *group;
+  uint32_t            mask, g;
+  bool                plain;
+
+  mask  = pass->_requiredBindGroupMask;
+  plain = twin && (pass->_texelPlainGroups & mask) != 0u;
+
+  if (!plain && !pass->_texelTwinBound)
+    return true;
+
+  if (!api->compute.setComputePipelineState || !api->descriptor.bindComputeGroup)
+    return false;
+
+  if (plain) {
+    if (!(pipeline = computeTexelTwinPipeline(twin)) || !pipeline->_state) {
+      computeValidationError(pass, "dispatch skipped: no plain pipeline for a range texel views can't hold");
+      return false;
+    }
+
+    api->compute.setComputePipelineState(pass, pipeline->_state);
+
+    for (g = 0u; g < GPU_ENCODER_MAX_BIND_GROUPS; g++) {
+      if (!(mask & (1u << g)) || !(group = pass->_boundGroups[g]))
+        continue;
+
+      if (twin->groupLayouts[g] && !(group = bindGroupPlainTwin(group, twin->groupLayouts[g]))) {
+        computeValidationError(pass, "dispatch skipped: no plain bind group for a range texel views can't hold");
+        return false;
+      }
+
+      api->descriptor.bindComputeGroup(pass, twin->layout, g, group, pass->_boundDynamicOffsetCounts[g],
+                                       pass->_boundDynamicOffsets[g]);
+    }
+
+    pass->_texelTwinBound = true;
+    return true;
+  }
+
+  /* back to what the app bound */
+  api->compute.setComputePipelineState(pass, ((GPUComputePipeline *)pass->_pipeline)->_state);
+
+  for (g = 0u; g < GPU_ENCODER_MAX_BIND_GROUPS; g++) {
+    if ((mask & (1u << g)) && (group = pass->_boundGroups[g]))
+      api->descriptor.bindComputeGroup(pass, pass->_pipelineLayout, g, group, pass->_boundDynamicOffsetCounts[g],
+                                       pass->_boundDynamicOffsets[g]);
+  }
+
+  pass->_texelTwinBound = false;
+  return true;
+}
+
 GPU_EXPORT
 void
 GPUDestroyComputePipeline(GPUComputePipeline *pipeline) {
@@ -726,6 +947,9 @@ GPUDestroyComputePipeline(GPUComputePipeline *pipeline) {
   if ((job = pipeline->_compile)) {
     if (!releaseComputePipeline(pipeline))
       return;
+
+    computeTexelTwinFree(pipeline->_texelTwin);
+    pipeline->_texelTwin = NULL;
 
     /* the compile finished (or run here), then this placeholder's hold on
      * what it made goes, and the job with the last one */
@@ -741,6 +965,9 @@ GPUDestroyComputePipeline(GPUComputePipeline *pipeline) {
   if (!releaseComputePipeline(pipeline)) {
     return;
   }
+
+  computeTexelTwinFree(pipeline->_texelTwin);
+  pipeline->_texelTwin = NULL;
 
   if ((api = pipeline->_api) && api->compute.destroyComputePipeline) {
     api->compute.destroyComputePipeline(pipeline);
@@ -826,6 +1053,7 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
                        GPUComputePipeline    *pipeline) {
   GPUComputePipelineState *state;
   GPUApi                  *api;
+  ComputeTexelTwin        *twin = pipeline ? pipeline->_texelTwin : NULL;
 
   if (pipeline && pipeline->_compile && !(pipeline = computePipelineResolve(pipeline))) {
     if (pass)
@@ -862,7 +1090,10 @@ GPUBindComputePipeline(GPUComputePassEncoder *pass,
            0,
            sizeof(pass->_boundDynamicOffsetCounts));
     pass->_imageBufferGroups = 0u;
+    pass->_texelPlainGroups  = 0u;
   }
+
+  pass->_texelTwin = twin;
 
   pass->_pipelineLayout = pipeline->_layout;
 
@@ -897,6 +1128,14 @@ computeGroupImageBuffers(GPUComputePassEncoder *pass, GPUBindGroup *group) {
 
   return priv->imageBufferGeneration == pass->_device->_imageBufferGeneration ? priv->imageBuffers
                                                                               : bindGroupImageBuffersFind(group);
+}
+
+static inline void
+computeNoteTexelPlain(GPUComputePassEncoder *pass, uint32_t groupIndex, GPUBindGroup *group) {
+  if (group && group->_priv && ((GPUBindGroupPriv *)group->_priv)->texelPlain)
+    pass->_texelPlainGroups |= 1u << groupIndex;
+  else
+    pass->_texelPlainGroups &= ~(1u << groupIndex);
 }
 
 static inline void
@@ -1024,6 +1263,11 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
 
   api = computePassApi(pass);
 
+  /* texel reads: under the plain twin's pipeline a group binds against its layout; the app's group goes in under
+   * the app's pipeline (the next dispatch binds what it runs either way) */
+  if (pass->_texelTwinBound && pass->_pipeline && api && api->compute.setComputePipelineState)
+    api->compute.setComputePipelineState(pass, ((GPUComputePipeline *)pass->_pipeline)->_state);
+
   if (api && api->descriptor.bindComputeGroup) {
 #if GPU_BUILD_WITH_VALIDATION
     if (!validateBindGroupDynamicOffsets(pass->_pipelineLayout,
@@ -1044,6 +1288,7 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
       if (pass->_boundGroups[groupIndex] != bindGroup) {
         pass->_boundGroupLayouts[groupIndex] = bindGroupGetLayout(bindGroup);
         computeNoteImageBuffers(pass, groupIndex, bindGroup);
+        computeNoteTexelPlain(pass, groupIndex, bindGroup);
       }
 
       pass->_boundGroups[groupIndex] = bindGroup;
@@ -1069,6 +1314,7 @@ GPUBindComputeGroup(GPUComputePassEncoder *pass,
     if (pass->_boundGroups[groupIndex] != bindGroup) {
       pass->_boundGroupLayouts[groupIndex] = bindGroupGetLayout(bindGroup);
       computeNoteImageBuffers(pass, groupIndex, bindGroup);
+      computeNoteTexelPlain(pass, groupIndex, bindGroup);
     }
 
     pass->_boundGroups[groupIndex] = bindGroup;
@@ -1159,6 +1405,11 @@ GPUDispatch(GPUComputePassEncoder *pass,
     computeImageBuffers(pass, api);
   }
 
+  /* texel reads: a range a view can't hold runs the plain twin */
+  if ((pass->_texelPlainGroups || pass->_texelTwinBound) && !computeTexelRoute(pass, api)) {
+    return;
+  }
+
   api->compute.dispatch(pass, x, y, z);
 }
 
@@ -1196,6 +1447,11 @@ GPUDispatchIndirect(GPUComputePassEncoder *pass,
 
   if (pass->_imageBufferGroups & pass->_requiredBindGroupMask) {
     computeImageBuffers(pass, api);
+  }
+
+  /* texel reads: a range a view can't hold runs the plain twin */
+  if ((pass->_texelPlainGroups || pass->_texelTwinBound) && !computeTexelRoute(pass, api)) {
+    return;
   }
 
   api->compute.dispatchIndirect(pass, argsBuffer, argsOffset);
@@ -1243,6 +1499,11 @@ GPUMultiDispatchIndirect(GPUComputePassEncoder *pass,
 
   if (pass->_imageBufferGroups & pass->_requiredBindGroupMask) {
     computeImageBuffers(pass, api);
+  }
+
+  /* texel reads: a range a view can't hold runs the plain twin */
+  if ((pass->_texelPlainGroups || pass->_texelTwinBound) && !computeTexelRoute(pass, api)) {
+    return;
   }
 
   if (api->compute.multiDispatchIndirect
@@ -1328,6 +1589,11 @@ GPUCreateComputePipeline(GPUDevice                          *device,
                          ? computeCompileDeferred(device, &snapshot, outPipeline)
                          : createComputePipeline(device, &snapshot, outPipeline);
   free(prepared.values);
+
+  /* reads through views: what a range they can't hold needs (no twin: such a dispatch is skipped) */
+  if (result == GPU_OK && *outPipeline && snapshot.library == info->library && info->layout
+      && shaderLibraryTexelReads(info->library))
+    (*outPipeline)->_texelTwin = computeTexelTwinPrepare(device, info);
 
   return result;
 }

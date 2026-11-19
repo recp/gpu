@@ -138,6 +138,8 @@ struct GPUDevice {
   bool                        uslHalfRoundtrip;
   bool                        uslQualcommCompiler; /* its quirk atoms: spirv_bare_conversions, spirv_guard_mul_shift */
   bool                        uslTexelReads;       /* USL_TEXEL_READS_ATOM: read-only arrays through texel views */
+  uint32_t                    uslTexelMaxElements; /* texel reads: a bound range past the views' limits runs the */
+  uint32_t                    uslTexelAlignment;   /* plain module (descr/descriptor.c, compute.c) */
   bool                        uslStorageF16;
   uint8_t                     uslNarrowStorage; /* GPU_USL_NARROW_*: classes keeping 8/16-bit data narrow */
   uint8_t                     uslSubgroupOps;   /* GPU_USL_SUBGROUP_* */

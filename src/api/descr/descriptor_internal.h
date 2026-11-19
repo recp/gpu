@@ -93,7 +93,23 @@ typedef struct GPUBindGroupPriv {
   uint32_t                 imageBufferGeneration; /* the device's when imageBuffers was found */
   bool                     bindless;
   bool                     imageBuffers; /* binds emulated read-write textures (image_buffer_internal.h) */
+  bool                     texelPlain;   /* texel reads: a range a view can't hold, dispatched on the plain module */
+  struct GPUBindGroup     *plainTwin;    /* texel reads: this group over its layout without views (made on demand) */
 } GPUBindGroupPriv;
+
+/* texel reads per bound range (api/compute.c): whether a group layout names a texel view; a copy of it that
+ * names none; the group as plain storage buffers over that copy (made once, kept by the group) */
+GPU_HIDE
+bool
+bindGroupLayoutHasTexelViews(const GPUBindGroupLayout *layout);
+
+GPU_HIDE
+GPUBindGroupLayout *
+bindGroupLayoutPlainCopy(GPUBindGroupLayout *layout);
+
+GPU_HIDE
+struct GPUBindGroup *
+bindGroupPlainTwin(struct GPUBindGroup *group, GPUBindGroupLayout *plainLayout);
 
 typedef struct GPUPipelineLayoutPriv {
   GPUBindGroupLayout **bindGroupLayouts;

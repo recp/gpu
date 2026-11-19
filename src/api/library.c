@@ -215,7 +215,8 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
                                bool               texelReads,
                                GPUShaderLibrary **outLibrary);
 
-static bool
+GPU_HIDE
+bool
 shaderLibraryTexelReads(const GPUShaderLibrary *library);
 
 static void
@@ -4329,7 +4330,8 @@ GPUCreateShaderLibraryFromUSL(GPUDevice         *device,
 }
 
 /* texel reads' read-only arrays in the reflection: their binding layouts name the views */
-static bool
+GPU_HIDE
+bool
 shaderLibraryTexelReads(const GPUShaderLibrary *library) {
   uint32_t i;
 
@@ -4340,6 +4342,30 @@ shaderLibraryTexelReads(const GPUShaderLibrary *library) {
   }
 
   return false;
+}
+
+GPU_HIDE
+bool
+shaderLibraryBytecode(const GPUShaderLibrary *library, const void **outData, uint64_t *outSize, bool *outNoDiskCache) {
+  const ShaderUSLSource *source = library ? library->_uslSource : NULL;
+
+  if (!source)
+    return false;
+
+  *outData        = source->artifact;
+  *outSize        = source->artifactSize;
+  *outNoDiskCache = source->disableDiskCache;
+  return true;
+}
+
+GPU_HIDE
+GPUResult
+shaderLibraryCreatePlain(GPUDevice        *device,
+                         const void       *bytecode,
+                         uint64_t          bytecodeSize,
+                         bool              disableDiskCache,
+                         GPUShaderLibrary **outLibrary) {
+  return createShaderLibraryFromUSLImpl(device, bytecode, bytecodeSize, disableDiskCache, false, outLibrary);
 }
 
 GPU_HIDE

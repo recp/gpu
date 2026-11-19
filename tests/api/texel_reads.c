@@ -21,11 +21,13 @@
 
 /* texel reads: where the device takes them (GPU_TEXEL_READS=1 forces them), the shader's read-only arrays reflect
  * the views' formats (GPUBufferBindingLayout.texelView) and plain storage buffers, one at an offset, are read
- * through those views; a layout made without the views runs the same entry with buffer reads. Both read what the
- * buffers hold. */
+ * through those views; a layout made without the views runs the same entry with buffer reads; and a group whose
+ * ranges a view can't hold (GPU_TEXEL_READS_MAX_ELEMENTS lowers the limit here) runs the plain module, back and
+ * forth with one that can in a pass. All read what the buffers hold. */
 
 enum {
-  READS_COUNT = 128u
+  READS_COUNT    = 128u,
+  READS_BINDINGS = 6u
 };
 
 static float
@@ -34,6 +36,34 @@ reads_half(uint16_t h) {
   float    v = e ? ldexpf((float)(1024u + m), (int)e - 25) : ldexpf((float)m, -24);
 
   return (h & 0x8000u) ? -v : v;
+}
+
+/* a normal half's bits for a value one exactly */
+static uint16_t
+reads_half_bits(float v) {
+  uint16_t sign = v < 0.0f ? 0x8000u : 0u;
+  int      e;
+  float    m;
+
+  if (v == 0.0f)
+    return sign;
+
+  m = frexpf(fabsf(v), &e); /* [0.5, 1) */
+
+  return (uint16_t)(sign | (uint16_t)((e + 14) << 10) | (uint16_t)((uint32_t)ldexpf(m, 11) & 1023u));
+}
+
+/* the per-range limit GPU-C reads at a group's creation (NULL: back to the device's) */
+static void
+reads_limit(const char *value) {
+#ifdef _WIN32
+  _putenv_s("GPU_TEXEL_READS_MAX_ELEMENTS", value ? value : "");
+#else
+  if (value)
+    setenv("GPU_TEXEL_READS_MAX_ELEMENTS", value, 1);
+  else
+    unsetenv("GPU_TEXEL_READS_MAX_ELEMENTS");
+#endif
 }
 
 static GPUBuffer *
@@ -49,67 +79,63 @@ reads_buffer(GPUDevice *device, uint64_t size, GPUBufferUsageFlags usage) {
   return GPUCreateBuffer(device, &info, &buffer) == GPU_OK ? buffer : NULL;
 }
 
-/* one dispatch over the five bindings with this layout; the outputs cleared first */
-static int
-reads_dispatch(GPUDevice                *device,
-               GPUQueue                 *queue,
-               GPUShaderLibrary         *library,
-               GPUPipelineLayout        *layout,
-               GPUBindGroupLayout       *groupLayout,
-               GPUBuffer *const         *buffers,
-               const uint64_t           *offsets,
-               const uint64_t           *sizes,
-               const char               *what) {
-  GPUComputePipelineCreateInfo info      = {0};
-  GPUBindGroupCreateInfo       groupInfo = {0};
-  GPUQueueSubmitInfo           submit    = {0};
-  GPUBindGroupEntry            entries[5];
-  GPUCommandBuffer            *commands[1];
-  GPUComputePipeline          *pipeline = NULL;
-  GPUBindGroup                *group    = NULL;
-  GPUFence                    *fence    = NULL;
-  GPUComputePassEncoder       *pass;
-  GPUCommandBuffer            *cmdb;
-  static const uint8_t         zeros[READS_COUNT * 16u] = {0};
-  uint32_t                     i;
-  int                          ok = 0;
-
-  info.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-  info.chain.structSize = sizeof(info);
-  info.library          = library;
-  info.layout           = layout;
-  info.entryPoint       = "texel_reads";
+/* the six bindings: the inputs, and this group's outputs */
+static GPUBindGroup *
+reads_group(GPUDevice          *device,
+            GPUBindGroupLayout *layout,
+            GPUBuffer *const   *buffers,
+            const uint64_t     *offsets,
+            const uint64_t     *sizes) {
+  GPUBindGroupCreateInfo info = {0};
+  GPUBindGroupEntry      entries[READS_BINDINGS];
+  GPUBindGroup          *group = NULL;
+  uint32_t               i;
 
   memset(entries, 0, sizeof(entries));
 
-  for (i = 0u; i < 5u; i++) {
+  for (i = 0u; i < READS_BINDINGS; i++) {
     entries[i].binding       = i;
-    entries[i].bindingType   = i < 3u ? GPU_BINDING_READ_ONLY_STORAGE_BUFFER : GPU_BINDING_STORAGE_BUFFER;
+    entries[i].bindingType   = i == 3u || i == 4u ? GPU_BINDING_STORAGE_BUFFER : GPU_BINDING_READ_ONLY_STORAGE_BUFFER;
     entries[i].buffer.buffer = buffers[i];
     entries[i].buffer.offset = offsets[i];
     entries[i].buffer.size   = sizes[i];
   }
 
-  groupInfo.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
-  groupInfo.chain.structSize = sizeof(groupInfo);
-  groupInfo.layout           = groupLayout;
-  groupInfo.pEntries         = entries;
-  groupInfo.entryCount       = 5u;
+  info.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.layout           = layout;
+  info.pEntries         = entries;
+  info.entryCount       = READS_BINDINGS;
 
-  if (GPUCreateComputePipeline(device, &info, &pipeline) != GPU_OK || !pipeline
-      || GPUCreateBindGroup(device, &groupInfo, &group) != GPU_OK || !group
-      || GPUQueueWriteBuffer(queue, buffers[3], 0u, zeros, sizes[3]) != GPU_OK
-      || GPUQueueWriteBuffer(queue, buffers[4], 0u, zeros, sizes[4]) != GPU_OK
-      || GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence
+  return GPUCreateBindGroup(device, &info, &group) == GPU_OK ? group : NULL;
+}
+
+/* one pass: the pipeline, then each group bound and dispatched in turn */
+static int
+reads_run(GPUDevice *device, GPUQueue *queue, GPUComputePipeline *pipeline, GPUBindGroup *const *groups,
+          uint32_t count, const char *what) {
+  GPUQueueSubmitInfo     submit = {0};
+  GPUCommandBuffer      *commands[1];
+  GPUComputePassEncoder *pass;
+  GPUCommandBuffer      *cmdb;
+  GPUFence              *fence = NULL;
+  uint32_t               i;
+  int                    ok = 0;
+
+  if (GPUCreateFence(device, NULL, &fence) != GPU_OK || !fence
       || GPUAcquireCommandBuffer(queue, "texel-reads", &cmdb) != GPU_OK || !cmdb) {
-    fprintf(stderr, "texel-reads: %s: pipeline, bind group or submission failed\n", what);
+    fprintf(stderr, "texel-reads: %s: submission failed\n", what);
     goto cleanup;
   }
 
   pass = GPUBeginComputePass(cmdb, "texel-reads");
   GPUBindComputePipeline(pass, pipeline);
-  GPUBindComputeGroup(pass, 0u, group, 0u, NULL);
-  GPUDispatch(pass, READS_COUNT / 64u, 1u, 1u);
+
+  for (i = 0u; i < count; i++) {
+    GPUBindComputeGroup(pass, 0u, groups[i], 0u, NULL);
+    GPUDispatch(pass, READS_COUNT / 64u, 1u, 1u);
+  }
+
   GPUEndComputePass(pass);
 
   commands[0]               = cmdb;
@@ -129,34 +155,40 @@ reads_dispatch(GPUDevice                *device,
 cleanup:
   if (fence)
     GPUDestroyFence(fence);
-  if (group)
-    GPUDestroyBindGroup(group);
-  if (pipeline)
-    GPUDestroyComputePipeline(pipeline);
 
   return ok;
 }
 
 static int
+reads_clear(GPUQueue *queue, GPUBuffer *wout, GPUBuffer *fout) {
+  static const uint8_t zeros[READS_COUNT * 16u] = {0};
+
+  return GPUQueueWriteBuffer(queue, wout, 0u, zeros, sizeof(zeros)) == GPU_OK
+         && GPUQueueWriteBuffer(queue, fout, 0u, zeros, sizeof(zeros)) == GPU_OK;
+}
+
+static int
 reads_check(GPUQueue        *queue,
-            GPUBuffer *const *buffers,
+            GPUBuffer       *woutBuffer,
+            GPUBuffer       *foutBuffer,
             const uint32_t  *words,
             const uint16_t  *halves,
             const float     *floats,
+            const uint16_t  *singles,
             const char      *what) {
   static uint32_t wout[READS_COUNT * 4u];
   static float    fout[READS_COUNT * 4u];
   uint32_t        i;
 
-  if (GPUQueueReadBuffer(queue, buffers[3], 0u, wout, sizeof(wout)) != GPU_OK
-      || GPUQueueReadBuffer(queue, buffers[4], 0u, fout, sizeof(fout)) != GPU_OK) {
+  if (GPUQueueReadBuffer(queue, woutBuffer, 0u, wout, sizeof(wout)) != GPU_OK
+      || GPUQueueReadBuffer(queue, foutBuffer, 0u, fout, sizeof(fout)) != GPU_OK) {
     fprintf(stderr, "texel-reads: %s: readback failed\n", what);
     return 0;
   }
 
   for (i = 0u; i < READS_COUNT * 4u; i++) {
     /* exact: the halves and the floats share one 22-bit window */
-    float want = reads_half(halves[i]) + floats[i / 4u];
+    float want = reads_half(halves[i]) + floats[i / 4u] + reads_half(singles[i / 4u]);
 
     if (wout[i] != words[i] || fout[i] != want) {
       fprintf(stderr, "texel-reads: %s: %u: %08x %a, %08x %a wanted\n", what, i, wout[i], fout[i], words[i], want);
@@ -169,27 +201,34 @@ reads_check(GPUQueue        *queue,
 
 int
 gpu_test_texel_reads(GPUDevice *device, const char *bytecodePath) {
-  GPUDeviceCapabilities          caps        = {0};
-  GPUBindGroupLayoutCreateInfo   groupInfo   = {0};
-  GPUPipelineLayoutCreateInfo    layoutInfo  = {0};
+  GPUDeviceCapabilities          caps         = {0};
+  GPUBindGroupLayoutCreateInfo   groupInfo    = {0};
+  GPUPipelineLayoutCreateInfo    layoutInfo   = {0};
+  GPUComputePipelineCreateInfo   pipelineInfo = {0};
   GPUBindGroupLayoutEntry        plainEntries[8];
-  static const GPUFormat         views[3]    = {GPU_FORMAT_RGBA32_UINT, GPU_FORMAT_RGBA16_FLOAT,
-                                                GPU_FORMAT_R32_FLOAT};
+  static const GPUFormat         views[READS_BINDINGS] = {GPU_FORMAT_RGBA32_UINT, GPU_FORMAT_RGBA16_FLOAT,
+                                                          GPU_FORMAT_R32_FLOAT, GPU_FORMAT_UNDEFINED,
+                                                          GPU_FORMAT_UNDEFINED, GPU_FORMAT_R16_FLOAT};
   static uint32_t                words[READS_COUNT * 4u];
   static uint16_t                halves[READS_COUNT * 4u];
   static float                   floats[READS_COUNT];
+  static uint16_t                singles[READS_COUNT];
   uint8_t                        prefix[256];
   const GPUBindGroupLayoutEntry *entries;
-  GPUBuffer                     *buffers[5] = {0};
-  GPUShaderLibrary              *library    = NULL;
-  GPUShaderLayout               *layout     = NULL;
-  GPUBindGroupLayout            *plainGroup = NULL;
-  GPUPipelineLayout             *plain      = NULL;
+  GPUBuffer                     *buffers[READS_BINDINGS] = {0};
+  GPUBuffer                     *outputs[2]              = {0}; /* the over-range group's wout, fout */
+  GPUBuffer                     *ranged[READS_BINDINGS];
+  GPUBindGroup                  *groups[3]               = {0};
+  GPUShaderLibrary              *library                 = NULL;
+  GPUShaderLayout               *layout                  = NULL;
+  GPUBindGroupLayout            *plainGroup              = NULL;
+  GPUPipelineLayout             *plain                   = NULL;
+  GPUComputePipeline            *pipelines[2]            = {0};
   GPUQueue                      *queue;
   void                          *bytecode;
   uint64_t                       bytecodeSize;
-  uint64_t                       offsets[5] = {0};
-  uint64_t                       sizes[5];
+  uint64_t                       offsets[READS_BINDINGS] = {0};
+  uint64_t                       sizes[READS_BINDINGS];
   uint32_t                       entryCount;
   uint32_t                       i;
   uint32_t                       viewed;
@@ -214,8 +253,10 @@ gpu_test_texel_reads(GPUDevice *device, const char *bytecodePath) {
                               : (uint16_t)(((i & 1u) << 15) | ((10u + i % 11u) << 10) | ((i * 37u) & 1023u));
   }
 
-  for (i = 0u; i < READS_COUNT; i++)
-    floats[i] = (float)i * 0.25f - 8.0f;
+  for (i = 0u; i < READS_COUNT; i++) {
+    floats[i]  = (float)i * 0.25f - 8.0f;
+    singles[i] = reads_half_bits((float)(i % 16u) * 0.5f - 4.0f);
+  }
 
   for (i = 0u; i < sizeof(prefix); i++)
     prefix[i] = 0xa5u;
@@ -225,6 +266,7 @@ gpu_test_texel_reads(GPUDevice *device, const char *bytecodePath) {
   sizes[2] = sizeof(floats);
   sizes[3] = sizeof(words);
   sizes[4] = READS_COUNT * 16u;
+  sizes[5] = sizeof(singles);
 
   if (!(bytecode = gpu_test_read_file(bytecodePath, &bytecodeSize)))
     return 0;
@@ -238,37 +280,35 @@ gpu_test_texel_reads(GPUDevice *device, const char *bytecodePath) {
 
   free(bytecode);
 
-  /* the views the layout names: all three or none */
+  /* the views the layout names: all four or none */
   entries = GPUGetBindGroupLayoutEntries(layout->bindGroupLayouts[0], &entryCount);
 
-  if (!entries || entryCount != 5u || entryCount > sizeof(plainEntries) / sizeof(plainEntries[0])) {
-    fprintf(stderr, "texel-reads: %u layout entries, 5 wanted\n", entries ? entryCount : 0u);
+  if (!entries || entryCount != READS_BINDINGS || entryCount > sizeof(plainEntries) / sizeof(plainEntries[0])) {
+    fprintf(stderr, "texel-reads: %u layout entries, %u wanted\n", entries ? entryCount : 0u, READS_BINDINGS);
     goto cleanup;
   }
 
   for (i = 0u, viewed = 0u; i < entryCount; i++) {
+    uint32_t b = entries[i].binding;
+
     plainEntries[i] = entries[i];
 
-    if (entries[i].binding < 3u
-        && (entries[i].bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER
-            || (entries[i].buffer.texelView != GPU_FORMAT_UNDEFINED
-                && entries[i].buffer.texelView != views[entries[i].binding]))) {
-      fprintf(stderr, "texel-reads: binding %u: type %d, view %d\n", entries[i].binding,
-              (int)entries[i].bindingType, (int)entries[i].buffer.texelView);
+    if (b >= READS_BINDINGS
+        || (views[b] != GPU_FORMAT_UNDEFINED
+            && (entries[i].bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER
+                || (entries[i].buffer.texelView != GPU_FORMAT_UNDEFINED && entries[i].buffer.texelView != views[b])))
+        || (views[b] == GPU_FORMAT_UNDEFINED && entries[i].buffer.texelView != GPU_FORMAT_UNDEFINED)) {
+      fprintf(stderr, "texel-reads: binding %u: type %d, view %d\n", b, (int)entries[i].bindingType,
+              (int)entries[i].buffer.texelView);
       goto cleanup;
     }
 
-    if (entries[i].binding >= 3u && entries[i].buffer.texelView != GPU_FORMAT_UNDEFINED) {
-      fprintf(stderr, "texel-reads: output %u named a view\n", entries[i].binding);
-      goto cleanup;
-    }
-
-    viewed                            += entries[i].buffer.texelView != GPU_FORMAT_UNDEFINED;
+    viewed                           += entries[i].buffer.texelView != GPU_FORMAT_UNDEFINED;
     plainEntries[i].buffer.texelView  = GPU_FORMAT_UNDEFINED;
   }
 
-  if (viewed != 0u && viewed != 3u) {
-    fprintf(stderr, "texel-reads: %u of 3 arrays through views\n", viewed);
+  if (viewed != 0u && viewed != 4u) {
+    fprintf(stderr, "texel-reads: %u of 4 arrays through views\n", viewed);
     goto cleanup;
   }
 
@@ -290,37 +330,103 @@ gpu_test_texel_reads(GPUDevice *device, const char *bytecodePath) {
     goto cleanup;
   }
 
-  for (i = 0u; i < 5u; i++) {
-    buffers[i] = reads_buffer(device, offsets[i] + sizes[i],
-                              GPU_BUFFER_USAGE_STORAGE | (i < 3u ? GPU_BUFFER_USAGE_COPY_DST
-                                                                 : GPU_BUFFER_USAGE_COPY_DST
-                                                                     | GPU_BUFFER_USAGE_COPY_SRC));
+  pipelineInfo.chain.sType      = GPU_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  pipelineInfo.chain.structSize = sizeof(pipelineInfo);
+  pipelineInfo.library          = library;
+  pipelineInfo.entryPoint       = "texel_reads";
+  pipelineInfo.layout           = layout->pipelineLayout;
+
+  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipelines[0]) != GPU_OK || !pipelines[0]) {
+    fprintf(stderr, "texel-reads: the pipeline failed\n");
+    goto cleanup;
   }
 
-  queue = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
+  pipelineInfo.layout = plain;
 
-  if (!buffers[0] || !buffers[1] || !buffers[2] || !buffers[3] || !buffers[4] || !queue
+  if (GPUCreateComputePipeline(device, &pipelineInfo, &pipelines[1]) != GPU_OK || !pipelines[1]) {
+    fprintf(stderr, "texel-reads: the pipeline without views failed\n");
+    goto cleanup;
+  }
+
+  for (i = 0u; i < READS_BINDINGS; i++) {
+    buffers[i] = reads_buffer(device, offsets[i] + sizes[i],
+                              GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_DST
+                                | (i == 3u || i == 4u ? GPU_BUFFER_USAGE_COPY_SRC : 0u));
+  }
+
+  outputs[0] = reads_buffer(device, sizes[3], GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_DST
+                                                | GPU_BUFFER_USAGE_COPY_SRC);
+  outputs[1] = reads_buffer(device, sizes[4], GPU_BUFFER_USAGE_STORAGE | GPU_BUFFER_USAGE_COPY_DST
+                                                | GPU_BUFFER_USAGE_COPY_SRC);
+  queue      = GPUGetQueue(device, GPU_QUEUE_COMPUTE, 0u);
+
+  if (!buffers[0] || !buffers[1] || !buffers[2] || !buffers[3] || !buffers[4] || !buffers[5] || !outputs[0]
+      || !outputs[1] || !queue
       || GPUQueueWriteBuffer(queue, buffers[0], 0u, prefix, offsets[0]) != GPU_OK
       || GPUQueueWriteBuffer(queue, buffers[0], offsets[0], words, sizes[0]) != GPU_OK
       || GPUQueueWriteBuffer(queue, buffers[1], 0u, halves, sizes[1]) != GPU_OK
-      || GPUQueueWriteBuffer(queue, buffers[2], 0u, floats, sizes[2]) != GPU_OK) {
+      || GPUQueueWriteBuffer(queue, buffers[2], 0u, floats, sizes[2]) != GPU_OK
+      || GPUQueueWriteBuffer(queue, buffers[5], 0u, singles, sizes[5]) != GPU_OK) {
     fprintf(stderr, "texel-reads: buffers failed\n");
     goto cleanup;
   }
 
-  if (!reads_dispatch(device, queue, library, layout->pipelineLayout, layout->bindGroupLayouts[0], buffers,
-                      offsets, sizes, "the shader's layout")
-      || !reads_check(queue, buffers, words, halves, floats, "the shader's layout")
-      || !reads_dispatch(device, queue, library, plain, plainGroup, buffers, offsets, sizes, "a layout without views")
-      || !reads_check(queue, buffers, words, halves, floats, "a layout without views"))
+  /* the shader's layout, then a layout without views */
+  if (!(groups[0] = reads_group(device, layout->bindGroupLayouts[0], buffers, offsets, sizes))
+      || !(groups[1] = reads_group(device, plainGroup, buffers, offsets, sizes))) {
+    fprintf(stderr, "texel-reads: bind groups failed\n");
+    goto cleanup;
+  }
+
+  if (!reads_clear(queue, buffers[3], buffers[4])
+      || !reads_run(device, queue, pipelines[0], &groups[0], 1u, "the shader's layout")
+      || !reads_check(queue, buffers[3], buffers[4], words, halves, floats, singles, "the shader's layout")
+      || !reads_clear(queue, buffers[3], buffers[4])
+      || !reads_run(device, queue, pipelines[1], &groups[1], 1u, "a layout without views")
+      || !reads_check(queue, buffers[3], buffers[4], words, halves, floats, singles, "a layout without views"))
     goto cleanup;
 
+  if (!viewed) {
+    ok = 1;
+    goto cleanup;
+  }
+
+  /* ranges a view can't hold (the limit lowered for this group): the plain module, back and forth in one pass */
+  for (i = 0u; i < READS_BINDINGS; i++)
+    ranged[i] = buffers[i];
+
+  ranged[3] = outputs[0];
+  ranged[4] = outputs[1];
+  reads_limit("64");
+  groups[2] = reads_group(device, layout->bindGroupLayouts[0], ranged, offsets, sizes);
+  reads_limit(NULL);
+
+  {
+    GPUBindGroup *order[3] = {groups[2], groups[0], groups[2]};
+
+    if (!groups[2] || !reads_clear(queue, buffers[3], buffers[4]) || !reads_clear(queue, outputs[0], outputs[1])
+        || !reads_run(device, queue, pipelines[0], order, 3u, "ranges past the views")
+        || !reads_check(queue, outputs[0], outputs[1], words, halves, floats, singles, "ranges past the views")
+        || !reads_check(queue, buffers[3], buffers[4], words, halves, floats, singles, "back through the views"))
+      goto cleanup;
+  }
+
+  printf("texel-reads: ranges past the views ran on the plain module\n");
   ok = 1;
 
 cleanup:
-  for (i = 0u; i < 5u; i++)
+  for (i = 0u; i < 3u; i++)
+    if (groups[i])
+      GPUDestroyBindGroup(groups[i]);
+  for (i = 0u; i < READS_BINDINGS; i++)
     if (buffers[i])
       GPUDestroyBuffer(buffers[i]);
+  for (i = 0u; i < 2u; i++) {
+    if (outputs[i])
+      GPUDestroyBuffer(outputs[i]);
+    if (pipelines[i])
+      GPUDestroyComputePipeline(pipelines[i]);
+  }
   if (plain)
     GPUDestroyPipelineLayout(plain);
   if (plainGroup)

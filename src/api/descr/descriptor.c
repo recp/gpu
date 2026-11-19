@@ -4425,6 +4425,183 @@ shaderLibraryReleaseLayout(GPUShaderLibrary *library) {
   }
 }
 
+/* texel reads: a binding the layout views as texels whose range a view can't hold (more texels than the device
+ * takes, or an offset off the views' alignment) sends its group's dispatches to the plain module (api/compute.c).
+ * The range as the backend views it: whole texels. GPU_TEXEL_READS_MAX_ELEMENTS lowers the limit (tests) */
+static bool
+bindGroupTexelPlain(const GPUDevice *device, const GPUBindGroupLayoutPriv *layout, const GPUBindGroupPriv *group) {
+  const GPUBindGroupLayoutEntry *entry;
+  const GPUBindGroupBindingPriv *binding;
+  GPUFormatLayout                texel;
+  const char                    *env;
+  uint64_t                       limit;
+  uint32_t                       i;
+
+  if (!device || !device->uslTexelReads || !layout || !group || group->bindless)
+    return false;
+
+  limit = device->uslTexelMaxElements;
+
+  if ((env = getenv("GPU_TEXEL_READS_MAX_ELEMENTS")) && env[0])
+    limit = strtoull(env, NULL, 10);
+
+  for (i = 0u; i < group->count; i++) {
+    binding = &group->bindings[i];
+
+    if (binding->kind != GPUBindKindBuffer || !binding->buffer || binding->layoutEntryIndex >= layout->count)
+      continue;
+
+    entry = &layout->entries[binding->layoutEntryIndex];
+
+    if (entry->bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER || entry->buffer.texelView == GPU_FORMAT_UNDEFINED)
+      continue;
+
+    if (!gpuFormatLayout((GPUFormat)entry->buffer.texelView, &texel) || texel.bytesPerBlock == 0u
+        || binding->size / texel.bytesPerBlock > limit
+        || (device->uslTexelAlignment && binding->offset % device->uslTexelAlignment != 0u))
+      return true;
+  }
+
+  return false;
+}
+
+GPU_HIDE
+bool
+bindGroupLayoutHasTexelViews(const GPUBindGroupLayout *layout) {
+  const GPUBindGroupLayoutPriv *priv = layout ? layout->_priv : NULL;
+  uint32_t                      i;
+
+  for (i = 0u; priv && i < priv->count; i++) {
+    if (priv->entries[i].bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER
+        && priv->entries[i].buffer.texelView != GPU_FORMAT_UNDEFINED)
+      return true;
+  }
+
+  return false;
+}
+
+GPU_HIDE
+GPUBindGroupLayout *
+bindGroupLayoutPlainCopy(GPUBindGroupLayout *layout) {
+  const GPUBindGroupLayoutPriv *priv = layout ? layout->_priv : NULL;
+  GPUBindGroupLayoutCreateInfo  info = {0};
+  GPUBindGroupLayoutEntry      *entries;
+  GPUBindGroupLayout           *copy = NULL;
+  uint32_t                      i;
+
+  if (!priv || priv->bindless || !(entries = calloc(priv->count ? priv->count : 1u, sizeof(*entries))))
+    return NULL;
+
+  for (i = 0u; i < priv->count; i++) {
+    entries[i]                  = priv->entries[i];
+    entries[i].buffer.texelView = entries[i].bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER
+                                    ? (uint16_t)GPU_FORMAT_UNDEFINED
+                                    : entries[i].buffer.texelView;
+  }
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_LAYOUT_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.pEntries         = entries;
+  info.entryCount       = priv->count;
+
+  if (gpu_createBindGroupLayout(layout->_device, &info, priv->hasBackendBindings ? priv->backendBindings : NULL,
+                                &copy) != GPU_OK)
+    copy = NULL;
+
+  free(entries);
+  return copy;
+}
+
+GPU_HIDE
+GPUBindGroup *
+bindGroupPlainTwin(GPUBindGroup *group, GPUBindGroupLayout *plainLayout) {
+  GPUBindGroupPriv             *priv = group ? group->_priv : NULL;
+  const GPUBindGroupLayoutPriv *layout;
+  GPUBindGroupCreateInfo        info = {0};
+  GPUBindGroupEntry            *entries;
+  GPUBindGroup                 *twin = NULL;
+  GPUBindGroup                 *expected;
+  uint32_t                      i, n;
+
+  if (!priv || !plainLayout || !(layout = gpu_layoutPriv(priv->layout)))
+    return NULL;
+
+#if defined(_MSC_VER) && !defined(__clang__)
+  if ((twin = InterlockedCompareExchangePointer((PVOID volatile *)&priv->plainTwin, NULL, NULL)))
+    return twin;
+#else
+  if ((twin = __atomic_load_n(&priv->plainTwin, __ATOMIC_ACQUIRE)))
+    return twin;
+#endif
+
+  if (!(entries = calloc(priv->count ? priv->count : 1u, sizeof(*entries))))
+    return NULL;
+
+  for (i = 0u, n = 0u; i < priv->count; i++) {
+    const GPUBindGroupBindingPriv *binding = &priv->bindings[i];
+    GPUBindGroupEntry             *entry   = &entries[n];
+
+    if (binding->layoutEntryIndex >= layout->count || !binding->uid)
+      continue;
+
+    entry->binding     = binding->binding;
+    entry->arrayIndex  = binding->arrayIndex;
+    entry->bindingType = layout->entries[binding->layoutEntryIndex].bindingType;
+
+    switch (binding->kind) {
+      case GPUBindKindBuffer:
+        entry->buffer.buffer = binding->buffer;
+        entry->buffer.offset = binding->offset;
+        entry->buffer.size   = binding->size;
+        entry->texelFormat   = binding->texelFormat;
+        break;
+      case GPUBindKindTexture:
+        entry->textureView = binding->textureView;
+        break;
+      case GPUBindKindSampler:
+        entry->sampler = binding->sampler;
+        break;
+      case GPUBindKindSamplerFeedback:
+        entry->samplerFeedback = binding->samplerFeedback;
+        break;
+      case GPUBindKindAccelerationStructure:
+        entry->accelerationStructure = binding->accelerationStructure;
+        break;
+      default:
+        free(entries);
+        return NULL;
+    }
+
+    n++;
+  }
+
+  info.chain.sType      = GPU_STRUCTURE_TYPE_BIND_GROUP_CREATE_INFO;
+  info.chain.structSize = sizeof(info);
+  info.layout           = plainLayout;
+  info.pEntries         = entries;
+  info.entryCount       = n;
+
+  if (GPUCreateBindGroup(group->_device, &info, &twin) != GPU_OK)
+    twin = NULL;
+
+  free(entries);
+
+  if (!twin)
+    return NULL;
+
+  expected = NULL;
+#if defined(_MSC_VER) && !defined(__clang__)
+  if ((expected = InterlockedCompareExchangePointer((PVOID volatile *)&priv->plainTwin, twin, NULL)) != NULL) {
+#else
+  if (!__atomic_compare_exchange_n(&priv->plainTwin, &expected, twin, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+#endif
+    GPUDestroyBindGroup(twin);
+    return expected;
+  }
+
+  return twin;
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreateBindGroup(GPUDevice                    *device,
@@ -4716,6 +4893,7 @@ GPUCreateBindGroup(GPUDevice                    *device,
   group->_device   = device;
   group->_priv     = priv;
   group->_refCount = 1u;
+  priv->texelPlain = bindGroupTexelPlain(device, layoutPriv, priv);
 
   if (device->imageBufferFormats)
     imageBufferGroupCreated(group);
@@ -4826,6 +5004,18 @@ GPUUpdateBindGroupEXT(GPUBindGroup            *group,
   /* found again at its next bind */
   ((GPUBindGroupPriv *)group->_priv)->imageBufferGeneration = 0u;
 
+  /* texel reads: the ranges again; a plain twin of the old bindings goes */
+  {
+    GPUBindGroupPriv *updated = group->_priv;
+
+    updated->texelPlain = bindGroupTexelPlain(group->_device, layout, updated);
+
+    if (updated->plainTwin) {
+      GPUDestroyBindGroup(updated->plainTwin);
+      updated->plainTwin = NULL;
+    }
+  }
+
   if (group->_device && group->_device->imageBufferFormats)
     imageBufferGroupCreated(group);
 
@@ -4843,6 +5033,11 @@ GPUDestroyBindGroup(GPUBindGroup *group) {
 
   if (!releaseBindGroup(group)) {
     return;
+  }
+
+  if (group->_priv && ((GPUBindGroupPriv *)group->_priv)->plainTwin) {
+    GPUDestroyBindGroup(((GPUBindGroupPriv *)group->_priv)->plainTwin);
+    ((GPUBindGroupPriv *)group->_priv)->plainTwin = NULL;
   }
 
   api = deviceApi(group->_device);

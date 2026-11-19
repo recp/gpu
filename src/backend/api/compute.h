@@ -46,6 +46,9 @@ struct GPUComputePassEncoder {
   uint32_t                _workgroupSize[3];
   uint32_t                _requiredBindGroupMask;
   uint32_t                _imageBufferGroups; /* bound groups that hold emulated read-write textures */
+  uint32_t                _texelPlainGroups;  /* bound groups whose ranges texel views can't hold */
+  void                   *_texelTwin;         /* the bound pipeline's plain twin (api/compute.c) */
+  bool                    _texelTwinBound;    /* the twin's pipeline and groups are what the commands bind now */
   uint32_t                _pushConstantSizeBytes;
   uint32_t                _timestampEndIndex;
   GPUShaderStageFlags     _pushConstantStages;
