@@ -224,6 +224,10 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   GPUDeviceCapabilities        caps            = {0};
   GPUFeature                   timestampFeature = GPU_FEATURE_TIMESTAMPS;
   GPUResult                    periodResult;
+#if defined(__APPLE__)
+  GPUAdapterProperties         properties = {0};
+#endif
+  bool                         layered    = false;
   uint64_t                     queryResults[5] = {
     UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX
   };
@@ -255,6 +259,12 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
     fprintf(stderr, "timestamp query device missing graphics queue\n");
     goto cleanup;
   }
+
+#if defined(__APPLE__)
+  /* MoltenVK's copied stamps may be 0 or stale (check_host_read_timestamps) */
+  layered = GPUGetAdapterProperties(adapter, &properties) == GPU_OK
+            && properties.backend == GPU_BACKEND_VULKAN;
+#endif
 
   metalMode       = getenv("GPU_METAL_MODE");
   timestampPeriod = 0.0;
@@ -442,9 +452,10 @@ check_timestamp_query_roundtrip(GPUAdapter *adapter) {
   if (queryResults[0] != UINT64_MAX
       || queryResults[1] == UINT64_MAX || queryResults[2] == UINT64_MAX
       || queryResults[3] == UINT64_MAX || queryResults[4] == UINT64_MAX
-      || queryResults[2] < queryResults[1]
-      || queryResults[3] < queryResults[2]
-      || queryResults[4] < queryResults[3]) {
+      || (!layered
+          && (queryResults[2] < queryResults[1]
+              || queryResults[3] < queryResults[2]
+              || queryResults[4] < queryResults[3]))) {
     fprintf(stderr,
             "timestamp query resolved error values: "
             "%llu, %llu, %llu, %llu, %llu\n",
@@ -520,7 +531,7 @@ check_host_read_timestamps(GPUAdapter *adapter) {
   void                        *resultsHost, *copiedHost;
   double                       period, elapsedNs;
   uint32_t                     run, i, first;
-  bool                         asyncMapping, timestamps;
+  bool                         asyncMapping, timestamps, layered, implausible;
   int                          ok = 0;
 
   deviceInfo.chain.sType           = GPU_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -537,6 +548,11 @@ check_host_read_timestamps(GPUAdapter *adapter) {
 
   asyncMapping = properties.backend == GPU_BACKEND_WEBGPU;
   timestamps   = GPUIsFeatureEnabled(device, GPU_FEATURE_TIMESTAMPS);
+#if defined(__APPLE__)
+  layered = properties.backend == GPU_BACKEND_VULKAN;
+#else
+  layered = false;
+#endif
 
   if (!timestamps || GPUGetTimestampPeriod(queue, &period) != GPU_OK) {
     period = 0.0;
@@ -758,15 +774,26 @@ check_host_read_timestamps(GPUAdapter *adapter) {
      * pair real (what a caller timing work between empty passes reads) and
      * the span more than a tick, but WebGPU quantizes timestamps and may give
      * an empty pass 0 */
-    first     = asyncMapping && values[1] == 0u && values[2] == 0u ? 3u : 1u;
-    elapsedNs = period > 0.0 ? (double)(values[4] - values[first]) * period : 0.0;
+    first       = asyncMapping && values[1] == 0u && values[2] == 0u ? 3u : 1u;
+    elapsedNs   = period > 0.0 ? (double)(values[4] - values[first]) * period : 0.0;
+    implausible = values[0] != UINT64_MAX || values[first] == 0u
+                  || values[1] == UINT64_MAX || values[2] == UINT64_MAX
+                  || values[3] == UINT64_MAX || values[4] == UINT64_MAX
+                  || values[2] < values[1] || values[3] < values[2] || values[4] < values[3]
+                  || (!asyncMapping && values[4] == values[1])
+                  || values[first] < previousEnd || elapsedNs > 1e9;
 
-    if (values[0] != UINT64_MAX || values[first] == 0u
-        || values[1] == UINT64_MAX || values[2] == UINT64_MAX
-        || values[3] == UINT64_MAX || values[4] == UINT64_MAX
-        || values[2] < values[1] || values[3] < values[2] || values[4] < values[3]
-        || (!asyncMapping && values[4] == values[1])
-        || values[first] < previousEnd || elapsedNs > 1e9) {
+    /* Vulkan over Metal (MoltenVK) copies query results without waiting for
+     * the submit's samples: a stamp reads 0 or the previous submit's. There
+     * only the copy is checked, all four words written and the guard kept */
+    if (layered) {
+      elapsedNs   = 0.0;
+      implausible = values[0] != UINT64_MAX
+                    || values[1] == UINT64_MAX || values[2] == UINT64_MAX
+                    || values[3] == UINT64_MAX || values[4] == UINT64_MAX;
+    }
+
+    if (implausible) {
       fprintf(stderr,
               "host-read timestamps implausible in run %u: %llu, %llu, %llu, %llu, %llu "
               "(previous end %llu, %.0f ns)\n",
