@@ -155,8 +155,9 @@ main(int argc, char **argv) {
   }
   assert(gpu_test_create_device(adapter, &deviceInfo, &device) == GPU_OK);
   assert(GPUIsFeatureEnabled(device, half) == native && creates == 1u);
-  assert(requestedIO == (native && supportedIO));
-  assert(requestedStorage == (native && supportedStorage));
+  /* 16-bit storage wherever offered, with 16-bit arithmetic or without */
+  assert(requestedIO == supportedIO);
+  assert(requestedStorage == supportedStorage);
   assert(requestedF16 == native);
   /* half code: native halves with shader_f16 (stage values as f32 without
    * storageInputOutput16), halves in 32-bit words without it */
