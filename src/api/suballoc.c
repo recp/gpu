@@ -429,7 +429,7 @@ gpuSubFree(GPUSubAllocator *alloc, const GPUSubAllocation *allocation) {
 
 GPU_HIDE
 void
-gpuSubTrim(GPUSubAllocator *alloc) {
+gpuSubTrim(GPUSubAllocator *alloc, bool keepNewest) {
   GPUSubBlock *block;
   uint32_t     i, j, kept;
   bool         newest;
@@ -442,7 +442,7 @@ gpuSubTrim(GPUSubAllocator *alloc) {
   kept = 0u;
   for (i = 0u; i < alloc->blockCount; i++) {
     block  = alloc->blocks[i];
-    newest = true;
+    newest = keepNewest;
     for (j = i + 1u; j < alloc->blockCount && newest; j++)
       newest = alloc->blocks[j]->key != block->key;
 

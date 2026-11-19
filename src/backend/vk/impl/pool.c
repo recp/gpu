@@ -358,9 +358,16 @@ vk_destroyResourcePool(GPUDeviceVk *deviceVk) {
 
 GPU_HIDE
 void
-vk_trimResourcePool(GPUDeviceVk *deviceVk) {
+vk_trimResourcePool(GPUDeviceVk *deviceVk, bool keepNewest) {
   if (deviceVk && deviceVk->resourcePool)
-    gpuSubTrim(deviceVk->resourcePool);
+    gpuSubTrim(deviceVk->resourcePool, keepNewest);
+}
+
+/* GPUTrimDevice: no wait, a range goes back to its block only once the GPU is past what it held (retire) */
+GPU_HIDE
+void
+vk_trimDevice(GPUDevice *__restrict device, GPUTrimFlags flags) {
+  vk_trimResourcePool(device ? device->_priv : NULL, (flags & GPU_TRIM_ALL) == 0u);
 }
 
 /* a range of a block of memoryTypeIndex; false: the caller allocates */

@@ -190,11 +190,11 @@ mt_destroyResourcePool(GPUDeviceMT *deviceMT) {
   deviceMT->resourcePool = NULL;
 }
 
-/* heaps nothing lives in, but the newest of each kind */
+/* heaps nothing lives in, but the newest of each kind where keepNewest */
 
 GPU_HIDE
 void
-mt_trimResourcePool(GPUDeviceMT *deviceMT) {
+mt_trimResourcePool(GPUDeviceMT *deviceMT, bool keepNewest) {
   MTResourcePool *pool;
   uint32_t        kind, i, kept;
 
@@ -205,7 +205,7 @@ mt_trimResourcePool(GPUDeviceMT *deviceMT) {
   for (kind = 0u; kind < MT_POOL_KINDS; kind++) {
     kept = 0u;
     for (i = 0u; i < pool->count[kind]; i++) {
-      if (i + 1u < pool->count[kind] && pool->heaps[kind][i].usedSize == 0u) {
+      if ((!keepNewest || i + 1u < pool->count[kind]) && pool->heaps[kind][i].usedSize == 0u) {
         [pool->heaps[kind][i] release];
         continue;
       }
@@ -214,6 +214,13 @@ mt_trimResourcePool(GPUDeviceMT *deviceMT) {
     pool->count[kind] = kept;
   }
   os_unfair_lock_unlock(&pool->lock);
+}
+
+/* GPUTrimDevice: a heap's usedSize counts its resources still alive, those work given to a queue holds too */
+GPU_HIDE
+void
+mt_trimDevice(GPUDevice *__restrict device, GPUTrimFlags flags) {
+  mt_trimResourcePool(device ? device->_priv : NULL, (flags & GPU_TRIM_ALL) == 0u);
 }
 
 static id
@@ -253,7 +260,7 @@ mt_placeResource(GPUDeviceMT          *deviceMT,
 
   if (!resource && pool->count[kind] == MT_POOL_MAX_HEAPS) {
     os_unfair_lock_unlock(&pool->lock);
-    mt_trimResourcePool(deviceMT);
+    mt_trimResourcePool(deviceMT, true);
     os_unfair_lock_lock(&pool->lock);
   }
 

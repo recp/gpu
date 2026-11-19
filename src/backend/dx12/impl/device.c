@@ -1836,5 +1836,6 @@ dx12_initDevice(GPUDeviceApi *apiDevice) {
   apiDevice->getSubgroupMatrixProperties = dx12_getSubgroupMatrixProperties;
   apiDevice->createDevice                = dx12_createDevice;
   apiDevice->waitIdle                    = dx12_waitDeviceIdle;
+  apiDevice->trim                        = dx12_trimDevice;
   apiDevice->destroyDevice               = dx12_destroyDevice;
 }

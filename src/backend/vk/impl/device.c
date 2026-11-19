@@ -4224,5 +4224,6 @@ vk_initDevice(GPUDeviceApi *apiDevice) {
 #endif
   apiDevice->createDevice  = vk_createDevice;
   apiDevice->waitIdle      = vk_waitDeviceIdle;
+  apiDevice->trim          = vk_trimDevice;
   apiDevice->destroyDevice = vk_destroyDevice;
 }

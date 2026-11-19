@@ -1922,7 +1922,7 @@ dx12_waitDeviceIdle(GPUDevice *__restrict device) {
 
   /* idle: pooled heaps nothing lives in go back */
   if (idle)
-    dx12_trimResourcePool(deviceDX12);
+    dx12_trimResourcePool(deviceDX12, true);
 
   return idle ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 }

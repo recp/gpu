@@ -245,7 +245,7 @@ main(void) {
     if (step % 997u == 0u && !check(&alloc, live, count))
       return 1;
     if (step % 50021u == 0u)
-      gpuSubTrim(&alloc);
+      gpuSubTrim(&alloc, true);
   }
 
   while (count)
@@ -259,9 +259,22 @@ main(void) {
       return fprintf(stderr, "suballoc: an empty block not whole\n"), 1;
   }
 
-  gpuSubTrim(&alloc);
+  gpuSubTrim(&alloc, true);
   if (alloc.blockCount != 3u)
     return fprintf(stderr, "suballoc: trimming kept %u blocks, not one a key\n", alloc.blockCount), 1;
+
+  /* GPU_TRIM_ALL: every empty block goes, and the next allocation makes one again */
+  gpuSubTrim(&alloc, false);
+  if (alloc.blockCount != 0u || blocksGone != blocksMade)
+    return fprintf(stderr, "suballoc: trimming all kept %u blocks (%u made, %u gone)\n", alloc.blockCount, blocksMade,
+                   blocksGone), 1;
+  {
+    GPUSubAllocation again;
+
+    if (!gpuSubAllocate(&alloc, 2u, 4096u, 256u, &again) || alloc.blockCount != 1u)
+      return fprintf(stderr, "suballoc: nothing placed after trimming all\n"), 1;
+    gpuSubFree(&alloc, &again);
+  }
 
   gpuSubDestroy(&alloc);
   if (!check_warm(&info))

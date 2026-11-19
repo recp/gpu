@@ -744,6 +744,16 @@ GPUDeviceWaitIdle(GPUDevice *__restrict device) {
 }
 
 GPU_EXPORT
+void
+GPUTrimDevice(GPUDevice *__restrict device, GPUTrimFlags flags) {
+  GPUApi *api;
+
+  if (device && (api = deviceApi(device)) && api->device.trim) {
+    api->device.trim(device, flags);
+  }
+}
+
+GPU_EXPORT
 GPUResult
 GPUCreateFence(GPUDevice                *__restrict device,
                const GPUFenceCreateInfo *__restrict info,

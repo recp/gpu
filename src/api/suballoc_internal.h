@@ -25,7 +25,7 @@
  * flags); blocks grow from firstBlockSize to largestBlockSize as a key
  * needs more. a free range goes back at once, so a resource is freed only
  * once the GPU is done with it, as for a dedicated allocation. empty blocks
- * stay until gpuSubTrim (device wait idle) or gpuSubDestroy.
+ * stay until gpuSubTrim (device wait idle, GPUTrimDevice) or gpuSubDestroy.
  */
 
 #ifndef gpu_suballoc_internal_h
@@ -124,9 +124,9 @@ GPU_HIDE
 void
 gpuSubFree(GPUSubAllocator *alloc, const GPUSubAllocation *allocation);
 
-/* empty blocks go back, but the newest of each key */
+/* empty blocks go back, but the newest of each key where keepNewest */
 GPU_HIDE
 void
-gpuSubTrim(GPUSubAllocator *alloc);
+gpuSubTrim(GPUSubAllocator *alloc, bool keepNewest);
 
 #endif /* gpu_suballoc_internal_h */

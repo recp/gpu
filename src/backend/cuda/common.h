@@ -223,7 +223,10 @@ cuda_initResourcePool(GPUDeviceCuda *native);
 void
 cuda_destroyResourcePool(GPUDeviceCuda *native);
 void
-cuda_trimResourcePool(GPUDeviceCuda *native);
+cuda_trimResourcePool(GPUDeviceCuda *native, bool keepNewest);
+
+void
+cuda_trimDevice(GPUDevice *__restrict device, GPUTrimFlags flags);
 bool
 cuda_poolAllocate(GPUDeviceCuda *native, uint64_t size, GPUBufferCuda *buffer);
 /* frees buffer once its range is back */

@@ -873,7 +873,7 @@ mt_waitDeviceIdle(GPUDevice *__restrict device) {
   }
 
   /* idle: pooled heaps nothing lives in go back */
-  mt_trimResourcePool(deviceMT);
+  mt_trimResourcePool(deviceMT, true);
 
   return GPU_OK;
 }
@@ -1460,5 +1460,6 @@ mt_initDevice(GPUDeviceApi *apiDevice) {
   apiDevice->getSubgroupMatrixProperties = mt_getSubgroupMatrixProperties;
   apiDevice->createDevice                = mt_createDevice;
   apiDevice->waitIdle                    = mt_waitDeviceIdle;
+  apiDevice->trim                        = mt_trimDevice;
   apiDevice->destroyDevice               = mt_destroyDevice;
 }

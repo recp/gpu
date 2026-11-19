@@ -447,6 +447,19 @@ GPU_EXPORT
 GPUResult
 GPUDeviceWaitIdle(GPUDevice *__restrict device);
 
+typedef enum GPUTrimFlags {
+  GPU_TRIM_DEFAULT = 0u, /* the newest empty block of each kind stays for what's made next */
+  GPU_TRIM_ALL     = 1u  /* every empty block goes: a burst of work over, nothing like it expected soon */
+} GPUTrimFlags;
+
+/* the device's pooled memory given back where nothing lives in it any more: Vulkan's and D3D12's memory blocks,
+ * CUDA's pooled ranges, Metal's heaps, none of whose resources is alive or still used by work given to a queue (a
+ * destroyed resource's range goes back only once the GPU is past it). GPUDeviceWaitIdle trims too, with the
+ * default; this doesn't wait for anything. Any thread. Nothing to do on backends without pools */
+GPU_EXPORT
+void
+GPUTrimDevice(GPUDevice *__restrict device, GPUTrimFlags flags);
+
 #ifdef __cplusplus
 }
 #endif

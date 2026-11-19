@@ -142,7 +142,8 @@ typedef struct GPUDeviceMT {
  * caller makes its own allocation */
 
 GPU_HIDE void           mt_initResourcePool(GPUDeviceMT *deviceMT);
-GPU_HIDE void           mt_trimResourcePool(GPUDeviceMT *deviceMT);
+GPU_HIDE void           mt_trimResourcePool(GPUDeviceMT *deviceMT, bool keepNewest);
+GPU_HIDE void           mt_trimDevice(GPUDevice *__restrict device, GPUTrimFlags flags);
 GPU_HIDE void           mt_destroyResourcePool(GPUDeviceMT *deviceMT);
 GPU_HIDE id<MTLBuffer>  mt_poolBuffer(GPUDeviceMT *deviceMT, NSUInteger length);
 GPU_HIDE id<MTLTexture> mt_poolTexture(GPUDeviceMT *deviceMT, MTLTextureDescriptor *desc);

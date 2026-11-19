@@ -807,7 +807,7 @@ cuda_waitIdle(GPUDevice *__restrict device) {
 
   /* idle: pooled blocks nothing lives in go back */
   if (result == GPU_OK)
-    cuda_trimResourcePool(native);
+    cuda_trimResourcePool(native, true);
 
   return result;
 }
@@ -942,5 +942,6 @@ cuda_initDevice(GPUDeviceApi *api) {
   api->getSubgroupMatrixProperties = cuda_getSubgroupMatrixProperties;
   api->createDevice                = cuda_createDevice;
   api->waitIdle                    = cuda_waitIdle;
+  api->trim                        = cuda_trimDevice;
   api->destroyDevice               = cuda_destroyDevice;
 }

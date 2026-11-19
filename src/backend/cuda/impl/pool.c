@@ -108,9 +108,15 @@ cuda_destroyResourcePool(GPUDeviceCuda *native) {
 }
 
 void
-cuda_trimResourcePool(GPUDeviceCuda *native) {
+cuda_trimResourcePool(GPUDeviceCuda *native, bool keepNewest) {
   if (native && native->resourcePool)
-    gpuSubTrim(native->resourcePool);
+    gpuSubTrim(native->resourcePool, keepNewest);
+}
+
+/* GPUTrimDevice: no wait, a range goes back to its block only once the GPU is past what it held (retire) */
+void
+cuda_trimDevice(GPUDevice *__restrict device, GPUTrimFlags flags) {
+  cuda_trimResourcePool(device ? cuda_device(device) : NULL, (flags & GPU_TRIM_ALL) == 0u);
 }
 
 bool

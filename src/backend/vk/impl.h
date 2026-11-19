@@ -310,7 +310,11 @@ vk_warmResourcePool(GPUDevice *device);
 
 GPU_HIDE
 void
-vk_trimResourcePool(GPUDeviceVk *deviceVk);
+vk_trimResourcePool(GPUDeviceVk *deviceVk, bool keepNewest);
+
+GPU_HIDE
+void
+vk_trimDevice(GPUDevice *__restrict device, GPUTrimFlags flags);
 
 GPU_HIDE
 bool

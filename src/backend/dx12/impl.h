@@ -377,7 +377,11 @@ dx12_destroyResourcePool(GPUDeviceDX12 *deviceDX12);
 
 GPU_HIDE
 void
-dx12_trimResourcePool(GPUDeviceDX12 *deviceDX12);
+dx12_trimResourcePool(GPUDeviceDX12 *deviceDX12, bool keepNewest);
+
+GPU_HIDE
+void
+dx12_trimDevice(GPUDevice *__restrict device, GPUTrimFlags flags);
 
 GPU_HIDE
 bool

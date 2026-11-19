@@ -99,6 +99,9 @@ typedef struct GPUDeviceApi {
 
   GPUResult (*waitIdle)(GPUDevice *__restrict device);
 
+  /* GPUTrimDevice: the pools' empty blocks (NULL: no pools) */
+  void (*trim)(GPUDevice *__restrict device, GPUTrimFlags flags);
+
   void (*destroyDevice)(GPUDevice *__restrict device);
 } GPUDeviceApi;
 
