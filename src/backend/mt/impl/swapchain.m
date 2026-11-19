@@ -259,8 +259,9 @@ mt_resizeSwapchain(GPUSwapchain *__restrict swapchain,
   drawableSize = CGSizeMake(ceil((double)size.width * swapchain->backingScaleFactor),
                             ceil((double)size.height * swapchain->backingScaleFactor));
 
-  objc = swapchainMtl->objc;
-  objc->backingScaleFactor          = swapchain->backingScaleFactor;
+  /* the backing-scale observer, absent on a swapchain made without one */
+  if ((objc = swapchainMtl->objc))
+    objc->backingScaleFactor = swapchain->backingScaleFactor;
   swapchainMtl->layer.contentsScale = swapchain->backingScaleFactor;
   swapchainMtl->layer.bounds        = bounds;
   swapchainMtl->layer.drawableSize  = drawableSize;
