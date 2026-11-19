@@ -452,7 +452,8 @@ measure(PacerTest *state, GPUAdapter *adapter, uint32_t latency) {
   for (wait = 0u; wait < 400u && state->sampleCount < 120u; wait++) {
     pacerHostPump(0.01);
 #if defined(PACER_TEST_VULKAN)
-    shown += display_times(state, times + shown, SAMPLE_CAPACITY - shown);
+    if (!state->feedback) /* GPU-C reads them for its feedback otherwise */
+      shown += display_times(state, times + shown, SAMPLE_CAPACITY - shown);
 #endif
   }
 
@@ -461,9 +462,19 @@ measure(PacerTest *state, GPUAdapter *adapter, uint32_t latency) {
   GPUQueueWaitIdle(state->queue);
   pacerHostPump(0.1);
 
-  kind = "display";
+  kind = "display (frame feedback)";
   got  = 0u;
-  if (!state->feedback) {
+  if (state->feedback) {
+    for (i = 0u; i < SAMPLE_CAPACITY; i++) {
+      if (state->feedbacks[i])
+        GPUDestroyFrameFeedback(state->feedbacks[i]);
+      state->feedbacks[i] = NULL;
+      got += state->samples[i].presented > 0.0;
+    }
+  }
+
+  /* no feedback, or none came (a consumer that isn't a display): the host's */
+  if (!got) {
     got  = pacerHostPresented(times, SAMPLE_CAPACITY);
     kind = pacerHostPresentKind();
 #if defined(PACER_TEST_VULKAN)
@@ -485,13 +496,6 @@ measure(PacerTest *state, GPUAdapter *adapter, uint32_t latency) {
 
     for (i = 0u; i < got && i < state->sampleCount; i++)
       state->samples[i].presented = times[i] > 0.0 ? times[i] : 0.0;
-  } else {
-    kind = "display (frame feedback)";
-    for (i = 0u; i < SAMPLE_CAPACITY; i++) {
-      if (state->feedbacks[i])
-        GPUDestroyFrameFeedback(state->feedbacks[i]);
-      state->feedbacks[i] = NULL;
-    }
   }
 
   n = missed = 0u;
