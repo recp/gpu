@@ -37,6 +37,16 @@
 #endif
 
 static REPORT_THREAD_LOCAL char gpu_driverMessage[512];
+static REPORT_THREAD_LOCAL bool gpu_reportsQuiet;
+
+GPU_HIDE
+bool
+pipelineReportsQuiet(bool quiet) {
+  bool was = gpu_reportsQuiet;
+
+  gpu_reportsQuiet = quiet;
+  return was;
+}
 
 GPU_HIDE
 void
@@ -109,6 +119,12 @@ pipelineFailed(GPUDevice              *device,
   char               message[1024];
   size_t             used;
   uint32_t           i;
+
+  /* an attempt that has a fallback after it (texel reads): its outcome decides */
+  if (gpu_reportsQuiet) {
+    gpu_driverMessage[0] = '\0';
+    return;
+  }
 
   used = report__append(message, 0u, sizeof(message), "%s \"%s\" failed (%s)",
                         kind ? kind : "pipeline", label ? label : "unlabeled", report__resultName(result));

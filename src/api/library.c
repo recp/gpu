@@ -219,6 +219,32 @@ GPU_HIDE
 bool
 shaderLibraryTexelReads(const GPUShaderLibrary *library);
 
+/* the device's texel reads, quietly: a module the atom can't make (an artifact packed without it, all a runtime-only
+ * USL has, or one the driver refuses) compiles again without it, and only that outcome is reported */
+static GPUResult
+createShaderLibraryFromUSLTexel(GPUDevice         *device,
+                                const void        *bytecodeData,
+                                uint64_t           bytecodeSize,
+                                bool               disableDiskCache,
+                                GPUShaderLibrary **outLibrary) {
+  GPUResult rc;
+  bool      quiet;
+
+  if (device && device->uslTexelReads) {
+    quiet = pipelineReportsQuiet(true);
+    rc    = createShaderLibraryFromUSLImpl(device, bytecodeData, bytecodeSize, disableDiskCache, true, outLibrary);
+    pipelineReportsQuiet(quiet);
+
+    if (rc == GPU_OK)
+      return rc;
+
+    if (getenv("GPU_USL_LOG"))
+      fprintf(stderr, "GPU: USL texel reads: none for this artifact (%d), compiled without them\n", (int)rc);
+  }
+
+  return createShaderLibraryFromUSLImpl(device, bytecodeData, bytecodeSize, disableDiskCache, false, outLibrary);
+}
+
 static void
 clearShaderUSLSource(GPUShaderLibrary *library) {
   if (!library) {
@@ -3475,6 +3501,15 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
 
   compileResult = us_compile(&compileInput, &compileOutput);
 
+  /* GPU_TEXEL_READS_FAIL=1 (tests): the texel attempt finds nothing, as a runtime-only USL does with an artifact
+   * packed without the atom */
+  if (texelReads && compileResult == USLOk && getenv("GPU_TEXEL_READS_FAIL")
+      && getenv("GPU_TEXEL_READS_FAIL")[0] == '1') {
+    us_free_compile_output(&compileOutput);
+    memset(&compileOutput, 0, sizeof(compileOutput));
+    compileResult = USLError;
+  }
+
   if (compileResult != USLOk
       || compileOutput.backend != target.backend
       || compileOutput.encoding != encoding
@@ -3490,7 +3525,8 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
     rc = targetSupported
            ? GPU_ERROR_BACKEND_FAILURE
            : GPU_ERROR_UNSUPPORTED;
-    uslLibraryFailed(device, api, bytecodeData, (size_t)bytecodeSize, &target, compileResult, rc);
+    if (!texelReads)
+      uslLibraryFailed(device, api, bytecodeData, (size_t)bytecodeSize, &target, compileResult, rc);
     goto cleanup;
   }
 
@@ -4285,15 +4321,9 @@ GPUCreateShaderLibrary(GPUDevice                        *device,
       return createShaderLibraryFromMSLText(device, info, outLibrary);
     case GPU_SHADER_SOURCE_WGSL_TEXT:
       return createShaderLibraryFromWGSLText(device, info, outLibrary);
-    case GPU_SHADER_SOURCE_USL_BYTECODE: {
-      GPUResult rc = createShaderLibraryFromUSLImpl(device, info->sourceData, info->sourceSize,
-                                                    info->disableDiskCache, device->uslTexelReads, outLibrary);
-
-      return rc == GPU_OK || !device->uslTexelReads
-               ? rc
-               : createShaderLibraryFromUSLImpl(device, info->sourceData, info->sourceSize, info->disableDiskCache,
-                                                false, outLibrary);
-    }
+    case GPU_SHADER_SOURCE_USL_BYTECODE:
+      return createShaderLibraryFromUSLTexel(device, info->sourceData, info->sourceSize, info->disableDiskCache,
+                                             outLibrary);
     case GPU_SHADER_SOURCE_USL_TEXT:
       return GPU_ERROR_INVALID_ARGUMENT;
     case GPU_SHADER_SOURCE_SPIRV_BINARY:
@@ -4319,14 +4349,7 @@ GPUCreateShaderLibraryFromUSL(GPUDevice         *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  {
-    GPUResult rc = createShaderLibraryFromUSLImpl(device, artifactData, artifactSize, false, device->uslTexelReads,
-                                                  outLibrary);
-
-    return rc == GPU_OK || !device->uslTexelReads
-             ? rc
-             : createShaderLibraryFromUSLImpl(device, artifactData, artifactSize, false, false, outLibrary);
-  }
+  return createShaderLibraryFromUSLTexel(device, artifactData, artifactSize, false, outLibrary);
 }
 
 /* texel reads' read-only arrays in the reflection: their binding layouts name the views */

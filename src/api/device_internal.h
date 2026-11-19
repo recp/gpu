@@ -210,6 +210,12 @@ pipelineDriverMessage(const char *format, ...)
 #endif
   ;
 
+/* this thread's failure reports held back (true) or let through again; the previous setting back: for an attempt
+ * a fallback follows (texel reads), so only the outcome reaches the app */
+GPU_HIDE
+bool
+pipelineReportsQuiet(bool quiet);
+
 GPU_HIDE
 void
 pipelineFailed(GPUDevice              *device,

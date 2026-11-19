@@ -16,6 +16,7 @@
 
 
 #include "test.h"
+#include "../../src/api/device_internal.h"
 
 #include <math.h>
 
@@ -23,7 +24,8 @@
  * the views' formats (GPUBufferBindingLayout.texelView) and plain storage buffers, one at an offset, are read
  * through those views; a layout made without the views runs the same entry with buffer reads; and a group whose
  * ranges a view can't hold (GPU_TEXEL_READS_MAX_ELEMENTS lowers the limit here) runs the plain module, back and
- * forth with one that can in a pass. All read what the buffers hold. */
+ * forth with one that can in a pass. All read what the buffers hold. A texel attempt that finds nothing (an
+ * artifact packed without the atom; GPU_TEXEL_READS_FAIL=1 here) gives the plain library, and the app hears nothing. */
 
 enum {
   READS_COUNT    = 128u,
@@ -53,17 +55,24 @@ reads_half_bits(float v) {
   return (uint16_t)(sign | (uint16_t)((e + 14) << 10) | (uint16_t)((uint32_t)ldexpf(m, 11) & 1023u));
 }
 
-/* the per-range limit GPU-C reads at a group's creation (NULL: back to the device's) */
+/* a test switch GPU-C reads (NULL: gone) */
 static void
-reads_limit(const char *value) {
+reads_env(const char *name, const char *value) {
 #ifdef _WIN32
-  _putenv_s("GPU_TEXEL_READS_MAX_ELEMENTS", value ? value : "");
+  _putenv_s(name, value ? value : "");
 #else
   if (value)
-    setenv("GPU_TEXEL_READS_MAX_ELEMENTS", value, 1);
+    setenv(name, value, 1);
   else
-    unsetenv("GPU_TEXEL_READS_MAX_ELEMENTS");
+    unsetenv(name);
 #endif
+}
+
+static void
+reads_count_error(GPUDevice *device, const GPUDeviceErrorInfo *error, void *userData) {
+  (void)device;
+  ++*(uint32_t *)userData;
+  fprintf(stderr, "texel-reads: device error: %s\n", error && error->message ? error->message : "unknown");
 }
 
 static GPUBuffer *
@@ -225,7 +234,7 @@ gpu_test_texel_reads(GPUDevice *device, const char *bytecodePath) {
   GPUPipelineLayout             *plain                   = NULL;
   GPUComputePipeline            *pipelines[2]            = {0};
   GPUQueue                      *queue;
-  void                          *bytecode;
+  void                          *bytecode = NULL;
   uint64_t                       bytecodeSize;
   uint64_t                       offsets[READS_BINDINGS] = {0};
   uint64_t                       sizes[READS_BINDINGS];
@@ -274,11 +283,8 @@ gpu_test_texel_reads(GPUDevice *device, const char *bytecodePath) {
   if ((rc = GPUCreateShaderLibraryFromUSL(device, bytecode, bytecodeSize, &library)) != GPU_OK || !library
       || (rc = GPUCreateShaderLayout(device, library, &layout)) != GPU_OK || !layout || layout->bindGroupLayoutCount != 1u) {
     fprintf(stderr, "texel-reads: %s failed (%d)\n", library ? "the layout" : "the library", (int)rc);
-    free(bytecode);
     goto cleanup;
   }
-
-  free(bytecode);
 
   /* the views the layout names: all four or none */
   entries = GPUGetBindGroupLayoutEntries(layout->bindGroupLayouts[0], &entryCount);
@@ -397,9 +403,9 @@ gpu_test_texel_reads(GPUDevice *device, const char *bytecodePath) {
 
   ranged[3] = outputs[0];
   ranged[4] = outputs[1];
-  reads_limit("64");
+  reads_env("GPU_TEXEL_READS_MAX_ELEMENTS", "64");
   groups[2] = reads_group(device, layout->bindGroupLayouts[0], ranged, offsets, sizes);
-  reads_limit(NULL);
+  reads_env("GPU_TEXEL_READS_MAX_ELEMENTS", NULL);
 
   {
     GPUBindGroup *order[3] = {groups[2], groups[0], groups[2]};
@@ -412,9 +418,45 @@ gpu_test_texel_reads(GPUDevice *device, const char *bytecodePath) {
   }
 
   printf("texel-reads: ranges past the views ran on the plain module\n");
+
+  /* a texel attempt that finds nothing: the plain library, and no error reaches the app */
+  {
+    GPUDeviceErrorCallback savedCallback = device->errorCallback;
+    void                  *savedUserData = device->errorUserData;
+    GPUShaderReflection    reflection    = {0};
+    GPUShaderLibrary      *fallback      = NULL;
+    uint32_t               errors        = 0u;
+    uint32_t               r;
+    int                    plainOk;
+
+    GPUSetDeviceErrorCallback(device, reads_count_error, &errors);
+    reads_env("GPU_TEXEL_READS_FAIL", "1");
+    rc = GPUCreateShaderLibraryFromUSL(device, bytecode, bytecodeSize, &fallback);
+    reads_env("GPU_TEXEL_READS_FAIL", NULL);
+    GPUSetDeviceErrorCallback(device, savedCallback, savedUserData);
+
+    plainOk = rc == GPU_OK && fallback && GPUGetShaderReflection(fallback, &reflection) == GPU_OK;
+
+    for (r = 0u; plainOk && r < reflection.resourceCount; r++)
+      plainOk = reflection.pResources[r].bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER
+                || reflection.pResources[r].buffer.texelView == GPU_FORMAT_UNDEFINED;
+
+    if (plainOk)
+      GPUFreeShaderReflection(&reflection);
+    if (fallback)
+      GPUDestroyShaderLibrary(fallback);
+
+    if (!plainOk || errors) {
+      fprintf(stderr, "texel-reads: a texel attempt that found nothing: %d, %u errors reported\n", (int)rc, errors);
+      goto cleanup;
+    }
+  }
+
+  printf("texel-reads: a texel attempt that found nothing gave the plain library quietly\n");
   ok = 1;
 
 cleanup:
+  free(bytecode);
   for (i = 0u; i < 3u; i++)
     if (groups[i])
       GPUDestroyBindGroup(groups[i]);
