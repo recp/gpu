@@ -80,6 +80,10 @@ typedef struct GPUBufferBindingLayout {
   uint64_t minBindingSize;
   uint32_t strideBytes;
   bool     byteAddress;
+  /* a read-only storage buffer the shader reads through texel views of this GPUFormat (GPUCreateShaderLayout fills
+   * it from the shader where the device takes texel reads); the bound buffer needs nothing more. 16 bits keep the
+   * struct at its 16 bytes */
+  uint16_t texelView;
 } GPUBufferBindingLayout;
 
 /* a texel buffer's view: format UNDEFINED leaves it to each bind group entry (texelFormat) */

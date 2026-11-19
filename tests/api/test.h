@@ -243,6 +243,9 @@ int
 gpu_test_texel_buffer(GPUDevice *device, const char *bytecodePath);
 
 int
+gpu_test_texel_reads(GPUDevice *device, const char *bytecodePath);
+
+int
 gpu_test_cube_texture_view(GPUDevice *device, const char *bytecodePath);
 
 int

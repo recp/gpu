@@ -531,15 +531,18 @@ normalizeLayoutEntry(const GPUBindGroupLayoutEntry *src,
 
   switch (src->bindingType) {
     case GPU_BINDING_UNIFORM_BUFFER:
-      if (src->buffer.strideBytes != 0u || src->buffer.byteAddress) {
+      if (src->buffer.strideBytes != 0u || src->buffer.byteAddress || src->buffer.texelView != GPU_FORMAT_UNDEFINED) {
         return 0;
       }
       break;
     case GPU_BINDING_READ_ONLY_STORAGE_BUFFER:
     case GPU_BINDING_STORAGE_BUFFER:
-      if (src->buffer.strideBytes != 0u
-          && src->buffer.minBindingSize != 0u
-          && src->buffer.minBindingSize < src->buffer.strideBytes) {
+      if ((src->buffer.strideBytes != 0u
+           && src->buffer.minBindingSize != 0u
+           && src->buffer.minBindingSize < src->buffer.strideBytes)
+          || (uint32_t)src->buffer.texelView >= GPU_FORMAT_COUNT
+          || (src->buffer.texelView != GPU_FORMAT_UNDEFINED
+              && (src->bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER || src->hasDynamicOffset))) {
         return 0;
       }
 
@@ -2228,7 +2231,10 @@ layoutResourceTypeMatches(const GPUBindGroupLayoutEntry     *entry,
       return entry->buffer.minBindingSize ==
                resource->buffer.minBindingSize
              && entry->buffer.strideBytes == resource->buffer.strideBytes
-             && entry->buffer.byteAddress == resource->buffer.byteAddress;
+             && entry->buffer.byteAddress == resource->buffer.byteAddress
+             /* a layout without the shader's view runs it with buffer reads (shaderLibraryForLayout) */
+             && (entry->buffer.texelView == resource->buffer.texelView
+                 || entry->buffer.texelView == GPU_FORMAT_UNDEFINED);
     case GPU_BINDING_SAMPLED_TEXTURE:
       return entry->sampledTexture.viewType ==
                resource->sampledTexture.viewType

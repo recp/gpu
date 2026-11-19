@@ -2812,6 +2812,32 @@ vk_supportsFeature(const GPUAdapter * __restrict adapter, GPUFeature feature) {
   }
 }
 
+/* texel reads (USL_TEXEL_READS_ATOM) where they pay: Qualcomm's own compiler, and only where every valid storage
+ * binding is a valid view of 4-byte or wider texels (whole 16-byte offsets the views' alignment divides, and as
+ * many 4-byte texels as the storage range holds). GPU_TEXEL_READS=0 turns them off; 1 forces them on any device
+ * (tests: bindings past the views' limits then fail) */
+static bool
+vk__texelReads(const GPUAdapterVk *adapterVk) {
+  const VkPhysicalDeviceLimits *limits;
+  const char                   *env;
+  VkDeviceSize                  storage;
+
+  env    = getenv("GPU_TEXEL_READS");
+  limits = &adapterVk->props.limits;
+
+  if (env && (env[0] == '0' || env[0] == '1'))
+    return env[0] == '1';
+
+  if (adapterVk->props.vendorID != 0x5143u || !adapterVk->qualcommCompiler)
+    return false;
+
+  storage = limits->minStorageBufferOffsetAlignment;
+
+  return storage % 16u == 0u && limits->minTexelBufferOffsetAlignment != 0u
+         && storage % limits->minTexelBufferOffsetAlignment == 0u
+         && (uint64_t)limits->maxTexelBufferElements * 4u >= (uint64_t)limits->maxStorageBufferRange;
+}
+
 GPU_HIDE
 GPUAdapter*
 vk_getAvailableAdapters(GPUInstance *__restrict inst,
@@ -3743,6 +3769,7 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
                                                      adapterVk->props.deviceID,
                                                      adapterVk->props.driverVersion);
   device->uslQualcommCompiler = adapterVk->qualcommCompiler;
+  device->uslTexelReads       = vk__texelReads(adapterVk);
   device->uslWide64           = (coreFeatures.shaderInt64 ? GPU_USL_WIDE_INT64 : 0u)
                               | (coreFeatures.shaderFloat64 ? GPU_USL_WIDE_F64 : 0u);
   device->uslNarrowInt        = (coreFeatures.shaderInt16 ? GPU_USL_INT16 : 0u)

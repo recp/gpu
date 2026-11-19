@@ -20,6 +20,7 @@
 #include "compile_pool_internal.h"
 #include "library_internal.h"
 #include "usl_target.h"
+#include "descr/descriptor_internal.h"
 
 _Static_assert((uint32_t)GPUShaderPTXTextureMetadataMipLevelCountBit ==
                  (uint32_t)USL_RUNTIME_PTX_TEXTURE_METADATA_MIP_LEVEL_COUNT,
@@ -211,7 +212,11 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
                                const void        *bytecodeData,
                                uint64_t           bytecodeSize,
                                bool               disableDiskCache,
+                               bool               texelReads,
                                GPUShaderLibrary **outLibrary);
+
+static bool
+shaderLibraryTexelReads(const GPUShaderLibrary *library);
 
 static void
 clearShaderUSLSource(GPUShaderLibrary *library) {
@@ -1090,6 +1095,10 @@ bindingLayoutFromUSLResource(const USLRuntimeResource    *resource,
       out->buffer.byteAddress    =
         (resource->buffer_access & USL_RUNTIME_BUFFER_ACCESS_BYTE_ADDRESS) != 0u
         || (bindingType != GPU_BINDING_UNIFORM_BUFFER && resource->buffer_stride_bytes == 0u);
+      out->buffer.texelView      = bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER
+                                       && (resource->buffer_access & USL_RUNTIME_BUFFER_ACCESS_TEXEL_READS)
+                                     ? storageTextureFormatFromUSL(resource->type.texel_format)
+                                     : GPU_FORMAT_UNDEFINED;
       return 1;
     case GPU_BINDING_SAMPLED_TEXTURE:
       if (!textureViewTypeFromUSL(resource->type.texture_dim,
@@ -1147,7 +1156,8 @@ shaderResourceLayoutEqual(const GPUShaderResourceReflection *a,
     case GPU_BINDING_STORAGE_BUFFER:
       return a->buffer.minBindingSize == b->buffer.minBindingSize
              && a->buffer.strideBytes == b->buffer.strideBytes
-             && a->buffer.byteAddress == b->buffer.byteAddress;
+             && a->buffer.byteAddress == b->buffer.byteAddress
+             && a->buffer.texelView == b->buffer.texelView;
     case GPU_BINDING_SAMPLED_TEXTURE:
       return a->sampledTexture.viewType == b->sampledTexture.viewType
              && a->sampledTexture.sampleType == b->sampledTexture.sampleType
@@ -2781,6 +2791,7 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
                                const void        *bytecodeData,
                                uint64_t           bytecodeSize,
                                bool               disableDiskCache,
+                               bool               texelReads,
                                GPUShaderLibrary **outLibrary) {
   USReflection                bootstrapReflection = {0};
   USCompileOutput             compileOutput       = {0};
@@ -3250,6 +3261,12 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
     }
   }
 
+  /* read-only arrays through texel views where the device reads those faster */
+
+  if (texelReads && us_cap_atom_text(&targetAtoms[targetAtomCount++], USL_TEXEL_READS_ATOM) != USLOk) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
   /* read-write images of formats the device has no read-write texture for: storage buffers */
 
   if (device->imageBufferFormats) {
@@ -3573,7 +3590,9 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
       *outLibrary = NULL;
       rc          = GPU_ERROR_BACKEND_FAILURE;
     } else if ((target.backend == USL_BACKEND_HLSL
-                || target.backend == USL_BACKEND_DXIL)
+                || target.backend == USL_BACKEND_DXIL
+                /* texel reads: kept for the plain variant a layout without views asks for */
+                || (texelReads && shaderLibraryTexelReads(*outLibrary)))
                && !setShaderUSLSource(*outLibrary,
                                       bytecodeData,
                                       bytecodeSize,
@@ -4265,12 +4284,15 @@ GPUCreateShaderLibrary(GPUDevice                        *device,
       return createShaderLibraryFromMSLText(device, info, outLibrary);
     case GPU_SHADER_SOURCE_WGSL_TEXT:
       return createShaderLibraryFromWGSLText(device, info, outLibrary);
-    case GPU_SHADER_SOURCE_USL_BYTECODE:
-      return createShaderLibraryFromUSLImpl(device,
-                                            info->sourceData,
-                                            info->sourceSize,
-                                            info->disableDiskCache,
-                                            outLibrary);
+    case GPU_SHADER_SOURCE_USL_BYTECODE: {
+      GPUResult rc = createShaderLibraryFromUSLImpl(device, info->sourceData, info->sourceSize,
+                                                    info->disableDiskCache, device->uslTexelReads, outLibrary);
+
+      return rc == GPU_OK || !device->uslTexelReads
+               ? rc
+               : createShaderLibraryFromUSLImpl(device, info->sourceData, info->sourceSize, info->disableDiskCache,
+                                                false, outLibrary);
+    }
     case GPU_SHADER_SOURCE_USL_TEXT:
       return GPU_ERROR_INVALID_ARGUMENT;
     case GPU_SHADER_SOURCE_SPIRV_BINARY:
@@ -4296,11 +4318,94 @@ GPUCreateShaderLibraryFromUSL(GPUDevice         *device,
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  return createShaderLibraryFromUSLImpl(device,
-                                        artifactData,
-                                        artifactSize,
-                                        false,
-                                        outLibrary);
+  {
+    GPUResult rc = createShaderLibraryFromUSLImpl(device, artifactData, artifactSize, false, device->uslTexelReads,
+                                                  outLibrary);
+
+    return rc == GPU_OK || !device->uslTexelReads
+             ? rc
+             : createShaderLibraryFromUSLImpl(device, artifactData, artifactSize, false, false, outLibrary);
+  }
+}
+
+/* texel reads' read-only arrays in the reflection: their binding layouts name the views */
+static bool
+shaderLibraryTexelReads(const GPUShaderLibrary *library) {
+  uint32_t i;
+
+  for (i = 0u; library && i < library->_reflection.resourceCount; i++) {
+    if (library->_reflection.pResources[i].bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER
+        && library->_reflection.pResources[i].buffer.texelView != GPU_FORMAT_UNDEFINED)
+      return true;
+  }
+
+  return false;
+}
+
+GPU_HIDE
+GPUShaderLibrary *
+shaderLibraryForLayout(GPUShaderLibrary *library, GPUPipelineLayout *layout) {
+  const GPUShaderResourceReflection *resource;
+  const GPUPipelineLayoutPriv       *pipeline;
+  const GPUBindGroupLayoutPriv      *group;
+  const ShaderUSLSource             *source;
+  GPUShaderLibrary                  *plain;
+  GPUShaderLibrary                  *expected;
+  uint32_t                           i, j;
+  bool                               named;
+
+  if (!library || !layout || !(pipeline = layout->_priv) || !shaderLibraryTexelReads(library))
+    return library;
+
+  named = true;
+
+  for (i = 0u; named && i < library->_reflection.resourceCount; i++) {
+    resource = &library->_reflection.pResources[i];
+
+    if (resource->bindingType != GPU_BINDING_READ_ONLY_STORAGE_BUFFER || resource->buffer.texelView == GPU_FORMAT_UNDEFINED)
+      continue;
+
+    group = resource->groupIndex < pipeline->bindGroupLayoutCount && pipeline->bindGroupLayouts[resource->groupIndex]
+              ? pipeline->bindGroupLayouts[resource->groupIndex]->_priv
+              : NULL;
+
+    /* a binding the layout doesn't hold is another entry's; one it holds must name the same view */
+    for (j = 0u; group && j < group->count; j++) {
+      if (group->entries[j].binding == resource->binding)
+        named = group->entries[j].bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER
+                && group->entries[j].buffer.texelView == resource->buffer.texelView;
+    }
+  }
+
+  if (named)
+    return library;
+
+  /* a layout made without the views: the module with buffer reads, made once */
+#if defined(_MSC_VER) && !defined(__clang__)
+  if ((plain = InterlockedCompareExchangePointer((PVOID volatile *)&library->_plain, NULL, NULL)))
+    return plain;
+#else
+  if ((plain = __atomic_load_n(&library->_plain, __ATOMIC_ACQUIRE)))
+    return plain;
+#endif
+
+  if (!(source = library->_uslSource)
+      || createShaderLibraryFromUSLImpl(library->_device, source->artifact, source->artifactSize,
+                                        source->disableDiskCache, false, &plain) != GPU_OK
+      || !plain)
+    return library;
+
+  expected = NULL;
+#if defined(_MSC_VER) && !defined(__clang__)
+  if ((expected = InterlockedCompareExchangePointer((PVOID volatile *)&library->_plain, plain, NULL)) != NULL) {
+#else
+  if (!__atomic_compare_exchange_n(&library->_plain, &expected, plain, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+#endif
+    GPUDestroyShaderLibrary(plain);
+    return expected;
+  }
+
+  return plain;
 }
 
 GPU_EXPORT
@@ -4330,6 +4435,12 @@ GPUDestroyShaderLibrary(GPUShaderLibrary *library) {
 
   /* background compiles read it */
   compilePoolDrain(library->_device);
+
+  if (library->_plain) {
+    GPUDestroyShaderLibrary(library->_plain);
+    library->_plain = NULL;
+  }
+
   shaderLibraryReleaseLayout(library);
   clearShaderUSLSource(library);
   clearShaderMetadata(library);

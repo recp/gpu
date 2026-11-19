@@ -1321,6 +1321,7 @@ GPUCreateComputePipeline(GPUDevice                          *device,
 
   snapshot             = *info;
   snapshot.chain.pNext = prepared.chain;
+  snapshot.library     = shaderLibraryForLayout(info->library, info->layout);
   if (!snapshot.cache && device)
     snapshot.cache = device->_defaultPipelineCache;
   result               = compilePoolThreaded(device)

@@ -146,6 +146,9 @@ vk__descriptorType(GPUBindingType    type,
 
 static GPUBindingType
 vk__layoutBindingType(const GPUDevice *device, const GPUBindGroupLayoutEntry *entry) {
+  if (entry->bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER && entry->buffer.texelView != GPU_FORMAT_UNDEFINED)
+    return GPU_BINDING_TEXEL_BUFFER; /* texel reads */
+
   if (entry->bindingType == GPU_BINDING_STORAGE_TEXTURE
       && entry->storageTexture.access == GPU_STORAGE_TEXTURE_ACCESS_READ_WRITE
       && deviceEmulatesReadWrite(device, entry->storageTexture.format))
@@ -877,8 +880,18 @@ vk__writeDescriptor(void                          *context,
 
   writeContext = context;
 
+  /* texel reads: a read-only storage binding whose layout names a view is that view */
+  GPUBindingType bindingType = binding ? binding->bindingType : GPU_BINDING_UNIFORM_BUFFER;
+  GPUFormat      texelFormat = binding ? binding->texelFormat : GPU_FORMAT_UNDEFINED;
+
+  if (binding && bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER
+      && binding->bufferLayout.texelView != GPU_FORMAT_UNDEFINED) {
+    bindingType = GPU_BINDING_TEXEL_BUFFER;
+    texelFormat = binding->bufferLayout.texelView;
+  }
+
   if (!writeContext || !writeContext->valid || !binding
-      || !vk__descriptorType(binding->bindingType,
+      || !vk__descriptorType(bindingType,
                              binding->hasDynamicOffset,
                              &type)) {
     if (writeContext) {
@@ -926,13 +939,15 @@ vk__writeDescriptor(void                          *context,
         return;
       }
 
-      if (binding->bindingType == GPU_BINDING_TEXEL_BUFFER) {
+      if (bindingType == GPU_BINDING_TEXEL_BUFFER) {
         VkBufferViewCreateInfo viewInfo = {0};
         GPUBindGroupVk        *group    = writeContext->group;
+        GPUFormatLayout        texel;
         VkBufferView          *grown;
         uint32_t               capacity;
 
-        if (!vk_formatFromGPU(binding->texelFormat, &viewInfo.format)) {
+        if (!vk_formatFromGPU(texelFormat, &viewInfo.format) || !gpuFormatLayout(texelFormat, &texel)
+            || texel.bytesPerBlock == 0u || binding->size < texel.bytesPerBlock) {
           writeContext->valid = false;
           return;
         }
@@ -965,7 +980,7 @@ vk__writeDescriptor(void                          *context,
         viewInfo.sType  = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
         viewInfo.buffer = buffer->buffer;
         viewInfo.offset = binding->offset;
-        viewInfo.range  = binding->size;
+        viewInfo.range  = binding->size - binding->size % texel.bytesPerBlock; /* whole texels */
 
         if (vkCreateBufferView(group->device, &viewInfo, NULL,
                                &group->texelViews[group->texelViewCount]) != VK_SUCCESS) {
@@ -1080,9 +1095,19 @@ vk__writeDescriptorBuffer(void                          *context,
   group        = writeContext ? writeContext->group : NULL;
   layout       = group ? group->layout : NULL;
 
+  /* texel reads: a read-only storage binding whose layout names a view is that view */
+  GPUBindingType bindingType = binding ? binding->bindingType : GPU_BINDING_UNIFORM_BUFFER;
+  GPUFormat      texelFormat = binding ? binding->texelFormat : GPU_FORMAT_UNDEFINED;
+
+  if (binding && bindingType == GPU_BINDING_READ_ONLY_STORAGE_BUFFER
+      && binding->bufferLayout.texelView != GPU_FORMAT_UNDEFINED) {
+    bindingType = GPU_BINDING_TEXEL_BUFFER;
+    texelFormat = binding->bufferLayout.texelView;
+  }
+
   if (!writeContext || !writeContext->valid || !binding || !layout
       || !layout->gpuDevice || !layout->gpuDevice->getDescriptor
-      || !vk__descriptorType(binding->bindingType,
+      || !vk__descriptorType(bindingType,
                              binding->hasDynamicOffset,
                              &type)) {
     if (writeContext) {
@@ -1144,13 +1169,15 @@ vk__writeDescriptorBuffer(void                          *context,
       addressInfo.format  = VK_FORMAT_UNDEFINED;
 
       if (type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) {
-        addressInfo.range = binding->size;
+        GPUFormatLayout texel;
 
-        if (!vk_formatFromGPU(binding->texelFormat, &addressInfo.format)) {
+        if (!vk_formatFromGPU(texelFormat, &addressInfo.format) || !gpuFormatLayout(texelFormat, &texel)
+            || texel.bytesPerBlock == 0u || binding->size < texel.bytesPerBlock) {
           writeContext->valid = false;
           return;
         }
 
+        addressInfo.range                = binding->size - binding->size % texel.bytesPerBlock; /* whole texels */
         getInfo.data.pUniformTexelBuffer = &addressInfo;
       } else if (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
         getInfo.data.pUniformBuffer = &addressInfo;
