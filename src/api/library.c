@@ -2971,10 +2971,12 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
     }
 
     /* Qualcomm's compiler: NoContraction on OpFConvert asserts it, and
-     * (x*c)>>s with c = odd*2^k, s = k+1 comes out as x */
+     * (x*c)>>s with c = odd*2^k, s = k+1 comes out as x. its int-to-float
+     * conversions run as fast as the bit steps USL would put in their place */
     if (device->uslQualcommCompiler
         && (us_cap_atom_text(&targetAtoms[targetAtomCount++], "spirv_bare_conversions") != USLOk
-            || us_cap_atom_text(&targetAtoms[targetAtomCount++], "spirv_guard_mul_shift") != USLOk)) {
+            || us_cap_atom_text(&targetAtoms[targetAtomCount++], "spirv_guard_mul_shift") != USLOk
+            || us_cap_atom_text(&targetAtoms[targetAtomCount++], USL_NO_SMALL_INT_FLOATS_ATOM) != USLOk)) {
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
