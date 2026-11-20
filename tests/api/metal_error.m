@@ -259,6 +259,19 @@ gpu_test_metal_errors(GPUDevice *device) {
   }
 
   @autoreleasepool {
-    return check_native_errors() && check_surface_status(device);
+    __block int surface = 0;
+
+    if (!check_native_errors())
+      return 0;
+
+    /* layers are resized on the main thread (mt_resizeSwapchain refuses
+     * others): a host running this test on another thread asks it there */
+    if ([NSThread isMainThread])
+      return check_surface_status(device);
+
+    dispatch_sync(dispatch_get_main_queue(), ^{
+      surface = check_surface_status(device);
+    });
+    return surface;
   }
 }
