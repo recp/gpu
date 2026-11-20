@@ -280,13 +280,70 @@ mt_prepareArgumentState(GPUCommandBuffer *cmdb,
 #endif
 }
 
+/* retained until the GPU is done with this command buffer (mt__releaseHeld) */
+static void
+mt__appendHeld(MTCommandBuffer *native, id object) {
+  id      *grown;
+  uint32_t capacity;
+
+  if (native->heldObjectCount == native->heldObjectCapacity) {
+    capacity = native->heldObjectCapacity ? native->heldObjectCapacity * 2u : 16u;
+    if (!(grown = realloc(native->heldObjects, capacity * sizeof(*grown))))
+      return;
+    native->heldObjects        = grown;
+    native->heldObjectCapacity = capacity;
+  }
+
+  native->heldObjects[native->heldObjectCount++] = [object retain];
+}
+
+#if MT_HAS_METAL4
+static inline uint32_t
+mt__pointerHash(const void *pointer) {
+  return (uint32_t)((((uintptr_t)pointer >> 4) * UINT64_C(0x9E3779B97F4A7C15)) >> 32);
+}
+
+/* true the first time this command buffer meets the allocation */
+static bool
+mt__residencyFirstUse(MTCommandBuffer *native, id allocation) {
+  void   **grown, *key;
+  uint32_t capacity, mask, i, j;
+
+  if (2u * (native->residencyAllocationCount + 1u) > native->residencySeenCapacity) {
+    capacity = native->residencySeenCapacity ? native->residencySeenCapacity * 2u : 256u;
+    if (!(grown = calloc(capacity, sizeof(*grown))))
+      return true; /* added or held twice then: still right */
+
+    for (i = 0u; i < native->residencySeenCapacity; i++) {
+      if (!(key = native->residencySeen[i]))
+        continue;
+      for (j = mt__pointerHash(key) & (capacity - 1u); grown[j]; j = (j + 1u) & (capacity - 1u))
+        ;
+      grown[j] = key;
+    }
+
+    free(native->residencySeen);
+    native->residencySeen         = grown;
+    native->residencySeenCapacity = capacity;
+  }
+
+  mask = native->residencySeenCapacity - 1u;
+  for (i = mt__pointerHash(allocation) & mask; (key = native->residencySeen[i]); i = (i + 1u) & mask) {
+    if (key == (void *)allocation)
+      return false;
+  }
+
+  native->residencySeen[i] = (void *)allocation;
+  native->residencyAllocationCount++;
+  return true;
+}
+#endif
+
 GPU_HIDE
 void
 mt_useAllocation(GPUCommandBuffer *cmdb, id allocation) {
 #if MT_HAS_METAL4
   MTCommandBuffer *native;
-  uint32_t         count;
-  uint32_t         i;
 
   native = mt_commandBuffer(cmdb);
 
@@ -305,27 +362,30 @@ mt_useAllocation(GPUCommandBuffer *cmdb, id allocation) {
     return;
   }
 
-  count = native->residencyAllocationCount;
+  native->previousResidencyAllocation = native->lastResidencyAllocation;
+  native->lastResidencyAllocation     = allocation;
 
-  for (i = count; i > 0u; i--) {
-    if (native->residencyAllocations[i - 1u] == allocation) {
-      native->previousResidencyAllocation = native->lastResidencyAllocation;
-      native->lastResidencyAllocation     = allocation;
-      return;
-    }
-  }
+  if (!mt__residencyFirstUse(native, allocation))
+    return;
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
-    if (count < MT_RESIDENCY_CACHE_SIZE) {
-      native->residencyAllocations[count] = allocation;
-      native->residencyAllocationCount    = count + 1u;
-      [native->residency addAllocation:allocation];
-    } else if (![native->residency containsAllocation:allocation]) {
+    id<MTLHeap> heap = nil;
+
+    /* a resource placed in a heap is resident through its heap: one entry
+     * for all of them, as a set's commit costs by its entries. the command
+     * buffer holds the resource itself until the GPU is done, as the set
+     * would have, so its space in the heap isn't reused under this work */
+    if ([allocation respondsToSelector:@selector(heap)])
+      heap = [(id<MTLResource>)allocation heap];
+
+    if (heap) {
+      mt__appendHeld(native, allocation);
+
+      if (mt__residencyFirstUse(native, heap))
+        [native->residency addAllocation:heap];
+    } else {
       [native->residency addAllocation:allocation];
     }
-
-    native->previousResidencyAllocation = native->lastResidencyAllocation;
-    native->lastResidencyAllocation     = allocation;
   }
 #else
   GPU__UNUSED(cmdb);
@@ -382,8 +442,6 @@ GPU_HIDE
 void
 mt_holdObject(GPUCommandBuffer *cmdb, id object) {
   MTCommandBuffer *native;
-  id              *grown;
-  uint32_t         capacity;
   uint32_t         i;
 
   if (!object || !(native = mt_commandBuffer(cmdb)))
@@ -394,15 +452,7 @@ mt_holdObject(GPUCommandBuffer *cmdb, id object) {
     if (native->heldObjects[i - 1u] == object)
       return;
 
-  if (native->heldObjectCount == native->heldObjectCapacity) {
-    capacity = native->heldObjectCapacity ? native->heldObjectCapacity * 2u : 16u;
-    if (!(grown = realloc(native->heldObjects, capacity * sizeof(*grown))))
-      return;
-    native->heldObjects        = grown;
-    native->heldObjectCapacity = capacity;
-  }
-
-  native->heldObjects[native->heldObjectCount++] = [object retain];
+  mt__appendHeld(native, object);
 }
 
 /* the GPU is done with this command buffer's work (or it never ran) */
@@ -1034,6 +1084,7 @@ mt_destroyCommandBufferState(MTCommandBuffer *native) {
   [native->drawable release];
   [native->feedbackDrawable release];
   [native->residency release];
+  free(native->residencySeen);
   [native->allocator release];
   [native->modern release];
 
@@ -1133,6 +1184,7 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
         /* idle pooled commands must not retain completed resource allocations. */
         [native->residency removeAllAllocations];
         [native->residency commit];
+        memset(native->residencySeen, 0, native->residencySeenCapacity * sizeof(*native->residencySeen));
       }
 
       native->residencyAllocationCount    = 0u;

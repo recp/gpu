@@ -111,7 +111,7 @@ typedef struct GPUAdapterMT {
 
 enum {
   MT_TRANSFER_SLOT_COUNT  = 8u, /* staging made when first used: past the first few only in a burst */
-  MT_RESIDENCY_CACHE_SIZE = 64u
+  MT_RESIDENCY_CACHE_SIZE = 64u  /* a command buffer's residency set's first capacity */
 };
 
 typedef struct GPUSwapchainMetal {
@@ -346,7 +346,7 @@ struct MTCommandBuffer {
   MTCommandBuffer                       *next;
   MTCommandBuffer                       *poolNext;
   MTUploadChunk                         *uploads;
-  id                                     residencyAllocations[MT_RESIDENCY_CACHE_SIZE];
+  void                                 **residencySeen; /* allocations met: open-addressed, at most half full */
   MTArgumentState                        vertexArguments;
   MTArgumentState                        fragmentArguments;
   MTArgumentState                        tileArguments;
@@ -381,6 +381,7 @@ struct MTCommandBuffer {
   uint32_t                               heldObjectCount;
   uint32_t                               heldObjectCapacity;
   uint32_t                               residencyAllocationCount;
+  uint32_t                               residencySeenCapacity;
   MTCommandMode                          mode;
   atomic_bool                            completionReady;
   bool                                   refreshModern;

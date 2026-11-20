@@ -298,9 +298,13 @@ check_completed(GPUDevice *device) {
 #if MT_HAS_METAL4
     if (@available(macOS 26.0, iOS 26.0, *)) {
       if (nativeQueue->mode == MTCommandMode4) {
+        /* resident itself, or through the heap it was placed in */
         for (i = 0u; i < RESIDENCY_COMMANDS; i++) {
-          if (![(id<MTLResidencySet>)resources[i].native->residency
-                  containsAllocation:owned_texture(resources[i].texture)])
+          id<MTLTexture> texture = owned_texture(resources[i].texture);
+
+          if (![(id<MTLResidencySet>)resources[i].native->residency containsAllocation:texture]
+              && !(texture.heap
+                   && [(id<MTLResidencySet>)resources[i].native->residency containsAllocation:texture.heap]))
             goto cleanup;
         }
       }

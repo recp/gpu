@@ -21,8 +21,9 @@
  * writing in it makes later passes wait: a compute pass and the render pass
  * after it run one after the other in one heap, and pooling only what
  * shaders read still lets uploads and readback copies write there.
- * residency sets retain what they hold, so a destroyed resource's space is
- * reused only once the GPU is done with it. GPU_RESOURCE_POOL=0 turns the
+ * command buffers hold what they use (a placed resource on their held list,
+ * its heap in their residency set), so a destroyed resource's space is reused
+ * only once the GPU is done with it. GPU_RESOURCE_POOL=0 turns the
  * pool off. */
 
 #include "../common.h"
