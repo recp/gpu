@@ -699,6 +699,26 @@ GPUSetPipelineCompileThreads(GPUDevice *device, uint32_t threadCount) {
 
 GPU_EXPORT
 GPUResult
+GPUHoldPipelineCompiles(GPUDevice *device, bool hold) {
+  if (!device)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  compilePoolHold(device, hold);
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
+GPUReleaseHeldPipelines(GPUDevice *device) {
+  if (!device)
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  compilePoolRelease(device);
+  return GPU_OK;
+}
+
+GPU_EXPORT
+GPUResult
 GPUWaitComputePipeline(GPUComputePipeline *pipeline) {
   if (!pipeline)
     return GPU_ERROR_INVALID_ARGUMENT;

@@ -36,6 +36,7 @@ struct GPUCompileTask {
   GPUCompileTask *next;
   uint32_t        done; /* compileTaskDone: what run wrote is seen */
   bool            started;
+  bool            held; /* in the held list (compilePoolHold) */
 };
 
 static inline bool
@@ -76,12 +77,25 @@ GPU_HIDE
 void
 compilePoolSubmit(GPUDevice *device, GPUCompileTask *task);
 
+/* tasks submitted from now on held (hold false: those after not; the held
+ * stay held): a thread starts one only while no other compile runs that
+ * came from the queue or a wait, so those a frame waits for compile alone;
+ * a wait runs one at once as any other not started. no-op without threads */
+GPU_HIDE
+void
+compilePoolHold(GPUDevice *device, bool hold);
+
+/* the held tasks queued after the others, as if never held */
+GPU_HIDE
+void
+compilePoolRelease(GPUDevice *device);
+
 /* the task done: run here when no thread started it */
 GPU_HIDE
 void
 compilePoolWait(GPUDevice *device, GPUCompileTask *task);
 
-/* every queued and running task done */
+/* every queued, held and running task done */
 GPU_HIDE
 void
 compilePoolDrain(GPUDevice *device);

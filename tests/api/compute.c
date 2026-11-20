@@ -1692,9 +1692,23 @@ gpu_test_compute(GPUDevice *device, const char *bytecodePath) {
          && check_compute_pipeline_validation(device, bytecodePath)
          && check_compute_cache_reused_library(device, bytecodePath)
          && check_compute_shared_shader_layout(device, bytecodePath)
+         && check_compute_readback(device, bytecodePath)
+         /* held: a bind compiles its own there, the rest once released or destroyed */
+         && GPUHoldPipelineCompiles(NULL, true) == GPU_ERROR_INVALID_ARGUMENT
+         && GPUReleaseHeldPipelines(NULL) == GPU_ERROR_INVALID_ARGUMENT
+         && GPUHoldPipelineCompiles(device, true) == GPU_OK
+         && check_compute_readback(device, bytecodePath)
+         && check_compute_shared_shader_layout(device, bytecodePath)
+         && GPUReleaseHeldPipelines(device) == GPU_OK
+         && check_compute_pipeline_validation(device, bytecodePath)
+         && GPUHoldPipelineCompiles(device, false) == GPU_OK
          && check_compute_readback(device, bytecodePath);
     (void)GPUSetPipelineCompileThreads(device, 0u);
     gComputeCompileThreads = false;
+    /* without threads a hold changes nothing */
+    ok = ok && GPUHoldPipelineCompiles(device, true) == GPU_OK
+         && check_compute_readback(device, bytecodePath)
+         && GPUHoldPipelineCompiles(device, false) == GPU_OK;
     if (!ok)
       fprintf(stderr, "compute: background pipeline compiles failed\n");
   }

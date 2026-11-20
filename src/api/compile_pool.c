@@ -44,10 +44,14 @@ typedef struct GPUCompilePool {
   GPUDevice         *device;
   GPUCompileTask    *head;
   GPUCompileTask    *tail;
+  GPUCompileTask    *heldHead; /* queued while holding (compilePoolHold): */
+  GPUCompileTask    *heldTail; /* started only with no other compile running */
   uint32_t           threadCount;
   uint32_t           running;
+  uint32_t           urgent;   /* running from the queue or for a waiter */
   uint32_t           storing;  /* threads writing the device's caches */
   bool               compiled; /* a task ran since they were written */
+  bool               holding;
   bool               stop;
 } GPUCompilePool;
 
@@ -65,6 +69,9 @@ typedef struct GPUCompilePool {
 #  define POOL_BROADCAST(p,c) pthread_cond_broadcast(&(p)->c)
 #endif
 
+/* the queue's next task, else a held one while no other compile runs: a
+ * held compile never slows those something waits for */
+
 static GPUCompileTask*
 compilePool__take(GPUCompilePool *pool) {
   GPUCompileTask *task;
@@ -72,12 +79,42 @@ compilePool__take(GPUCompilePool *pool) {
   if ((task = pool->head)) {
     if (!(pool->head = task->next))
       pool->tail = NULL;
-    task->next    = NULL;
-    task->started = true;
-    pool->running++;
+    task->held = false;
+    pool->urgent++;
+  } else if ((task = pool->heldHead) && !pool->urgent) {
+    if (!(pool->heldHead = task->next))
+      pool->heldTail = NULL;
+  } else {
+    return NULL;
   }
 
+  task->next    = NULL;
+  task->started = true;
+  pool->running++;
+
   return task;
+}
+
+/* the held tasks after those queued, as any other */
+
+static void
+compilePool__release(GPUCompilePool *pool) {
+  GPUCompileTask *task;
+
+  if (!pool->heldHead)
+    return;
+
+  for (task = pool->heldHead; task; task = task->next)
+    task->held = false;
+
+  if (pool->tail)
+    pool->tail->next = pool->heldHead;
+  else
+    pool->head = pool->heldHead;
+  pool->tail     = pool->heldTail;
+  pool->heldHead = NULL;
+  pool->heldTail = NULL;
+  POOL_BROADCAST(pool, work);
 }
 
 /* the task's result is published under the lock. the last one run on the
@@ -85,7 +122,7 @@ compilePool__take(GPUCompilePool *pool) {
  * ran it writes them itself, next round */
 
 static void
-compilePool__run(GPUCompilePool *pool, GPUCompileTask *task, bool asking) {
+compilePool__run(GPUCompilePool *pool, GPUCompileTask *task, bool urgent, bool asking) {
   task->run(task);
 
   POOL_LOCK(pool);
@@ -93,7 +130,10 @@ compilePool__run(GPUCompilePool *pool, GPUCompileTask *task, bool asking) {
   pool->running--;
   pool->compiled = true;
   POOL_BROADCAST(pool, done);
-  if (asking && !pool->head && !pool->running)
+  /* the last urgent one done: the held may start */
+  if (urgent && !--pool->urgent && pool->heldHead && !pool->head)
+    POOL_BROADCAST(pool, work);
+  else if (asking && !pool->head && !pool->running)
     POOL_SIGNAL(pool, work);
   POOL_UNLOCK(pool);
 }
@@ -111,13 +151,17 @@ compilePool__worker(void *context) {
   pool = context;
 
   for (;;) {
+    bool urgent;
+
     POOL_LOCK(pool);
-    while (!pool->head && !pool->stop && !(pool->compiled && !pool->running))
+    while (!pool->head && !(pool->heldHead && !pool->urgent) && !pool->stop
+           && !(pool->compiled && !pool->running))
       POOL_WAIT(pool, work);
 
+    urgent = pool->head != NULL;
     if ((task = compilePool__take(pool))) {
       POOL_UNLOCK(pool);
-      compilePool__run(pool, task, false);
+      compilePool__run(pool, task, urgent, false);
       continue;
     }
 
@@ -153,6 +197,7 @@ compilePool__stop(GPUCompilePool *pool) {
   uint32_t i;
 
   POOL_LOCK(pool);
+  compilePool__release(pool);
   pool->stop = true;
   POOL_BROADCAST(pool, work);
   POOL_UNLOCK(pool);
@@ -275,6 +320,7 @@ compilePoolSubmit(GPUDevice *device, GPUCompileTask *task) {
 
   task->next    = NULL;
   task->started = false;
+  task->held    = false;
   task->done    = 0u;
 
   if (!device || !(pool = device->_compilePool) || !pool->threadCount) {
@@ -285,12 +331,48 @@ compilePoolSubmit(GPUDevice *device, GPUCompileTask *task) {
   }
 
   POOL_LOCK(pool);
-  if (pool->tail)
-    pool->tail->next = task;
-  else
-    pool->head = task;
-  pool->tail = task;
-  POOL_SIGNAL(pool, work);
+  if ((task->held = pool->holding)) {
+    if (pool->heldTail)
+      pool->heldTail->next = task;
+    else
+      pool->heldHead = task;
+    pool->heldTail = task;
+    if (!pool->urgent && !pool->head)
+      POOL_SIGNAL(pool, work);
+  } else {
+    if (pool->tail)
+      pool->tail->next = task;
+    else
+      pool->head = task;
+    pool->tail = task;
+    POOL_SIGNAL(pool, work);
+  }
+  POOL_UNLOCK(pool);
+}
+
+GPU_HIDE
+void
+compilePoolHold(GPUDevice *device, bool hold) {
+  GPUCompilePool *pool;
+
+  if (!device || !(pool = device->_compilePool) || !pool->threadCount)
+    return;
+
+  POOL_LOCK(pool);
+  pool->holding = hold;
+  POOL_UNLOCK(pool);
+}
+
+GPU_HIDE
+void
+compilePoolRelease(GPUDevice *device) {
+  GPUCompilePool *pool;
+
+  if (!device || !(pool = device->_compilePool))
+    return;
+
+  POOL_LOCK(pool);
+  compilePool__release(pool);
   POOL_UNLOCK(pool);
 }
 
@@ -306,21 +388,26 @@ compilePoolWait(GPUDevice *device, GPUCompileTask *task) {
   POOL_LOCK(pool);
 
   if (!task->started) {
-    for (link = &pool->head; *link && *link != task; link = &(*link)->next) {}
+    GPUCompileTask **head = task->held ? &pool->heldHead : &pool->head;
+    GPUCompileTask **tail = task->held ? &pool->heldTail : &pool->tail;
+
+    for (link = head; *link && *link != task; link = &(*link)->next) {}
 
     if (*link) {
       *link = task->next;
-      if (pool->tail == task) {
-        pool->tail = NULL;
-        for (GPUCompileTask *last = pool->head; last; last = last->next)
-          pool->tail = last;
+      if (*tail == task) {
+        *tail = NULL;
+        for (GPUCompileTask *last = *head; last; last = last->next)
+          *tail = last;
       }
       task->next    = NULL;
+      task->held    = false;
       task->started = true;
       pool->running++;
+      pool->urgent++; /* held ones wait while it runs */
       POOL_UNLOCK(pool);
 
-      compilePool__run(pool, task, true);
+      compilePool__run(pool, task, true, true);
       return;
     }
   }
@@ -340,6 +427,7 @@ compilePoolDrain(GPUDevice *device) {
     return;
 
   POOL_LOCK(pool);
+  compilePool__release(pool);
   while (pool->head || pool->running)
     POOL_WAIT(pool, done);
   POOL_UNLOCK(pool);

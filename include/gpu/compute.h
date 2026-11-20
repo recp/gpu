@@ -68,6 +68,24 @@ GPU_EXPORT
 GPUResult
 GPUSetPipelineCompileThreads(GPUDevice *device, uint32_t threadCount);
 
+/* compute pipelines created while held (hold true; false: those created
+ * after compile as before, the held stay held) wait for the compile threads
+ * to have nothing else: a thread starts one only while no compile runs that
+ * was made outside the hold or that something waits for. so the pipelines a
+ * first frame binds compile alone, not slowed by the others beside them. a
+ * held pipeline's bind or wait compiles it there at once, as one no thread
+ * started. no-op where pipelines compile on the creating thread or by the
+ * backend's own means (GPUSetPipelineCompileThreads) */
+GPU_EXPORT
+GPUResult
+GPUHoldPipelineCompiles(GPUDevice *device, bool hold);
+
+/* the held pipelines compiled as any other, in the order they were made:
+ * when one of them is wanted soon */
+GPU_EXPORT
+GPUResult
+GPUReleaseHeldPipelines(GPUDevice *device);
+
 /* GPU_OK once the pipeline's compile is done and it can be bound */
 GPU_EXPORT
 GPUResult
