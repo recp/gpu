@@ -317,7 +317,8 @@ mt_computeCommandEncoder(GPUCommandBuffer               *cmdb,
     }
 
     if (@available(macOS 26.0, iOS 26.0, *)) {
-      nativeState->modern = [commandState->modern computeCommandEncoder];
+      if (!(nativeState->modern = mt_reuseOpenEncoder(cmdb, info->label && info->label[0] != '\0')))
+        nativeState->modern = [[commandState->modern computeCommandEncoder] retain];
       mt_applyPendingBarrier(cmdb, nativeState->modern, MT_ENCODER_STAGES(MTLStageDispatch));
 
       nativeState->arguments = &commandState->computeArguments;
@@ -632,8 +633,17 @@ mt_endComputeEncoding(GPUComputePassEncoder *enc) {
   }
 #if MT_HAS_METAL4
   if (native->modern) {
-    if (@available(macOS 26.0, iOS 26.0, *)) {
-      [native->modern endEncoding];
+    MTCommandBuffer *command = mt_commandBuffer(enc->_cmdb);
+
+    /* kept open for a compute pass after it; ended by whatever else comes */
+    if (command && !command->openCompute) {
+      command->openCompute = native->modern;
+      command->openOrdered = false;
+    } else {
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        [native->modern endEncoding];
+      }
+      [native->modern release];
     }
   } else
 #endif

@@ -370,6 +370,10 @@ struct MTCommandBuffer {
   uint64_t                               pendingMLAfterStages;
   uint64_t                               pendingMLBeforeStages;
   uint64_t                               pendingMLVisibility;
+  uint64_t                               groupAfterStages;  /* Metal 4: barriers since the last encoder */
+  uint64_t                               groupBeforeStages;
+  uint64_t                               groupVisibility;
+  id                                     openCompute; /* Metal 4: a compute pass's encoder kept open for the next */
   MTTextureViewSlot                     *heldViews;   /* view slots bound here: given back once the GPU is done */
   id                                    *heldObjects; /* sampler states bound here: released then too */
   uint32_t                               heldViewCount;
@@ -380,6 +384,7 @@ struct MTCommandBuffer {
   MTCommandMode                          mode;
   atomic_bool                            completionReady;
   bool                                   refreshModern;
+  bool                                   openOrdered; /* a barrier since made its later dispatches wait */
 };
 
 typedef struct MTQuerySet {
@@ -607,12 +612,35 @@ GPU_HIDE
 void
 mt_carryPendingBarrier(GPUCommandBuffer *cmdb);
 
-/* at commit on Metal 4: a barrier no encoder followed, encoded on one of its
- * own so later command buffers wait as they would have */
+/* Metal 4, before another encoder starts and at commit: the compute encoder
+ * kept open ended, and the barriers recorded since the last encoder as one
+ * barrier on an encoder of their own */
 
 GPU_HIDE
 void
 mt_flushPendingBarrier(GPUCommandBuffer *cmdb);
+
+/* Metal 4: compute passes with a barrier between them that orders dispatches
+ * share one encoder (an encoder costs the driver far more than a barrier);
+ * passes with none keep encoders of their own, free to overlap as before */
+
+GPU_HIDE
+id
+mt_reuseOpenEncoder(GPUCommandBuffer *cmdb, bool labelled);
+
+GPU_HIDE
+void
+mt_closeOpenEncoder(MTCommandBuffer *native);
+
+/* Metal 4: a barrier on the encoder kept open; work after it in that encoder,
+ * in later encoders and in later command buffers waits */
+
+GPU_HIDE
+void
+mt_barrierOnOpenEncoder(MTCommandBuffer *native,
+                        uint64_t         afterStages,
+                        uint64_t         beforeStages,
+                        uint64_t         visibility);
 
 GPU_HIDE
 void

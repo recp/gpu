@@ -555,6 +555,8 @@ encode(GPUCommandBuffer *cmdb, GPUMLBindingsEXT *bindings) {
       return GPU_ERROR_UNSUPPORTED;
     }
 
+    mt_flushPendingBarrier(cmdb);
+
     if (!(encoder = [(id<MTL4CommandBuffer>)command->modern machineLearningCommandEncoder])) {
       return GPU_ERROR_BACKEND_FAILURE;
     }

@@ -1036,6 +1036,7 @@ mt_beginAccelerationStructurePass(GPUCommandBuffer *cmdb, const char *label) {
 #if MT_HAS_METAL4
   if (command->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
+      mt_flushPendingBarrier(cmdb);
       native->modern = [command->modern computeCommandEncoder];
       mt_applyPendingBarrier(cmdb, native->modern, MT_ENCODER_STAGES(MTLStageAccelerationStructure));
     }

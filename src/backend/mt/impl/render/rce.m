@@ -248,6 +248,7 @@ mt_renderCommandEncoder(GPUCommandBuffer *cmdb, GPURenderPassDesc *pass) {
     }
 
     if (@available(macOS 26.0, iOS 26.0, *)) {
+      mt_flushPendingBarrier(cmdb);
       nativeState->modern = [commandState->modern renderCommandEncoderWithDescriptor:nativePass->modern];
       mt_applyPendingBarrier(cmdb,
                              nativeState->modern,

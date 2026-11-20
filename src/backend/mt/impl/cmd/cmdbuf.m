@@ -729,20 +729,102 @@ mt_flushPendingBarrier(GPUCommandBuffer *cmdb) {
 #if MT_HAS_METAL4
   MTCommandBuffer *native;
 
-  if (!(native = mt_commandBuffer(cmdb)) || native->mode != MTCommandMode4
-      || !native->pendingAfterStages || !native->pendingBeforeStages)
+  if (!(native = mt_commandBuffer(cmdb)) || native->mode != MTCommandMode4)
     return;
 
+  mt_closeOpenEncoder(native);
+
+  if (!native->groupBeforeStages)
+    return;
+
+  /* a producer barrier on an empty encoder: every later encoder, here or in a
+   * later command buffer, waits for the work before it (the GPU starts later
+   * work sooner than with a barrier at the next encoder's start) */
   if (@available(macOS 26.0, iOS 26.0, *)) {
     id<MTL4ComputeCommandEncoder> encoder;
 
     if ((encoder = [(id<MTL4CommandBuffer>)native->modern computeCommandEncoder])) {
       mt_applyPendingBarrier(cmdb, encoder, 0u);
+      [encoder barrierAfterStages:native->groupAfterStages
+                beforeQueueStages:native->groupBeforeStages
+                visibilityOptions:native->groupVisibility];
       [encoder endEncoding];
     }
   }
+
+  native->groupAfterStages  = 0u;
+  native->groupBeforeStages = 0u;
+  native->groupVisibility   = 0u;
 #else
   GPU__UNUSED(cmdb);
+#endif
+}
+
+GPU_HIDE
+void
+mt_closeOpenEncoder(MTCommandBuffer *native) {
+#if MT_HAS_METAL4
+  id encoder;
+
+  if (!native || !(encoder = native->openCompute))
+    return;
+
+  native->openCompute = nil;
+  native->openOrdered = false;
+
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    [(id<MTL4ComputeCommandEncoder>)encoder endEncoding];
+  }
+
+  [encoder release];
+#else
+  GPU__UNUSED(native);
+#endif
+}
+
+GPU_HIDE
+void
+mt_barrierOnOpenEncoder(MTCommandBuffer *native,
+                        uint64_t         afterStages,
+                        uint64_t         beforeStages,
+                        uint64_t         visibility) {
+#if MT_HAS_METAL4
+  uint64_t inside, encoderStages;
+
+  if (!native || !native->openCompute)
+    return;
+
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    id<MTL4ComputeCommandEncoder> encoder = native->openCompute;
+
+    encoderStages = MTLStageDispatch | MTLStageBlit | MTLStageAccelerationStructure;
+
+    /* this encoder's later work, if a compute pass goes on in it: after its
+     * own earlier work (an encoder barrier takes only stages it runs) and
+     * after earlier encoders' */
+    if ((inside = beforeStages & encoderStages)) {
+      if (afterStages & encoderStages) {
+        [encoder barrierAfterEncoderStages:afterStages & encoderStages
+                       beforeEncoderStages:inside
+                         visibilityOptions:visibility];
+        native->openOrdered |= (afterStages & inside & MTLStageDispatch) != 0u;
+      }
+
+      [encoder barrierAfterQueueStages:afterStages
+                          beforeStages:inside
+                     visibilityOptions:visibility];
+    }
+
+    /* every later encoder, here or in a later command buffer */
+    [encoder barrierAfterStages:afterStages
+              beforeQueueStages:beforeStages
+              visibilityOptions:visibility];
+  }
+#else
+  GPU__UNUSED(native);
+  GPU__UNUSED(afterStages);
+  GPU__UNUSED(beforeStages);
+  GPU__UNUSED(visibility);
 #endif
 }
 
@@ -854,43 +936,26 @@ mt_applyPendingBarrier(GPUCommandBuffer *cmdb,
 
   applyStages = encoderStages ? native->pendingBeforeStages & encoderStages : native->pendingBeforeStages;
 
-#if MT_HAS_METAL4
-  /* Metal 4 tracks nothing: this encoder's stages wait from its start, and a
-   * producer barrier before its first command makes every later encoder (here
-   * or in a later command buffer) wait for the same work, as an encoder of its
-   * own between them would */
-  if (native->mode == MTCommandMode4) {
-    if (@available(macOS 26.0, iOS 26.0, *)) {
-      if (applyStages) {
-        [(id<MTL4CommandEncoder>)encoder
-          barrierAfterQueueStages:native->pendingAfterStages
-                     beforeStages:applyStages
-                visibilityOptions:native->pendingVisibility];
-      }
-
-      [(id<MTL4CommandEncoder>)encoder
-        barrierAfterStages:native->pendingAfterStages
-         beforeQueueStages:native->pendingBeforeStages
-         visibilityOptions:native->pendingVisibility];
-    }
-
-    native->pendingAfterStages  = 0u;
-    native->pendingBeforeStages = 0u;
-    native->pendingVisibility   = 0u;
-    return;
-  }
-#endif
-
   if (!applyStages)
     return;
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
-#if !TARGET_OS_SIMULATOR
-    /* the Simulator's encoders say they have queue barriers and throw; classic resources are tracked */
-    [(id<MTLCommandEncoder>)encoder
-      barrierAfterQueueStages:native->pendingAfterStages
-                 beforeStages:applyStages];
+#if MT_HAS_METAL4
+    if (native->mode == MTCommandMode4) {
+      [(id<MTL4CommandEncoder>)encoder
+        barrierAfterQueueStages:native->pendingAfterStages
+                   beforeStages:applyStages
+              visibilityOptions:native->pendingVisibility];
+    } else
 #endif
+    {
+#if !TARGET_OS_SIMULATOR
+      /* the Simulator's encoders say they have queue barriers and throw; classic resources are tracked */
+      [(id<MTLCommandEncoder>)encoder
+        barrierAfterQueueStages:native->pendingAfterStages
+                   beforeStages:applyStages];
+#endif
+    }
   }
 
   native->pendingBeforeStages &= ~applyStages;
@@ -902,6 +967,35 @@ mt_applyPendingBarrier(GPUCommandBuffer *cmdb,
 #else
   GPU__UNUSED(cmdb);
   GPU__UNUSED(encoder);
+#endif
+}
+
+GPU_HIDE
+id
+mt_reuseOpenEncoder(GPUCommandBuffer *cmdb, bool labelled) {
+#if MT_HAS_METAL4
+  MTCommandBuffer *native;
+  id               encoder;
+
+  if (!(native = mt_commandBuffer(cmdb)))
+    return nil;
+
+  /* not across passes nothing orders (they may overlap, as encoders of their
+   * own do), labelled ones (debug markers: one encoder a pass, as captures
+   * show them) or GPU_METAL_FULL_BARRIERS' (every encoder waits whole) */
+  if (!native->openCompute || !native->openOrdered || labelled || mt__fullBarriers()) {
+    mt_flushPendingBarrier(cmdb);
+    return nil;
+  }
+
+  encoder             = native->openCompute;
+  native->openCompute = nil;
+  native->openOrdered = false;
+  return encoder;
+#else
+  mt_flushPendingBarrier(cmdb);
+  GPU__UNUSED(labelled);
+  return nil;
 #endif
 }
 
@@ -929,6 +1023,7 @@ mt_destroyCommandBufferState(MTCommandBuffer *native) {
   [native->taskArguments.table release];
   [native->meshArguments.table release];
   [native->computeArguments.table release];
+  [native->openCompute release];
   [native->renderState.classic release];
   [native->computeState.classic release];
   [native->copyState.classic release];
@@ -973,6 +1068,9 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
 
   queue = native->owner;
   mt__releaseHeld(native, cmdb->_queue && cmdb->_queue->_device ? cmdb->_queue->_device->_priv : NULL);
+  [native->openCompute release];
+  native->openCompute = nil;
+  native->openOrdered = false;
   [native->renderState.classic release];
   native->renderState.classic = nil;
   [native->computeState.classic release];
@@ -999,6 +1097,9 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
   native->pendingMLAfterStages  = 0u;
   native->pendingMLBeforeStages = 0u;
   native->pendingMLVisibility   = 0u;
+  native->groupAfterStages      = 0u;
+  native->groupBeforeStages     = 0u;
+  native->groupVisibility       = 0u;
 
   for (upload = native->uploads; upload; upload = upload->next) {
     upload->offset = 0u;
@@ -1252,6 +1353,8 @@ mt_writeTimestamp(GPUCommandBuffer *cmdb,
     return;
   }
 
+  mt_flushPendingBarrier(cmdb);
+
   if (!mt_counterApiAvailable()) {
     return;
   }
@@ -1372,6 +1475,8 @@ mt_resolveQuerySet(GPUCommandBuffer *cmdb,
       || queryCount > set->count - firstQuery) {
     return;
   }
+
+  mt_flushPendingBarrier(cmdb);
 
   dst          = (id<MTLBuffer>)dstBuffer->_priv;
   resolveBytes = (uint64_t)queryCount * sizeof(uint64_t);

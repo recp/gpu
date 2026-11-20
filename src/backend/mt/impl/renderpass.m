@@ -929,6 +929,7 @@ mt_beginTransferPass(GPUCommandBuffer *cmdb, const char *label) {
 #if MT_HAS_METAL4
   if (commandState->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
+      mt_flushPendingBarrier(cmdb);
       native->modern = [[commandState->modern computeCommandEncoder] retain];
       mt_applyPendingBarrier(cmdb, native->modern, MT_ENCODER_STAGES(MTLStageBlit));
       commandState->refreshModern |= commandState->owner->shaderValidation;
@@ -1445,11 +1446,18 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
         return;
       }
 
-      /* encoded where the next encoder starts (mt_applyPendingBarrier), or
-       * at commit if none follows: an encoder of its own costs far more */
-      native->pendingAfterStages  |= afterStages;
-      native->pendingBeforeStages |= beforeStages;
-      native->pendingVisibility   |= visibility;
+      /* on the encoder a compute pass left open; else with the barriers
+       * after the last encoder, all on one encoder of their own made when
+       * the next encoder starts or at commit (mt_flushPendingBarrier): an
+       * encoder costs the driver far more than a barrier */
+      if (native->openCompute) {
+        mt_barrierOnOpenEncoder(native, afterStages, beforeStages, visibility);
+        return;
+      }
+
+      native->groupAfterStages  |= afterStages;
+      native->groupBeforeStages |= beforeStages;
+      native->groupVisibility   |= visibility;
       return;
     }
 #endif

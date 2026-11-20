@@ -1145,6 +1145,9 @@ mt_newCommandBuffer(GPUQueue         *__restrict cmdb,
   native->pendingAfterStages  = 0u;
   native->pendingBeforeStages = 0u;
   native->pendingVisibility   = 0u;
+  native->groupAfterStages    = 0u;
+  native->groupBeforeStages   = 0u;
+  native->groupVisibility     = 0u;
 
   for (upload = native->uploads; upload; upload = upload->next) {
     upload->offset = 0u;
@@ -1224,6 +1227,7 @@ mt_discardCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
 #if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     if (@available(macOS 26.0, iOS 26.0, *)) {
+      mt_closeOpenEncoder(native);
       [native->modern endCommandBuffer];
     } else {
       discardCommandBufferState(cmdb, NULL);
@@ -1265,8 +1269,8 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  /* a barrier with no encoder after it here: Metal 4 encodes it now, classic
-   * waits on the queue's next encoder */
+  /* barriers with no encoder after them here: Metal 4's on one of their own
+   * now, classic's wait on the queue's next encoder */
   mt_flushPendingBarrier(cmdb);
   mt_carryPendingBarrier(cmdb);
 
