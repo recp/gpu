@@ -607,6 +607,13 @@ GPU_HIDE
 void
 mt_carryPendingBarrier(GPUCommandBuffer *cmdb);
 
+/* at commit on Metal 4: a barrier no encoder followed, encoded on one of its
+ * own so later command buffers wait as they would have */
+
+GPU_HIDE
+void
+mt_flushPendingBarrier(GPUCommandBuffer *cmdb);
+
 GPU_HIDE
 void
 mt_destroyCommandBufferState(MTCommandBuffer *native);

@@ -1389,8 +1389,6 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
   if (@available(macOS 26.0, iOS 26.0, *)) {
 #if MT_HAS_METAL4
     if (native->mode == MTCommandMode4) {
-      id<MTL4ComputeCommandEncoder> encoder;
-
       afterStages  = mt_stageMask(barriers->srcStages);
       beforeStages = mt_stageMask(barriers->dstStages);
       visibility   = MTL4VisibilityOptionDevice;
@@ -1447,15 +1445,11 @@ mt_encodeBarriers(GPUCommandBuffer *cmdb, const GPUBarrierBatch *barriers) {
         return;
       }
 
-      if (!(encoder = [(id<MTL4CommandBuffer>)native->modern computeCommandEncoder])) {
-        return;
-      }
-
-      mt_applyPendingBarrier(cmdb, encoder, 0u);
-      [encoder barrierAfterStages:afterStages
-                beforeQueueStages:beforeStages
-                visibilityOptions:visibility];
-      [encoder endEncoding];
+      /* encoded where the next encoder starts (mt_applyPendingBarrier), or
+       * at commit if none follows: an encoder of its own costs far more */
+      native->pendingAfterStages  |= afterStages;
+      native->pendingBeforeStages |= beforeStages;
+      native->pendingVisibility   |= visibility;
       return;
     }
 #endif

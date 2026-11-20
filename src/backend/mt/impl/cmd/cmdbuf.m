@@ -723,6 +723,29 @@ mt_carryPendingBarrier(GPUCommandBuffer *cmdb) {
   native->pendingVisibility   = 0u;
 }
 
+GPU_HIDE
+void
+mt_flushPendingBarrier(GPUCommandBuffer *cmdb) {
+#if MT_HAS_METAL4
+  MTCommandBuffer *native;
+
+  if (!(native = mt_commandBuffer(cmdb)) || native->mode != MTCommandMode4
+      || !native->pendingAfterStages || !native->pendingBeforeStages)
+    return;
+
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    id<MTL4ComputeCommandEncoder> encoder;
+
+    if ((encoder = [(id<MTL4CommandBuffer>)native->modern computeCommandEncoder])) {
+      mt_applyPendingBarrier(cmdb, encoder, 0u);
+      [encoder endEncoding];
+    }
+  }
+#else
+  GPU__UNUSED(cmdb);
+#endif
+}
+
 #if MT_HAS_METAL4
 static bool
 mt__fullBarriers(void) {
@@ -831,26 +854,43 @@ mt_applyPendingBarrier(GPUCommandBuffer *cmdb,
 
   applyStages = encoderStages ? native->pendingBeforeStages & encoderStages : native->pendingBeforeStages;
 
+#if MT_HAS_METAL4
+  /* Metal 4 tracks nothing: this encoder's stages wait from its start, and a
+   * producer barrier before its first command makes every later encoder (here
+   * or in a later command buffer) wait for the same work, as an encoder of its
+   * own between them would */
+  if (native->mode == MTCommandMode4) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      if (applyStages) {
+        [(id<MTL4CommandEncoder>)encoder
+          barrierAfterQueueStages:native->pendingAfterStages
+                     beforeStages:applyStages
+                visibilityOptions:native->pendingVisibility];
+      }
+
+      [(id<MTL4CommandEncoder>)encoder
+        barrierAfterStages:native->pendingAfterStages
+         beforeQueueStages:native->pendingBeforeStages
+         visibilityOptions:native->pendingVisibility];
+    }
+
+    native->pendingAfterStages  = 0u;
+    native->pendingBeforeStages = 0u;
+    native->pendingVisibility   = 0u;
+    return;
+  }
+#endif
+
   if (!applyStages)
     return;
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
-#if MT_HAS_METAL4
-    if (native->mode == MTCommandMode4) {
-      [(id<MTL4CommandEncoder>)encoder
-        barrierAfterQueueStages:native->pendingAfterStages
-                   beforeStages:applyStages
-              visibilityOptions:native->pendingVisibility];
-    } else
-#endif
-    {
 #if !TARGET_OS_SIMULATOR
-      /* the Simulator's encoders say they have queue barriers and throw; classic resources are tracked */
-      [(id<MTLCommandEncoder>)encoder
-        barrierAfterQueueStages:native->pendingAfterStages
-                   beforeStages:applyStages];
+    /* the Simulator's encoders say they have queue barriers and throw; classic resources are tracked */
+    [(id<MTLCommandEncoder>)encoder
+      barrierAfterQueueStages:native->pendingAfterStages
+                 beforeStages:applyStages];
 #endif
-    }
   }
 
   native->pendingBeforeStages &= ~applyStages;

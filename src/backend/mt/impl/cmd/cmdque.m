@@ -1265,7 +1265,9 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  /* a barrier with no encoder after it here waits on the queue's next */
+  /* a barrier with no encoder after it here: Metal 4 encodes it now, classic
+   * waits on the queue's next encoder */
+  mt_flushPendingBarrier(cmdb);
   mt_carryPendingBarrier(cmdb);
 
 #if MT_HAS_METAL4
@@ -1412,6 +1414,8 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
     for (submitIndex = 0u; submitIndex < count; submitIndex++) {
       cmdb   = buffers[submitIndex];
       native = natives[submitIndex];
+      mt_flushPendingBarrier(cmdb);
+      mt_carryPendingBarrier(cmdb);
       [native->residency commit];
       [native->modern endCommandBuffer];
       [options addFeedbackHandler:^(id<MTL4CommitFeedback> feedback) {
