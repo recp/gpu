@@ -37,6 +37,11 @@ gpuSubInit(GPUSubAllocator *alloc, const GPUSubAllocatorInfo *info) {
 
   memset(alloc, 0, sizeof(*alloc));
   alloc->info = *info;
+  /* a resource over a quarter of the largest block takes an allocation of its own: two or three of them in one
+   * block leave, once one goes, a gap too small for the next, and the block is kept for whatever small one stays
+   * beside them */
+  if (alloc->info.largestBlockSize / 4u && alloc->info.maxResourceSize > alloc->info.largestBlockSize / 4u)
+    alloc->info.maxResourceSize = alloc->info.largestBlockSize / 4u;
 #if defined(_WIN32) || defined(WIN32)
   InitializeSRWLock(&alloc->lock);
 #else

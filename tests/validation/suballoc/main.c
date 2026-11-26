@@ -224,6 +224,23 @@ main(void) {
     return 1;
   }
 
+  /* a largest resource over a quarter of the largest block: a quarter's the most placed */
+  {
+    GPUSubAllocatorInfo wide = info;
+    GPUSubAllocator     quarter;
+    GPUSubAllocation    a;
+
+    wide.maxResourceSize = info.largestBlockSize / 2u;
+    if (!gpuSubInit(&quarter, &wide)) return 1;
+    if (gpuSubAllocate(&quarter, 0u, info.largestBlockSize / 4u + 1u, 256u, &a) || a.block
+        || !gpuSubAllocate(&quarter, 0u, info.largestBlockSize / 4u, 256u, &a) || !a.block) {
+      fprintf(stderr, "suballoc: over a quarter of the largest block placed, or a quarter not\n");
+      return 1;
+    }
+    gpuSubFree(&quarter, &a);
+    gpuSubDestroy(&quarter);
+  }
+
   count = 0u;
   for (step = 0u; step < 200000u; step++) {
     if (count && (count == LIVE_MAX || next() % 100u < 48u)) {
