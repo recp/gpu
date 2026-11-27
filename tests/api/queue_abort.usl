@@ -7,6 +7,15 @@ kern(1, 1, 1) queue_abort_spin_cs(inout state: [uint] #buffer(0)) {
   }
 }
 
+/* finite work for the hang limit: state[4] rounds of an atomic (kept, as
+ * above), counted in state[5] */
+
+kern(1, 1, 1) queue_abort_busy_cs(inout state: [uint] #buffer(0)) {
+  for (var i: uint = 0u; i < state[4]; i += 1u) {
+    state.atomic_add(5u, 1u)
+  }
+}
+
 /* work after the stuck one: its mark shows it ran */
 
 kern(1, 1, 1) queue_abort_mark_cs(inout state: [uint] #buffer(0)) {

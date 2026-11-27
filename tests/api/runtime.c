@@ -258,6 +258,30 @@ check_runtime_config(GPUDevice *device) {
 
   config.validationMode = GPU_VALIDATION_BASIC;
 
+  /* a hang limit where queues are watched, refused where they can't be;
+   * the config below turns it off again */
+  {
+    GPUAdapterProperties props = {0};
+    GPUResult            want;
+
+    if (GPUGetAdapterProperties(device->adapter, &props) != GPU_OK) {
+      fprintf(stderr, "runtime config: no adapter properties\n");
+      return 0;
+    }
+
+    want               = props.backend == GPU_BACKEND_WEBGPU || props.backend == GPU_BACKEND_CUDA
+                           ? GPU_ERROR_UNSUPPORTED
+                           : GPU_OK;
+    config.hangLimitNs = 2000000000ull;
+
+    if (GPUConfigureRuntime(device, &config) != want) {
+      fprintf(stderr, "runtime config: a hang limit not %s\n", want == GPU_OK ? "taken" : "refused");
+      return 0;
+    }
+
+    config.hangLimitNs = 0u;
+  }
+
   if (GPUConfigureRuntime(device, &config) != GPU_OK) {
     fprintf(stderr, "runtime config failed\n");
     return 0;

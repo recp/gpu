@@ -22,12 +22,25 @@
  * bounded: the work behind it and the stuck one with GPU_ERROR_DEVICE_LOST,
  * a fresh submit and GPUQueueWaitIdle at once, and the device reports the
  * loss. only then the flag ends the kernel and the device goes.
- *   queue_abort <queue_abort.us>
+ *
+ * hang: nothing stalls behind it, which the system may never give up on, so
+ * the queue runs under a hang limit (GPURuntimeConfig.hangLimitNs). first
+ * what must not trip it, with kernels that end by themselves (a flag the
+ * CPU sets while a kernel runs can take seconds to reach it): after an idle
+ * gap, one about half the limit, together longer than it; then a chain of
+ * short ones submitted at once, about three times the limit in all. then the
+ * endless one with a queue write and a command buffer behind it: every wait
+ * returns GPU_ERROR_DEVICE_LOST within about the limit, the device reports
+ * the loss once, as hung.
+ *   queue_abort <queue_abort.us> [hang]
  */
 
 #include "test.h"
 
 #include <inttypes.h>
+#include <math.h>
+#include <string.h>
+#include <time.h>
 
 #if defined(_WIN32)
 #  include <windows.h>
@@ -36,25 +49,35 @@
 #endif
 
 enum {
-  QA_STOP  = 0u,
-  QA_COUNT = 1u,
-  QA_MARK  = 2u,
-  QA_WORDS = 4u
+  QA_STOP   = 0u,
+  QA_COUNT  = 1u,
+  QA_MARK   = 2u,
+  QA_ROUNDS = 4u,
+  QA_WORDS  = 8u
 };
 
 /* the system gives up on a stuck queue in seconds; this long means a hang */
 #define QA_WAIT_NS (30ull * 1000000000ull)
+
+/* hang: the limit, and how late a loss may come past it (the timer's
+ * leeway, a loaded machine); the busy kernel's rounds a timed batch starts
+ * from, and the short ones chained */
+#define QA_LIMIT_NS   (1000000000ull)
+#define QA_LATE_NS    (1500000000ull)
+#define QA_ROUNDS0    20000u
+#define QA_CHAIN      48u
 
 typedef struct QATest {
   GPUDevice          *device;
   GPUQueue           *queue;
   GPUShaderLibrary   *library;
   GPUShaderLayout    *layout;
-  GPUComputePipeline *spin, *mark;
+  GPUComputePipeline *spin, *busy, *mark;
   GPUBuffer          *state;
   GPUBindGroup       *group;
   volatile uint32_t  *words;
   uint32_t            errors, lost;
+  GPUDeviceLostReason lostReason;
 } QATest;
 
 static size_t
@@ -78,6 +101,8 @@ qa_error(GPUDevice *device, const GPUDeviceErrorInfo *error, void *user) {
   (void)device;
   t->errors++;
   t->lost += error->type == GPU_DEVICE_ERROR_LOST;
+  if (error->type == GPU_DEVICE_ERROR_LOST)
+    t->lostReason = error->lostReason;
   printf("queue abort: device error (type %d, result %d): %s\n", (int)error->type, (int)error->result,
          error->message ? error->message : "");
 }
@@ -112,7 +137,8 @@ qa_setup(QATest *t, const char *path, void *host, uint64_t hostSize) {
 
   ok = GPUCreateShaderLibraryFromUSL(t->device, bytecode, size, &t->library) == GPU_OK
        && GPUCreateShaderLayout(t->device, t->library, &t->layout) == GPU_OK
-       && qa_pipeline(t, "queue_abort_spin_cs", &t->spin) && qa_pipeline(t, "queue_abort_mark_cs", &t->mark);
+       && qa_pipeline(t, "queue_abort_spin_cs", &t->spin) && qa_pipeline(t, "queue_abort_busy_cs", &t->busy)
+       && qa_pipeline(t, "queue_abort_mark_cs", &t->mark);
   free(bytecode);
 
   memset(host, 0, (size_t)hostSize);
@@ -183,6 +209,127 @@ qa_wait(GPUFence *fence, const char *name, uint64_t start) {
   return result;
 }
 
+static void
+qa_sleepMs(uint32_t milliseconds) {
+#if defined(_WIN32)
+  Sleep(milliseconds);
+#else
+  struct timespec duration;
+
+  duration.tv_sec  = (time_t)(milliseconds / 1000u);
+  duration.tv_nsec = (long)(milliseconds % 1000u) * 1000000l;
+  nanosleep(&duration, NULL);
+#endif
+}
+
+static double
+qa_seconds(uint64_t start) {
+  return (double)(gpu_test_now_ns() - start) / 1e9;
+}
+
+/* count busy kernels of rounds each, a fence on the last, waited */
+static GPUResult
+qa_busy(QATest *t, uint32_t rounds, uint32_t count, GPUFence *fence) {
+  GPUResult result;
+  uint32_t  i;
+
+  GPUResetFence(fence);
+  t->words[QA_ROUNDS] = rounds;
+  for (i = 0u; i < count; i++) {
+    if ((result = qa_submit(t, t->busy, "queue-hang-busy", i + 1u == count ? fence : NULL, NULL, NULL)) != GPU_OK)
+      return result;
+  }
+
+  return GPUWaitFence(fence, QA_WAIT_NS);
+}
+
+/* under the hang limit: what must not trip it, then what must */
+static bool
+qa_hang(QATest *t, GPUFence *spun, GPUFence *after, GPUFence *again) {
+  GPURuntimeConfig config = {0};
+  GPUResult        spunResult, afterResult, againResult, idleResult;
+  uint32_t         zero = 0u, longRounds, shortRounds;
+  uint64_t         start, lostAt;
+  double           perRound, afterAt;
+
+  config.chain.sType      = GPU_STRUCTURE_TYPE_RUNTIME_CONFIG;
+  config.chain.structSize = sizeof(config);
+  config.hangLimitNs      = QA_LIMIT_NS;
+  if (GPUConfigureRuntime(t->device, &config) != GPU_OK) {
+    fprintf(stderr, "queue hang: GPUConfigureRuntime refused the limit\n");
+    return false;
+  }
+
+  /* the busy kernel's pace: a batch to warm up and time roughly, then one
+   * kernel of about 50 ms, which a command's own cost doesn't skew */
+  if (qa_busy(t, QA_ROUNDS0, 8u, spun) != GPU_OK)
+    return false;
+  start = gpu_test_now_ns();
+  if (qa_busy(t, QA_ROUNDS0, 8u, spun) != GPU_OK)
+    return false;
+  perRound   = (double)(gpu_test_now_ns() - start) / (8.0 * QA_ROUNDS0);
+  longRounds = (uint32_t)fmin(50e6 / perRound, 4e9);
+  start      = gpu_test_now_ns();
+  if (qa_busy(t, longRounds, 1u, spun) != GPU_OK)
+    return false;
+  perRound    = (double)(gpu_test_now_ns() - start) / longRounds;
+  longRounds  = (uint32_t)fmin(0.45 * QA_LIMIT_NS / perRound, 4e9);
+  shortRounds = (uint32_t)fmin((double)QA_LIMIT_NS / 16.0 / perRound, 4e9);
+  printf("queue hang: %.1f ns a round; %u rounds about 45%% of the limit, %u a 16th\n", perRound, longRounds,
+         shortRounds);
+
+  /* an idle gap doesn't count: the clock starts at the next submit */
+  if (GPUQueueWaitIdle(t->queue) != GPU_OK)
+    return false;
+  qa_sleepMs((uint32_t)(QA_LIMIT_NS * 7u / 10u / 1000000u));
+  start = gpu_test_now_ns();
+  if (qa_busy(t, longRounds, 1u, spun) != GPU_OK || t->errors != 0u) {
+    fprintf(stderr, "queue hang: work after an idle gap tripped the limit\n");
+    return false;
+  }
+  printf("queue hang: after an idle gap, one kernel of %.2f s\n", qa_seconds(start));
+
+  /* nor does work that keeps finishing, however long it goes on */
+  start = gpu_test_now_ns();
+  if (qa_busy(t, shortRounds, QA_CHAIN, spun) != GPU_OK || t->errors != 0u) {
+    fprintf(stderr, "queue hang: a chain of short kernels tripped the limit\n");
+    return false;
+  }
+  printf("queue hang: %u short kernels at once, %.2f s in all%s\n", QA_CHAIN, qa_seconds(start),
+         gpu_test_now_ns() - start > QA_LIMIT_NS ? "" : " (not past the limit: shows little)");
+  if (GPUQueueWaitIdle(t->queue) != GPU_OK)
+    return false;
+
+  /* the endless one, a queue write and a command buffer behind it */
+  t->words[QA_STOP] = 0u;
+  GPUResetFence(spun);
+  GPUResetFence(after);
+  start = gpu_test_now_ns();
+  if (qa_submit(t, t->spin, "queue-hang-spin", spun, NULL, NULL) != GPU_OK
+      || GPUQueueWriteBuffer(t->queue, t->state, QA_MARK * sizeof(uint32_t), &zero, sizeof(zero)) != GPU_OK
+      || qa_submit(t, t->mark, "queue-hang-after", after, NULL, NULL) != GPU_OK) {
+    fprintf(stderr, "queue hang: submits failed\n");
+    return false;
+  }
+
+  afterResult = qa_wait(after, "the work behind it", start);
+  afterAt     = qa_seconds(start);
+  lostAt      = gpu_test_now_ns();
+  spunResult  = qa_wait(spun, "the stuck one", start);
+  againResult = qa_submit(t, t->mark, "queue-hang-again", again, NULL, NULL);
+  printf("queue hang: a fresh submit: %d\n", (int)againResult);
+  againResult = againResult == GPU_OK ? qa_wait(again, "its wait", start) : againResult;
+  idleResult  = GPUQueueWaitIdle(t->queue);
+  printf("queue hang: GPUQueueWaitIdle: %d at %.2f s\n", (int)idleResult, qa_seconds(start));
+  printf("queue hang: %u device errors (%u lost, reason %d)\n", t->errors, t->lost, (int)t->lostReason);
+
+  /* lost at about the limit, everything after at once */
+  return afterResult == GPU_ERROR_DEVICE_LOST && spunResult == GPU_ERROR_DEVICE_LOST
+         && againResult == GPU_ERROR_DEVICE_LOST && idleResult == GPU_ERROR_DEVICE_LOST && t->lost == 1u
+         && t->lostReason == GPU_DEVICE_LOST_REASON_HUNG && afterAt >= (double)QA_LIMIT_NS / 1e9 * 0.95
+         && afterAt <= (double)(QA_LIMIT_NS + QA_LATE_NS) / 1e9 && gpu_test_now_ns() - lostAt < 250000000ull;
+}
+
 int
 main(int argc, char **argv) {
   GPUDeviceCreateInfo deviceInfo = {0};
@@ -199,12 +346,14 @@ main(int argc, char **argv) {
   GPUResult           spunResult, afterResult, againResult, idleResult;
   uint64_t            start;
   size_t              page;
-  bool                ok;
+  bool                ok, hang;
 
-  if (argc < 2) {
-    fprintf(stderr, "usage: %s <queue_abort.us>\n", argv[0]);
+  if (argc < 2 || (argc > 2 && strcmp(argv[2], "hang") != 0)) {
+    fprintf(stderr, "usage: %s <queue_abort.us> [hang]\n", argv[0]);
     return 2;
   }
+
+  hang = argc > 2;
 
   page = qa_pageSize();
   deviceInfo.required.pFeatures    = features;
@@ -231,6 +380,12 @@ main(int argc, char **argv) {
 
   if (!ok) {
     fprintf(stderr, "queue abort: setup failed\n");
+    goto done;
+  }
+
+  if (hang) {
+    ok                = qa_hang(&t, spun, after, again);
+    t.words[QA_STOP] = 1u;
     goto done;
   }
 
@@ -287,6 +442,7 @@ done:
   GPUDestroyBindGroup(t.group);
   GPUDestroyBuffer(t.state);
   GPUDestroyComputePipeline(t.mark);
+  GPUDestroyComputePipeline(t.busy);
   GPUDestroyComputePipeline(t.spin);
   GPUDestroyShaderLayout(t.layout);
   GPUDestroyShaderLibrary(t.library);
