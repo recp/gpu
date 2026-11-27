@@ -2394,6 +2394,19 @@ vk_queueIdle(GPUQueue *queue) {
   return idle;
 }
 
+GPU_HIDE
+bool
+vk_queueLostToHang(GPUQueue *queue) {
+  return queue && queue->_priv && vk__queueLost(queue->_priv);
+}
+
+GPU_HIDE
+void
+vk_letQueueGo(GPUQueue *queue) {
+  if (queue && queue->_priv)
+    vk__stopWorker(queue->_priv);
+}
+
 /* GPUQueueWaitIdle: queue writes' transfers, then every command buffer GPU-C
  * tracks in flight (no vkQueueWaitIdle: other threads keep submitting) */
 

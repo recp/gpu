@@ -131,6 +131,7 @@ typedef struct GPUInstanceVk {
   PFN_vkCmdInsertDebugUtilsLabelEXT   CmdInsertDebugUtilsLabelEXT;
   PFN_vkSetDebugUtilsObjectNameEXT    SetDebugUtilsObjectNameEXT;
 #endif
+  bool devicesLetGo; /* a device was let go with work that may never end: the instance is too */
 } GPUInstanceVk;
 
 typedef struct GPUAdapterVk {

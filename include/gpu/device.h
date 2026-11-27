@@ -293,7 +293,10 @@ typedef struct GPURuntimeConfig {
    * system gives up on it: its waits return GPU_ERROR_DEVICE_LOST, later
    * submits fail, and the device reports GPU_DEVICE_ERROR_LOST with
    * GPU_DEVICE_LOST_REASON_HUNG. The caller promises that no submission
-   * runs longer: long work and an endless kernel look the same. 0: off.
+   * runs longer: long work and an endless kernel look the same. A device
+   * with such a queue is let go by GPUDestroyDevice, not destroyed, where
+   * its API can't destroy what work may still use (Vulkan, Direct3D 12):
+   * what the GPU may still hold stays until the process ends. 0: off.
    * GPUConfigureRuntime returns GPU_ERROR_UNSUPPORTED on backends that
    * can't watch their queues (CUDA, WebGPU) */
   uint64_t          hangLimitNs;

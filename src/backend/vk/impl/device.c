@@ -4152,6 +4152,27 @@ vk_destroyDevice(GPUDevice * __restrict device) {
 
   deviceVk = device->_priv;
 
+  /* a queue lost to the hang limit abandoned work that may never end, and
+   * Vulkan can't destroy what a device's work may still use (its idle wait
+   * would wait for good): such a device is let go, its queues' threads
+   * stopped, its Vulkan objects and its instance left to the process, as
+   * Metal leaves abandoned work to Metal */
+  for (i = 0u; deviceVk && i < deviceVk->nCreatedQueues; i++) {
+    if (vk_queueLostToHang(deviceVk->createdQueues[i]))
+      break;
+  }
+
+  if (deviceVk && i < deviceVk->nCreatedQueues) {
+    for (i = 0u; i < deviceVk->nCreatedQueues; i++)
+      vk_letQueueGo(deviceVk->createdQueues[i]);
+
+    if (device->inst && device->inst->_priv)
+      ((GPUInstanceVk *)device->inst->_priv)->devicesLetGo = true;
+
+    free(device);
+    return;
+  }
+
   if (deviceVk) {
     if (deviceVk->device) {
       vkDeviceWaitIdle(deviceVk->device);

@@ -471,6 +471,13 @@ vk_destroyInstance(GPUApi * __restrict api, GPUInstance * __restrict inst) {
 
   instVk = inst->_priv;
 
+  /* a device of it was let go (vk_destroyDevice): Vulkan destroys no
+   * instance under a live device, and its messages may still come */
+  if (instVk && instVk->devicesLetGo) {
+    free(inst);
+    return;
+  }
+
   if (instVk) {
 #if GPU_BUILD_WITH_VALIDATION
     if (instVk->DestroyDebugUtilsMessengerEXT && instVk->dbg_messenger) {

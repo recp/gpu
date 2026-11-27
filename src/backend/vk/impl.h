@@ -201,6 +201,17 @@ GPU_HIDE
 bool
 vk_queueIdle(GPUQueue *queue);
 
+/* lost to the hang limit: what it abandoned may still run, maybe for good */
+GPU_HIDE
+bool
+vk_queueLostToHang(GPUQueue *queue);
+
+/* a lost queue let go with its device: its thread stopped, its Vulkan
+ * objects left as they are */
+GPU_HIDE
+void
+vk_letQueueGo(GPUQueue *queue);
+
 GPU_HIDE
 GPUResult
 vk_getBufferMemoryRequirements(GPUDevice                 *device,
