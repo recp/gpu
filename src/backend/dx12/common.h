@@ -580,6 +580,8 @@ struct GPUQueueDX12 {
   UINT64                  timestampFrequency;
   uint64_t                readbackCapacity;
   uint32_t                transfersSinceLarge; /* transfer batches begun since one needed large staging */
+  volatile LONG64         hangLimitNs; /* GPURuntimeConfig's, 0: off */
+  volatile LONG           lost;        /* hung past the hang limit: what was in flight abandoned, nothing runs after */
   D3D12_COMMAND_LIST_TYPE type;
   uint32_t                inFlightCount;
   uint32_t                activeTransferSlot;

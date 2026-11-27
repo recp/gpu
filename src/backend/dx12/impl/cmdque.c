@@ -92,6 +92,77 @@ dx12__queueDevice(GPUQueueDX12 *queue) {
   return queue && queue->queue ? queue->queue->_device : NULL;
 }
 
+/* the hang limit (GPURuntimeConfig.hangLimitNs), each queue's copy: the
+ * completion thread waits on a command buffer's fence that long at most,
+ * from the one before it (or its submit, the queue idle); past it the queue
+ * is lost. Off, the wait is as long as it takes */
+
+static uint64_t
+dx12__hangLimit(GPUQueueDX12 *queue) {
+  return (uint64_t)InterlockedCompareExchange64(&queue->hangLimitNs, 0, 0);
+}
+
+static void
+dx12_setHangLimit(GPUDevice *device, uint64_t limitNs) {
+  GPUDeviceDX12 *deviceDX12;
+  GPUQueueDX12  *queue;
+  uint32_t       i;
+
+  if (!device || !(deviceDX12 = device->_priv))
+    return;
+
+  for (i = 0u; i < deviceDX12->nCreatedQueues; i++) {
+    if (deviceDX12->createdQueues[i] && (queue = deviceDX12->createdQueues[i]->_priv))
+      InterlockedExchange64(&queue->hangLimitNs, (LONG64)limitNs);
+  }
+}
+
+static bool
+dx12__queueLost(GPUQueueDX12 *queue) {
+  return InterlockedCompareExchange(&queue->lost, 0, 0) != 0;
+}
+
+/* by the completion thread, the only one that loses a queue: reported first,
+ * so a wait the loss ends finds the device lost. What was in flight is
+ * abandoned (the GPU may still hold it: never reused, nor retired), and
+ * nothing submitted after runs */
+static void
+dx12__hangQueue(GPUQueueDX12 *queue, uint64_t limit) {
+  if (dx12__queueLost(queue))
+    return;
+
+  deviceReportQueueHang(dx12__queueDevice(queue), "Direct3D 12", limit);
+  InterlockedExchange(&queue->lost, 1);
+}
+
+/* WaitForSingleObject's milliseconds for ns, rounded up; 0: INFINITE */
+static DWORD
+dx12__waitMs(uint64_t ns) {
+  uint64_t ms;
+
+  if (ns == 0u)
+    return INFINITE;
+
+  ms = ns / 1000000u + (ns % 1000000u != 0u);
+  return ms < (uint64_t)INFINITE ? (DWORD)ms : INFINITE - 1u;
+}
+
+/* an event wait off the completion thread: under a hang limit in slices of
+ * a quarter of it, so one behind hung work ends with the queue's loss
+ * (WAIT_TIMEOUT then) */
+static DWORD
+dx12__waitEvent(GPUQueueDX12 *queue, HANDLE event) {
+  uint64_t limit;
+  DWORD    result;
+
+  do {
+    limit  = dx12__hangLimit(queue);
+    result = WaitForSingleObject(event, limit == 0u ? INFINITE : dx12__waitMs(limit / 4u > 0u ? limit / 4u : 1u));
+  } while (result == WAIT_TIMEOUT && !dx12__queueLost(queue));
+
+  return result;
+}
+
 /* work went out on the queue: *serial 0 takes the next one (api/retire) */
 static void
 dx12__submitted(GPUQueueDX12 *queue, uint64_t *serial) {
@@ -291,13 +362,18 @@ dx12__takePendingCommand(GPUQueueDX12 *queue) {
   return native;
 }
 
+/* judge: the completion thread's, up to the hang limit, past it the queue
+ * lost; others wait in slices till done or the queue is lost. On a lost
+ * queue only what finished before is done */
 static bool
 dx12__waitForFence(GPUQueueDX12 *queue,
                    UINT64        value,
-                   HANDLE        event) {
-  UINT64  completedValue;
-  HRESULT result;
-  DWORD   waitResult;
+                   HANDLE        event,
+                   bool          judge) {
+  UINT64   completedValue;
+  HRESULT  result;
+  DWORD    waitResult;
+  uint64_t limit;
 
   if (!queue || !queue->completionFence || !event || value == 0u) {
     return value == 0u;
@@ -316,6 +392,10 @@ dx12__waitForFence(GPUQueueDX12 *queue,
     return true;
   }
 
+  if (dx12__queueLost(queue)) {
+    return false;
+  }
+
   result = queue->completionFence->lpVtbl->SetEventOnCompletion(queue->completionFence,
                                                                 value,
                                                                 event);
@@ -325,7 +405,17 @@ dx12__waitForFence(GPUQueueDX12 *queue,
     return false;
   }
 
-  waitResult = WaitForSingleObject(event, INFINITE);
+  if (judge) {
+    limit      = dx12__hangLimit(queue);
+    waitResult = WaitForSingleObject(event, dx12__waitMs(limit));
+
+    if (waitResult == WAIT_TIMEOUT) {
+      dx12__hangQueue(queue, limit);
+      return false;
+    }
+  } else if ((waitResult = dx12__waitEvent(queue, event)) == WAIT_TIMEOUT) {
+    return false;
+  }
 
   if (waitResult != WAIT_OBJECT_0) {
     dx12__reportQueueError(queue,
@@ -352,7 +442,8 @@ dx12__completionMain(LPVOID context) {
     fenceValue = native->fenceValue;
     completed  = dx12__waitForFence(queue,
                                     fenceValue,
-                                    queue->completionEvent);
+                                    queue->completionEvent,
+                                    true);
 
     if (completed) {
       dx12__recordFrameTime(native);
@@ -827,7 +918,10 @@ dx12__waitTransfer(GPUQueue            *queue,
       queue->_device->allocatorStats.uploadStallCount++;
     }
 
-    waitResult = WaitForSingleObject(native->transferEvent, INFINITE);
+    /* behind work the queue's loss abandoned: the GPU may still hold it */
+    if (dx12__queueLost(native) || (waitResult = dx12__waitEvent(native, native->transferEvent)) == WAIT_TIMEOUT) {
+      return GPU_ERROR_DEVICE_LOST;
+    }
 
     if (waitResult != WAIT_OBJECT_0) {
       result = waitResult == WAIT_FAILED ? HRESULT_FROM_WIN32(GetLastError()) : E_FAIL;
@@ -856,6 +950,12 @@ dx12__flushTransfers(GPUQueue *queue, bool wait) {
 
   if (!native || !native->commandQueue) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  /* nothing runs on a lost queue: an open batch is dropped */
+  if (dx12__queueLost(native)) {
+    dx12_abortTransfer(queue);
+    return GPU_ERROR_DEVICE_LOST;
   }
 
   if (native->transferOpen) {
@@ -1392,13 +1492,13 @@ dx12_waitQueueFence(GPUQueueDX12 *queue,
     return true;
   }
 
-  if (!dx12__waitForFence(queue, value, event)) {
+  if (!dx12__waitForFence(queue, value, event, false)) {
     return false;
   }
 
   dx12__queueLock(queue);
 
-  while (!queue->stopping && queue->finishedFenceValue < value) {
+  while (!queue->stopping && !dx12__queueLost(queue) && queue->finishedFenceValue < value) {
     dx12__queueWait(queue);
   }
 
@@ -1502,6 +1602,10 @@ dx12_beginTransfer(GPUQueue                   *queue,
       || native->type == D3D12_COMMAND_LIST_TYPE_COPY
       || (!upload && heapType != D3D12_HEAP_TYPE_READBACK)) {
     return GPU_ERROR_UNSUPPORTED;
+  }
+
+  if (dx12__queueLost(native)) {
+    return GPU_ERROR_DEVICE_LOST;
   }
 
   if (stagingBytes > DX12_TRANSFER_STAGING_KEEP)
@@ -1884,7 +1988,7 @@ dx12_waitCommandQueueIdle(GPUQueueDX12 *queue) {
                                                                   event);
   }
 
-  waitResult = SUCCEEDED(result) ? WaitForSingleObject(event, INFINITE) : WAIT_FAILED;
+  waitResult = SUCCEEDED(result) ? dx12__waitEvent(queue, event) : WAIT_FAILED;
   CloseHandle(event);
 
   if (SUCCEEDED(result) && waitResult == WAIT_OBJECT_0) {
@@ -1910,7 +2014,7 @@ dx12_waitDeviceIdle(GPUDevice *__restrict device) {
   GPUDeviceDX12 *deviceDX12;
   GPUQueueDX12  *queue;
   uint32_t       i;
-  bool           idle;
+  bool           idle, lost;
 
   deviceDX12 = device ? device->_priv : NULL;
 
@@ -1919,6 +2023,7 @@ dx12_waitDeviceIdle(GPUDevice *__restrict device) {
   }
 
   idle = true;
+  lost = false;
 
   for (i = 0u; i < deviceDX12->nCreatedQueues; i++) {
     queue = deviceDX12->createdQueues[i] ? deviceDX12->createdQueues[i]->_priv : NULL;
@@ -1929,13 +2034,14 @@ dx12_waitDeviceIdle(GPUDevice *__restrict device) {
 
     idle = dx12_waitCommandQueueIdle(queue) && idle;
     dx12__waitForCompletions(queue);
+    lost = dx12__queueLost(queue) || lost;
   }
 
   /* idle: pooled heaps nothing lives in go back */
   if (idle)
     dx12_trimResourcePool(deviceDX12, true);
 
-  return idle ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+  return lost ? GPU_ERROR_DEVICE_LOST : idle ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 }
 
 GPU_HIDE
@@ -2307,7 +2413,8 @@ dx12_waitQueueIdle(GPUQueue *queue) {
   idle = dx12_waitCommandQueueIdle(native);
   dx12__waitForCompletions(native);
 
-  return idle ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+  /* a lost queue's in-flight work was let go: this returns */
+  return dx12__queueLost(native) ? GPU_ERROR_DEVICE_LOST : idle ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
 }
 
 GPU_HIDE
@@ -2327,4 +2434,5 @@ dx12_initCmdQue(GPUCommandQueueApi *api) {
   api->lock                    = dx12_lockQueue;
   api->unlock                  = dx12_unlockQueue;
   api->waitIdle                = dx12_waitQueueIdle;
+  api->setHangLimit            = dx12_setHangLimit;
 }
