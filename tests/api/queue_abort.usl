@@ -1,0 +1,14 @@
+/* never ends by itself: state[0] stays 0, so the GPU has to give up on it.
+ * atomics, so the loop can't be assumed to end and dropped */
+
+kern(1, 1, 1) queue_abort_spin_cs(inout state: [uint] #buffer(0)) {
+  while state.atomic_add(0u, 0u) == 0u {
+    state.atomic_add(1u, 1u)
+  }
+}
+
+/* work after the stuck one: its mark shows it ran */
+
+kern(1, 1, 1) queue_abort_mark_cs(inout state: [uint] #buffer(0)) {
+  state[2] = 7u
+}

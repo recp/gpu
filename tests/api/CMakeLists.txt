@@ -622,3 +622,27 @@ else()
   set_tests_properties(barrier-order PROPERTIES
     SKIP_RETURN_CODE 77 LABELS "barrier;ordering" TIMEOUT 120 RUN_SERIAL TRUE)
 endif()
+
+# a kernel that never ends doesn't take its queue's waits with it, once the
+# system gives up on the work stalled behind it. Metal does in seconds; on
+# MoltenVK nothing ever gives up, and real drivers reset the GPU for it, which
+# a suite shouldn't do
+
+if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  gpu_add_usl_fixtures(GPU_QUEUE_ABORT_FIXTURE metal api-queue-abort
+    "${CMAKE_CURRENT_SOURCE_DIR}/queue_abort.usl")
+
+  add_executable(gpu-queue-abort-test queue_abort.c runner.c ${GPU_QUEUE_ABORT_FIXTURE})
+
+  set_target_properties(gpu-queue-abort-test PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+  target_compile_options(gpu-queue-abort-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+  target_link_libraries(gpu-queue-abort-test PRIVATE gpu)
+
+  foreach(mode classic metal4)
+    add_test(NAME queue-abort-${mode} COMMAND gpu-queue-abort-test ${GPU_QUEUE_ABORT_FIXTURE})
+    set_tests_properties(queue-abort-${mode} PROPERTIES
+      ENVIRONMENT "GPU_METAL_MODE=${mode}"
+      SKIP_RETURN_CODE 77 LABELS "abort;gpu-timeout" TIMEOUT 120 RUN_SERIAL TRUE)
+  endforeach()
+endif()
