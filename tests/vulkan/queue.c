@@ -1102,6 +1102,7 @@ timestamp_roundtrip(GPUDevice *device,
   GPUQuerySet             *set;
   GPUBuffer               *buffer;
   double                   timestampPeriod;
+  bool                     layered;
   int                      ok;
 
   set    = NULL;
@@ -1109,6 +1110,15 @@ timestamp_roundtrip(GPUDevice *device,
   cmdb   = NULL;
   pass   = NULL;
   ok     = 0;
+
+  /* Vulkan over Metal (MoltenVK) copies query results without waiting for
+   * the submit's samples: a stamp reads 0 or the previous submit's
+   * (tests/api/query.c). There only the copy is checked, both words written */
+#if defined(__APPLE__)
+  layered = true;
+#else
+  layered = false;
+#endif
 
   timestampPeriod = 0.0;
 
@@ -1198,7 +1208,7 @@ timestamp_roundtrip(GPUDevice *device,
                             timestamps,
                             sizeof(timestamps)) != GPU_OK
       || timestamps[0] == UINT64_MAX || timestamps[1] == UINT64_MAX
-      || timestamps[1] < timestamps[0]) {
+      || (!layered && timestamps[1] < timestamps[0])) {
     goto cleanup;
   }
 
