@@ -199,6 +199,12 @@ deviceReportError(GPUDevice          *device,
                   GPUResult           result,
                   const char         *message);
 
+/* a queue lost to GPURuntimeConfig.hangLimitNs: reported before its waiters
+ * are let go, so a wait that returns finds the device lost */
+GPU_HIDE
+void
+deviceReportQueueHang(GPUDevice *device, const char *backend, uint64_t limitNs);
+
 /* api/pipeline_report.c: a backend leaves the driver's words on a failed
  * pipeline or library for this thread (NULL clears); the api layer then
  * reports the failure once, naming label, entry points and payload */

@@ -69,6 +69,10 @@ typedef struct GPUCommandQueueApi {
   /* everything submitted so far done and its completions run (optional:
    * GPUQueueWaitIdle otherwise waits on an empty submission's fence) */
   GPUResult (*waitIdle)(GPUQueue *queue);
+
+  /* GPURuntimeConfig.hangLimitNs for the device's queues, 0: off (NULL: the
+   * backend can't watch them; a limit is refused) */
+  void (*setHangLimit)(GPUDevice *device, uint64_t limitNs);
 } GPUCommandQueueApi;
 
 #ifdef __cplusplus

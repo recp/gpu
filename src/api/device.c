@@ -1521,6 +1521,23 @@ deviceReportError(GPUDevice          *device,
 #endif
 }
 
+GPU_HIDE
+void
+deviceReportQueueHang(GPUDevice *device, const char *backend, uint64_t limitNs) {
+  char message[128];
+
+  snprintf(message,
+           sizeof(message),
+           "%s queue made no progress within its hang limit (%.3f s)",
+           backend,
+           (double)limitNs / 1e9);
+  deviceReportError(device,
+                    GPU_DEVICE_ERROR_LOST,
+                    GPU_DEVICE_LOST_REASON_HUNG,
+                    GPU_ERROR_DEVICE_LOST,
+                    message);
+}
+
 #if GPU_BUILD_WITH_VALIDATION
 GPU_HIDE
 void
@@ -1885,15 +1902,22 @@ GPUGetCacheStats(GPUDevice *device, GPUCacheStats *outStats) {
 GPU_EXPORT
 GPUResult
 GPUConfigureRuntime(GPUDevice *device, const GPURuntimeConfig *config) {
+  GPUApi *api;
+
   if (!device || !validRuntimeConfig(config)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
-  if (config->chain.pNext) {
+  api = deviceApi(device);
+
+  if (config->chain.pNext
+      || (config->hangLimitNs != 0u && (!api || !api->cmdque.setHangLimit))) {
     return GPU_ERROR_UNSUPPORTED;
   }
 
   device->runtimeConfig = *config;
+  if (api && api->cmdque.setHangLimit)
+    api->cmdque.setHangLimit(device, config->hangLimitNs);
 
   return GPU_OK;
 }

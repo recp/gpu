@@ -285,6 +285,18 @@ typedef struct GPURuntimeConfig {
   bool              enableDebugMarkers;
   bool              enableVerboseLogs;
   bool              enableStats;
+
+  /* opt-in hang limit: work submitted while it is set is watched, and a
+   * queue whose oldest unfinished submission has made no progress for this
+   * long (counted from the queue's previous completion, or from the submit
+   * if the queue was idle; semaphore waits included) is lost, as when the
+   * system gives up on it: its waits return GPU_ERROR_DEVICE_LOST, later
+   * submits fail, and the device reports GPU_DEVICE_ERROR_LOST with
+   * GPU_DEVICE_LOST_REASON_HUNG. The caller promises that no submission
+   * runs longer: long work and an endless kernel look the same. 0: off.
+   * GPUConfigureRuntime returns GPU_ERROR_UNSUPPORTED on backends that
+   * can't watch their queues (CUDA, WebGPU) */
+  uint64_t          hangLimitNs;
 } GPURuntimeConfig;
 
 typedef struct GPUTransientAllocatorConfig {
