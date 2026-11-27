@@ -21,7 +21,8 @@
  * work stalled like that (a GPU timeout); then every wait returns, each
  * bounded: the work behind it and the stuck one with GPU_ERROR_DEVICE_LOST,
  * a fresh submit and GPUQueueWaitIdle at once, and the device reports the
- * loss. only then the flag ends the kernel and the device goes.
+ * loss. then the flag is set for the kernel, which may never see it, and the
+ * device goes without waiting for it.
  *
  * hang: nothing stalls behind it, which the system may never give up on, so
  * the queue runs under a hang limit (GPURuntimeConfig.hangLimitNs). first
@@ -448,7 +449,8 @@ done:
   GPUDestroyShaderLibrary(t.library);
   GPUDestroyDevice(t.device);
   GPUDestroyInstance(instance);
-  free(allocation);
 
+  /* the host pages stay: a kernel the queue's loss let go may still write
+   * them (the flag reaches a running kernel late, if ever) */
   return ok ? 0 : 1;
 }
