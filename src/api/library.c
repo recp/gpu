@@ -2608,9 +2608,10 @@ shaderLibraryRefused(GPUDevice *device, GPUApi *api, uint64_t size, uint64_t has
   pipelineFailed(device, GPU_ERROR_BACKEND_FAILURE, "shader library", NULL, &payload, NULL, NULL, 0u);
 }
 
-/* USL made nothing for this device: the target it was asked for and the
- * payloads the artifact carries (all a runtime-only USL can use), so a
- * missing variant shows which. A supported target that got nothing is
+/* USL made nothing for this device: the target it was asked for, the
+ * semantic features the artifact needs that the target lacks (device_fence
+ * on WGSL), and the payloads it carries (all a runtime-only USL can use),
+ * so a missing variant shows which. A supported target that got nothing is
  * reported to the app; an unsupported one is an answer, logged only with
  * GPU_USL_LOG. "USL compile failed" stays first: tests match it */
 static void
@@ -2625,9 +2626,12 @@ uslLibraryFailed(GPUDevice           *device,
   GPUShaderLibrary payload    = {0};
   char             caps[512];
   char             packed[320];
+  char             lacks[192];
   size_t           used;
+  size_t           lacked;
   uint32_t         count;
   uint32_t         i;
+  uint32_t         j;
   int              n;
 
   if (rc != GPU_ERROR_BACKEND_FAILURE && !getenv("GPU_USL_LOG"))
@@ -2637,8 +2641,10 @@ uslLibraryFailed(GPUDevice           *device,
     caps[0] = '\0';
 
   packed[0] = '\0';
+  lacks[0]  = '\0';
   count     = 0u;
   used      = 0u;
+  lacked    = 0u;
 
   if (us_reflect(bytecode, size, &reflection) == USLOk) {
     count = reflection.embedded_blobs.blob_count;
@@ -2654,13 +2660,31 @@ uslLibraryFailed(GPUDevice           *device,
       used = n < 0 ? sizeof(packed) : used + (size_t)n;
     }
 
+    for (i = 0u; i < reflection.runtime.capability_requirement_count && reflection.runtime.capability_requirements
+                 && lacked < sizeof(lacks); i++) {
+      const USLRuntimeCapabilityRequirement *requirement = &reflection.runtime.capability_requirements[i];
+
+      for (j = 0u; j < requirement->atom_count && lacked < sizeof(lacks); j++) {
+        const USLCapabilityAtomDesc *atom = &requirement->atoms[j];
+
+        if (atom->family != USL_CAPABILITY_ATOM_FAMILY_SEMANTIC_FEATURE
+            || us_target_supports_feature(target, (USLSemanticFeatureId)atom->id)) {
+          continue;
+        }
+
+        n = snprintf(lacks + lacked, sizeof(lacks) - lacked, "%s%s (%s)", lacked ? ", " : ", lacks ",
+                     atom->text[0] ? atom->text : "a semantic feature", requirement->entry);
+        lacked = n < 0 ? sizeof(lacks) : lacked + (size_t)n;
+      }
+    }
+
     us_free_reflection(&reflection);
   }
 
   if (rc != GPU_ERROR_BACKEND_FAILURE) {
-    fprintf(stderr, "GPU: USL compile failed (result=%d, backend=%u, profile=%06x, caps=%s): unsupported; "
+    fprintf(stderr, "GPU: USL compile failed (result=%d, backend=%u, profile=%06x, caps=%s): unsupported%s; "
                     "%u packed payload%s%s\n",
-            (int)result, (unsigned)target->backend, (unsigned)target->profile, caps,
+            (int)result, (unsigned)target->backend, (unsigned)target->profile, caps, lacks,
             (unsigned)count, count == 1u ? "" : "s", packed);
     return;
   }
