@@ -339,6 +339,18 @@ run_shader_f16(void *ctx) {
 }
 
 static int
+run_device_fence(void *ctx) {
+  GPUApiTestContext *testCtx;
+
+  testCtx = ctx;
+
+  return gpu_test_device_fence(testCtx->adapter,
+                               testCtx->device,
+                               getenv("GPU_DEVICE_FENCE_USL_PATH"),
+                               getenv("GPU_DEVICE_FENCE_SPLIT_USL_PATH"));
+}
+
+static int
 run_atomic64(void *ctx) {
   GPUApiTestContext *testCtx;
 
@@ -469,7 +481,7 @@ main(int argc, char **argv) {
   GPUInstanceCreateInfo instanceInfo  = {0};
   GPURuntimeConfig      runtimeConfig = {0};
   GPUApiTestContext     ctx;
-  GPUApiTest            tests[47];
+  GPUApiTest            tests[48];
   GPUInstance          *instance;
   GPUAdapter           *adapter;
   GPUDevice            *device;
@@ -693,6 +705,7 @@ main(int argc, char **argv) {
   tests[44] = (GPUApiTest){ "chains", run_chains, &ctx };
   tests[45] = (GPUApiTest){ "texel-buffer", run_texel_buffer, &ctx };
   tests[46] = (GPUApiTest){ "texel-reads", run_texel_reads, &ctx };
+  tests[47] = (GPUApiTest){ "device-fence", run_device_fence, &ctx };
 
   ok = gpu_run_api_tests(tests, (uint32_t)GPU_ARRAY_LEN(tests));
 

@@ -291,6 +291,26 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
   )
   unset(GPU_USL_FIXTURE_TARGET_CAPS)
   list(APPEND GPU_API_USL_FIXTURES ${GPU_API_SHADER_F16_USL_FIXTURE})
+  # one kernel, two artifacts: USL decides #available(device_fence) as source
+  # becomes bytecode, so the Vulkan one holds the fence and the WebGPU one the
+  # split
+  gpu_add_usl_fixtures(
+    GPU_API_DEVICE_FENCE_USL_FIXTURE
+    vulkan
+    api-device-fence
+    "${PROJECT_SOURCE_DIR}/tests/api/device_fence.usl"
+  )
+  gpu_add_usl_fixtures(
+    GPU_API_DEVICE_FENCE_SPLIT_USL_FIXTURE
+    webgpu
+    api-device-fence-split
+    "${PROJECT_SOURCE_DIR}/tests/api/device_fence.usl"
+  )
+  add_custom_target(
+    gpu-api-device-fence-fixture
+    DEPENDS ${GPU_API_DEVICE_FENCE_USL_FIXTURE}
+            ${GPU_API_DEVICE_FENCE_SPLIT_USL_FIXTURE}
+  )
   set(GPU_USL_FIXTURE_TARGET_CAPS sm_6_6,atomic64)
   gpu_add_usl_fixtures(
     GPU_API_ATOMIC64_USL_FIXTURE
@@ -904,6 +924,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
     ${PROJECT_SOURCE_DIR}/tests/api/mipmaps.c
     ${PROJECT_SOURCE_DIR}/tests/api/cube_texture.c
     ${PROJECT_SOURCE_DIR}/tests/api/descriptor_array.c
+    ${PROJECT_SOURCE_DIR}/tests/api/device_fence.c
     ${PROJECT_SOURCE_DIR}/tests/api/dx12_binding_plan.c
     ${PROJECT_SOURCE_DIR}/tests/api/execution_graph.c
     ${PROJECT_SOURCE_DIR}/tests/api/line_texture.c
@@ -972,6 +993,7 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
   add_dependencies(gpu-api-test gpu-api-dx12-binding-plan-fixture)
   add_dependencies(gpu-api-test gpu-api-msaa-fixture)
   add_dependencies(gpu-api-test gpu-api-atomic64-fixture)
+  add_dependencies(gpu-api-test gpu-api-device-fence-fixture)
   add_dependencies(gpu-api-test gpu-api-subgroup-relative-fixture)
   add_dependencies(gpu-api-test gpu-api-buffer-descriptor-array-fixture)
   add_dependencies(gpu-api-test
@@ -1158,6 +1180,8 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
   endif()
   set_property(TEST api-validation APPEND PROPERTY ENVIRONMENT
     "GPU_ATOMIC64_USL_PATH=${GPU_API_ATOMIC64_USL_FIXTURE}"
+    "GPU_DEVICE_FENCE_USL_PATH=${GPU_API_DEVICE_FENCE_USL_FIXTURE}"
+    "GPU_DEVICE_FENCE_SPLIT_USL_PATH=${GPU_API_DEVICE_FENCE_SPLIT_USL_FIXTURE}"
   )
   if(GPU_API_DEFAULT_BACKEND STREQUAL "dx12")
     get_property(apiValidationEnvironment TEST api-validation
@@ -1213,6 +1237,8 @@ if(GPU_BUILD_TESTS AND GPU_BUILD_GRAPHICS_API_TESTS)
               vulkan
     )
     set_property(TEST api-validation-vulkan APPEND PROPERTY ENVIRONMENT
+      "GPU_DEVICE_FENCE_USL_PATH=${GPU_API_DEVICE_FENCE_USL_FIXTURE}"
+      "GPU_DEVICE_FENCE_SPLIT_USL_PATH=${GPU_API_DEVICE_FENCE_SPLIT_USL_FIXTURE}"
       "GPU_LOD_USL_PATH=${GPU_API_LOD_USL_FIXTURE}"
       "GPU_MSAA_USL_PATH=${GPU_API_VULKAN_MSAA_USL_FIXTURE}"
       "GPU_SUBGROUP_RELATIVE_USL_PATH=${GPU_API_SUBGROUP_RELATIVE_USL_FIXTURE}"

@@ -266,6 +266,12 @@ int
 gpu_test_shader_f16(GPUAdapter *adapter, const char *bytecodePath);
 
 int
+gpu_test_device_fence(GPUAdapter *adapter,
+                      GPUDevice  *device,
+                      const char *fencePath,
+                      const char *splitPath);
+
+int
 gpu_test_atomic64(GPUAdapter *adapter, const char *bytecodePath);
 
 int

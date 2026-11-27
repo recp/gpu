@@ -1,0 +1,45 @@
+// a total over every group's values. Where the target has a device-scope
+// fence, the group that counts last sums what the others wrote, in the same
+// dispatch; elsewhere the partials are left for a later step. USL picks the
+// arm as the source becomes bytecode. counters[1] holds the group count
+kern(64) fence_total(values: &[uint] #buffer(0) #group(0),
+                     partials: &mut [uint] #buffer(1) #group(0),
+                     counters: &mut [uint] #buffer(2) #group(0),
+                     total: &mut [uint] #buffer(3) #group(0),
+                     group: uint3 #workgroup_id,
+                     lid: uint #local_index) {
+  workgroup var last: [uint; 1]
+  let slot = group.x * 64u + lid
+
+  partials[slot] = values[slot] * 3u + group.x
+
+  if #available(device_fence) {
+    storage_barrier()
+
+    if (lid == 0u) {
+      device_fence()
+      let done = counters.atomic_add(0, 1u)
+      last[0] = done == counters[1] - 1u ? 1u : 0u
+    }
+
+    workgroup_barrier()
+
+    if (last[0] != 0u && lid == 0u) {
+      device_fence()
+
+      var sum = 0u
+      var i = 0u
+      while (i < counters[1] * 64u) {
+        sum = sum + partials[i]
+        i = i + 1u
+      }
+
+      total[0] = sum
+    }
+  } else {
+    if (slot == 0u) {
+      counters[0] = counters[1]
+      total[1] = counters[1]
+    }
+  }
+}
