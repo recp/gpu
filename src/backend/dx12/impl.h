@@ -72,6 +72,17 @@ dx12_waitQueueFence(GPUQueueDX12 *queue,
                     UINT64        value,
                     HANDLE        event);
 
+/* lost to the hang limit: what it abandoned may still run, maybe for good */
+GPU_HIDE
+bool
+dx12_queueLostToHang(GPUQueue *queue);
+
+/* a lost queue let go with its device: its thread stopped, its objects
+ * left as they are */
+GPU_HIDE
+void
+dx12_letQueueGo(GPUQueue *queue);
+
 GPU_HIDE
 GPUResult
 dx12_waitDeviceIdle(GPUDevice *__restrict device);

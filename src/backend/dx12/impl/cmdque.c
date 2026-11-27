@@ -2399,6 +2399,19 @@ dx12_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   return GPU_OK;
 }
 
+GPU_HIDE
+bool
+dx12_queueLostToHang(GPUQueue *queue) {
+  return queue && queue->_priv && dx12__queueLost(queue->_priv);
+}
+
+GPU_HIDE
+void
+dx12_letQueueGo(GPUQueue *queue) {
+  if (queue && queue->_priv)
+    dx12__stopWorker(queue->_priv);
+}
+
 /* GPUQueueWaitIdle: the queue's fence, then its completions */
 
 static GPUResult

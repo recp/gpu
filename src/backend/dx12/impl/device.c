@@ -1772,6 +1772,23 @@ dx12_destroyDevice(GPUDevice *__restrict device) {
 
   deviceDX12 = device->_priv;
 
+  /* a queue lost to the hang limit abandoned work that may never end: what
+   * it may still use stays, and the device is let go with it (those
+   * references keep the D3D12 device alive), its queues' threads stopped,
+   * as Metal leaves abandoned work to Metal */
+  for (i = 0u; deviceDX12 && i < deviceDX12->nCreatedQueues; i++) {
+    if (dx12_queueLostToHang(deviceDX12->createdQueues[i]))
+      break;
+  }
+
+  if (deviceDX12 && i < deviceDX12->nCreatedQueues) {
+    for (i = 0u; i < deviceDX12->nCreatedQueues; i++)
+      dx12_letQueueGo(deviceDX12->createdQueues[i]);
+
+    free(device);
+    return;
+  }
+
   if (deviceDX12) {
     /* idle (GPUDestroyDevice waited): what was destroyed while in use goes,
      * before the queues (their last waits reclaim) and its memory's pool */
