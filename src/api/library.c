@@ -2813,44 +2813,21 @@ createShaderLibraryFromBinary(GPUDevice                        *device,
                                               outLibrary);
 }
 
+/* the USL target a device's libraries compile for: the backend's own
+ * (usl_target.h), then the device's profile and the atoms its features and
+ * quirks name. outTarget points at targetAtoms (GPU_USL_TARGET_ATOMS), which
+ * must outlive it */
 static GPUResult
-createShaderLibraryFromUSLImpl(GPUDevice         *device,
-                               const void        *bytecodeData,
-                               uint64_t           bytecodeSize,
-                               bool               disableDiskCache,
-                               bool               texelReads,
-                               GPUShaderLibrary **outLibrary) {
-  USReflection                bootstrapReflection = {0};
-  USCompileOutput             compileOutput       = {0};
-  USLCompileOptions           compileOptions;
-  USLTargetSpec               target;
-  USLCapabilityAtomDesc       targetAtoms[GPU_USL_TARGET_ATOMS];
-  USCompileInput              compileInput;
-  GPUApi                     *api;
-  const char                 *payloadBackend;
-  const char                 *bootstrapEntry = NULL;
-  const char                 *payloadEncoding;
-  const char                 *payloadSource;
-  const USLRuntimeEntryPoint *entry;
-  USResult                    compileResult;
-  GPUResult                   rc;
-  uint32_t                    targetAtomCount;
-  uint32_t                    sourceCompileFlags;
-  uint32_t                    namedFloatMode;
-  uint32_t                    artifactFloatMode;
-  uint32_t                    encoding;
-  uint32_t                    floatModeIndex;
-  uint32_t                    floatAtomicIndex;
-  USResult                    atomResult;
-  uint32_t                    bootstrapIndex;
-  bool                        targetSupported;
-
-  if (!device || !bytecodeData || bytecodeSize == 0u
-      || bytecodeSize > (uint64_t)SIZE_MAX || !outLibrary) {
-    return GPU_ERROR_INVALID_ARGUMENT;
-  }
-
-  *outLibrary = NULL;
+deviceUSLTarget(const GPUDevice       *device,
+                bool                   texelReads,
+                USLTargetSpec         *outTarget,
+                USLCapabilityAtomDesc *targetAtoms) {
+  USLTargetSpec target;
+  GPUApi       *api;
+  USResult      atomResult;
+  uint32_t      targetAtomCount;
+  uint32_t      floatModeIndex;
+  uint32_t      floatAtomicIndex;
 
   if (!(api = deviceApi(device))) {
     return GPU_ERROR_BACKEND_FAILURE;
@@ -3411,6 +3388,54 @@ createShaderLibraryFromUSLImpl(GPUDevice         *device,
                                targetAtoms,
                                targetAtomCount) != USLOk) {
     return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  *outTarget = target;
+
+  return GPU_OK;
+}
+
+static GPUResult
+createShaderLibraryFromUSLImpl(GPUDevice         *device,
+                               const void        *bytecodeData,
+                               uint64_t           bytecodeSize,
+                               bool               disableDiskCache,
+                               bool               texelReads,
+                               GPUShaderLibrary **outLibrary) {
+  USReflection                bootstrapReflection = {0};
+  USCompileOutput             compileOutput       = {0};
+  USLCompileOptions           compileOptions;
+  USLTargetSpec               target;
+  USLCapabilityAtomDesc       targetAtoms[GPU_USL_TARGET_ATOMS];
+  USCompileInput              compileInput;
+  GPUApi                     *api;
+  const char                 *payloadBackend;
+  const char                 *bootstrapEntry = NULL;
+  const char                 *payloadEncoding;
+  const char                 *payloadSource;
+  const USLRuntimeEntryPoint *entry;
+  USResult                    compileResult;
+  GPUResult                   rc;
+  uint32_t                    sourceCompileFlags;
+  uint32_t                    namedFloatMode;
+  uint32_t                    artifactFloatMode;
+  uint32_t                    encoding;
+  uint32_t                    bootstrapIndex;
+  bool                        targetSupported;
+
+  if (!device || !bytecodeData || bytecodeSize == 0u
+      || bytecodeSize > (uint64_t)SIZE_MAX || !outLibrary) {
+    return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  *outLibrary = NULL;
+
+  if (!(api = deviceApi(device))) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
+  if ((rc = deviceUSLTarget(device, texelReads, &target, targetAtoms)) != GPU_OK) {
+    return rc;
   }
 
   /* dxil bootstraps one entry but still requires module-wide support. */
