@@ -40,11 +40,12 @@ struct GPUFence {
   GPUUploaderReadyFn ready;
   void              *readyUser;
   uint32_t          references;
+  GPUResult         result; /* the signaled work's: GPUWaitFence returns it */
   bool              signaled;
 };
 
 static void
-gpu_signalFence(GPUFence *fence) {
+gpu_signalFence(GPUFence *fence, GPUResult result) {
   GPUFenceObserver  *completion;
   GPUUploaderReadyFn ready;
   void             *user;
@@ -67,6 +68,7 @@ gpu_signalFence(GPUFence *fence) {
     fence->ready     = NULL;
     fence->readyUser = NULL;
   }
+  fence->result   = result;
   fence->signaled = true;
 
 #if defined(_WIN32) || defined(WIN32)
@@ -155,10 +157,12 @@ resetFenceInternal(GPUFence *fence) {
 #if defined(_WIN32) || defined(WIN32)
   EnterCriticalSection(&fence->lock);
   fence->signaled = false;
+  fence->result   = GPU_OK;
   LeaveCriticalSection(&fence->lock);
 #else
   pthread_mutex_lock(&fence->mutex);
   fence->signaled = false;
+  fence->result   = GPU_OK;
   pthread_mutex_unlock(&fence->mutex);
 #endif
 }
@@ -324,7 +328,8 @@ prepareQueueSubmit(GPUQueue                *cmdq,
 GPU_HIDE
 void
 finishCommandBuffer(GPUCommandBuffer         *cmdb,
-                    GPUCommandBufferRecycleFn recycle) {
+                    GPUCommandBufferRecycleFn recycle,
+                    GPUResult                 result) {
   GPUFrameFeedback            *feedback;
   GPUFence                    *fence;
   GPUFence                    *transientFence;
@@ -347,11 +352,11 @@ finishCommandBuffer(GPUCommandBuffer         *cmdb,
   cmdb->_onCompleteSender = NULL;
   cmdb->_onComplete       = NULL;
 
-  gpu_signalFence(transientFence);
+  gpu_signalFence(transientFence, result);
 
   if (feedback) {
     /* native completion publishes its result first; this covers submit failure. */
-    frameFeedbackComplete(feedback, GPU_ERROR_BACKEND_FAILURE, 0.0, 0.0);
+    frameFeedbackComplete(feedback, result != GPU_OK ? result : GPU_ERROR_BACKEND_FAILURE, 0.0, 0.0);
     frameFeedbackRelease(feedback);
   }
 
@@ -363,7 +368,7 @@ finishCommandBuffer(GPUCommandBuffer         *cmdb,
     recycle(cmdb);
   }
 
-  gpu_signalFence(fence);
+  gpu_signalFence(fence, result);
 }
 
 GPU_HIDE
@@ -873,6 +878,7 @@ GPUDestroyFence(GPUFence *__restrict fence) {
 GPU_EXPORT
 GPUResult
 GPUWaitFence(GPUFence *__restrict fence, uint64_t timeoutNs) {
+  GPUResult result;
 #if defined(_WIN32) || defined(WIN32)
   DWORD timeoutMs;
   DWORD error;
@@ -903,6 +909,7 @@ GPUWaitFence(GPUFence *__restrict fence, uint64_t timeoutNs) {
     }
   }
 
+  result = fence->result;
   LeaveCriticalSection(&fence->lock);
 #else
   pthread_mutex_lock(&fence->mutex);
@@ -932,10 +939,11 @@ GPUWaitFence(GPUFence *__restrict fence, uint64_t timeoutNs) {
     }
   }
 
+  result = fence->result;
   pthread_mutex_unlock(&fence->mutex);
 #endif
 
-  return GPU_OK;
+  return result;
 }
 
 GPU_EXPORT

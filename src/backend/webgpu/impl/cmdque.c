@@ -41,7 +41,6 @@ webgpu_commandDone(WGPUQueueWorkDoneStatus status,
   GPUCommandWebGPU *command;
   WGPUCommandBuffer submitted;
 
-  GPU__UNUSED(status);
   GPU__UNUSED(message);
   GPU__UNUSED(unused);
   command   = userData;
@@ -53,7 +52,8 @@ webgpu_commandDone(WGPUQueueWorkDoneStatus status,
     wgpuCommandBufferRelease(submitted);
   }
 
-  finishCommandBuffer(&command->command, webgpu_recycleCommand);
+  finishCommandBuffer(&command->command, webgpu_recycleCommand,
+                      status == WGPUQueueWorkDoneStatus_Success ? GPU_OK : GPU_ERROR_BACKEND_FAILURE);
 }
 
 static GPUQueue*
@@ -199,7 +199,7 @@ webgpu_abortCommandBuffers(uint32_t                 count,
       command->present = NULL;
     }
 
-    finishCommandBuffer(buffers[i], webgpu_recycleCommand);
+    finishCommandBuffer(buffers[i], webgpu_recycleCommand, GPU_ERROR_BACKEND_FAILURE);
   }
 }
 

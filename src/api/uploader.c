@@ -94,8 +94,9 @@ reuseSlot(const GPUUploader *uploader, UploadSlot *slot) {
       slot->fence   = NULL;
     }
   } else {
+    /* a failed upload's fence is signaled too: the GPU is done with the slot */
     result = GPUWaitFence(slot->fence, UINT64_MAX);
-    if (result != GPU_OK)
+    if (result != GPU_OK && !GPUIsFenceSignaled(slot->fence))
       return result;
   }
 

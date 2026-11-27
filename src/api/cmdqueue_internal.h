@@ -53,10 +53,12 @@ struct GPUCommandBuffer {
 
 typedef void (*GPUCommandBufferRecycleFn)(GPUCommandBuffer *cmdb);
 
+/* result: what the buffer's work came to, its fences signaled with it */
 GPU_HIDE
 void
 finishCommandBuffer(GPUCommandBuffer         *cmdb,
-                    GPUCommandBufferRecycleFn recycle);
+                    GPUCommandBufferRecycleFn recycle,
+                    GPUResult                 result);
 
 GPU_HIDE
 void

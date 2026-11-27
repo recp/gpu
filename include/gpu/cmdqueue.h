@@ -133,7 +133,8 @@ GPUQueueSubmitEx(GPUQueue                   *__restrict cmdq,
 
 /* waits until everything submitted to the queue so far (command buffers and
  * queue writes) has finished and its completion callbacks have run. work
- * other threads submit meanwhile may or may not be included. */
+ * other threads submit meanwhile may or may not be included. a queue that
+ * can't finish (GPU_ERROR_DEVICE_LOST) returns at once with that. */
 GPU_EXPORT
 GPUResult
 GPUQueueWaitIdle(GPUQueue *__restrict cmdq);
@@ -148,6 +149,10 @@ GPU_EXPORT
 void
 GPUDestroyFence(GPUFence *__restrict fence);
 
+/* GPU_OK once the work the fence was submitted with finished; that work's
+ * error when it failed (GPU_ERROR_DEVICE_LOST: abandoned, its queue can't
+ * finish it); GPU_ERROR_TIMEOUT when timeoutNs passed first. a failed
+ * fence is signaled too: the GPU is done with what that work used */
 GPU_EXPORT
 GPUResult
 GPUWaitFence(GPUFence *__restrict fence, uint64_t timeoutNs);

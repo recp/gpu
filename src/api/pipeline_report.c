@@ -73,6 +73,7 @@ report__resultName(GPUResult result) {
     case GPU_ERROR_BACKEND_FAILURE:       return "backend failure";
     case GPU_ERROR_INSUFFICIENT_CAPACITY: return "insufficient capacity";
     case GPU_ERROR_TIMEOUT:               return "timeout";
+    case GPU_ERROR_DEVICE_LOST:           return "device lost";
   }
 
   return "error";

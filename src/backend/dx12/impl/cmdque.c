@@ -361,8 +361,10 @@ dx12__completionMain(LPVOID context) {
       dx12__queueDone(queue, native->serial);
     }
 
+    /* not seen complete (the device went away): abandoned, its state kept */
     finishCommandBuffer(cmdb,
-                        completed ? dx12__recycleCommandBuffer : NULL);
+                        completed ? dx12__recycleCommandBuffer : NULL,
+                        completed ? GPU_OK : GPU_ERROR_DEVICE_LOST);
 
     dx12__queueLock(queue);
 
@@ -1097,12 +1099,14 @@ dx12__commitCommandBuffers(uint32_t                 count,
 static void
 dx12__finishCommandBuffers(uint32_t                 count,
                            GPUCommandBuffer *const *buffers,
-                           bool                     recycle) {
+                           bool                     recycle,
+                           GPUResult                result) {
   uint32_t i;
 
   for (i = 0u; i < count; i++) {
     finishCommandBuffer(buffers[i],
-                        recycle ? dx12__recycleCommandBuffer : NULL);
+                        recycle ? dx12__recycleCommandBuffer : NULL,
+                        result);
   }
 }
 
@@ -1204,7 +1208,8 @@ dx12_submitEx(GPUQueue                   *queueHandle,
         || !natives[i]->commandList) {
       dx12__finishCommandBuffers(info->commandBufferCount,
                                  info->ppCommandBuffers,
-                                 true);
+                                 true,
+                                 GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -1212,7 +1217,8 @@ dx12_submitEx(GPUQueue                   *queueHandle,
       if (swapchain) {
         dx12__finishCommandBuffers(info->commandBufferCount,
                                    info->ppCommandBuffers,
-                                   true);
+                                   true,
+                                   GPU_ERROR_INVALID_ARGUMENT);
         return GPU_ERROR_INVALID_ARGUMENT;
       }
 
@@ -1228,7 +1234,8 @@ dx12_submitEx(GPUQueue                   *queueHandle,
   if (flushResult != GPU_OK) {
     dx12__finishCommandBuffers(info->commandBufferCount,
                                info->ppCommandBuffers,
-                               true);
+                               true,
+                               flushResult);
     return flushResult;
   }
 
@@ -1241,7 +1248,8 @@ dx12_submitEx(GPUQueue                   *queueHandle,
       dx12__logDebugMessages(queue);
       dx12__finishCommandBuffers(info->commandBufferCount,
                                  info->ppCommandBuffers,
-                                 true);
+                                 true,
+                                 GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
@@ -1252,7 +1260,8 @@ dx12_submitEx(GPUQueue                   *queueHandle,
     if (!waitFence) {
       dx12__finishCommandBuffers(info->commandBufferCount,
                                  info->ppCommandBuffers,
-                                 true);
+                                 true,
+                                 GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -1264,7 +1273,8 @@ dx12_submitEx(GPUQueue                   *queueHandle,
       dx12__reportQueueError(queue, "advanced queue wait", result);
       dx12__finishCommandBuffers(info->commandBufferCount,
                                  info->ppCommandBuffers,
-                                 true);
+                                 true,
+                                 GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
@@ -1319,7 +1329,8 @@ dx12_submitEx(GPUQueue                   *queueHandle,
     dx12__reportQueueError(queue, "advanced completion signal", result);
     dx12__finishCommandBuffers(info->commandBufferCount,
                                info->ppCommandBuffers,
-                               false);
+                               false,
+                               GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -2100,14 +2111,14 @@ dx12_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
   queue  = native ? native->owner : NULL;
 
   if (!native || !queue || !native->commandList) {
-    finishCommandBuffer(cmdb, dx12__recycleCommandBuffer);
+    finishCommandBuffer(cmdb, dx12__recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   commitResult = dx12__flushTransfers(queue->queue, false);
 
   if (commitResult != GPU_OK) {
-    finishCommandBuffer(cmdb, dx12__recycleCommandBuffer);
+    finishCommandBuffer(cmdb, dx12__recycleCommandBuffer, commitResult);
     return commitResult;
   }
 
@@ -2117,7 +2128,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
   if (FAILED(result)) {
     dx12__reportQueueError(queue, "command list close", result);
     dx12__logDebugMessages(queue);
-    finishCommandBuffer(cmdb, dx12__recycleCommandBuffer);
+    finishCommandBuffer(cmdb, dx12__recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -2154,7 +2165,7 @@ dx12_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
 
   if (FAILED(result)) {
     dx12__reportQueueError(queue, "queue signal", result);
-    finishCommandBuffer(cmdb, NULL);
+    finishCommandBuffer(cmdb, NULL, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -2221,7 +2232,7 @@ dx12_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   flushResult = dx12__flushTransfers(queueHandle, false);
 
   if (flushResult != GPU_OK) {
-    dx12__finishCommandBuffers(count, buffers, true);
+    dx12__finishCommandBuffers(count, buffers, true, flushResult);
     return flushResult;
   }
 
@@ -2232,7 +2243,7 @@ dx12_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
     if (FAILED(result)) {
       dx12__reportQueueError(queue, "command list close", result);
       dx12__logDebugMessages(queue);
-      dx12__finishCommandBuffers(count, buffers, true);
+      dx12__finishCommandBuffers(count, buffers, true, GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
@@ -2253,7 +2264,7 @@ dx12_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
 
   if (FAILED(result)) {
     dx12__reportQueueError(queue, "queue batch signal", result);
-    dx12__finishCommandBuffers(count, buffers, false);
+    dx12__finishCommandBuffers(count, buffers, false, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 

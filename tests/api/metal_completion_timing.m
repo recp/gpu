@@ -27,6 +27,7 @@ typedef struct CompletionState {
   double                     start;
   double                     end;
   GPUResult                  result;
+  GPUResult                  finishResult;
   GPUResult                  errorResult;
   GPUDeviceErrorType         errorType;
   uint32_t                   sequence;
@@ -66,7 +67,7 @@ report_error(GPUDevice *device, GPUDeviceErrorType type, GPUDeviceLostReason rea
              GPUResult result, const char *message);
 
 static void
-finish_command(GPUCommandBuffer *command, GPUCommandBufferRecycleFn recycle);
+finish_command(GPUCommandBuffer *command, GPUCommandBufferRecycleFn recycle, GPUResult result);
 
 /* exercise the actual completion handlers; replace only their external sinks. */
 
@@ -134,10 +135,11 @@ report_error(GPUDevice *device, GPUDeviceErrorType type, GPUDeviceLostReason rea
 }
 
 static void
-finish_command(GPUCommandBuffer *command, GPUCommandBufferRecycleFn recycle) {
+finish_command(GPUCommandBuffer *command, GPUCommandBufferRecycleFn recycle, GPUResult result) {
   kCompletion.finishes++;
-  kCompletion.command     = command;
-  kCompletion.recycle     = recycle;
+  kCompletion.command      = command;
+  kCompletion.recycle      = recycle;
+  kCompletion.finishResult = result;
   kCompletion.finishOrder = ++kCompletion.sequence;
 }
 
@@ -154,6 +156,7 @@ check_case(bool modern, uint32_t flags, bool error, bool missing, bool ready) {
   uint32_t         stats;
   uint32_t         events;
   uint32_t         errors;
+  GPUResult        expected;
   bool             ok;
 
   probe = [TimingProbe new];
@@ -184,6 +187,7 @@ check_case(bool modern, uint32_t flags, bool error, bool missing, bool ready) {
   stats   = ready && !missing && (flags & 1u) ? 1u : 0u;
   events  = ready && (flags & 2u) ? 1u : 0u;
   errors  = ready && !missing && error ? 1u : 0u;
+  expected = error || missing ? GPU_ERROR_BACKEND_FAILURE : GPU_OK;
   ok      = probe->starts == getters && probe->ends == getters
             && kCompletion.stats == stats && kCompletion.events == events
             && kCompletion.errors == errors && kCompletion.finishes == (ready ? 1u : 0u);
@@ -193,7 +197,7 @@ check_case(bool modern, uint32_t flags, bool error, bool missing, bool ready) {
 
   if (events) {
     ok = ok && kCompletion.feedback == token
-         && kCompletion.result == (error || missing ? GPU_ERROR_BACKEND_FAILURE : GPU_OK)
+         && kCompletion.result == expected
          && kCompletion.start == (error || missing ? 0.0 : 16.0)
          && kCompletion.end == (error || missing ? 0.0 : 16.125)
          && kCompletion.eventOrder < kCompletion.finishOrder;
@@ -208,7 +212,7 @@ check_case(bool modern, uint32_t flags, bool error, bool missing, bool ready) {
 
   if (ready) {
     ok = ok && kCompletion.command == &command && kCompletion.recycle == mt_recycleCommandBuffer
-         && kCompletion.finishOrder == kCompletion.sequence
+         && kCompletion.finishResult == expected && kCompletion.finishOrder == kCompletion.sequence
          && dispatch_group_wait(queue.inFlightGroup, DISPATCH_TIME_NOW) == 0;
   } else {
     ok = ok && dispatch_group_wait(queue.inFlightGroup, DISPATCH_TIME_NOW) != 0;

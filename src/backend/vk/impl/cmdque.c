@@ -156,6 +156,17 @@ vk__waitQueueIdle(GPUQueueVk *queue) {
   vk__queueUnlock(queue);
 }
 
+static GPUResult
+vk__queueResult(VkResult result) {
+  switch (result) {
+    case VK_SUCCESS:                    return GPU_OK;
+    case VK_ERROR_DEVICE_LOST:          return GPU_ERROR_DEVICE_LOST;
+    case VK_ERROR_OUT_OF_HOST_MEMORY:
+    case VK_ERROR_OUT_OF_DEVICE_MEMORY: return GPU_ERROR_OUT_OF_MEMORY;
+    default:                            return GPU_ERROR_BACKEND_FAILURE;
+  }
+}
+
 static void
 vk__reportQueueError(GPUCommandBuffer *cmdb,
                      const char       *operation,
@@ -172,14 +183,12 @@ vk__reportQueueError(GPUCommandBuffer *cmdb,
   }
 
   type      = GPU_DEVICE_ERROR_BACKEND;
-  gpuResult = GPU_ERROR_BACKEND_FAILURE;
+  gpuResult = vk__queueResult(result);
 
   if (result == VK_ERROR_DEVICE_LOST) {
     type = GPU_DEVICE_ERROR_LOST;
-  } else if (result == VK_ERROR_OUT_OF_HOST_MEMORY
-             || result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
-    type      = GPU_DEVICE_ERROR_OUT_OF_MEMORY;
-    gpuResult = GPU_ERROR_OUT_OF_MEMORY;
+  } else if (gpuResult == GPU_ERROR_OUT_OF_MEMORY) {
+    type = GPU_DEVICE_ERROR_OUT_OF_MEMORY;
   }
 
   snprintf(message,
@@ -415,7 +424,7 @@ vk__completionLoop(GPUQueueVk *queue) {
     native->completionSync    = NULL;
     native->presentImageIndex = 0u;
     native->presentFrameIndex = 0u;
-    finishCommandBuffer(cmdb, vk__recycleCommandBuffer);
+    finishCommandBuffer(cmdb, vk__recycleCommandBuffer, vk__queueResult(result));
 
     vk__queueLock(queue);
 
@@ -904,12 +913,14 @@ vk__commitCommandBuffers(uint32_t                 count,
 static void
 vk__finishCommandBuffers(uint32_t                 count,
                          GPUCommandBuffer *const *buffers,
-                         bool                     recycle) {
+                         bool                     recycle,
+                         GPUResult                result) {
   uint32_t i;
 
   for (i = 0u; i < count; i++) {
     finishCommandBuffer(buffers[i],
-                        recycle ? vk__recycleCommandBuffer : NULL);
+                        recycle ? vk__recycleCommandBuffer : NULL,
+                        result);
   }
 }
 
@@ -1069,7 +1080,8 @@ vk_submitEx(GPUQueue                   *queueHandle,
     if (!natives[i] || natives[i]->owner != queue || !natives[i]->command) {
       vk__finishCommandBuffers(info->commandBufferCount,
                                info->ppCommandBuffers,
-                               true);
+                               true,
+                               GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -1077,7 +1089,8 @@ vk_submitEx(GPUQueue                   *queueHandle,
       if (swapchain) {
         vk__finishCommandBuffers(info->commandBufferCount,
                                  info->ppCommandBuffers,
-                                 true);
+                                 true,
+                                 GPU_ERROR_INVALID_ARGUMENT);
         return GPU_ERROR_INVALID_ARGUMENT;
       }
 
@@ -1093,7 +1106,8 @@ vk_submitEx(GPUQueue                   *queueHandle,
   if (flushResult != GPU_OK) {
     vk__finishCommandBuffers(info->commandBufferCount,
                              info->ppCommandBuffers,
-                             true);
+                             true,
+                             flushResult);
     return flushResult;
   }
 
@@ -1108,7 +1122,8 @@ vk_submitEx(GPUQueue                   *queueHandle,
         || presentNative->presentImageIndex >= swapchain->imageCount) {
       vk__finishCommandBuffers(info->commandBufferCount,
                                info->ppCommandBuffers,
-                               true);
+                               true,
+                               GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -1119,7 +1134,8 @@ vk_submitEx(GPUQueue                   *queueHandle,
     if (!renderFinished) {
       vk__finishCommandBuffers(info->commandBufferCount,
                                info->ppCommandBuffers,
-                               true);
+                               true,
+                               GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
@@ -1132,7 +1148,8 @@ vk_submitEx(GPUQueue                   *queueHandle,
     if (!waitSemaphore || waitSemaphore->device != device->device || !waitSemaphore->semaphore) {
       vk__finishCommandBuffers(info->commandBufferCount,
                                info->ppCommandBuffers,
-                               true);
+                               true,
+                               GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -1156,7 +1173,8 @@ vk_submitEx(GPUQueue                   *queueHandle,
     if (!signalSemaphore || signalSemaphore->device != device->device || !signalSemaphore->semaphore) {
       vk__finishCommandBuffers(info->commandBufferCount,
                                info->ppCommandBuffers,
-                               true);
+                               true,
+                               GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -1215,8 +1233,9 @@ vk_submitEx(GPUQueue                   *queueHandle,
                          result);
     vk__finishCommandBuffers(info->commandBufferCount,
                              info->ppCommandBuffers,
-                             true);
-    return GPU_ERROR_BACKEND_FAILURE;
+                             true,
+                             vk__queueResult(result));
+    return vk__queueResult(result);
   }
 
   for (uint32_t n = 0u; n < info->commandBufferCount; n++) {
@@ -2023,14 +2042,14 @@ vk_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
     cmdb->_queue->_device->_priv : NULL;
 
   if (!native || !queue || !deviceVk) {
-    finishCommandBuffer(cmdb, vk__recycleCommandBuffer);
+    finishCommandBuffer(cmdb, vk__recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   commitResult = vk__flushTransfers(queue->queue, false);
 
   if (commitResult != GPU_OK) {
-    finishCommandBuffer(cmdb, vk__recycleCommandBuffer);
+    finishCommandBuffer(cmdb, vk__recycleCommandBuffer, commitResult);
     return commitResult;
   }
 
@@ -2045,7 +2064,7 @@ vk_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
     if (!swapchain->frameActive || !swapchain->frameScheduled
         || native->presentFrameIndex >= swapchain->imageCount
         || native->presentImageIndex >= swapchain->imageCount) {
-      finishCommandBuffer(cmdb, vk__recycleCommandBuffer);
+      finishCommandBuffer(cmdb, vk__recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
@@ -2054,7 +2073,7 @@ vk_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
     renderFinished = swapchain->renderFinished[native->presentImageIndex];
 
     if (!renderFinished) {
-      finishCommandBuffer(cmdb, vk__recycleCommandBuffer);
+      finishCommandBuffer(cmdb, vk__recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
@@ -2089,8 +2108,8 @@ vk_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
     }
 
     vk__reportQueueError(cmdb, "queue submit", result);
-    finishCommandBuffer(cmdb, vk__recycleCommandBuffer);
-    return GPU_ERROR_BACKEND_FAILURE;
+    finishCommandBuffer(cmdb, vk__recycleCommandBuffer, vk__queueResult(result));
+    return vk__queueResult(result);
   }
 
   vk_submitGraphInitializations(native);
@@ -2175,7 +2194,7 @@ vk_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   flushResult = vk__flushTransfers(queueHandle, false);
 
   if (flushResult != GPU_OK) {
-    vk__finishCommandBuffers(count, buffers, true);
+    vk__finishCommandBuffers(count, buffers, true, flushResult);
     return flushResult;
   }
 
@@ -2185,7 +2204,7 @@ vk_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
 
     if (result != VK_SUCCESS) {
       vk__reportQueueError(buffers[j], "command buffer end", result);
-      vk__finishCommandBuffers(count, buffers, true);
+      vk__finishCommandBuffers(count, buffers, true, GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
   }
@@ -2202,8 +2221,8 @@ vk_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
 
   if (result != VK_SUCCESS) {
     vk__reportQueueError(buffers[0], "queue batch submit", result);
-    vk__finishCommandBuffers(count, buffers, true);
-    return GPU_ERROR_BACKEND_FAILURE;
+    vk__finishCommandBuffers(count, buffers, true, vk__queueResult(result));
+    return vk__queueResult(result);
   }
 
   for (uint32_t k = 0u; k < count; k++) {

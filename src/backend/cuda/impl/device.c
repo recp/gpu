@@ -85,7 +85,8 @@ cuda__completionLoop(GPUQueueCuda *queue) {
                        device->queueCount,
                        &queue->queue,
                        command->serial);
-    finishCommandBuffer(&command->command, cuda_recycleCommand);
+    finishCommandBuffer(&command->command, cuda_recycleCommand,
+                        result == CUDA_SUCCESS ? GPU_OK : GPU_ERROR_BACKEND_FAILURE);
   }
 }
 

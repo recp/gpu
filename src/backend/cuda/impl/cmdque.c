@@ -113,12 +113,12 @@ cuda__submitted(GPUQueueCuda *queue, GPUCommandCuda *command) {
 }
 
 static void
-cuda__finishCommands(uint32_t count, GPUCommandBuffer *const *commands) {
+cuda__finishCommands(uint32_t count, GPUCommandBuffer *const *commands, GPUResult result) {
   uint32_t i;
 
   for (i = 0u; i < count; i++) {
     if (commands[i]) {
-      finishCommandBuffer(commands[i], cuda_recycleCommand);
+      finishCommandBuffer(commands[i], cuda_recycleCommand, result);
     }
   }
 }
@@ -348,7 +348,7 @@ cuda_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
 
   if (command->recordResult != GPU_OK) {
     recordResult = command->recordResult;
-    finishCommandBuffer(cmdb, cuda_recycleCommand);
+    finishCommandBuffer(cmdb, cuda_recycleCommand, recordResult);
     return recordResult;
   }
 
@@ -356,7 +356,7 @@ cuda_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
 
   if (cuda_push(queue->driver, queue->context) != GPU_OK) {
     cuda_queueUnlock(queue);
-    finishCommandBuffer(cmdb, cuda_recycleCommand);
+    finishCommandBuffer(cmdb, cuda_recycleCommand, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -371,7 +371,7 @@ cuda_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
     cuda_pop(queue->driver);
     cuda_queueUnlock(queue);
     cuda_report(queue->queue._device, result, "command submission");
-    finishCommandBuffer(cmdb, cuda_recycleCommand);
+    finishCommandBuffer(cmdb, cuda_recycleCommand, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -438,7 +438,7 @@ cuda_submitEx(GPUQueue                   *queueHandle,
       || info->commandBufferCount > CUDA_SUBMIT_STACK_COUNT
       || info->waitCount > CUDA_SUBMIT_STACK_COUNT
       || info->signalCount > CUDA_SUBMIT_STACK_COUNT) {
-    cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers);
+    cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers, GPU_ERROR_UNSUPPORTED);
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -446,7 +446,7 @@ cuda_submitEx(GPUQueue                   *queueHandle,
        && !queue->driver->waitExternalSemaphoresAsync)
       || (info->signalCount > 0u
           && !queue->driver->signalExternalSemaphoresAsync)) {
-    cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers);
+    cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers, GPU_ERROR_UNSUPPORTED);
     return GPU_ERROR_UNSUPPORTED;
   }
 
@@ -454,13 +454,13 @@ cuda_submitEx(GPUQueue                   *queueHandle,
     commands[i] = cuda_command(info->ppCommandBuffers[i]);
 
     if (!commands[i] || commands[i]->owner != queue) {
-      cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers);
+      cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers, GPU_ERROR_BACKEND_FAILURE);
       return GPU_ERROR_BACKEND_FAILURE;
     }
 
     if (commands[i]->recordResult != GPU_OK) {
       recordResult = commands[i]->recordResult;
-      cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers);
+      cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers, recordResult);
       return recordResult;
     }
   }
@@ -470,7 +470,7 @@ cuda_submitEx(GPUQueue                   *queueHandle,
                              info->waitCount,
                              info->pSignals,
                              info->signalCount)) {
-    cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers);
+    cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -478,7 +478,7 @@ cuda_submitEx(GPUQueue                   *queueHandle,
 
   if (cuda_push(queue->driver, queue->context) != GPU_OK) {
     cuda_queueUnlock(queue);
-    cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers);
+    cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -503,7 +503,7 @@ cuda_submitEx(GPUQueue                   *queueHandle,
     cuda_pop(queue->driver);
     cuda_queueUnlock(queue);
     cuda_report(queueHandle->_device, result, "advanced queue submission");
-    cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers);
+    cuda__finishCommands(info->commandBufferCount, info->ppCommandBuffers, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 

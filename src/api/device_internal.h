@@ -314,7 +314,8 @@ devicePrepareFrameSlotTimeout(GPUDevice *device, uint32_t *outFrameIndex, uint64
     device->allocatorStats.uploadStallCount++;
     result = GPUWaitFence(fence, timeout);
 
-    if (result != GPU_OK) {
+    /* a failed frame's fence is signaled too: the GPU is done with its memory */
+    if (result != GPU_OK && !GPUIsFenceSignaled(fence)) {
       return result;
     }
   }

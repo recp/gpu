@@ -132,7 +132,12 @@ typedef enum GPUResult {
   GPU_ERROR_OUT_OF_MEMORY         = -3,
   GPU_ERROR_BACKEND_FAILURE       = -4,
   GPU_ERROR_INSUFFICIENT_CAPACITY = -5,
-  GPU_ERROR_TIMEOUT               = -6
+  GPU_ERROR_TIMEOUT               = -6,
+
+  /* the queue can't finish its work: the system gave up on it (a GPU
+   * timeout) or the device went away. what was in flight is abandoned and
+   * nothing submitted after runs */
+  GPU_ERROR_DEVICE_LOST = -7
 } GPUResult;
 
 typedef uint32_t GPUShaderStageFlags;

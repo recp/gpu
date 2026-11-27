@@ -395,8 +395,7 @@ mt_submitEx(GPUQueue                   *queueHandle,
   for (uint32_t i = 0u; i < info->waitCount; i++) {
     if (!info->pWaits[i].semaphore->_priv) {
       for (uint32_t j = 0u; j < info->commandBufferCount; j++) {
-        finishCommandBuffer(info->ppCommandBuffers[j],
-                            mt_recycleCommandBuffer);
+        finishCommandBuffer(info->ppCommandBuffers[j], mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
       }
 
       return GPU_ERROR_BACKEND_FAILURE;
@@ -407,8 +406,7 @@ mt_submitEx(GPUQueue                   *queueHandle,
   for (uint32_t i = 0u; i < info->signalCount; i++) {
     if (!info->pSignals[i].semaphore->_priv) {
       for (uint32_t j = 0u; j < info->commandBufferCount; j++) {
-        finishCommandBuffer(info->ppCommandBuffers[j],
-                            mt_recycleCommandBuffer);
+        finishCommandBuffer(info->ppCommandBuffers[j], mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
       }
 
       return GPU_ERROR_BACKEND_FAILURE;
@@ -417,8 +415,7 @@ mt_submitEx(GPUQueue                   *queueHandle,
 
   if (mt_flushTransfers(queueHandle, false) != GPU_OK) {
     for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
-      finishCommandBuffer(info->ppCommandBuffers[i],
-                          mt_recycleCommandBuffer);
+      finishCommandBuffer(info->ppCommandBuffers[i], mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
     }
 
     return GPU_ERROR_BACKEND_FAILURE;
@@ -456,8 +453,7 @@ mt_submitEx(GPUQueue                   *queueHandle,
 
 
     for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
-      finishCommandBuffer(info->ppCommandBuffers[i],
-                          mt_recycleCommandBuffer);
+      finishCommandBuffer(info->ppCommandBuffers[i], mt_recycleCommandBuffer, GPU_ERROR_UNSUPPORTED);
     }
 
     return GPU_ERROR_UNSUPPORTED;
@@ -474,8 +470,7 @@ mt_submitEx(GPUQueue                   *queueHandle,
 
     if (!waitBuffer) {
       for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
-        finishCommandBuffer(info->ppCommandBuffers[i],
-                            mt_recycleCommandBuffer);
+        finishCommandBuffer(info->ppCommandBuffers[i], mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
       }
 
       return GPU_ERROR_BACKEND_FAILURE;
@@ -495,8 +490,7 @@ mt_submitEx(GPUQueue                   *queueHandle,
 
   if (!last->classic) {
     for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
-      finishCommandBuffer(info->ppCommandBuffers[i],
-                          mt_recycleCommandBuffer);
+      finishCommandBuffer(info->ppCommandBuffers[i], mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
     }
 
     return GPU_ERROR_BACKEND_FAILURE;
@@ -630,7 +624,7 @@ cmdoncomplete(GPUCommandBuffer *__restrict cmdb,
                           result == GPU_OK ? start : 0.0,
                           result == GPU_OK ? end : 0.0);
 
-  finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+  finishCommandBuffer(cmdb, mt_recycleCommandBuffer, result);
   dispatch_group_leave(queue->inFlightGroup);
 }
 
@@ -677,7 +671,7 @@ cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
                           result == GPU_OK ? start : 0.0,
                           result == GPU_OK ? end : 0.0);
 
-  finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+  finishCommandBuffer(cmdb, mt_recycleCommandBuffer, result);
   dispatch_group_leave(queue->inFlightGroup);
 }
 #endif
@@ -1260,12 +1254,12 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
   queue  = cmdb->_queue ? mt_commandQueue(cmdb->_queue) : NULL;
 
   if (!native || !queue) {
-    finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+    finishCommandBuffer(cmdb, mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
   if (mt_flushTransfers(cmdb->_queue, false) != GPU_OK) {
-    finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+    finishCommandBuffer(cmdb, mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -1322,7 +1316,7 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
       return GPU_OK;
     }
 
-    finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+    finishCommandBuffer(cmdb, mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 #endif
@@ -1330,7 +1324,7 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
   mcb = native->classic;
 
   if (!mcb) {
-    finishCommandBuffer(cmdb, mt_recycleCommandBuffer);
+    finishCommandBuffer(cmdb, mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -1404,7 +1398,7 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
 
   if (mt_flushTransfers(queueHandle, false) != GPU_OK) {
     for (cleanupIndex = 0u; cleanupIndex < count; cleanupIndex++) {
-      finishCommandBuffer(buffers[cleanupIndex], mt_recycleCommandBuffer);
+      finishCommandBuffer(buffers[cleanupIndex], mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
     }
 
     return GPU_ERROR_BACKEND_FAILURE;
