@@ -225,8 +225,12 @@ typedef struct MTTransferSlot {
   id<MTLBuffer>             staging;
   id<MTLCommandBuffer>      command;
   id<MTLBlitCommandEncoder> blit;
+  dispatch_semaphore_t      done;     /* signaled once per batch: by its handler or the queue's loss */
   uint64_t                  capacity;
   uint64_t                  used;
+  uint64_t                  signal;   /* Metal 4: the transfer timeline value the batch signals */
+  GPUResult                 result;   /* what the batch came to, once done is signaled */
+  atomic_bool               inFlight; /* committed; cleared by whichever of the two comes first */
   bool                      pending;
 } MTTransferSlot;
 
@@ -331,7 +335,18 @@ typedef struct MTCommandQueue {
 
   id<MTLSharedEvent>   transferEvent;
   uint64_t            transferValue;
+
+  /* the system gave up on the queue (a GPU timeout, GPU access taken away):
+   * what was in flight is abandoned, nothing submitted after runs */
+  atomic_bool         lost;
 } MTCommandQueue;
+
+/* a semaphore value a command buffer signals: released from the CPU when the
+ * command buffer fails, so what waits for it on other queues goes on */
+typedef struct MTSignal {
+  id<MTLSharedEvent> event;
+  uint64_t           value;
+} MTSignal;
 
 struct MTCommandBuffer {
   id<MTLCommandBuffer>                   classic;
@@ -382,8 +397,13 @@ struct MTCommandBuffer {
   uint32_t                               heldObjectCapacity;
   uint32_t                               residencyAllocationCount;
   uint32_t                               residencySeenCapacity;
+  MTSignal                              *signals;     /* GPUQueueSubmitEx's, on the last of its buffers */
+  MTCommandBuffer                       *abandonedNext;
+  uint32_t                               signalCount;
+  uint32_t                               signalCapacity;
   MTCommandMode                          mode;
-  atomic_bool                            completionReady;
+  atomic_bool                            completionReady; /* in flight; cleared by its handler or the queue's loss */
+  bool                                   abandoned;   /* with its queue: Metal may still hold it, never reused */
   bool                                   refreshModern;
   bool                                   openOrdered; /* a barrier since made its later dispatches wait */
 };
@@ -400,9 +420,8 @@ MTLPixelFormat
 mt_format(GPUFormat format);
 
 GPU_HIDE
-void
-mt_reportCommandBufferError(GPUCommandBuffer *__restrict cmdb,
-                            NSError          *__restrict error);
+GPUResult
+mt_commandFailed(GPUQueue *__restrict queue, NSError *__restrict error);
 
 GPU_HIDE
 void

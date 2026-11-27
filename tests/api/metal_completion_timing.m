@@ -187,7 +187,8 @@ check_case(bool modern, uint32_t flags, bool error, bool missing, bool ready) {
   stats   = ready && !missing && (flags & 1u) ? 1u : 0u;
   events  = ready && (flags & 2u) ? 1u : 0u;
   errors  = ready && !missing && error ? 1u : 0u;
-  expected = error || missing ? GPU_ERROR_BACKEND_FAILURE : GPU_OK;
+  /* the work's own error: the fence and the feedback carry it */
+  expected = error ? GPU_ERROR_OUT_OF_MEMORY : missing ? GPU_ERROR_BACKEND_FAILURE : GPU_OK;
   ok      = probe->starts == getters && probe->ends == getters
             && kCompletion.stats == stats && kCompletion.events == events
             && kCompletion.errors == errors && kCompletion.finishes == (ready ? 1u : 0u);

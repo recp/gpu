@@ -139,11 +139,13 @@ mt_transferCapacity(uint64_t sizeBytes) {
   return capacity;
 }
 
+/* a batch's end: its handler's, or the queue's loss (then Metal may still
+ * hold it, and its staging is never written again) */
 static GPUResult
 mt_waitTransfer(GPUQueue       *queue,
                 MTTransferSlot *slot,
                 bool            countStall) {
-  MTLCommandBufferStatus status;
+  GPUResult result;
 
   if (!slot || !slot->pending) {
     return GPU_OK;
@@ -153,24 +155,43 @@ mt_waitTransfer(GPUQueue       *queue,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
-  status = slot->command.status;
-
-  if (status != MTLCommandBufferStatusCompleted
-      && status != MTLCommandBufferStatusError) {
-    if (countStall && queue && queue->_device) {
-      queue->_device->allocatorStats.uploadStallCount++;
-    }
-
-    [slot->command waitUntilCompleted];
-    status = slot->command.status;
+  if (countStall && queue && queue->_device
+      && atomic_load_explicit(&slot->inFlight, memory_order_acquire)) {
+    queue->_device->allocatorStats.uploadStallCount++;
   }
+
+  dispatch_semaphore_wait(slot->done, DISPATCH_TIME_FOREVER);
+  result = slot->result;
 
   [slot->command release];
   slot->command = nil;
   slot->used    = 0u;
   slot->pending = false;
 
-  return status == MTLCommandBufferStatusCompleted ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
+  return result;
+}
+
+/* a batch's handler; one the queue's loss took first does nothing more: the
+ * queue may be gone by then */
+static void
+mt_transferDone(GPUQueue *queue, MTTransferSlot *slot, id<MTLCommandBuffer> batch) {
+  MTCommandQueue *native;
+  GPUResult       result;
+
+  if (!atomic_exchange_explicit(&slot->inFlight, false, memory_order_acq_rel))
+    return;
+
+  native = mt_commandQueue(queue);
+  result = batch.status == MTLCommandBufferStatusCompleted ? GPU_OK : mt_commandFailed(queue, batch.error);
+#if MT_HAS_METAL4
+  /* a failed batch signals nothing, and later commits wait for its value:
+   * given from here, unless the queue is lost (what waits is abandoned) */
+  if (result != GPU_OK && result != GPU_ERROR_DEVICE_LOST && native->mode == MTCommandMode4)
+    native->transferEvent.signaledValue = slot->signal;
+#endif
+  slot->result = result;
+  dispatch_semaphore_signal(slot->done);
+  dispatch_group_leave(native->inFlightGroup);
 }
 
 static bool
@@ -304,6 +325,103 @@ mt_takeCommandBufferState(GPUQueue *cmdb, MTCommandQueue *queue) {
   return native ? native : mt_createCommandBufferState(cmdb, queue);
 }
 
+/* semaphore values a submission signals, kept on its last buffer: a CPU
+ * signal stands in for them when that buffer fails (a failed one signals
+ * nothing), so other queues waiting on them go on */
+static bool
+mt_keepSignals(MTCommandBuffer *native, const GPUQueueSemaphoreSignal *signals, uint32_t count) {
+  MTSignal *grown;
+  uint32_t  i;
+
+  if (count > native->signalCapacity) {
+    if (!(grown = realloc(native->signals, count * sizeof(*grown))))
+      return false;
+
+    native->signals        = grown;
+    native->signalCapacity = count;
+  }
+
+  for (i = 0u; i < count; i++) {
+    native->signals[i].event = [(id<MTLSharedEvent>)signals[i].semaphore->_priv retain];
+    native->signals[i].value = signals[i].value;
+  }
+
+  native->signalCount = count;
+  return true;
+}
+
+static void
+mt_settleSignals(MTCommandBuffer *native, bool failed) {
+  uint32_t i;
+
+  for (i = 0u; i < native->signalCount; i++) {
+    /* a value below the event's is ignored: one the GPU gave stays */
+    if (failed)
+      native->signals[i].event.signaledValue = native->signals[i].value;
+    [native->signals[i].event release];
+    native->signals[i].event = nil;
+  }
+
+  native->signalCount = 0u;
+}
+
+/* a command buffer that won't reach the GPU: its recording ended so its state
+ * can be used again, what it would signal given, its waiters told */
+static GPUResult
+mt_abortCommandBuffer(GPUCommandBuffer *cmdb, GPUResult result) {
+  MTCommandBuffer *native;
+
+  if ((native = mt_commandBuffer(cmdb))) {
+#if MT_HAS_METAL4
+    if (native->mode == MTCommandMode4) {
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        mt_closeOpenEncoder(native);
+        [native->modern endCommandBuffer];
+      }
+    }
+#endif
+    mt_settleSignals(native, true);
+  }
+
+  finishCommandBuffer(cmdb, mt_recycleCommandBuffer, result);
+  return result;
+}
+
+static bool
+mt_queueLost(MTCommandQueue *native) {
+  return atomic_load_explicit(&native->lost, memory_order_acquire);
+}
+
+/* in flight from here, unless the queue is lost: marked under the lock the
+ * loss sweeps under, so each one either fails here or is let go by the loss */
+static GPUResult
+mt_beginCommits(MTCommandQueue *queue, MTCommandBuffer *const *natives, uint32_t count) {
+  uint32_t i;
+  bool     lost;
+
+  os_unfair_lock_lock(&queue->poolLock);
+  if (!(lost = mt_queueLost(queue))) {
+    for (i = 0u; i < count; i++) {
+      dispatch_group_enter(queue->inFlightGroup);
+      atomic_store_explicit(&natives[i]->completionReady, true, memory_order_release);
+    }
+  }
+  os_unfair_lock_unlock(&queue->poolLock);
+
+  return lost ? GPU_ERROR_DEVICE_LOST : GPU_OK;
+}
+
+/* one marked in flight that won't reach the GPU after all; one the queue's
+ * loss took meanwhile was let go then (and is never used again) */
+static GPUResult
+mt_cancelCommit(GPUCommandBuffer *cmdb, MTCommandBuffer *native, MTCommandQueue *queue, GPUResult result) {
+  if (!atomic_exchange_explicit(&native->completionReady, false, memory_order_acq_rel))
+    return GPU_ERROR_DEVICE_LOST;
+
+  dispatch_group_leave(queue->inFlightGroup);
+  return mt_abortCommandBuffer(cmdb, result);
+}
+
 static GPUResult
 mt__commitCommandBuffers(uint32_t                 count,
                          GPUCommandBuffer *const *buffers) {
@@ -378,9 +496,7 @@ mt_submitEx(GPUQueue                   *queueHandle,
             const GPUQueueSubmitExInfo *info) {
   MTCommandQueue  *queue;
   MTCommandBuffer *last;
-#if MT_HAS_METAL4
   GPUResult        result;
-#endif
 
   queue = mt_commandQueue(queueHandle);
   last  = info && info->commandBufferCount > 0u
@@ -391,34 +507,37 @@ mt_submitEx(GPUQueue                   *queueHandle,
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  result = GPU_OK;
 
   for (uint32_t i = 0u; i < info->waitCount; i++) {
-    if (!info->pWaits[i].semaphore->_priv) {
-      for (uint32_t j = 0u; j < info->commandBufferCount; j++) {
-        finishCommandBuffer(info->ppCommandBuffers[j], mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
-      }
-
-      return GPU_ERROR_BACKEND_FAILURE;
-    }
+    if (!info->pWaits[i].semaphore->_priv)
+      result = GPU_ERROR_BACKEND_FAILURE;
   }
-
 
   for (uint32_t i = 0u; i < info->signalCount; i++) {
-    if (!info->pSignals[i].semaphore->_priv) {
-      for (uint32_t j = 0u; j < info->commandBufferCount; j++) {
-        finishCommandBuffer(info->ppCommandBuffers[j], mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
-      }
-
-      return GPU_ERROR_BACKEND_FAILURE;
-    }
+    if (!info->pSignals[i].semaphore->_priv)
+      result = GPU_ERROR_BACKEND_FAILURE;
   }
 
-  if (mt_flushTransfers(queueHandle, false) != GPU_OK) {
+  /* kept before anything can fail: a failure gives them from the CPU */
+  if (result == GPU_OK && !mt_keepSignals(last, info->pSignals, info->signalCount)) {
+    for (uint32_t i = 0u; i < info->signalCount; i++)
+      ((id<MTLSharedEvent>)info->pSignals[i].semaphore->_priv).signaledValue = info->pSignals[i].value;
+    result = GPU_ERROR_OUT_OF_MEMORY;
+  }
+
+  if (result == GPU_OK && mt_queueLost(queue))
+    result = GPU_ERROR_DEVICE_LOST;
+
+  if (result == GPU_OK)
+    result = mt_flushTransfers(queueHandle, false);
+
+  if (result != GPU_OK) {
     for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
-      finishCommandBuffer(info->ppCommandBuffers[i], mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
+      (void)mt_abortCommandBuffer(info->ppCommandBuffers[i], result);
     }
 
-    return GPU_ERROR_BACKEND_FAILURE;
+    return result;
   }
 
 #if MT_HAS_METAL4
@@ -451,9 +570,8 @@ mt_submitEx(GPUQueue                   *queueHandle,
       return GPU_OK;
     }
 
-
     for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
-      finishCommandBuffer(info->ppCommandBuffers[i], mt_recycleCommandBuffer, GPU_ERROR_UNSUPPORTED);
+      (void)mt_abortCommandBuffer(info->ppCommandBuffers[i], GPU_ERROR_UNSUPPORTED);
     }
 
     return GPU_ERROR_UNSUPPORTED;
@@ -467,15 +585,13 @@ mt_submitEx(GPUQueue                   *queueHandle,
       waitBuffer = [[queue->classic commandBuffer] retain];
     }
 
-
     if (!waitBuffer) {
       for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
-        finishCommandBuffer(info->ppCommandBuffers[i], mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
+        (void)mt_abortCommandBuffer(info->ppCommandBuffers[i], GPU_ERROR_BACKEND_FAILURE);
       }
 
       return GPU_ERROR_BACKEND_FAILURE;
     }
-
 
     for (uint32_t i = 0u; i < info->waitCount; i++) {
       id<MTLEvent> event;
@@ -490,12 +606,11 @@ mt_submitEx(GPUQueue                   *queueHandle,
 
   if (!last->classic) {
     for (uint32_t i = 0u; i < info->commandBufferCount; i++) {
-      finishCommandBuffer(info->ppCommandBuffers[i], mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
+      (void)mt_abortCommandBuffer(info->ppCommandBuffers[i], GPU_ERROR_BACKEND_FAILURE);
     }
 
     return GPU_ERROR_BACKEND_FAILURE;
   }
-
 
   for (uint32_t i = 0u; i < info->signalCount; i++) {
     id<MTLEvent> event;
@@ -511,28 +626,67 @@ mt_submitEx(GPUQueue                   *queueHandle,
            : mt_cmdbufCommit(info->ppCommandBuffers[0]);
 }
 
+/* the system gave up on the queue: what's in flight won't finish, so its
+ * waiters go now with GPU_ERROR_DEVICE_LOST and nothing submitted after runs.
+ * Metal may still hold that work: its states and batches are never used again
+ * (nor freed), and their handlers, if they come, do nothing */
+static void
+mt_loseQueue(GPUQueue *queue) {
+  MTCommandQueue  *native;
+  MTCommandBuffer *state, *abandoned, *next;
+  MTTransferSlot  *slot;
+  uint32_t         i, lostSlots;
+
+  if (!(native = mt_commandQueue(queue))
+      || atomic_exchange_explicit(&native->lost, true, memory_order_acq_rel))
+    return;
+
+  abandoned = NULL;
+  lostSlots = 0u;
+  os_unfair_lock_lock(&native->poolLock);
+  for (state = native->commands; state; state = state->next) {
+    if (atomic_exchange_explicit(&state->completionReady, false, memory_order_acq_rel)) {
+      state->abandoned     = true;
+      state->abandonedNext = abandoned;
+      abandoned            = state;
+    }
+  }
+
+  for (i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
+    if (atomic_exchange_explicit(&native->transferSlots[i].inFlight, false, memory_order_acq_rel))
+      lostSlots |= 1u << i;
+  }
+  os_unfair_lock_unlock(&native->poolLock);
+
+  for (i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
+    if (lostSlots & (1u << i)) {
+      slot         = &native->transferSlots[i];
+      slot->result = GPU_ERROR_DEVICE_LOST;
+      dispatch_semaphore_signal(slot->done);
+      dispatch_group_leave(native->inFlightGroup);
+    }
+  }
+
+  for (state = abandoned; state; state = next) {
+    next = state->abandonedNext;
+    mt_settleSignals(state, true);
+    finishCommandBuffer(&state->commandBuffer, NULL, GPU_ERROR_DEVICE_LOST);
+    dispatch_group_leave(native->inFlightGroup);
+  }
+}
+
+/* what a failed command buffer's error comes to, reported; the queue lost
+ * when the system gave up on it (a GPU timeout, GPU access taken away, the
+ * device gone): Metal then runs nothing behind it in time, or ever */
 GPU_HIDE
-void
-mt_reportCommandBufferError(GPUCommandBuffer *__restrict cmdb,
-                            NSError          *__restrict error) {
+GPUResult
+mt_commandFailed(GPUQueue *__restrict queue, NSError *__restrict error) {
   char                message[256];
-  GPUQueue           *queue;
   GPUDevice          *device;
   const char         *detail;
   GPUDeviceErrorType  type;
   GPUDeviceLostReason lostReason;
   GPUResult           result;
-
-  if (!cmdb) {
-    return;
-  }
-
-  queue  = cmdb->_queue;
-  device = queue ? queue->_device : NULL;
-
-  if (!device) {
-    return;
-  }
 
   type       = GPU_DEVICE_ERROR_BACKEND;
   lostReason = GPU_DEVICE_LOST_REASON_UNKNOWN;
@@ -545,10 +699,15 @@ mt_reportCommandBufferError(GPUCommandBuffer *__restrict cmdb,
           type   = GPU_DEVICE_ERROR_OUT_OF_MEMORY;
           result = GPU_ERROR_OUT_OF_MEMORY;
           break;
+        case MTL4CommandQueueErrorTimeout:
+          type       = GPU_DEVICE_ERROR_LOST;
+          lostReason = GPU_DEVICE_LOST_REASON_HUNG;
+          break;
         case MTL4CommandQueueErrorDeviceRemoved:
           type       = GPU_DEVICE_ERROR_LOST;
           lostReason = GPU_DEVICE_LOST_REASON_REMOVED;
           break;
+        case MTL4CommandQueueErrorNotPermitted:
         case MTL4CommandQueueErrorAccessRevoked:
           type       = GPU_DEVICE_ERROR_LOST;
           lostReason = GPU_DEVICE_LOST_REASON_DRIVER_ERROR;
@@ -565,6 +724,11 @@ mt_reportCommandBufferError(GPUCommandBuffer *__restrict cmdb,
         type   = GPU_DEVICE_ERROR_OUT_OF_MEMORY;
         result = GPU_ERROR_OUT_OF_MEMORY;
         break;
+      case MTLCommandBufferErrorTimeout:
+        type       = GPU_DEVICE_ERROR_LOST;
+        lostReason = GPU_DEVICE_LOST_REASON_HUNG;
+        break;
+      case MTLCommandBufferErrorNotPermitted:
       case MTLCommandBufferErrorAccessRevoked:
         type       = GPU_DEVICE_ERROR_LOST;
         lostReason = GPU_DEVICE_LOST_REASON_DRIVER_ERROR;
@@ -580,13 +744,23 @@ mt_reportCommandBufferError(GPUCommandBuffer *__restrict cmdb,
     }
   }
 
-  detail = error ? error.localizedDescription.UTF8String : NULL;
-  snprintf(message,
-           sizeof(message),
-           "Metal command buffer failed%s%s",
-           detail ? ": " : "",
-           detail ? detail : "");
-  deviceReportError(device, type, lostReason, result, message);
+  if (type == GPU_DEVICE_ERROR_LOST)
+    result = GPU_ERROR_DEVICE_LOST;
+
+  if ((device = queue ? queue->_device : NULL)) {
+    detail = error ? error.localizedDescription.UTF8String : NULL;
+    snprintf(message,
+             sizeof(message),
+             "Metal command buffer failed%s%s",
+             detail ? ": " : "",
+             detail ? detail : "");
+    deviceReportError(device, type, lostReason, result, message);
+  }
+
+  if (result == GPU_ERROR_DEVICE_LOST)
+    mt_loseQueue(queue);
+
+  return result;
 }
 
 static
@@ -599,17 +773,18 @@ cmdoncomplete(GPUCommandBuffer *__restrict cmdb,
   CFTimeInterval start = 0.0, end = 0.0;
   GPUResult      result;
 
+  /* taken by the queue's loss: its waiters went then, the queue may be gone */
   if (!cmdb || !native || !queue
-      || !atomic_load_explicit(&native->completionReady,
-                               memory_order_acquire)) {
+      || !atomic_exchange_explicit(&native->completionReady,
+                                   false,
+                                   memory_order_acq_rel)) {
     return;
   }
 
-  result = mtlCmdb && mtlCmdb.status != MTLCommandBufferStatusError
-             ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
-  if (mtlCmdb && result != GPU_OK) {
-    mt_reportCommandBufferError(cmdb, mtlCmdb.error);
-  }
+  result = !mtlCmdb ? GPU_ERROR_BACKEND_FAILURE
+           : mtlCmdb.status == MTLCommandBufferStatusError ? mt_commandFailed(cmdb->_queue, mtlCmdb.error)
+           : GPU_OK;
+  mt_settleSignals(native, result != GPU_OK);
 
   if (mtlCmdb && (cmdb->_recordsGPUFrameTime || cmdb->_frameFeedback)) {
     if (@available(macOS 10.15, iOS 10.3, *)) {
@@ -636,28 +811,25 @@ cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
                MTCommandBuffer  *__restrict native,
                MTCommandQueue   *__restrict queue,
                id                           feedback) {
-  GPUDevice             *device;
   id<MTL4CommitFeedback> modernFeedback;
   NSError               *error;
   CFTimeInterval         start = 0.0, end = 0.0;
   GPUResult              result = GPU_ERROR_BACKEND_FAILURE;
 
+  /* taken by the queue's loss: its waiters went then, the queue may be gone */
   if (!cmdb || !native || !queue
-      || !atomic_load_explicit(&native->completionReady,
-                               memory_order_acquire)) {
+      || !atomic_exchange_explicit(&native->completionReady,
+                                   false,
+                                   memory_order_acq_rel)) {
     return;
   }
-
-  device = cmdb->_queue ? cmdb->_queue->_device : NULL;
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
     modernFeedback = feedback;
     error  = modernFeedback.error;
-    result = modernFeedback && !error ? GPU_OK : GPU_ERROR_BACKEND_FAILURE;
-
-    if (error && device) {
-      mt_reportCommandBufferError(cmdb, error);
-    }
+    result = !modernFeedback ? GPU_ERROR_BACKEND_FAILURE
+             : error         ? mt_commandFailed(cmdb->_queue, error)
+             : GPU_OK;
 
     if (cmdb->_recordsGPUFrameTime || cmdb->_frameFeedback) {
       start = modernFeedback.GPUStartTime;
@@ -666,6 +838,7 @@ cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
     }
   }
 
+  mt_settleSignals(native, result != GPU_OK);
   if (cmdb->_frameFeedback)
     frameFeedbackComplete(cmdb->_frameFeedback, result,
                           result == GPU_OK ? start : 0.0,
@@ -680,18 +853,12 @@ cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
  * first; with every one in flight, the next in turn (its upload waited for) */
 static MTTransferSlot*
 mt_freeTransferSlot(MTCommandQueue *native) {
-  MTTransferSlot        *slot;
-  MTLCommandBufferStatus status;
-  uint32_t               i;
+  MTTransferSlot *slot;
+  uint32_t        i;
 
   for (i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
     slot = &native->transferSlots[i];
-    if (!slot->pending) {
-      return slot;
-    }
-
-    status = slot->command.status;
-    if (status == MTLCommandBufferStatusCompleted || status == MTLCommandBufferStatusError) {
+    if (!slot->pending || !atomic_load_explicit(&slot->inFlight, memory_order_acquire)) {
       return slot;
     }
   }
@@ -702,9 +869,8 @@ mt_freeTransferSlot(MTCommandQueue *native) {
 /* large staging of slots the GPU is done with goes back */
 static void
 mt_trimTransferStaging(GPUQueue *queue, MTCommandQueue *native) {
-  MTTransferSlot        *slot;
-  MTLCommandBufferStatus status;
-  uint32_t               i;
+  MTTransferSlot *slot;
+  uint32_t        i;
 
   for (i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
     slot = &native->transferSlots[i];
@@ -713,8 +879,7 @@ mt_trimTransferStaging(GPUQueue *queue, MTCommandQueue *native) {
       continue;
 
     if (slot->pending) {
-      status = slot->command.status;
-      if (status != MTLCommandBufferStatusCompleted && status != MTLCommandBufferStatusError)
+      if (atomic_load_explicit(&slot->inFlight, memory_order_acquire))
         continue;
       (void)mt_waitTransfer(queue, slot, false);
     }
@@ -751,6 +916,10 @@ mt_beginTransfer(GPUQueue                  *queue,
 
   if (!native || (!native->classic && !native->upload)) {
     return GPU_ERROR_UNSUPPORTED;
+  }
+
+  if (mt_queueLost(native)) {
+    return GPU_ERROR_DEVICE_LOST;
   }
 
   if (sizeBytes > MT_TRANSFER_STAGING_KEEP)
@@ -838,6 +1007,7 @@ mt_flushTransfers(GPUQueue *queue, bool wait) {
   GPUResult       flushResult;
   uint32_t        i;
   GPUResult       result;
+  bool            lost;
 
   native = mt_commandQueue(queue);
 
@@ -862,25 +1032,45 @@ mt_flushTransfers(GPUQueue *queue, bool wait) {
 
     [slot->blit endEncoding];
     [slot->blit release];
-    slot->blit = nil;
-#if MT_HAS_METAL4
-    if (native->mode == MTCommandMode4) {
-      [slot->command encodeSignalEvent:native->transferEvent
-                                 value:++native->transferValue];
+    slot->blit           = nil;
+    native->transferOpen = false;
+
+    /* in flight unless lost, under the lock the loss sweeps under */
+    os_unfair_lock_lock(&native->poolLock);
+    if (!(lost = mt_queueLost(native))) {
+      atomic_store_explicit(&slot->inFlight, true, memory_order_release);
+      dispatch_group_enter(native->inFlightGroup);
     }
-#endif
-    [slot->command commit];
+    os_unfair_lock_unlock(&native->poolLock);
+
+    if (lost) {
+      /* nothing runs on a lost queue */
+      [slot->command release];
+      slot->command = nil;
+      slot->used    = 0u;
+      flushResult   = GPU_ERROR_DEVICE_LOST;
+    } else {
 #if MT_HAS_METAL4
-    if (native->mode == MTCommandMode4) {
-      if (@available(macOS 26.0, iOS 26.0, *)) {
-        [native->modern waitForEvent:native->transferEvent
-                              value:native->transferValue];
+      if (native->mode == MTCommandMode4) {
+        slot->signal = ++native->transferValue;
+        [slot->command encodeSignalEvent:native->transferEvent value:slot->signal];
       }
-    }
 #endif
-    slot->pending            = true;
-    native->transferOpen     = false;
-    native->nextTransferSlot = (native->activeTransferSlot + 1u) % MT_TRANSFER_SLOT_COUNT;
+      [slot->command addCompletedHandler:^(id<MTLCommandBuffer> batch) {
+        mt_transferDone(queue, slot, batch);
+      }];
+      [slot->command commit];
+#if MT_HAS_METAL4
+      if (native->mode == MTCommandMode4) {
+        if (@available(macOS 26.0, iOS 26.0, *)) {
+          [native->modern waitForEvent:native->transferEvent
+                                value:native->transferValue];
+        }
+      }
+#endif
+      slot->pending            = true;
+      native->nextTransferSlot = (native->activeTransferSlot + 1u) % MT_TRANSFER_SLOT_COUNT;
+    }
   }
 
   if (wait) {
@@ -914,7 +1104,10 @@ mt_waitCommandQueueIdle(GPUQueue *queue) {
     return result;
   }
 
+  /* a lost queue's in-flight work was let go: this returns */
   dispatch_group_wait(native->inFlightGroup, DISPATCH_TIME_FOREVER);
+  if (mt_queueLost(native))
+    return GPU_ERROR_DEVICE_LOST;
   if (native->transfersSinceLarge >= MT_TRANSFER_LARGE_IDLE)
     mt_trimTransferStaging(queue, native);
 
@@ -927,6 +1120,8 @@ mt_newCommandQueue(GPUDevice *__restrict device) {
   GPUDeviceMT    *deviceMT;
   GPUQueue       *que;
   MTCommandQueue *native;
+  uint32_t        i;
+  bool            slotsReady;
 #if MT_HAS_METAL4
   const char     *shaderValidation;
 #endif
@@ -962,13 +1157,19 @@ mt_newCommandQueue(GPUDevice *__restrict device) {
   }
 
   native->inFlightGroup = dispatch_group_create();
+  slotsReady            = true;
+
+  for (i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
+    atomic_init(&native->transferSlots[i].inFlight, false);
+    slotsReady = (native->transferSlots[i].done = dispatch_semaphore_create(0)) && slotsReady;
+  }
 #if MT_HAS_METAL4
   if ((!native->classic
        && (!native->modern || !native->upload || !native->transferEvent
            || !native->commitOptions))
-      || !native->inFlightGroup) {
+      || !native->inFlightGroup || !slotsReady) {
 #else
-  if (!native->classic || !native->inFlightGroup) {
+  if (!native->classic || !native->inFlightGroup || !slotsReady) {
 #endif
     [native->classic release];
     [native->upload release];
@@ -978,6 +1179,11 @@ mt_newCommandQueue(GPUDevice *__restrict device) {
 
     if (native->inFlightGroup) {
       dispatch_release(native->inFlightGroup);
+    }
+
+    for (i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
+      if (native->transferSlots[i].done)
+        dispatch_release(native->transferSlots[i].done);
     }
 
     free(native);
@@ -998,6 +1204,7 @@ mt_destroyCommandQueue(GPUQueue *__restrict queue) {
   MTCommandBuffer *next;
   MTCommandQueue  *native;
   uint32_t         i;
+  bool             lost;
 
   if (!queue) {
     return;
@@ -1008,11 +1215,19 @@ mt_destroyCommandQueue(GPUQueue *__restrict queue) {
 
     (void)mt_flushTransfers(queue, true);
     dispatch_group_wait(native->inFlightGroup, DISPATCH_TIME_FOREVER);
+    lost    = mt_queueLost(native);
     command = native->commands;
 
     while (command) {
       next = command->next;
-      mt_destroyCommandBufferState(command);
+
+      /* abandoned with the queue: Metal may still hold it and call back */
+      if (!command->abandoned) {
+        mt_settleSignals(command, false);
+        free(command->signals);
+        mt_destroyCommandBufferState(command);
+      }
+
       command = next;
     }
 
@@ -1026,10 +1241,14 @@ mt_destroyCommandQueue(GPUQueue *__restrict queue) {
       [native->transferSlots[i].blit release];
       [native->transferSlots[i].command release];
       [native->transferSlots[i].staging release];
+      dispatch_release(native->transferSlots[i].done);
     }
 
     dispatch_release(native->inFlightGroup);
-    free(native);
+
+    /* a lost queue's late handlers still read its batches' flags */
+    if (!lost)
+      free(native);
   }
 
   free(queue);
@@ -1245,6 +1464,7 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
   MTCommandQueue       *queue;
   id<MTLCommandBuffer>  mcb;
   id<CAMetalDrawable>   drawable;
+  GPUResult             result;
 
   if (!cmdb) {
     return GPU_ERROR_BACKEND_FAILURE;
@@ -1254,13 +1474,15 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
   queue  = cmdb->_queue ? mt_commandQueue(cmdb->_queue) : NULL;
 
   if (!native || !queue) {
-    finishCommandBuffer(cmdb, mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
-    return GPU_ERROR_BACKEND_FAILURE;
+    return mt_abortCommandBuffer(cmdb, GPU_ERROR_BACKEND_FAILURE);
   }
 
-  if (mt_flushTransfers(cmdb->_queue, false) != GPU_OK) {
-    finishCommandBuffer(cmdb, mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
-    return GPU_ERROR_BACKEND_FAILURE;
+  if ((result = mt_beginCommits(queue, &native, 1u)) != GPU_OK) {
+    return mt_abortCommandBuffer(cmdb, result);
+  }
+
+  if ((result = mt_flushTransfers(cmdb->_queue, false)) != GPU_OK) {
+    return mt_cancelCommit(cmdb, native, queue, result);
   }
 
   /* barriers with no encoder after them here: Metal 4's on one of their own
@@ -1292,11 +1514,6 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
       if (cmdb->_frameFeedback)
         mt_observeFrameFeedback(cmdb->_frameFeedback, drawable);
 
-      dispatch_group_enter(queue->inFlightGroup);
-      atomic_store_explicit(&native->completionReady,
-                            true,
-                            memory_order_release);
-
       if (drawable) {
         [queue->modern waitForDrawable:drawable];
       }
@@ -1316,16 +1533,14 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
       return GPU_OK;
     }
 
-    finishCommandBuffer(cmdb, mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
-    return GPU_ERROR_BACKEND_FAILURE;
+    return mt_cancelCommit(cmdb, native, queue, GPU_ERROR_BACKEND_FAILURE);
   }
 #endif
 
   mcb = native->classic;
 
   if (!mcb) {
-    finishCommandBuffer(cmdb, mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
-    return GPU_ERROR_BACKEND_FAILURE;
+    return mt_cancelCommit(cmdb, native, queue, GPU_ERROR_BACKEND_FAILURE);
   }
 
   drawable         = native->drawable;
@@ -1342,10 +1557,6 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
     native->feedbackDrawable = nil;
   }
 
-  dispatch_group_enter(queue->inFlightGroup);
-  atomic_store_explicit(&native->completionReady,
-                        true,
-                        memory_order_release);
   [mcb commit];
 
   if (drawable) {
@@ -1370,6 +1581,7 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   MTCommandQueue       *queue;
   GPUCommandBuffer     *cmdb;
   MTCommandBuffer      *native;
+  GPUResult             flushResult;
   uint32_t              validateIndex;
   uint32_t              cleanupIndex;
   uint32_t              submitIndex;
@@ -1396,16 +1608,24 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
     modern[validateIndex] = natives[validateIndex]->modern;
   }
 
-  if (mt_flushTransfers(queueHandle, false) != GPU_OK) {
-    for (cleanupIndex = 0u; cleanupIndex < count; cleanupIndex++) {
-      finishCommandBuffer(buffers[cleanupIndex], mt_recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
-    }
-
-    return GPU_ERROR_BACKEND_FAILURE;
-  }
-
   if (@available(macOS 26.0, iOS 26.0, *)) {
     MTL4CommitOptions *options;
+
+    if ((flushResult = mt_beginCommits(queue, natives, count)) != GPU_OK) {
+      for (cleanupIndex = 0u; cleanupIndex < count; cleanupIndex++) {
+        (void)mt_abortCommandBuffer(buffers[cleanupIndex], flushResult);
+      }
+
+      return flushResult;
+    }
+
+    if ((flushResult = mt_flushTransfers(queueHandle, false)) != GPU_OK) {
+      for (cleanupIndex = 0u; cleanupIndex < count; cleanupIndex++) {
+        (void)mt_cancelCommit(buffers[cleanupIndex], natives[cleanupIndex], queue, flushResult);
+      }
+
+      return flushResult;
+    }
 
     options = queue->commitOptions;
 
@@ -1419,10 +1639,6 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
       [options addFeedbackHandler:^(id<MTL4CommitFeedback> feedback) {
         cmdoncomplete4(cmdb, native, queue, feedback);
       }];
-      dispatch_group_enter(queue->inFlightGroup);
-      atomic_store_explicit(&native->completionReady,
-                            true,
-                            memory_order_release);
     }
 
     [queue->modern commit:modern count:count options:options];

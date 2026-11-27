@@ -686,6 +686,10 @@ mt_submitSparse(GPUQueue                       *queueHandle,
 
   queue = mt_commandQueue(queueHandle);
 
+  if (queue && atomic_load_explicit(&queue->lost, memory_order_acquire)) {
+    return GPU_ERROR_DEVICE_LOST;
+  }
+
   if (!queue || !info
       || mt_flushTransfers(queueHandle, false) != GPU_OK) {
     return GPU_ERROR_BACKEND_FAILURE;

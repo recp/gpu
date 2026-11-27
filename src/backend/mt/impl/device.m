@@ -858,19 +858,26 @@ static GPUResult
 mt_waitDeviceIdle(GPUDevice *__restrict device) {
   GPUDeviceMT *deviceMT;
   GPUQueue    *commandQueue;
+  GPUResult    result, queueResult;
   uint32_t     i;
 
   if (!device || !(deviceMT = device->_priv)) {
     return GPU_ERROR_INVALID_ARGUMENT;
   }
 
+  result = GPU_OK;
+
+  /* every queue, a failed one's result kept: the others still drain */
   for (i = 0u; i < deviceMT->nCreatedQueues; i++) {
     commandQueue = deviceMT->createdQueues[i];
 
-    if (mt_waitCommandQueueIdle(commandQueue) != GPU_OK) {
-      return GPU_ERROR_BACKEND_FAILURE;
+    if ((queueResult = mt_waitCommandQueueIdle(commandQueue)) != GPU_OK && result == GPU_OK) {
+      result = queueResult;
     }
   }
+
+  if (result != GPU_OK)
+    return result;
 
   /* idle: pooled heaps nothing lives in go back */
   mt_trimResourcePool(deviceMT, true);

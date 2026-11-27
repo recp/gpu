@@ -43,33 +43,33 @@ typedef struct MetalErrorCapture {
 static const MetalErrorCase error_cases[] = {
   {MTLCommandBufferErrorInternal, GPU_DEVICE_ERROR_BACKEND,
    GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 0},
-  {MTLCommandBufferErrorTimeout, GPU_DEVICE_ERROR_BACKEND,
-   GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 0},
+  {MTLCommandBufferErrorTimeout, GPU_DEVICE_ERROR_LOST,
+   GPU_DEVICE_LOST_REASON_HUNG, GPU_ERROR_DEVICE_LOST, 0},
   {MTLCommandBufferErrorPageFault, GPU_DEVICE_ERROR_BACKEND,
    GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 0},
-  {MTLCommandBufferErrorNotPermitted, GPU_DEVICE_ERROR_BACKEND,
-   GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 0},
+  {MTLCommandBufferErrorNotPermitted, GPU_DEVICE_ERROR_LOST,
+   GPU_DEVICE_LOST_REASON_DRIVER_ERROR, GPU_ERROR_DEVICE_LOST, 0},
   {MTLCommandBufferErrorOutOfMemory, GPU_DEVICE_ERROR_OUT_OF_MEMORY,
    GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_OUT_OF_MEMORY, 0},
   {MTLCommandBufferErrorAccessRevoked, GPU_DEVICE_ERROR_LOST,
-   GPU_DEVICE_LOST_REASON_DRIVER_ERROR, GPU_ERROR_BACKEND_FAILURE, 0},
+   GPU_DEVICE_LOST_REASON_DRIVER_ERROR, GPU_ERROR_DEVICE_LOST, 0},
 #if TARGET_OS_OSX
   {MTLCommandBufferErrorDeviceRemoved, GPU_DEVICE_ERROR_LOST,
-   GPU_DEVICE_LOST_REASON_REMOVED, GPU_ERROR_BACKEND_FAILURE, 0},
+   GPU_DEVICE_LOST_REASON_REMOVED, GPU_ERROR_DEVICE_LOST, 0},
 #endif
 #if MT_HAS_METAL4
   {MTL4CommandQueueErrorInternal, GPU_DEVICE_ERROR_BACKEND,
    GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 1},
-  {MTL4CommandQueueErrorTimeout, GPU_DEVICE_ERROR_BACKEND,
-   GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 1},
-  {MTL4CommandQueueErrorNotPermitted, GPU_DEVICE_ERROR_BACKEND,
-   GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 1},
+  {MTL4CommandQueueErrorTimeout, GPU_DEVICE_ERROR_LOST,
+   GPU_DEVICE_LOST_REASON_HUNG, GPU_ERROR_DEVICE_LOST, 1},
+  {MTL4CommandQueueErrorNotPermitted, GPU_DEVICE_ERROR_LOST,
+   GPU_DEVICE_LOST_REASON_DRIVER_ERROR, GPU_ERROR_DEVICE_LOST, 1},
   {MTL4CommandQueueErrorOutOfMemory, GPU_DEVICE_ERROR_OUT_OF_MEMORY,
    GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_OUT_OF_MEMORY, 1},
   {MTL4CommandQueueErrorAccessRevoked, GPU_DEVICE_ERROR_LOST,
-   GPU_DEVICE_LOST_REASON_DRIVER_ERROR, GPU_ERROR_BACKEND_FAILURE, 1},
+   GPU_DEVICE_LOST_REASON_DRIVER_ERROR, GPU_ERROR_DEVICE_LOST, 1},
   {MTL4CommandQueueErrorDeviceRemoved, GPU_DEVICE_ERROR_LOST,
-   GPU_DEVICE_LOST_REASON_REMOVED, GPU_ERROR_BACKEND_FAILURE, 1},
+   GPU_DEVICE_LOST_REASON_REMOVED, GPU_ERROR_DEVICE_LOST, 1},
 #endif
   {MTLCommandBufferErrorOutOfMemory, GPU_DEVICE_ERROR_BACKEND,
    GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 2},
@@ -120,8 +120,8 @@ check_native_errors(void) {
 #endif
 
   command = &cmdb;
-  mt_reportCommandBufferError(NULL, nil);
-  mt_reportCommandBufferError(command, nil);
+  (void)mt_commandFailed(NULL, nil);
+  (void)mt_commandFailed(command->_queue, nil);
 
   for (i = 0u; i < GPU_ARRAY_LEN(error_cases); i++) {
     if (error_cases[i].domain == 1u && !modern) {
@@ -153,7 +153,10 @@ check_native_errors(void) {
                              userInfo:@{NSLocalizedDescriptionKey: @"injected"}];
     }
 
-    mt_reportCommandBufferError(command, error);
+    if (mt_commandFailed(command->_queue, error) != error_cases[i].result) {
+      fprintf(stderr, "Metal error result wrong at case %u\n", i);
+      return 0;
+    }
 
     if (capture.count != 1u || capture.device != &devices[i]
         || capture.type != error_cases[i].type
@@ -174,7 +177,7 @@ check_native_errors(void) {
                          userInfo:@{NSLocalizedDescriptionKey: @"concurrent loss"}];
   dispatch_apply(32u, dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0u), ^(size_t index) {
     (void)index;
-    mt_reportCommandBufferError(command, error);
+    (void)mt_commandFailed(command->_queue, error);
   });
 
   if (capture.count != 1u || capture.device != &concurrent
