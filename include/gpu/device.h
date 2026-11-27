@@ -163,7 +163,16 @@ typedef enum GPUFeature {
   GPU_FEATURE_FRAMEBUFFER_FETCH           = 40,
   GPU_FEATURE_TILE_SHADERS                = 41,
   GPU_FEATURE_IMAGEBLOCKS                 = 42,
-  GPU_FEATURE_FRAME_FEEDBACK              = 43
+  GPU_FEATURE_FRAME_FEEDBACK              = 43,
+
+  /* kernels may call USL's device_fence(): storage buffers released and
+   * acquired at device scope, no execution barrier, so the workgroup that
+   * counts last can read what the others wrote in the same dispatch. USL
+   * answers it for the device's shader target (WGSL has none); every device
+   * whose target has it has it enabled, asked for or not. USL decides
+   * #available(device_fence) when source becomes bytecode, so bytecode made
+   * with the fence compiles only where this is enabled */
+  GPU_FEATURE_DEVICE_FENCE                = 44
 } GPUFeature;
 
 /* GPUIsFeatureEnabled reads immutable device state and may run on any thread

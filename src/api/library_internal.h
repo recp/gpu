@@ -160,6 +160,16 @@ GPU_HIDE
 bool
 shaderLibraryTexelReads(const GPUShaderLibrary *library);
 
+/* whether a device's shader target has a feature only USL can answer
+ * (GPU_FEATURE_DEVICE_FENCE): the target its libraries compile for, made by
+ * the same function. With no device, the adapter's backend's own target,
+ * the one each device's starts from */
+GPU_HIDE
+bool
+shaderTargetSupportsFeature(const GPUAdapter *adapter,
+                            const GPUDevice  *device,
+                            GPUFeature        feature);
+
 GPU_HIDE
 bool
 shaderLibraryBytecode(const GPUShaderLibrary *library, const void **outData, uint64_t *outSize, bool *outNoDiskCache);

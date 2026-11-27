@@ -2840,7 +2840,8 @@ createShaderLibraryFromBinary(GPUDevice                        *device,
 /* the USL target a device's libraries compile for: the backend's own
  * (usl_target.h), then the device's profile and the atoms its features and
  * quirks name. outTarget points at targetAtoms (GPU_USL_TARGET_ATOMS), which
- * must outlive it */
+ * must outlive it. Compiles and shaderTargetSupportsFeature both take theirs
+ * from here, so what a device is said to have and what it compiles agree */
 static GPUResult
 deviceUSLTarget(const GPUDevice       *device,
                 bool                   texelReads,
@@ -3417,6 +3418,30 @@ deviceUSLTarget(const GPUDevice       *device,
   *outTarget = target;
 
   return GPU_OK;
+}
+
+GPU_HIDE
+bool
+shaderTargetSupportsFeature(const GPUAdapter *adapter,
+                            const GPUDevice  *device,
+                            GPUFeature        feature) {
+  USLCapabilityAtomDesc targetAtoms[GPU_USL_TARGET_ATOMS];
+  USLTargetSpec         target;
+  GPUApi               *api;
+
+  if (feature != GPU_FEATURE_DEVICE_FENCE) {
+    return false;
+  }
+
+  if (device) {
+    if (deviceUSLTarget(device, false, &target, targetAtoms) != GPU_OK) {
+      return false;
+    }
+  } else if (!(api = adapterApi(adapter)) || !uslDefaultTarget(api->backend, &target)) {
+    return false;
+  }
+
+  return us_target_supports_feature(&target, USL_SEMANTIC_FEATURE_ID_DEVICE_FENCE);
 }
 
 static GPUResult

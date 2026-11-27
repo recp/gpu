@@ -155,7 +155,7 @@ struct GPUDevice {
   bool                        uslStorageExtFormats;
   bool                        uslBoundedDescriptorIndexing;
   bool                        uslUntypedPointers;
-  GPUFeature                  enabledFeatureStorage[GPU_FEATURE_FRAME_FEEDBACK + 1u];
+  GPUFeature                  enabledFeatureStorage[GPU_FEATURE_DEVICE_FENCE + 1u];
   uint64_t                    imageBufferFormats; /* USL texel formats whose read-write images are buffers */
   struct GPUImageBuffer      *_imageBuffers;
   void                       *_imageBufferLock;

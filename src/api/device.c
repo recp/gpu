@@ -21,6 +21,7 @@
 #include "device_internal.h"
 #include "compile_pool_internal.h"
 #include "image_buffer_internal.h"
+#include "library_internal.h"
 #include "pass/blit_internal.h"
 #include "pipeline_cache_internal.h"
 #include "pacer_internal.h"
@@ -159,7 +160,7 @@ reportDeviceLostOnce(GPUDevice *device) {
 static bool
 knownFeature(GPUFeature feature) {
   return feature >= GPU_FEATURE_COMPUTE
-         && feature <= GPU_FEATURE_FRAME_FEEDBACK;
+         && feature <= GPU_FEATURE_DEVICE_FENCE;
 }
 
 static bool
@@ -282,6 +283,11 @@ adapterSupportsFeature(const GPUAdapter *adapter, GPUFeature feature) {
     return pacerClockSupported();
   }
 
+  /* what the backend's shader target can express: USL's answer */
+  if (feature == GPU_FEATURE_DEVICE_FENCE) {
+    return shaderTargetSupportsFeature(adapter, NULL, feature);
+  }
+
   if ((api = adapterApi(adapter)) && api->device.supportsFeature) {
     return api->device.supportsFeature(adapter, feature);
   }
@@ -295,7 +301,7 @@ adapterSupportsMask(const GPUAdapter *adapter, uint64_t requiredMask) {
   GPUFeature feature;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_FRAME_FEEDBACK;
+       feature <= GPU_FEATURE_DEVICE_FENCE;
        feature = (GPUFeature)(feature + 1)) {
     bit = featureBit(feature);
 
@@ -410,7 +416,7 @@ supportedFeatureMask(const GPUAdapter *adapter) {
   mask = 0;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_FRAME_FEEDBACK;
+       feature <= GPU_FEATURE_DEVICE_FENCE;
        feature = (GPUFeature)(feature + 1)) {
     if (adapterSupportsFeature(adapter, feature)) {
       mask |= featureBit(feature);
@@ -431,7 +437,7 @@ fillFeatureSet(uint64_t       mask,
   count = 0u;
 
   for (feature = GPU_FEATURE_COMPUTE;
-       feature <= GPU_FEATURE_FRAME_FEEDBACK
+       feature <= GPU_FEATURE_DEVICE_FENCE
          && count < capacity;
        feature = (GPUFeature)(feature + 1)) {
     if (mask & featureBit(feature)) {
@@ -1273,6 +1279,15 @@ finalizeDevice(GPUAdapter *adapter,
   }
 
   device->enabledFeatureMask = enabledFeatureMask;
+
+  /* the target this device's libraries compile for answers, whether asked
+   * for or not: it costs nothing and changes nothing else */
+  if (shaderTargetSupportsFeature(adapter, device, GPU_FEATURE_DEVICE_FENCE)) {
+    device->enabledFeatureMask |= featureBit(GPU_FEATURE_DEVICE_FENCE);
+  } else {
+    device->enabledFeatureMask &= ~featureBit(GPU_FEATURE_DEVICE_FENCE);
+  }
+
   fillFeatureSet(device->enabledFeatureMask,
                  device->enabledFeatureStorage,
                  (uint32_t)GPU_ARRAY_LEN(device->enabledFeatureStorage),
