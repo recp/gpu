@@ -87,6 +87,12 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
                         uint32_t                            count,
                         GPUCommandBuffer *const *__restrict buffers);
 
+static void
+mt_loseQueue(GPUQueue *queue);
+
+static void
+mt_watchedDone(MTCommandQueue *native);
+
 @implementation GPUFrameFeedbackTarget
 - (void)dealloc {
   frameFeedbackRelease(feedback);
@@ -182,6 +188,8 @@ mt_transferDone(GPUQueue *queue, MTTransferSlot *slot, id<MTLCommandBuffer> batc
     return;
 
   native = mt_commandQueue(queue);
+  if (slot->watched)
+    mt_watchedDone(native);
   result = batch.status == MTLCommandBufferStatusCompleted ? GPU_OK : mt_commandFailed(queue, batch.error);
 #if MT_HAS_METAL4
   /* a failed batch signals nothing, and later commits wait for its value:
@@ -392,19 +400,145 @@ mt_queueLost(MTCommandQueue *native) {
   return atomic_load_explicit(&native->lost, memory_order_acquire);
 }
 
+/* the hang limit (GPURuntimeConfig.hangLimitNs): work submitted under it is
+ * watched; a timer, set only while watched work is in flight, loses the
+ * queue once the oldest has made no progress for the limit. Off, a submit
+ * reads the limit and nothing more */
+
+static uint64_t
+mt_hangLimit(GPUQueue *queue) {
+  return atomic_load_explicit(&((GPUDeviceMT *)queue->_device->_priv)->hangLimitNs, memory_order_relaxed);
+}
+
+static void
+mt_setHangLimit(GPUDevice *device, uint64_t limitNs) {
+  atomic_store_explicit(&((GPUDeviceMT *)device->_priv)->hangLimitNs, limitNs, memory_order_relaxed);
+}
+
+static uint64_t
+mt_nowNs(void) {
+  return clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+}
+
+/* under poolLock: once, delayNs from now (leeway an eighth of the limit) */
+static void
+mt_setHangTimer(MTCommandQueue *native, uint64_t delayNs, uint64_t limit) {
+  dispatch_source_set_timer(native->hangTimer,
+                            dispatch_time(DISPATCH_TIME_NOW, (int64_t)MIN(delayNs, (uint64_t)INT64_MAX)),
+                            DISPATCH_TIME_FOREVER,
+                            limit / 8u);
+  native->hangArmed = true;
+}
+
+/* the timer: watched work in flight with no progress for the limit loses the
+ * queue; otherwise set again for the oldest one's deadline, or, with nothing
+ * watched in flight, left off till the next watched submit */
+static void
+mt_hangCheck(GPUQueue *queue) {
+  MTCommandQueue *native;
+  uint64_t        limit, since, now, ran;
+  bool            hung;
+
+  native = mt_commandQueue(queue);
+  limit  = mt_hangLimit(queue);
+  hung   = false;
+
+  os_unfair_lock_lock(&native->poolLock);
+  native->hangArmed = false;
+  if (limit != 0u && !mt_queueLost(native)
+      && atomic_load_explicit(&native->watched, memory_order_acquire) != 0u) {
+    since = atomic_load_explicit(&native->progressNs, memory_order_acquire);
+    now   = mt_nowNs();
+    ran   = now > since ? now - since : 0u;
+    if (!(hung = ran >= limit))
+      mt_setHangTimer(native, limit - ran, limit);
+  }
+  os_unfair_lock_unlock(&native->poolLock);
+
+  /* reported first: a wait the loss ends finds the device lost */
+  if (hung && !mt_queueLost(native)) {
+    deviceReportQueueHang(queue->_device, "Metal", limit);
+    mt_loseQueue(queue);
+  }
+}
+
+/* under poolLock, made at the queue's first watched submit; its cancel
+ * handler runs after the last check, for the queue's destruction */
+static bool
+mt_makeHangTimer(GPUQueue *queue, MTCommandQueue *native) {
+  dispatch_source_t    timer;
+  dispatch_semaphore_t gone;
+
+  if (native->hangTimer)
+    return true;
+
+  timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,
+                                 0u,
+                                 0u,
+                                 dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0));
+  gone  = dispatch_semaphore_create(0);
+  if (!timer || !gone) {
+    if (timer)
+      dispatch_release(timer);
+    if (gone)
+      dispatch_release(gone);
+    return false;
+  }
+
+  dispatch_source_set_event_handler(timer, ^{
+    mt_hangCheck(queue);
+  });
+  dispatch_source_set_cancel_handler(timer, ^{
+    dispatch_semaphore_signal(gone);
+  });
+  native->hangTimer     = timer;
+  native->hangTimerGone = gone;
+  dispatch_source_set_timer(timer, DISPATCH_TIME_FOREVER, DISPATCH_TIME_FOREVER, 0u);
+  dispatch_activate(timer);
+  return true;
+}
+
+/* under poolLock: count more watched work in flight; with none before, the
+ * clock starts now. The timer is set unless it is */
+static void
+mt_watchSubmits(GPUQueue *queue, MTCommandQueue *native, uint32_t count, uint64_t limit) {
+  uint64_t since, now;
+
+  if (atomic_fetch_add_explicit(&native->watched, count, memory_order_acq_rel) == 0u)
+    atomic_store_explicit(&native->progressNs, mt_nowNs(), memory_order_release);
+
+  if (!native->hangArmed && mt_makeHangTimer(queue, native)) {
+    since = atomic_load_explicit(&native->progressNs, memory_order_acquire);
+    now   = mt_nowNs();
+    mt_setHangTimer(native, now - since < limit ? limit - (now - since) : 0u, limit);
+  }
+}
+
+/* watched work finished: the queue made progress */
+static void
+mt_watchedDone(MTCommandQueue *native) {
+  atomic_store_explicit(&native->progressNs, mt_nowNs(), memory_order_release);
+  atomic_fetch_sub_explicit(&native->watched, 1u, memory_order_acq_rel);
+}
+
 /* in flight from here, unless the queue is lost: marked under the lock the
  * loss sweeps under, so each one either fails here or is let go by the loss */
 static GPUResult
-mt_beginCommits(MTCommandQueue *queue, MTCommandBuffer *const *natives, uint32_t count) {
+mt_beginCommits(GPUQueue *handle, MTCommandQueue *queue, MTCommandBuffer *const *natives, uint32_t count) {
+  uint64_t limit;
   uint32_t i;
   bool     lost;
 
+  limit = mt_hangLimit(handle);
   os_unfair_lock_lock(&queue->poolLock);
   if (!(lost = mt_queueLost(queue))) {
     for (i = 0u; i < count; i++) {
       dispatch_group_enter(queue->inFlightGroup);
+      natives[i]->watched = limit != 0u;
       atomic_store_explicit(&natives[i]->completionReady, true, memory_order_release);
     }
+    if (limit != 0u)
+      mt_watchSubmits(handle, queue, count, limit);
   }
   os_unfair_lock_unlock(&queue->poolLock);
 
@@ -418,6 +552,8 @@ mt_cancelCommit(GPUCommandBuffer *cmdb, MTCommandBuffer *native, MTCommandQueue 
   if (!atomic_exchange_explicit(&native->completionReady, false, memory_order_acq_rel))
     return GPU_ERROR_DEVICE_LOST;
 
+  if (native->watched)
+    atomic_fetch_sub_explicit(&queue->watched, 1u, memory_order_acq_rel);
   dispatch_group_leave(queue->inFlightGroup);
   return mt_abortCommandBuffer(cmdb, result);
 }
@@ -781,6 +917,9 @@ cmdoncomplete(GPUCommandBuffer *__restrict cmdb,
     return;
   }
 
+  if (native->watched)
+    mt_watchedDone(queue);
+
   result = !mtlCmdb ? GPU_ERROR_BACKEND_FAILURE
            : mtlCmdb.status == MTLCommandBufferStatusError ? mt_commandFailed(cmdb->_queue, mtlCmdb.error)
            : GPU_OK;
@@ -823,6 +962,9 @@ cmdoncomplete4(GPUCommandBuffer *__restrict cmdb,
                                    memory_order_acq_rel)) {
     return;
   }
+
+  if (native->watched)
+    mt_watchedDone(queue);
 
   if (@available(macOS 26.0, iOS 26.0, *)) {
     modernFeedback = feedback;
@@ -1005,6 +1147,7 @@ mt_flushTransfers(GPUQueue *queue, bool wait) {
   MTCommandQueue *native;
   MTTransferSlot *slot;
   GPUResult       flushResult;
+  uint64_t        limit;
   uint32_t        i;
   GPUResult       result;
   bool            lost;
@@ -1036,10 +1179,14 @@ mt_flushTransfers(GPUQueue *queue, bool wait) {
     native->transferOpen = false;
 
     /* in flight unless lost, under the lock the loss sweeps under */
+    limit = mt_hangLimit(queue);
     os_unfair_lock_lock(&native->poolLock);
     if (!(lost = mt_queueLost(native))) {
+      slot->watched = limit != 0u;
       atomic_store_explicit(&slot->inFlight, true, memory_order_release);
       dispatch_group_enter(native->inFlightGroup);
+      if (limit != 0u)
+        mt_watchSubmits(queue, native, 1u, limit);
     }
     os_unfair_lock_unlock(&native->poolLock);
 
@@ -1158,6 +1305,8 @@ mt_newCommandQueue(GPUDevice *__restrict device) {
 
   native->inFlightGroup = dispatch_group_create();
   slotsReady            = true;
+  atomic_init(&native->progressNs, 0u);
+  atomic_init(&native->watched, 0u);
 
   for (i = 0u; i < MT_TRANSFER_SLOT_COUNT; i++) {
     atomic_init(&native->transferSlots[i].inFlight, false);
@@ -1216,6 +1365,14 @@ mt_destroyCommandQueue(GPUQueue *__restrict queue) {
     (void)mt_flushTransfers(queue, true);
     dispatch_group_wait(native->inFlightGroup, DISPATCH_TIME_FOREVER);
     lost    = mt_queueLost(native);
+
+    /* no hang check runs past its cancel handler */
+    if (native->hangTimer) {
+      dispatch_source_cancel(native->hangTimer);
+      dispatch_semaphore_wait(native->hangTimerGone, DISPATCH_TIME_FOREVER);
+      dispatch_release(native->hangTimer);
+      dispatch_release(native->hangTimerGone);
+    }
     command = native->commands;
 
     while (command) {
@@ -1477,7 +1634,7 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
     return mt_abortCommandBuffer(cmdb, GPU_ERROR_BACKEND_FAILURE);
   }
 
-  if ((result = mt_beginCommits(queue, &native, 1u)) != GPU_OK) {
+  if ((result = mt_beginCommits(cmdb->_queue, queue, &native, 1u)) != GPU_OK) {
     return mt_abortCommandBuffer(cmdb, result);
   }
 
@@ -1611,7 +1768,7 @@ mt_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
   if (@available(macOS 26.0, iOS 26.0, *)) {
     MTL4CommitOptions *options;
 
-    if ((flushResult = mt_beginCommits(queue, natives, count)) != GPU_OK) {
+    if ((flushResult = mt_beginCommits(queueHandle, queue, natives, count)) != GPU_OK) {
       for (cleanupIndex = 0u; cleanupIndex < count; cleanupIndex++) {
         (void)mt_abortCommandBuffer(buffers[cleanupIndex], flushResult);
       }
@@ -1778,6 +1935,7 @@ mt_initCmdQue(GPUCommandQueueApi *api) {
   api->createSemaphore         = mt_createSemaphore;
   api->destroySemaphore        = mt_destroySemaphore;
   api->submitEx                = mt_submitEx;
+  api->setHangLimit            = mt_setHangLimit;
 #if MT_HAS_METAL4
   api->uploadProgress          = mt_uploadProgress;
   api->observeUploadProgress   = mt_observeUploadProgress;

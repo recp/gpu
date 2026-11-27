@@ -136,6 +136,7 @@ typedef struct GPUDeviceMT {
   os_unfair_lock         textureViewPoolLock;
   uint32_t               nCreatedQueues;
   MTCommandMode          commandMode;
+  _Atomic(uint64_t)      hangLimitNs; /* GPURuntimeConfig's, 0: off */
 } GPUDeviceMT;
 
 /* small buffers and textures placed in pooled heaps (impl/pool.m); nil: the
@@ -232,6 +233,7 @@ typedef struct MTTransferSlot {
   GPUResult                 result;   /* what the batch came to, once done is signaled */
   atomic_bool               inFlight; /* committed; cleared by whichever of the two comes first */
   bool                      pending;
+  bool                      watched;  /* in flight under a hang limit */
 } MTTransferSlot;
 
 typedef struct MTRenderPassColorState {
@@ -339,6 +341,16 @@ typedef struct MTCommandQueue {
   /* the system gave up on the queue (a GPU timeout, GPU access taken away):
    * what was in flight is abandoned, nothing submitted after runs */
   atomic_bool         lost;
+
+  /* the hang limit's watch: work submitted under a limit counts in watched;
+   * the oldest runs from progressNs (the queue's last completion, or the
+   * submit that found nothing watched in flight). The timer is set only
+   * while watched work is in flight, at most once a limit's time */
+  dispatch_source_t    hangTimer;     /* made at the first watched submit */
+  dispatch_semaphore_t hangTimerGone; /* its cancel handler ran */
+  _Atomic(uint64_t)    progressNs;
+  atomic_uint          watched;
+  bool                 hangArmed;     /* under poolLock: the timer is set */
 } MTCommandQueue;
 
 /* a semaphore value a command buffer signals: released from the CPU when the
@@ -404,6 +416,7 @@ struct MTCommandBuffer {
   MTCommandMode                          mode;
   atomic_bool                            completionReady; /* in flight; cleared by its handler or the queue's loss */
   bool                                   abandoned;   /* with its queue: Metal may still hold it, never reused */
+  bool                                   watched;     /* in flight under a hang limit */
   bool                                   refreshModern;
   bool                                   openOrdered; /* a barrier since made its later dispatches wait */
 };
