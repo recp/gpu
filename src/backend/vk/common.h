@@ -310,6 +310,7 @@ typedef struct GPUDeviceVk {
   PFN_vkCmdDispatchGraphIndirectAMDX             dispatchGraphIndirect;
 #endif
   VkDevice                                       device;
+  uint64_t                                       hangLimitNs; /* GPURuntimeConfig's, 0: off (atomic) */
   VkSampleCountFlags                             colorSampleCounts;
   VkSampleCountFlags                             depthSampleCounts;
   VkExtent2D                                     minVRSTexelSize;
@@ -732,6 +733,7 @@ struct GPUQueueVk {
   uint32_t            nextTransferSlot;
   uint64_t            readbackCapacity;
   uint32_t            transfersSinceLarge; /* transfer batches begun since one needed large staging */
+  uint32_t            lost; /* atomic: hung past the hang limit; what was in flight abandoned, nothing runs after */
   double              timestampPeriodNs;
   bool                stopping;
   bool                workerStarted;

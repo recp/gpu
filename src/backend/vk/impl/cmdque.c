@@ -167,6 +167,79 @@ vk__queueResult(VkResult result) {
   }
 }
 
+/* the hang limit (GPURuntimeConfig.hangLimitNs): the completion thread waits
+ * on a command buffer's fence that long at most, from the one before it (or
+ * its submit, the queue idle); past it the queue is lost. Off, the wait is
+ * as long as it takes */
+
+static uint64_t
+vk__hangLimit(GPUDeviceVk *device) {
+#if defined(_MSC_VER) && !defined(__clang__)
+  return (uint64_t)InterlockedCompareExchange64((volatile LONG64 *)&device->hangLimitNs, 0, 0);
+#else
+  return __atomic_load_n(&device->hangLimitNs, __ATOMIC_RELAXED);
+#endif
+}
+
+static void
+vk_setHangLimit(GPUDevice *device, uint64_t limitNs) {
+  GPUDeviceVk *deviceVk;
+
+  if (!device || !(deviceVk = device->_priv))
+    return;
+#if defined(_MSC_VER) && !defined(__clang__)
+  InterlockedExchange64((volatile LONG64 *)&deviceVk->hangLimitNs, (LONG64)limitNs);
+#else
+  __atomic_store_n(&deviceVk->hangLimitNs, limitNs, __ATOMIC_RELAXED);
+#endif
+}
+
+static bool
+vk__queueLost(GPUQueueVk *queue) {
+#if defined(_MSC_VER) && !defined(__clang__)
+  return InterlockedCompareExchange((volatile LONG *)&queue->lost, 0, 0) != 0;
+#else
+  return __atomic_load_n(&queue->lost, __ATOMIC_ACQUIRE) != 0u;
+#endif
+}
+
+/* by the completion thread, the only one that loses a queue: reported first,
+ * so a wait the loss ends finds the device lost. What was in flight is
+ * abandoned (the GPU may still hold it: never reused, nor retired), and
+ * nothing submitted after runs */
+static void
+vk__hangQueue(GPUQueueVk *queue, uint64_t limit) {
+  if (vk__queueLost(queue))
+    return;
+
+  deviceReportQueueHang(queue->queue->_device, "Vulkan", limit);
+#if defined(_MSC_VER) && !defined(__clang__)
+  InterlockedExchange((volatile LONG *)&queue->lost, 1);
+#else
+  __atomic_store_n(&queue->lost, 1u, __ATOMIC_RELEASE);
+#endif
+}
+
+/* a fence wait off the completion thread: under a hang limit in slices of a
+ * quarter of it (1 ms at least), so one behind hung work ends with the
+ * queue's loss (VK_TIMEOUT then) */
+static VkResult
+vk__waitFence(GPUQueueVk *queue, GPUDeviceVk *device, VkFence fence) {
+  uint64_t limit;
+  VkResult result;
+
+  do {
+    limit  = vk__hangLimit(device);
+    result = vkWaitForFences(device->device,
+                             1u,
+                             &fence,
+                             VK_TRUE,
+                             limit == 0u ? UINT64_MAX : limit / 4u > 1000000u ? limit / 4u : 1000000u);
+  } while (result == VK_TIMEOUT && !vk__queueLost(queue));
+
+  return result;
+}
+
 static void
 vk__reportQueueError(GPUCommandBuffer *cmdb,
                      const char       *operation,
@@ -394,19 +467,34 @@ vk__completionLoop(GPUQueueVk *queue) {
   GPUFrameSyncVk     *completionSync;
   VkFence             waitFence;
   VkResult            result;
+  uint64_t            limit;
+  bool                abandoned;
 
   deviceVk = queue->queue->_device->_priv;
 
   while ((native = vk__takePendingCommand(queue))) {
     cmdb      = &native->commandBuffer;
     waitFence = native->submitFence ? native->submitFence : native->fence;
-    result    = vkWaitForFences(deviceVk->device,
-                                1u,
-                                &waitFence,
-                                VK_TRUE,
-                                UINT64_MAX);
 
-    if (result != VK_SUCCESS) {
+    /* on a lost queue only what finished before completes */
+    if (vk__queueLost(queue)) {
+      result = vkGetFenceStatus(deviceVk->device, waitFence);
+    } else {
+      limit  = vk__hangLimit(deviceVk);
+      result = vkWaitForFences(deviceVk->device,
+                               1u,
+                               &waitFence,
+                               VK_TRUE,
+                               limit != 0u ? limit : UINT64_MAX);
+      if (result == VK_TIMEOUT)
+        vk__hangQueue(queue, limit);
+    }
+
+    abandoned = result != VK_SUCCESS && vk__queueLost(queue);
+
+    if (abandoned) {
+      result = VK_ERROR_DEVICE_LOST;
+    } else if (result != VK_SUCCESS) {
       vk__reportQueueError(cmdb, "fence wait", result);
     } else {
       vk__recordFrameTime(native);
@@ -424,7 +512,7 @@ vk__completionLoop(GPUQueueVk *queue) {
     native->completionSync    = NULL;
     native->presentImageIndex = 0u;
     native->presentFrameIndex = 0u;
-    finishCommandBuffer(cmdb, vk__recycleCommandBuffer, vk__queueResult(result));
+    finishCommandBuffer(cmdb, abandoned ? NULL : vk__recycleCommandBuffer, vk__queueResult(result));
 
     vk__queueLock(queue);
 
@@ -712,19 +800,19 @@ vk__waitTransfer(GPUQueue          *queue,
 
   result = vkGetFenceStatus(device->device, slot->fence);
 
-  if (result == VK_NOT_READY) {
+  if (result == VK_NOT_READY && !vk__queueLost(native)) {
     if (countStall) {
       queue->_device->allocatorStats.uploadStallCount++;
     }
 
-    result = vkWaitForFences(device->device,
-                             1u,
-                             &slot->fence,
-                             VK_TRUE,
-                             UINT64_MAX);
+    result = vk__waitFence(native, device, slot->fence);
   }
 
   if (result != VK_SUCCESS) {
+    /* behind work the queue's loss abandoned: the GPU may still hold it */
+    if (vk__queueLost(native))
+      return GPU_ERROR_DEVICE_LOST;
+
     (void)vkDeviceWaitIdle(device->device);
     return GPU_ERROR_BACKEND_FAILURE;
   }
@@ -750,6 +838,12 @@ vk__flushTransfers(GPUQueue *queue, bool wait) {
 
   if (!native || !device || !device->device || !native->queRaw) {
     return GPU_ERROR_INVALID_ARGUMENT;
+  }
+
+  /* nothing runs on a lost queue: an open batch is dropped */
+  if (vk__queueLost(native)) {
+    vk_abortTransfer(queue);
+    return GPU_ERROR_DEVICE_LOST;
   }
 
   if (native->transferOpen) {
@@ -1390,6 +1484,22 @@ vk_waitDeviceIdle(GPUDevice *__restrict device) {
     }
   }
 
+  /* vkDeviceWaitIdle would wait for what a lost queue abandoned, maybe for
+   * good: then each queue's own work instead */
+  for (i = 0u; i < deviceVk->nCreatedQueues; i++) {
+    if (deviceVk->createdQueues[i] && vk__queueLost(deviceVk->createdQueues[i]->_priv))
+      break;
+  }
+
+  if (i < deviceVk->nCreatedQueues) {
+    for (j = 0u; j < deviceVk->nCreatedQueues; j++) {
+      if (deviceVk->createdQueues[j])
+        (void)vk_waitCommandQueueIdle(deviceVk->createdQueues[j]);
+    }
+
+    return GPU_ERROR_DEVICE_LOST;
+  }
+
   before = gpuRetireLoad(&deviceVk->retire.serial);
   result = vkDeviceWaitIdle(deviceVk->device);
 
@@ -1513,6 +1623,10 @@ vk_beginTransfer(GPUQueue        *queue,
     return GPU_ERROR_UNSUPPORTED;
   }
 
+  if (vk__queueLost(native)) {
+    return GPU_ERROR_DEVICE_LOST;
+  }
+
   if (sizeBytes > VK_TRANSFER_STAGING_KEEP)
     native->transfersSinceLarge = 0u;
 
@@ -1617,11 +1731,14 @@ vk_waitCommandQueueIdle(GPUQueue *queue) {
 
   result = vk__flushTransfers(queue, true);
 
-  if (result != GPU_OK) {
+  if (result != GPU_OK && result != GPU_ERROR_DEVICE_LOST) {
     return result;
   }
 
+  /* a lost queue's in-flight work was let go: this returns */
   vk__waitQueueIdle(native);
+  if (vk__queueLost(native))
+    return GPU_ERROR_DEVICE_LOST;
   if (native->transfersSinceLarge >= VK_TRANSFER_LARGE_IDLE && queue->_device && queue->_device->_priv)
     vk__trimTransferStaging(queue, native, queue->_device->_priv);
 
@@ -2292,7 +2409,7 @@ vk_waitQueueIdle(GPUQueue *queue) {
   result = vk__flushTransfers(queue, true);
   vk__waitQueueIdle(native);
 
-  return result;
+  return vk__queueLost(native) ? GPU_ERROR_DEVICE_LOST : result;
 }
 
 GPU_HIDE
@@ -2312,4 +2429,5 @@ vk_initCmdQue(GPUCommandQueueApi *apiQue) {
   apiQue->lock                    = vk_lockQueue;
   apiQue->unlock                  = vk_unlockQueue;
   apiQue->waitIdle                = vk_waitQueueIdle;
+  apiQue->setHangLimit            = vk_setHangLimit;
 }
