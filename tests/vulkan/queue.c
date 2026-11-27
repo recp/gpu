@@ -36,7 +36,8 @@ enum {
                                     VULKAN_TRANSFER_TEST_BYTES,
   VULKAN_WARM_ITERATIONS          = 256u,
   VULKAN_STAGING_KEEP             = 16u * 1024u * 1024u, /* cmdque.c's VK_TRANSFER_STAGING_KEEP */
-  VULKAN_LARGE_TRANSFER_BYTES     = 24u * 1024u * 1024u
+  VULKAN_LARGE_TRANSFER_BYTES     = 24u * 1024u * 1024u,
+  VULKAN_BATCH_TEXTURE_SIZE       = 64u
 };
 
 typedef struct CompletionProbe {
@@ -69,6 +70,7 @@ _Static_assert(sizeof(GPUPipelineStatisticsResult) == 11u * sizeof(uint64_t),
 
 static uint8_t kBufferUpload[VULKAN_TRANSFER_TEST_BYTES];
 static uint8_t kTextureUpload[VULKAN_TRANSFER_TEST_BYTES];
+static GPUTexture *kBatchTexture; /* open_transfer_batch's, made at its first use */
 
 static int
 feature_set_contains(const GPUFeatureSet *set, GPUFeature feature) {
@@ -578,6 +580,63 @@ wait_queue(GPUQueue *queue, GPUFence *fence) {
          && GPUWaitFence(fence, UINT64_MAX) == GPU_OK;
 }
 
+/* host-visible device memory (an integrated GPU's) is written straight while
+ * nothing the queue was given runs or waits, through the transfer batch while
+ * something does (buffer.c's vk_writeBuffer); a texture upload left open in
+ * the batch is such a thing, so the buffer's writes after it take the batch
+ * on every device */
+static int
+open_transfer_batch(GPUQueue *queue, GPUBuffer *buffer) {
+  GPUTextureCreateInfo  info   = {0};
+  GPUTextureWriteRegion region = {0};
+  GPUQueueVk           *native;
+  GPUBufferVk          *bufferVk;
+
+  native   = queue ? queue->_priv : NULL;
+  bufferVk = buffer ? buffer->_priv : NULL;
+
+  if (!native || !bufferVk) {
+    return 0;
+  }
+
+  if (!bufferVk->deviceMapped) {
+    return 1;
+  }
+
+  if (!kBatchTexture) {
+    info.chain.sType      = GPU_STRUCTURE_TYPE_TEXTURE_CREATE_INFO;
+    info.chain.structSize = sizeof(info);
+    info.label            = "vulkan-transfer-batch";
+    info.dimension        = GPU_TEXTURE_DIMENSION_2D;
+    info.format           = GPU_FORMAT_RGBA8_UNORM;
+    info.width            = VULKAN_BATCH_TEXTURE_SIZE;
+    info.height           = VULKAN_BATCH_TEXTURE_SIZE;
+    info.depthOrLayers    = 1u;
+    info.mipLevelCount    = 1u;
+    info.sampleCount      = 1u;
+    info.usage            = GPU_TEXTURE_USAGE_COPY_DST;
+
+    if (GPUCreateTexture(queue->_device, &info, &kBatchTexture) != GPU_OK
+        || !kBatchTexture) {
+      return 0;
+    }
+  }
+
+  region.width        = VULKAN_BATCH_TEXTURE_SIZE;
+  region.height       = VULKAN_BATCH_TEXTURE_SIZE;
+  region.depth        = 1u;
+  region.layerCount   = 1u;
+  region.bytesPerRow  = VULKAN_BATCH_TEXTURE_SIZE * 4u;
+  region.rowsPerImage = VULKAN_BATCH_TEXTURE_SIZE;
+  return GPUQueueWriteTexture(queue,
+                              kBatchTexture,
+                              &region,
+                              kTextureUpload,
+                              VULKAN_BATCH_TEXTURE_SIZE *
+                                VULKAN_BATCH_TEXTURE_SIZE * 4u) == GPU_OK
+         && native->transferOpen;
+}
+
 static int
 frame_time_roundtrip(GPUDevice *device,
                      GPUQueue  *queue,
@@ -620,6 +679,7 @@ buffer_transfers_reuse(GPUDevice *device,
   GPUBuffer          *buffer;
   GPUBufferVk        *bufferNative;
   GPUBuffer          *readback;
+  GPUBuffer          *readbackBefore;
   GPUBufferVk        *readbackNative;
   VkBuffer            readbackBuffer;
   VkDeviceMemory      readbackMemory;
@@ -628,6 +688,7 @@ buffer_transfers_reuse(GPUDevice *device,
   uint32_t            value;
   uint32_t            copied;
   uint32_t            used;
+  int                 stagedReads;
   int                 ok;
 
   native = queue ? queue->_priv : NULL;
@@ -648,8 +709,24 @@ buffer_transfers_reuse(GPUDevice *device,
     return 0;
   }
 
-  bufferNative = buffer->_priv;
-  ok           = bufferNative && !bufferNative->mapped;
+  bufferNative   = buffer->_priv;
+  ok             = bufferNative != NULL;
+  readbackBefore = native->readbackStaging;
+  /* host-visible device memory the host caches is read from its mapping */
+  stagedReads    = ok && (!bufferNative->mapped || bufferNative->stagedReads);
+
+  /* nothing in flight: such memory is written straight, no batch opens */
+  if (ok && bufferNative->deviceMapped) {
+    ok = GPUQueueWaitIdle(queue) == GPU_OK
+         && GPUQueueWriteBuffer(queue,
+                                buffer,
+                                0u,
+                                kBufferUpload,
+                                sizeof(kBufferUpload)) == GPU_OK
+         && !native->transferOpen;
+  }
+
+  ok = ok && open_transfer_batch(queue, buffer);
 
   for (uint32_t i = 0u;
        ok && i < GPU_VK_TRANSFER_SLOT_COUNT *
@@ -661,7 +738,8 @@ buffer_transfers_reuse(GPUDevice *device,
                              buffer,
                              0u,
                              kBufferUpload,
-                             sizeof(kBufferUpload)) == GPU_OK;
+                             sizeof(kBufferUpload)) == GPU_OK
+         && native->transferOpen;
   }
 
   copied = 0u;
@@ -717,8 +795,11 @@ buffer_transfers_reuse(GPUDevice *device,
   readbackMapped   = readbackNative ? readbackNative->mapped : NULL;
   readbackCapacity = native->readbackCapacity;
 
-  if (!readbackNative || !readbackBuffer || !readbackMemory
-      || !readbackMapped || readbackCapacity < sizeof(value)) {
+  /* a staged read sets up the queue's readback staging; one from the
+   * mapping leaves it as it was */
+  if (stagedReads ? !readbackNative || !readbackBuffer || !readbackMemory
+                    || !readbackMapped || readbackCapacity < sizeof(value)
+                  : readback != readbackBefore) {
     (void)wait_queue(queue, fence);
     GPUDestroyBuffer(buffer);
     return 0;
@@ -728,11 +809,12 @@ buffer_transfers_reuse(GPUDevice *device,
     value  = UINT32_C(0xabc00000) + i;
     copied = 0u;
 
-    if (GPUQueueWriteBuffer(queue,
-                            buffer,
-                            0u,
-                            &value,
-                            sizeof(value)) != GPU_OK
+    if (!open_transfer_batch(queue, buffer)
+        || GPUQueueWriteBuffer(queue,
+                               buffer,
+                               0u,
+                               &value,
+                               sizeof(value)) != GPU_OK
         || GPUQueueReadBuffer(queue,
                               buffer,
                               0u,
@@ -740,10 +822,11 @@ buffer_transfers_reuse(GPUDevice *device,
                               sizeof(copied)) != GPU_OK
         || copied != value
         || native->readbackStaging != readback
-        || native->readbackStaging->_priv != readbackNative
-        || readbackNative->buffer != readbackBuffer
-        || readbackNative->memory != readbackMemory
-        || readbackNative->mapped != readbackMapped
+        || (readbackNative
+            && (native->readbackStaging->_priv != readbackNative
+                || readbackNative->buffer != readbackBuffer
+                || readbackNative->memory != readbackMemory
+                || readbackNative->mapped != readbackMapped))
         || native->readbackCapacity != readbackCapacity
         || native->transferOpen) {
       ok = 0;
@@ -772,7 +855,8 @@ buffer_transfers_reuse(GPUDevice *device,
 }
 
 /* a large write and read leave large staging behind, given back after the
- * small transfers that follow (cmdque.c: VK_TRANSFER_LARGE_IDLE batches) */
+ * small transfers that follow (cmdque.c: VK_TRANSFER_LARGE_IDLE batches);
+ * a read from host-visible device memory the host caches leaves none */
 static int
 large_staging_goes_back(GPUDevice *device,
                         GPUQueue  *queue,
@@ -799,16 +883,11 @@ large_staging_goes_back(GPUDevice *device,
   info.usage            = GPU_BUFFER_USAGE_COPY_SRC | GPU_BUFFER_USAGE_COPY_DST;
 
   ok = GPUCreateBuffer(device, &info, &buffer) == GPU_OK && buffer
+       && open_transfer_batch(queue, buffer)
        && GPUQueueWriteBuffer(queue, buffer, 0u, bytes, VULKAN_LARGE_TRANSFER_BYTES) == GPU_OK
        && GPUQueueReadBuffer(queue, buffer, 0u, bytes, VULKAN_LARGE_TRANSFER_BYTES) == GPU_OK
        && bytes[VULKAN_LARGE_TRANSFER_BYTES - 1u] == 7u;
   free(bytes);
-
-  /* a mapped buffer (host-visible device memory) takes neither path */
-  if (ok && ((GPUBufferVk *)buffer->_priv)->mapped) {
-    GPUDestroyBuffer(buffer);
-    return wait_queue(queue, fence);
-  }
 
   large = native->readbackCapacity > VULKAN_STAGING_KEEP;
   for (i = 0u; i < GPU_VK_TRANSFER_SLOT_COUNT; i++) {
@@ -819,7 +898,8 @@ large_staging_goes_back(GPUDevice *device,
   for (i = 0u; ok && i < 40u; i++) {
     value  = 0x5a000000u + i;
     copied = 0u;
-    ok     = GPUQueueWriteBuffer(queue, buffer, 0u, &value, sizeof(value)) == GPU_OK
+    ok     = open_transfer_batch(queue, buffer)
+             && GPUQueueWriteBuffer(queue, buffer, 0u, &value, sizeof(value)) == GPU_OK
              && GPUQueueReadBuffer(queue, buffer, 0u, &copied, sizeof(copied)) == GPU_OK
              && copied == value;
   }
@@ -1572,7 +1652,8 @@ destroy_while_in_use(GPUDevice *device,
        && GPUQueueWaitIdle(queue) == GPU_OK;
 
   /* written, then destroyed while its batch records: the batch takes more */
-  ok = ok && GPUQueueWriteBuffer(queue, written, 0u, values, sizeof(values)) == GPU_OK
+  ok = ok && open_transfer_batch(queue, written)
+       && GPUQueueWriteBuffer(queue, written, 0u, values, sizeof(values)) == GPU_OK
        && native->transferOpen;
   GPUDestroyBuffer(written);
   written = NULL;
@@ -1760,7 +1841,8 @@ destroy_bindings_while_in_use(GPUDevice *device, GPUQueue *queue) {
   }
 
   /* destroyed while a transfer batch records: all four wait for it */
-  ok = ok && GPUQueueWriteBuffer(queue, kept, 0u, values, sizeof(values)) == GPU_OK
+  ok = ok && open_transfer_batch(queue, kept)
+       && GPUQueueWriteBuffer(queue, kept, 0u, values, sizeof(values)) == GPU_OK
        && native->transferOpen;
   GPUDestroyBindGroup(group);
   GPUDestroyBindGroupLayout(layout);
@@ -1828,6 +1910,7 @@ main(void) {
   uint32_t               adapterCount;
   uint32_t               requiredFeatureCount;
   int                    ok;
+  int                    checked;
   uint32_t               i;
   bool                   pipelineStatsSupported;
   bool                   bindlessSupported;
@@ -1979,6 +2062,7 @@ main(void) {
   VULKAN_CHECK("completion callback",
                probe.count == 1u && probe.cmdb != NULL);
   GPUResetStats(device);
+  checked = ok;
 
   for (i = 0; ok && i < VULKAN_WARM_ITERATIONS; i++) {
     ok = submit_empty_batch(graphics, fence, NULL)
@@ -1991,15 +2075,19 @@ main(void) {
        && stats.hotPathAllocCount == 0u
        && stats.hotPathFreeCount == 0u;
 
+  GPUDestroyTexture(kBatchTexture);
   GPUDestroyFence(fence);
   GPUDestroyDevice(device);
   GPUDestroyInstance(instance);
 
+  /* a failed check skips the warm path: its line is for its own failure */
   if (!ok) {
-    fprintf(stderr,
-            "vulkan warm path failed: %llu allocs, %llu frees\n",
-            (unsigned long long)stats.hotPathAllocCount,
-            (unsigned long long)stats.hotPathFreeCount);
+    if (checked) {
+      fprintf(stderr,
+              "vulkan warm path failed: %llu allocs, %llu frees\n",
+              (unsigned long long)stats.hotPathAllocCount,
+              (unsigned long long)stats.hotPathFreeCount);
+    }
     return 1;
   }
 
