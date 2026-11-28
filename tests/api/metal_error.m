@@ -47,8 +47,9 @@ static const MetalErrorCase error_cases[] = {
    GPU_DEVICE_LOST_REASON_HUNG, GPU_ERROR_DEVICE_LOST, 0},
   {MTLCommandBufferErrorPageFault, GPU_DEVICE_ERROR_BACKEND,
    GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 0},
-  {MTLCommandBufferErrorNotPermitted, GPU_DEVICE_ERROR_LOST,
-   GPU_DEVICE_LOST_REASON_DRIVER_ERROR, GPU_ERROR_DEVICE_LOST, 0},
+  /* not permitted now (iOS: from the background): that command buffer fails, the queue goes on */
+  {MTLCommandBufferErrorNotPermitted, GPU_DEVICE_ERROR_BACKEND,
+   GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 0},
   {MTLCommandBufferErrorOutOfMemory, GPU_DEVICE_ERROR_OUT_OF_MEMORY,
    GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_OUT_OF_MEMORY, 0},
   {MTLCommandBufferErrorAccessRevoked, GPU_DEVICE_ERROR_LOST,
@@ -62,8 +63,13 @@ static const MetalErrorCase error_cases[] = {
    GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 1},
   {MTL4CommandQueueErrorTimeout, GPU_DEVICE_ERROR_LOST,
    GPU_DEVICE_LOST_REASON_HUNG, GPU_ERROR_DEVICE_LOST, 1},
-  {MTL4CommandQueueErrorNotPermitted, GPU_DEVICE_ERROR_LOST,
-   GPU_DEVICE_LOST_REASON_DRIVER_ERROR, GPU_ERROR_DEVICE_LOST, 1},
+  {MTL4CommandQueueErrorNotPermitted, GPU_DEVICE_ERROR_BACKEND,
+   GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 1},
+  /* Metal 4 gives the background refusal as a timeout, not permitted underneath */
+  {MTL4CommandQueueErrorTimeout, GPU_DEVICE_ERROR_BACKEND,
+   GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 4},
+  {MTL4CommandQueueErrorTimeout, GPU_DEVICE_ERROR_BACKEND,
+   GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_BACKEND_FAILURE, 5},
   {MTL4CommandQueueErrorOutOfMemory, GPU_DEVICE_ERROR_OUT_OF_MEMORY,
    GPU_DEVICE_LOST_REASON_UNKNOWN, GPU_ERROR_OUT_OF_MEMORY, 1},
   {MTL4CommandQueueErrorAccessRevoked, GPU_DEVICE_ERROR_LOST,
@@ -124,6 +130,10 @@ check_native_errors(void) {
   (void)mt_commandFailed(command->_queue, nil);
 
   for (i = 0u; i < GPU_ARRAY_LEN(error_cases); i++) {
+    if (error_cases[i].domain >= 4u && !modern) {
+      continue;
+    }
+
     if (error_cases[i].domain == 1u && !modern) {
       continue;
     }
@@ -152,6 +162,19 @@ check_native_errors(void) {
                                  code:error_cases[i].code
                              userInfo:@{NSLocalizedDescriptionKey: @"injected"}];
     }
+#if MT_HAS_METAL4
+    if (error_cases[i].domain >= 4u) {
+      if (@available(macOS 26.0, iOS 26.0, *)) {
+        NSError *under = [NSError errorWithDomain:MTL4CommandQueueErrorDomain
+                                             code:MTL4CommandQueueErrorNotPermitted
+                                         userInfo:@{NSLocalizedDescriptionKey: @"injected"}];
+        error = [NSError errorWithDomain:MTL4CommandQueueErrorDomain
+                                    code:error_cases[i].code
+                                userInfo:error_cases[i].domain == 4u ? @{NSMultipleUnderlyingErrorsKey: @[under]}
+                                                                     : @{NSUnderlyingErrorKey: under}];
+      }
+    }
+#endif
 
     if (mt_commandFailed(command->_queue, error) != error_cases[i].result) {
       fprintf(stderr, "Metal error result wrong at case %u\n", i);

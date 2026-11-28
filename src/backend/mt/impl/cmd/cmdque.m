@@ -811,6 +811,45 @@ mt_loseQueue(GPUQueue *queue) {
   }
 }
 
+/* GPU work the process may not submit now (iOS: from the background): that
+ * command buffer fails, the queue runs what comes once it may again. Metal 4
+ * gives it under another code (a timeout), the reason among the underlying */
+static NSError*
+mt_notPermitted(NSError *error, uint32_t depth) {
+  NSError *found;
+  id       under;
+
+  if (!error || depth > 4u)
+    return nil;
+
+  if ([error.domain isEqualToString:MTLCommandBufferErrorDomain]
+      && error.code == MTLCommandBufferErrorNotPermitted)
+    return error;
+#if MT_HAS_METAL4
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    if ([error.domain isEqualToString:MTL4CommandQueueErrorDomain]
+        && error.code == MTL4CommandQueueErrorNotPermitted)
+      return error;
+  }
+#endif
+
+  under = error.userInfo[NSUnderlyingErrorKey];
+  if ([under isKindOfClass:[NSError class]] && (found = mt_notPermitted(under, depth + 1u)))
+    return found;
+
+  if (@available(macOS 11.3, iOS 14.5, *)) {
+    under = error.userInfo[NSMultipleUnderlyingErrorsKey];
+    if ([under isKindOfClass:[NSArray class]]) {
+      for (id each in (NSArray *)under) {
+        if ([each isKindOfClass:[NSError class]] && (found = mt_notPermitted(each, depth + 1u)))
+          return found;
+      }
+    }
+  }
+
+  return nil;
+}
+
 /* what a failed command buffer's error comes to, reported; the queue lost
  * when the system gave up on it (a GPU timeout, GPU access taken away, the
  * device gone): Metal then runs nothing behind it in time, or ever */
@@ -819,6 +858,7 @@ GPUResult
 mt_commandFailed(GPUQueue *__restrict queue, NSError *__restrict error) {
   char                message[256];
   GPUDevice          *device;
+  NSError            *permission;
   const char         *detail;
   GPUDeviceErrorType  type;
   GPUDeviceLostReason lostReason;
@@ -878,6 +918,13 @@ mt_commandFailed(GPUQueue *__restrict queue, NSError *__restrict error) {
       default:
         break;
     }
+  }
+
+  if ((permission = mt_notPermitted(error, 0u))) {
+    type       = GPU_DEVICE_ERROR_BACKEND;
+    lostReason = GPU_DEVICE_LOST_REASON_UNKNOWN;
+    result     = GPU_ERROR_BACKEND_FAILURE;
+    error      = permission;
   }
 
   if (type == GPU_DEVICE_ERROR_LOST)
