@@ -23,15 +23,15 @@
   float             backingScaleFactor;
   id                observedObject;
   NSString          *observedKeyPath;
-#if TARGET_OS_OSX
-  NSView            *occlusionView; /* the surface's view, whose window's occlusion is tracked */
+#if TARGET_OS_OSX || TARGET_OS_IOS
+  GPUViewHandle     *occlusionView; /* the surface's view: whether its window is shown is tracked */
 #endif
 }
 
 - (void)gpuObserveObject:(id)object keyPath:(NSString *)keyPath;
 - (void)gpuStopObserving;
-#if TARGET_OS_OSX
-- (void)gpuObserveOcclusionOf:(NSView *)view;
+#if TARGET_OS_OSX || TARGET_OS_IOS
+- (void)gpuObserveOcclusionOf:(GPUViewHandle *)view;
 - (void)gpuStopObservingOcclusion;
 #endif
 @end
@@ -111,11 +111,59 @@
     occlusionView = nil;
   }
 }
+#elif TARGET_OS_IOS
+/* a scene in the background may not use the GPU: a frame drawn there fails
+ * (cmdque.m's not permitted) and nextDrawable can wait out its second, so
+ * frames are refused there (mt_beginFrame) from the scene's word, or the
+ * app's for a view in no scene */
+- (void)gpuObserveOcclusionOf:(GPUViewHandle *)view {
+  NSNotificationCenter *center;
+
+  [self gpuStopObservingOcclusion];
+  occlusionView = [view retain];
+  center        = [NSNotificationCenter defaultCenter];
+  [center addObserver:self selector:@selector(gpuEnteredBackground:)
+                 name:UISceneDidEnterBackgroundNotification object:nil];
+  [center addObserver:self selector:@selector(gpuEnteringForeground:)
+                 name:UISceneWillEnterForegroundNotification object:nil];
+  [center addObserver:self selector:@selector(gpuEnteredBackground:)
+                 name:UIApplicationDidEnterBackgroundNotification object:nil];
+  [center addObserver:self selector:@selector(gpuEnteringForeground:)
+                 name:UIApplicationWillEnterForegroundNotification object:nil];
+}
+
+- (bool)gpuConcerns:(NSNotification *)note {
+  UIScene *scene;
+
+  scene = occlusionView.window.windowScene;
+  if ([note.object isKindOfClass:[UIScene class]])
+    return note.object == scene;
+
+  return !scene;
+}
+
+- (void)gpuEnteredBackground:(NSNotification *)note {
+  if ([self gpuConcerns:note])
+    atomic_store_explicit(&swapchainMtl->hidden, true, memory_order_relaxed);
+}
+
+- (void)gpuEnteringForeground:(NSNotification *)note {
+  if ([self gpuConcerns:note])
+    atomic_store_explicit(&swapchainMtl->hidden, false, memory_order_relaxed);
+}
+
+- (void)gpuStopObservingOcclusion {
+  if (occlusionView) {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [occlusionView release];
+    occlusionView = nil;
+  }
+}
 #endif
 
 - (void)dealloc {
   [self gpuStopObserving];
-#if TARGET_OS_OSX
+#if TARGET_OS_OSX || TARGET_OS_IOS
   [self gpuStopObservingOcclusion];
 #endif
   [super dealloc];
@@ -176,7 +224,7 @@ mt_swapchainAttachToView(GPUSwapchain *__restrict swapchain,
                                                      keyPath:@"bounds"];
   }
 
-#if TARGET_OS_OSX
+#if TARGET_OS_OSX || TARGET_OS_IOS
   [(GPUSwapchainObjc *)swapchainMtl->objc gpuObserveOcclusionOf:_viewHandle];
 #endif
 }
@@ -350,7 +398,7 @@ mt_destroySwapchain(GPUSwapchain *__restrict swapchain) {
 
     if (swapchainMtl->objc) {
       [(GPUSwapchainObjc *)swapchainMtl->objc gpuStopObserving];
-#if TARGET_OS_OSX
+#if TARGET_OS_OSX || TARGET_OS_IOS
       [(GPUSwapchainObjc *)swapchainMtl->objc gpuStopObservingOcclusion];
 #endif
       [(id)swapchainMtl->objc release];

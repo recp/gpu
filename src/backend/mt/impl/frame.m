@@ -136,7 +136,8 @@ mt_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
   if (native->presentsWithTransaction && ![NSThread isMainThread])
     return NULL;
 
-  /* a window the system doesn't show: nextDrawable would wait out its second */
+  /* a window the system doesn't show, a scene in the background: nextDrawable
+   * would wait out its second, and on iOS the frame couldn't be drawn */
   if (atomic_load_explicit(&native->hidden, memory_order_relaxed)) {
     swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
     return NULL;
