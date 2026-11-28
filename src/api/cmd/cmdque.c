@@ -659,11 +659,7 @@ GPUQueueSubmitEx(GPUQueue                   *__restrict cmdq,
 GPU_EXPORT
 GPUResult
 GPUQueueWaitIdle(GPUQueue *__restrict cmdq) {
-  GPUQueueSubmitInfo submit = {0};
-  GPUCommandBuffer  *cmdb;
-  GPUFence          *fence;
-  GPUApi            *api;
-  GPUResult          result;
+  GPUApi *api;
 
   if (!cmdq) {
     return GPU_ERROR_INVALID_ARGUMENT;
@@ -677,7 +673,17 @@ GPUQueueWaitIdle(GPUQueue *__restrict cmdq) {
     return api->cmdque.waitIdle(cmdq);
   }
 
-  /* an empty submission's fence: queues finish their submissions in order */
+  return commandQueueWaitIdleSubmit(cmdq);
+}
+
+/* an empty submission's fence: queues finish their submissions in order */
+GPU_HIDE
+GPUResult
+commandQueueWaitIdleSubmit(GPUQueue *cmdq) {
+  GPUQueueSubmitInfo submit = {0};
+  GPUCommandBuffer  *cmdb;
+  GPUFence          *fence;
+  GPUResult          result;
 
   cmdb  = NULL;
   fence = NULL;

@@ -1060,6 +1060,10 @@ webgpu_requestDevice(GPUAdapter                     *adapter,
   callbackInfo.mode      = WGPUCallbackMode_AllowSpontaneous;
   callbackInfo.callback  = webgpu_deviceReady;
   callbackInfo.userdata1 = request;
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+  /* from the device on, the app's background is followed (webgpuGPURefused) */
+  appleWatchGPUAccess();
+#endif
   wgpuAdapterRequestDevice(native->adapter, &descriptor, callbackInfo);
 
   return GPU_OK;

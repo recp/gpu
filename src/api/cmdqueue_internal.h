@@ -69,6 +69,12 @@ GPU_HIDE
 GPUResult
 submitUploadCommandBuffer(GPUCommandBuffer *cmdb, GPUFence *fence, uint64_t *progress);
 
+/* GPUQueueWaitIdle by an empty command buffer's fence (a backend without a
+ * wait of its own, or not one this time) */
+GPU_HIDE
+GPUResult
+commandQueueWaitIdleSubmit(GPUQueue *cmdq);
+
 GPU_HIDE
 void
 retainFence(GPUFence *fence);

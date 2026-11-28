@@ -42,6 +42,10 @@
 
 #include <stdatomic.h>
 
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+#  include "../surface_apple.h"
+#endif
+
 #if !defined(__EMSCRIPTEN__)
 #  if defined(_WIN32) || defined(WIN32)
 #    include <windows.h>
@@ -97,6 +101,7 @@ typedef struct GPUAdapterWebGPU {
 typedef struct GPUSurfaceWebGPU {
   WGPUSurface surface;
   void       *ownedPlatformHandle;
+  void       *shown;               /* appleWatchView's: frames only while the system shows the view */
   uint32_t    formats[GPU_WEBGPU_MAX_SURFACE_FORMATS];
   uint32_t    presentModes[GPU_WEBGPU_MAX_PRESENT_MODES];
   uint32_t    formatCount;
@@ -160,6 +165,7 @@ typedef struct GPUDeviceWebGPU {
 #endif
   bool                norm16Resolve;
   WGPULimits          limits;
+  _Atomic(uint64_t)   writtenBytes; /* queue writes since the last submit (webgpuQueueWrite) */
   GPUQueue            queueHandle;
   GPUCommandWebGPU    commands[GPU_WEBGPU_COMMAND_SLOT_COUNT];
 #if !defined(__EMSCRIPTEN__)
@@ -259,6 +265,10 @@ webgpuWaitCommandSlot(GPUDeviceWebGPU *device);
 
 GPU_HIDE
 void
+webgpuWaitInFlight(GPUDeviceWebGPU *device);
+
+GPU_HIDE
+void
 webgpuCommandSlotFreed(GPUDeviceWebGPU *device);
 
 void
@@ -326,6 +336,79 @@ webgpuDevice(const GPUDevice *device) {
 static GPU_INLINE GPUSurfaceWebGPU*
 webgpuSurface(const GPUSurface *surface) {
   return surface ? surface->_priv : NULL;
+}
+
+/* iOS: the app in the background. The system refuses its GPU work, and Dawn
+ * loses the device to one refused command buffer: nothing goes to it there
+ * that it would commit (a submit, a present), and what can't wait fails
+ * alone, a backend failure */
+static GPU_INLINE bool
+webgpuGPURefused(void) {
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+  return appleGPURefused();
+#else
+  return false;
+#endif
+}
+
+/* no frame where the system doesn't show the view (nextDrawable would wait
+ * out its second), or from the background */
+static GPU_INLINE bool
+webgpuFramesRefused(const GPUSwapchain *swapchain) {
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+  GPUSurfaceWebGPU *surface;
+
+  surface = swapchain ? webgpuSurface(swapchain->surface) : NULL;
+  return appleGPURefused() || (surface && appleViewHidden(surface->shown));
+#else
+  (void)swapchain;
+  return false;
+#endif
+}
+
+/* Dawn keeps queue writes for the next submit, and commits them itself once
+ * 16 MB are waiting, or when a wait needs them: from the background a write
+ * past a few MB since the last submit is refused (false), as is a map read
+ * behind any (its submit couldn't go either). Every write counts; a submit
+ * clears the count */
+enum { GPU_WEBGPU_REFUSED_WRITE_BUDGET = 4u << 20 };
+
+static GPU_INLINE bool
+webgpuQueueWrite(GPUDeviceWebGPU *device, uint64_t sizeBytes) {
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+  uint64_t written;
+
+  written = atomic_fetch_add_explicit(&device->writtenBytes, sizeBytes, memory_order_relaxed);
+  if (webgpuGPURefused() && written + sizeBytes > GPU_WEBGPU_REFUSED_WRITE_BUDGET) {
+    atomic_fetch_sub_explicit(&device->writtenBytes, sizeBytes, memory_order_relaxed);
+    return false;
+  }
+#else
+  (void)device;
+  (void)sizeBytes;
+#endif
+
+  return true;
+}
+
+/* a submit takes the writes before it along */
+static GPU_INLINE void
+webgpuQueueWritesSubmitted(GPUDeviceWebGPU *device) {
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+  atomic_store_explicit(&device->writtenBytes, 0u, memory_order_relaxed);
+#else
+  (void)device;
+#endif
+}
+
+static GPU_INLINE bool
+webgpuQueueWritesWaiting(GPUDeviceWebGPU *device) {
+  return atomic_load_explicit(&device->writtenBytes, memory_order_relaxed) > 0u;
+}
+
+static GPU_INLINE bool
+webgpuMapReadRefused(GPUDeviceWebGPU *device) {
+  return webgpuGPURefused() && webgpuQueueWritesWaiting(device);
 }
 
 static GPU_INLINE GPUSwapchainWebGPU*

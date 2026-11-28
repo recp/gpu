@@ -286,6 +286,7 @@ webgpu_createSurface(GPUApi                     *api,
   }
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
   native->ownedPlatformHandle = metalLayer.layer;
+  native->shown               = appleWatchView(info->nativeHandle);
 #endif
 
   surface->_priv = native;
@@ -306,6 +307,7 @@ webgpu_destroySurface(GPUSurface *surface) {
       wgpuSurfaceRelease(native->surface);
     }
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+    appleUnwatchView(native->shown);
     destroyMetalLayer(native->ownedPlatformHandle);
 #endif
     free(native);

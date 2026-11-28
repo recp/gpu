@@ -96,6 +96,15 @@ webgpu_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
     return NULL;
   }
 
+  /* a view the system doesn't show gives no texture for up to a second, and
+   * from the background nothing could be drawn: no frame there, at once. A
+   * frame refused its submit keeps its texture the surface's own: the next
+   * frame takes it again */
+  if (webgpuFramesRefused(swapchain)) {
+    swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
+    return NULL;
+  }
+
   memset(&native->frame, 0, sizeof(native->frame));
   if (!webgpu__acquireTexture(swapchain, native)) {
     return NULL;
@@ -124,6 +133,13 @@ webgpu_beginDrawable(GPUApi *api, GPUSwapchain *swapchain, void *pacer) {
     return NULL;
   }
 
+  /* a display link ticks where the view isn't shown and in the background:
+   * no frame there (webgpu_beginFrame) */
+  if (webgpuFramesRefused(swapchain)) {
+    swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
+    return NULL;
+  }
+
   memset(&native->frame, 0, sizeof(native->frame));
   native->frame._priv       = native;
   native->frame.drawable    = native;
@@ -139,6 +155,12 @@ webgpu_acquireDrawable(GPUApi *api, GPUFrame *frame) {
 
   GPU__UNUSED(api);
   native = frame->_priv;
+
+  /* gone to the background, or out of view, since its tick */
+  if (native && webgpuFramesRefused(frame->swapchain)) {
+    swapchainSetStatus(frame->swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
+    return false;
+  }
 
   return native && native->acquired && !native->currentTexture
          && webgpu__acquireTexture(frame->swapchain, native);

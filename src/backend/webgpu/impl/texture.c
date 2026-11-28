@@ -308,6 +308,10 @@ webgpu_writeTexture(GPUQueue                        *__restrict queue,
     return GPU_ERROR_UNSUPPORTED;
   }
 
+  if (!webgpuQueueWrite(native, sizeBytes)) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
   layout.bytesPerRow        = region->bytesPerRow;
   layout.rowsPerImage       = region->rowsPerImage ? region->rowsPerImage : region->height; /* 0: tightly packed */
   extent.width              = region->width;

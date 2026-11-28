@@ -176,6 +176,10 @@ webgpu_writeBuffer(GPUQueue   *__restrict queue,
     return GPU_ERROR_UNSUPPORTED;
   }
 
+  if (!webgpuQueueWrite(native, sizeBytes)) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
   if (alignedSize != 0u) {
     wgpuQueueWriteBuffer(native->queue,
                          buffer->_priv,
@@ -304,6 +308,13 @@ webgpu_readBuffer(GPUQueue  *__restrict queue,
   }
 #endif
 
+  /* from the background Dawn would commit what a map read waits behind, and
+   * a copy to read through couldn't go (webgpuGPURefused) */
+  if (webgpuMapReadRefused(native)
+      || (webgpuGPURefused() && (buffer->usage & GPU_BUFFER_USAGE_HOST_READ) == 0u)) {
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
   /* a map-read buffer (HOST_READ) maps itself: offsets in 8s, sizes in 4s */
   if ((buffer->usage & GPU_BUFFER_USAGE_HOST_READ) != 0u) {
     copyOffset = srcOffset & ~UINT64_C(7);
@@ -348,6 +359,7 @@ webgpu_readBuffer(GPUQueue  *__restrict queue,
     goto cleanup_staging;
   }
 
+  webgpuQueueWritesSubmitted(native);
   wgpuQueueSubmit(native->queue, 1u, &command);
   wgpuCommandBufferRelease(command);
   result = webgpu_mapRead(device, staging, 0u, copySize, prefix, outData, sizeBytes);

@@ -150,6 +150,33 @@ webgpuWaitCommandSlot(GPUDeviceWebGPU *device) {
   return free;
 }
 
+/* every command buffer given to the queue finished, its completion run;
+ * nothing submitted for it */
+GPU_HIDE
+void
+webgpuWaitInFlight(GPUDeviceWebGPU *device) {
+  bool     inFlight;
+  uint32_t i;
+
+  if (!device || !device->completionWorkerStarted)
+    return;
+
+  webgpu_completionLock(device);
+
+  for (;;) {
+    inFlight = false;
+    for (i = 0u; i < GPU_WEBGPU_COMMAND_SLOT_COUNT; i++)
+      inFlight = inFlight || atomic_load_explicit(&device->commands[i].submitted, memory_order_acquire);
+
+    if (!inFlight || device->stoppingCompletionWorker)
+      break;
+
+    webgpu_completionWait(device);
+  }
+
+  webgpu_completionUnlock(device);
+}
+
 /* a slot came back: wake an acquire waiting for one */
 GPU_HIDE
 void

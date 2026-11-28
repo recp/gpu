@@ -244,6 +244,19 @@ webgpu_submitCommandBuffers(GPUQueue                *__restrict queue,
     }
   }
 
+  /* from the background (webgpuGPURefused) these command buffers fail alone
+   * and at once, nothing given to Dawn; a frame's texture stays the surface's
+   * current one, the next frame's. The queue goes on */
+  if (webgpuGPURefused()) {
+    deviceReportError(queue->_device,
+                      GPU_DEVICE_ERROR_BACKEND,
+                      GPU_DEVICE_LOST_REASON_UNKNOWN,
+                      GPU_ERROR_BACKEND_FAILURE,
+                      "WebGPU queue submit refused: the app is in the background");
+    webgpu_abortCommandBuffers(count, buffers);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
   for (finishIndex = 0u; finishIndex < count; finishIndex++) {
     submitted[finishIndex] = wgpuCommandEncoderFinish(commands[finishIndex]->encoder,
                                                       &finishInfo);
@@ -268,6 +281,7 @@ webgpu_submitCommandBuffers(GPUQueue                *__restrict queue,
                           memory_order_release);
   }
 
+  webgpuQueueWritesSubmitted(device);
 #if GPU_WEBGPU_PROVIDER_WGPU_NATIVE
   submission = wgpuQueueSubmitForIndex(device->queue,
                                        count,
@@ -343,6 +357,26 @@ webgpu_presentDrawable(GPUCommandBuffer *cmdb, GPUFrame *frame) {
   return true;
 }
 
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+/* GPUQueueWaitIdle: an empty command buffer's fence, the generic wait; from
+ * the background, where it couldn't be submitted, the command buffers given
+ * before are waited for. A queue write still waiting for its submit can't
+ * finish there: a backend failure */
+static GPUResult
+webgpu_waitQueueIdle(GPUQueue *queue) {
+  GPUDeviceWebGPU *device;
+
+  if (!webgpuGPURefused())
+    return commandQueueWaitIdleSubmit(queue);
+
+  if (!(device = webgpuDevice(commandQueueDevice(queue))))
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  webgpuWaitInFlight(device);
+  return webgpuQueueWritesWaiting(device) ? GPU_ERROR_BACKEND_FAILURE : GPU_OK;
+}
+#endif
+
 void
 webgpu_initCommandQueue(GPUCommandQueueApi *api) {
   api->getCommandQueue         = webgpu_getCommandQueue;
@@ -352,6 +386,9 @@ webgpu_initCommandQueue(GPUCommandQueueApi *api) {
   api->discard                 = webgpu_discard;
   api->commit                  = webgpu_commit;
   api->submit                  = webgpu_submitCommandBuffers;
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+  api->waitIdle                = webgpu_waitQueueIdle;
+#endif
 }
 
 void
