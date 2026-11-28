@@ -33,6 +33,7 @@
 #include "../../api/surface_internal.h"
 #include "../../api/swapchain_internal.h"
 #include "../../api/texture_internal.h"
+#include "../surface_apple.h"
 
 #include <stdatomic.h>
 
@@ -124,7 +125,7 @@ typedef struct GPUSwapchainMetal {
   GPUTextureView targetView;
   bool           frameActive;
   bool           presentsWithTransaction;
-  _Atomic(bool)  hidden;         /* its window isn't shown (macOS) or its scene is in the background (iOS) */
+  void          *shown;          /* appleWatchView's: its window isn't shown (macOS), its scene is in the background (iOS) */
 } GPUSwapchainMetal;
 
 typedef struct MTResourcePool MTResourcePool;

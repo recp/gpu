@@ -23,9 +23,6 @@
   float             backingScaleFactor;
   id                observedObject;
   NSString          *observedKeyPath;
-#if TARGET_OS_OSX || TARGET_OS_IOS
-  GPUViewHandle     *occlusionView; /* the surface's view: whether its window is shown is tracked */
-#endif
 #if TARGET_OS_OSX
   NSView            *hostView;      /* the view whose own layer is the swapchain's */
 #endif
@@ -33,10 +30,6 @@
 
 - (void)gpuObserveObject:(id)object keyPath:(NSString *)keyPath;
 - (void)gpuStopObserving;
-#if TARGET_OS_OSX || TARGET_OS_IOS
-- (void)gpuObserveOcclusionOf:(GPUViewHandle *)view;
-- (void)gpuStopObservingOcclusion;
-#endif
 #if TARGET_OS_OSX
 - (void)gpuGiveBackLayer:(CALayer *)layer;
 #endif
@@ -81,43 +74,6 @@
 }
 
 #if TARGET_OS_OSX
-/* a window the system doesn't show (covered, minimized, on another Space, the
- * screen locked) gives its layer no drawable for up to a second: frames are
- * refused there (mt_beginFrame), as DXGI's occluded present. Only AppKit's
- * word on a change counts, on the main thread: a window just ordered reads
- * hidden until AppKit hears from the window server, and one whose events
- * nobody dispatches would read so for good. A view in no window is not hidden */
-- (void)gpuObserveOcclusionOf:(NSView *)view {
-  [self gpuStopObservingOcclusion];
-  occlusionView = [view retain];
-  [[NSNotificationCenter defaultCenter] addObserver:self
-                                           selector:@selector(gpuOcclusionChanged:)
-                                               name:NSWindowDidChangeOcclusionStateNotification
-                                             object:nil];
-}
-
-- (void)gpuOcclusionChanged:(NSNotification *)note {
-  NSWindow *window;
-
-  window = occlusionView.window;
-  if (note.object != window)
-    return;
-
-  atomic_store_explicit(&swapchainMtl->hidden,
-                        window && !(window.occlusionState & NSWindowOcclusionStateVisible),
-                        memory_order_relaxed);
-}
-
-- (void)gpuStopObservingOcclusion {
-  if (occlusionView) {
-    [[NSNotificationCenter defaultCenter] removeObserver:self
-                                                    name:NSWindowDidChangeOcclusionStateNotification
-                                                  object:nil];
-    [occlusionView release];
-    occlusionView = nil;
-  }
-}
-
 /* a view whose own layer was the swapchain's gets one of AppKit's back, at
  * once and in the window's tree. Only taking ours out of its superlayer would
  * leave the view a dead layer outside the tree: nothing drawn there after
@@ -135,61 +91,10 @@
   [hostView release];
   hostView = nil;
 }
-#elif TARGET_OS_IOS
-/* a scene in the background may not use the GPU: a frame drawn there fails
- * (cmdque.m's not permitted) and nextDrawable can wait out its second, so
- * frames are refused there (mt_beginFrame) from the scene's word, or the
- * app's for a view in no scene */
-- (void)gpuObserveOcclusionOf:(GPUViewHandle *)view {
-  NSNotificationCenter *center;
-
-  [self gpuStopObservingOcclusion];
-  occlusionView = [view retain];
-  center        = [NSNotificationCenter defaultCenter];
-  [center addObserver:self selector:@selector(gpuEnteredBackground:)
-                 name:UISceneDidEnterBackgroundNotification object:nil];
-  [center addObserver:self selector:@selector(gpuEnteringForeground:)
-                 name:UISceneWillEnterForegroundNotification object:nil];
-  [center addObserver:self selector:@selector(gpuEnteredBackground:)
-                 name:UIApplicationDidEnterBackgroundNotification object:nil];
-  [center addObserver:self selector:@selector(gpuEnteringForeground:)
-                 name:UIApplicationWillEnterForegroundNotification object:nil];
-}
-
-- (bool)gpuConcerns:(NSNotification *)note {
-  UIScene *scene;
-
-  scene = occlusionView.window.windowScene;
-  if ([note.object isKindOfClass:[UIScene class]])
-    return note.object == scene;
-
-  return !scene;
-}
-
-- (void)gpuEnteredBackground:(NSNotification *)note {
-  if ([self gpuConcerns:note])
-    atomic_store_explicit(&swapchainMtl->hidden, true, memory_order_relaxed);
-}
-
-- (void)gpuEnteringForeground:(NSNotification *)note {
-  if ([self gpuConcerns:note])
-    atomic_store_explicit(&swapchainMtl->hidden, false, memory_order_relaxed);
-}
-
-- (void)gpuStopObservingOcclusion {
-  if (occlusionView) {
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
-    [occlusionView release];
-    occlusionView = nil;
-  }
-}
 #endif
 
 - (void)dealloc {
   [self gpuStopObserving];
-#if TARGET_OS_OSX || TARGET_OS_IOS
-  [self gpuStopObservingOcclusion];
-#endif
 #if TARGET_OS_OSX
   [hostView release];
 #endif
@@ -252,9 +157,10 @@ mt_swapchainAttachToView(GPUSwapchain *__restrict swapchain,
                                                      keyPath:@"bounds"];
   }
 
-#if TARGET_OS_OSX || TARGET_OS_IOS
-  [(GPUSwapchainObjc *)swapchainMtl->objc gpuObserveOcclusionOf:_viewHandle];
-#endif
+  /* a window the system doesn't show (macOS), a scene in the background
+   * (iOS): no frame there (mt_beginFrame), at once */
+  appleUnwatchView(swapchainMtl->shown);
+  swapchainMtl->shown = appleWatchView(_viewHandle);
 }
 
 GPU_HIDE
@@ -426,14 +332,13 @@ mt_destroySwapchain(GPUSwapchain *__restrict swapchain) {
 
     if (swapchainMtl->objc) {
       [(GPUSwapchainObjc *)swapchainMtl->objc gpuStopObserving];
-#if TARGET_OS_OSX || TARGET_OS_IOS
-      [(GPUSwapchainObjc *)swapchainMtl->objc gpuStopObservingOcclusion];
-#endif
 #if TARGET_OS_OSX
       [(GPUSwapchainObjc *)swapchainMtl->objc gpuGiveBackLayer:swapchainMtl->layer];
 #endif
       [(id)swapchainMtl->objc release];
     }
+
+    appleUnwatchView(swapchainMtl->shown);
 
 #if MT_HAS_METAL4
     if (swapchainMtl->residencyQueue) {

@@ -16,7 +16,7 @@ if(GPU_BUILD_METAL OR (APPLE AND GPU_BUILD_WEBGPU))
   gpu_link_apple_framework(gpu Metal "${GPU_FRAMEWORK_METAL}")
 endif()
 
-if(APPLE AND (GPU_BUILD_VULKAN OR GPU_BUILD_WEBGPU))
+if(APPLE AND (GPU_BUILD_METAL OR GPU_BUILD_VULKAN OR GPU_BUILD_WEBGPU))
   target_sources(gpu PRIVATE surface_apple.m)
 endif()
 

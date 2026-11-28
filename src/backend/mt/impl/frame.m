@@ -75,7 +75,7 @@ mt_beginDrawableFrame(GPUApi *api, GPUSwapchain *swapchain, void *nativeDrawable
 #if TARGET_OS_IOS
   /* a pacer's display link hands out drawables in the background too: there
    * the frame couldn't be drawn, so the tick comes with none */
-  if (atomic_load_explicit(&swapchainMtl->hidden, memory_order_relaxed)) {
+  if (appleViewHidden(swapchainMtl->shown)) {
     swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
     return NULL;
   }
@@ -147,7 +147,7 @@ mt_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
 
   /* a window the system doesn't show, a scene in the background: nextDrawable
    * would wait out its second, and on iOS the frame couldn't be drawn */
-  if (atomic_load_explicit(&native->hidden, memory_order_relaxed)) {
+  if (appleViewHidden(native->shown)) {
     swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
     return NULL;
   }

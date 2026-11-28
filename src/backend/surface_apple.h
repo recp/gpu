@@ -34,4 +34,39 @@ GPU_HIDE
 void
 destroyMetalLayer(void *metalLayer);
 
+/* whether the system shows a view's frames, from its word on the main thread:
+ * on macOS its window covered, minimized, on another Space or the screen
+ * locked; on iOS its scene in the background (the app's, for a view in no
+ * scene). nextDrawable waits out its second there, and on iOS nothing could
+ * be drawn: frames are refused there at once. Read from any thread; NULL
+ * (nothing watched) is never hidden */
+GPU_HIDE
+void*
+appleWatchView(void *view);
+
+GPU_HIDE
+bool
+appleViewHidden(const void *watch);
+
+GPU_HIDE
+void
+appleUnwatchView(void *watch);
+
+/* iOS: the process may give the GPU no work, from the app's word that it went
+ * to the background until it comes back (the system refuses a command buffer
+ * committed there a moment later, and MoltenVK and Dawn lose the device to
+ * one). Followed from the first appleWatchGPUAccess; never refused elsewhere */
+GPU_HIDE
+void
+appleWatchGPUAccess(void);
+
+GPU_HIDE
+bool
+appleGPURefused(void);
+
+/* tests: as if the app had gone to the background, or come back */
+GPU_HIDE
+void
+appleSetGPURefused(bool refused);
+
 #endif /* gpu_backend_surface_apple_h */
