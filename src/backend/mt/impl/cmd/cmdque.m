@@ -1750,10 +1750,10 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
       if (drawable) {
         /* a transaction shows the layer's contents at its commit, so its
          * drawable goes finished, as classic's after waitUntilScheduled:
-         * one signalled on the queue never shows with a presentation time
-         * there, finished or not, and Metal 4 has no point short of
-         * completion to wait for. A frame not done in a second (a hung or
-         * lost queue) goes as other presents do, not holding the caller */
+         * one signalled on the queue never reaches the screen there,
+         * finished or not, and Metal 4 has no point short of completion to
+         * wait for. A frame not done in a second (a hung or lost queue)
+         * goes as other presents do, not holding the caller */
         if (!transaction || mt_queueLost(queue)
             || ![queue->transferEvent waitUntilSignaledValue:queue->transferValue timeoutMS:1000u])
           [queue->modern signalDrawable:drawable];
