@@ -122,6 +122,7 @@ GPU_HIDE
 GPUFrame*
 mt_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
   GPUSwapchainMetal *native;
+  GPUFrame          *frame;
 
   native = swapchain ? swapchain->_priv : NULL;
   if (!native || !native->layer) {
@@ -135,7 +136,13 @@ mt_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
   if (native->presentsWithTransaction && ![NSThread isMainThread])
     return NULL;
 
-  return mt_beginDrawableFrame(api, swapchain, [native->layer nextDrawable]);
+  /* the frame holds the drawable: nothing left in the caller's pool keeps its
+   * buffer from the layer once the frame ends */
+  @autoreleasepool {
+    frame = mt_beginDrawableFrame(api, swapchain, [native->layer nextDrawable]);
+  }
+
+  return frame;
 }
 
 GPU_HIDE
@@ -178,10 +185,11 @@ mt_endFrame(GPUApi   *__restrict api,
 }
 
 - (void)metalDisplayLink:(CAMetalDisplayLink *)displayLink needsUpdate:(CAMetalDisplayLinkUpdate *)update {
-  GPUFrameTiming  timing;
-  GPUFrame       *frame;
-  void           *user;
-  GPUFramePacerFn callback;
+  GPUFrameTiming      timing;
+  GPUFrame           *frame;
+  void               *user;
+  GPUFramePacerFn     callback;
+  id<CAMetalDrawable> drawable;
 
   [self retain];
   if (!pacer || displayLink != link || inCallback || thread != [NSThread currentThread] || paused) {
@@ -189,27 +197,31 @@ mt_endFrame(GPUApi   *__restrict api,
     return;
   }
 
-  inCallback = true;
-  timing.targetPresentTime = update.targetPresentationTimestamp;
-  timing.deadline          = update.targetTimestamp;
-  timing.refreshInterval   = previousPresentation > 0.0
-                               ? timing.targetPresentTime - previousPresentation : 0.0;
-  previousPresentation     = timing.targetPresentTime;
-  callback = pacer->callback;
-  user     = pacer->user;
-  frame    = frameBeginDrawable(pacer->swapchain, update.drawable);
-  if (frame)
-    frame->targetPresentTime = timing.targetPresentTime;
+  /* what the tick leaves autoreleased goes with it, not with the caller's run loop */
+  @autoreleasepool {
+    inCallback = true;
+    drawable                 = update.drawable;
+    timing.targetPresentTime = update.targetPresentationTimestamp;
+    timing.deadline          = update.targetTimestamp;
+    timing.refreshInterval   = previousPresentation > 0.0
+                                 ? timing.targetPresentTime - previousPresentation : 0.0;
+    previousPresentation     = timing.targetPresentTime;
+    callback = pacer->callback;
+    user     = pacer->user;
+    frame    = frameBeginDrawable(pacer->swapchain, drawable);
+    if (frame)
+      frame->targetPresentTime = timing.targetPresentTime;
 
-  callbackFrame = frame;
-  callback(frame, &timing, user);
+    callbackFrame = frame;
+    callback(frame, &timing, user);
 
-  /* callback destruction clears pacer before releasing its wrapper. */
-  if (pacer && frame && frame->drawable == update.drawable)
-    GPUEndFrame(frame);
+    /* callback destruction clears pacer before releasing its wrapper. */
+    if (pacer && frame && frame->drawable == drawable)
+      GPUEndFrame(frame);
 
-  callbackFrame = NULL;
-  inCallback    = false;
+    callbackFrame = NULL;
+    inCallback    = false;
+  }
   [self release];
 }
 
