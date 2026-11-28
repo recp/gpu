@@ -123,6 +123,15 @@ GPU_EXPORT
 void
 GPUSetFramePacerPaused(GPUFramePacer *pacer, bool paused);
 
+/* the rates changed in place, checked as GPUFramePacerCreateInfo's (zero
+ * rates: the system's choice again): on the pacer's thread, its callback
+ * too, from a coming refresh on. a fast scroll asks GPU_FRAME_RATE_FASTEST
+ * and gives it back when it slows; a link made again (Metal, after a manual
+ * frame) keeps the rates last set */
+GPU_EXPORT
+GPUResult
+GPUSetFramePacerRate(GPUFramePacer *pacer, float minRate, float maxRate, float preferredRate);
+
 GPU_EXPORT
 void
 GPUDestroyFramePacer(GPUFramePacer *pacer);

@@ -353,6 +353,14 @@ pacerClockRun(GPUPacerClock *clock, bool run) {
     ResetEvent(clock->resume);
 }
 
+/* the display's rate isn't asked here: the pacer thins the refreshes */
+GPU_HIDE
+void
+pacerClockRate(GPUPacerClock *clock, const GPUPacer *pacer) {
+  (void)clock;
+  (void)pacer;
+}
+
 GPU_HIDE
 void
 pacerClockDestroy(GPUPacerClock *clock) {

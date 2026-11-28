@@ -33,6 +33,7 @@ typedef struct GPUFrameApi {
   GPUFrame* (*beginDrawable)(struct GPUApi *api, GPUSwapchain *swapchain, void *drawable);
   GPUResult (*createPacer)(GPUFramePacer *pacer, const GPUFramePacerCreateInfo *info);
   void (*pausePacer)(GPUFramePacer *pacer, bool paused);
+  GPUResult (*ratePacer)(GPUFramePacer *pacer, float minRate, float maxRate, float preferredRate);
   void (*destroyPacer)(GPUFramePacer *pacer);
   bool (*prepareWithPacer)(GPUFramePacer *pacer);
   GPUResult (*observe)(GPUFrame *frame, GPUFrameFeedback *feedback);

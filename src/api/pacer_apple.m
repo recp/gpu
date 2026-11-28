@@ -152,6 +152,16 @@ pacerClockRun(GPUPacerClock *clock, bool run) {
 
 GPU_HIDE
 void
+pacerClockRate(GPUPacerClock *clock, const GPUPacer *pacer) {
+  if (@available(macOS 14.0, iOS 15.0, tvOS 15.0, *)) {
+    if (clock && clock->target)
+      clock->target->link.preferredFrameRateRange = frameRateRange(pacer->minRate, pacer->maxRate,
+                                                                   pacer->preferredRate);
+  }
+}
+
+GPU_HIDE
+void
 pacerClockDestroy(GPUPacerClock *clock) {
   GPUPacerLinkTarget *target;
 

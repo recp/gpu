@@ -316,6 +316,31 @@ mt_pauseFramePacer(GPUFramePacer *pacer, bool paused) {
 #endif
 }
 
+/* the link's range set in place; a link made again after a manual frame takes it too */
+static GPUResult
+mt_rateFramePacer(GPUFramePacer *pacer, float minRate, float maxRate, float preferredRate) {
+#if __has_include(<QuartzCore/CAMetalDisplayLink.h>)
+  GPUFramePacerTarget *target;
+
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    target = pacer->_priv;
+    if (!target || target->thread != [NSThread currentThread])
+      return GPU_ERROR_INVALID_ARGUMENT;
+
+    target->rateRange = frameRateRange(minRate, maxRate, preferredRate);
+    if (target->link)
+      target->link.preferredFrameRateRange = target->rateRange;
+
+    return GPU_OK;
+  }
+#endif
+  (void)pacer;
+  (void)minRate;
+  (void)maxRate;
+  (void)preferredRate;
+  return GPU_ERROR_UNSUPPORTED;
+}
+
 static void
 mt_destroyFramePacer(GPUFramePacer *pacer) {
 #if __has_include(<QuartzCore/CAMetalDisplayLink.h>)
@@ -373,6 +398,7 @@ mt_initFrame(GPUFrameApi *api) {
   api->beginDrawable = mt_beginDrawableFrame;
   api->createPacer   = mt_createFramePacer;
   api->pausePacer    = mt_pauseFramePacer;
+  api->ratePacer     = mt_rateFramePacer;
   api->destroyPacer  = mt_destroyFramePacer;
   api->prepareWithPacer = mt_prepareWithPacer;
   api->observe = mt_observeFrame;

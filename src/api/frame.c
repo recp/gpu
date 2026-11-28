@@ -184,6 +184,16 @@ GPUBeginFrame(GPUSwapchain *swapchain) {
   return frameBegin(swapchain, NULL);
 }
 
+/* rates as GPUFramePacerCreateInfo takes them: finite, none negative,
+ * min <= preferred <= max where given */
+static bool
+frameRatesValid(float minRate, float maxRate, float preferredRate) {
+  return isfinite(minRate) && isfinite(maxRate) && isfinite(preferredRate)
+         && minRate >= 0.0f && maxRate >= 0.0f && preferredRate >= 0.0f
+         && minRate <= maxRate && preferredRate <= maxRate
+         && !(preferredRate > 0.0f && preferredRate < minRate);
+}
+
 GPU_EXPORT
 GPUResult
 GPUCreateFramePacer(GPUDevice                     *device,
@@ -201,10 +211,7 @@ GPUCreateFramePacer(GPUDevice                     *device,
       || info->chain.sType != GPU_STRUCTURE_TYPE_FRAME_PACER_CREATE_INFO
       || info->chain.structSize < sizeof(*info) || info->chain.pNext
       || info->latencyFrames > 2u
-      || !isfinite(info->minRate) || !isfinite(info->maxRate) || !isfinite(info->preferredRate)
-      || info->minRate < 0.0f || info->maxRate < 0.0f || info->preferredRate < 0.0f
-      || info->minRate > info->maxRate || info->preferredRate > info->maxRate
-      || (info->preferredRate > 0.0f && info->preferredRate < info->minRate))
+      || !frameRatesValid(info->minRate, info->maxRate, info->preferredRate))
     return GPU_ERROR_INVALID_ARGUMENT;
 
   api = deviceApi(device);
@@ -239,6 +246,21 @@ GPUSetFramePacerPaused(GPUFramePacer *pacer, bool paused) {
   api = pacer ? deviceApi(pacer->device) : NULL;
   if (api && api->frame.pausePacer)
     api->frame.pausePacer(pacer, paused);
+}
+
+GPU_EXPORT
+GPUResult
+GPUSetFramePacerRate(GPUFramePacer *pacer, float minRate, float maxRate, float preferredRate) {
+  GPUApi *api;
+
+  if (!pacer || !frameRatesValid(minRate, maxRate, preferredRate))
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  api = deviceApi(pacer->device);
+  if (!api || !api->frame.ratePacer)
+    return GPU_ERROR_UNSUPPORTED;
+
+  return api->frame.ratePacer(pacer, minRate, maxRate, preferredRate);
 }
 
 GPU_EXPORT

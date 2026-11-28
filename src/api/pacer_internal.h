@@ -53,6 +53,7 @@ struct GPUPacer {
   GPUFrame      *callbackFrame;
   uintptr_t      owner;         /* the thread pacer calls come from (the creating thread) */
   double         previousPresent;
+  double         previousPeriod; /* the last tick's: a change starts the intervals again */
   double         nextTick;      /* a rate below the display's: the next refresh that ticks */
   float          minRate;
   float          maxRate;
@@ -86,6 +87,12 @@ GPU_HIDE
 void
 pacerClockDestroy(GPUPacerClock *clock);
 
+/* the pacer's rates changed: a clock that asks the display for them asks
+ * again (the others' refreshes are thinned by the pacer itself) */
+GPU_HIDE
+void
+pacerClockRate(GPUPacerClock *clock, const GPUPacer *pacer);
+
 /* a clock that ticks on a thread of its own serializes the pacer's calls */
 GPU_HIDE
 void
@@ -109,7 +116,7 @@ GPU_HIDE
 void
 framePacerVsync(GPUPacer *pacer, const GPUPacerVsync *vsync);
 
-/* createPacer, pausePacer, destroyPacer and prepareWithPacer on the platform's
+/* createPacer, pausePacer, ratePacer, destroyPacer and prepareWithPacer on the platform's
  * clock; the backend brings beginDrawable (no wait) and acquireDrawable */
 GPU_HIDE
 void

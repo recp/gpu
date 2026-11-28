@@ -254,7 +254,6 @@ GPUResult
 pacerClockCreate(GPUPacer *pacer, GPUSwapchain *swapchain, GPUPacerClock **outClock) {
   GPUPacerClock  *clock;
   AChoreographer *choreographer;
-  float           rate;
 
   *outClock = NULL;
   if (!pacerClockSupported())
@@ -280,17 +279,32 @@ pacerClockCreate(GPUPacer *pacer, GPUSwapchain *swapchain, GPUPacerClock **outCl
     clock->refreshRegistered = true;
   }
 
-  /* a rate asked of the display for this window (API 30); ticks keep to it too */
-  if (pacer->maxRate > 0.0f && pacer__android.setFrameRate && swapchain->surface
+  /* the window held for the rates asked of the display (API 30), those made
+   * with the pacer and those set after; ticks keep to them too */
+  if (pacer__android.setFrameRate && swapchain->surface
       && swapchain->surface->type == GPU_SURFACE_ANDROID_NATIVE_WINDOW
       && (clock->window = swapchain->surface->nativeHandle)) {
     ANativeWindow_acquire(clock->window);
-    rate = pacer->preferredRate > 0.0f ? pacer->preferredRate : pacer->maxRate;
-    clock->rateSet = pacer__android.setFrameRate(clock->window, rate, 0) == 0;
+    pacerClockRate(clock, pacer);
   }
 
   *outClock = clock;
   return GPU_OK;
+}
+
+/* a rate asked of the display for the window; none (zero) gives the choice
+ * back to the system */
+GPU_HIDE
+void
+pacerClockRate(GPUPacerClock *clock, const GPUPacer *pacer) {
+  float rate;
+
+  if (!clock || clock->dead || !clock->window)
+    return;
+
+  rate = pacer->maxRate > 0.0f ? (pacer->preferredRate > 0.0f ? pacer->preferredRate : pacer->maxRate) : 0.0f;
+  if (rate > 0.0f || clock->rateSet)
+    clock->rateSet = pacer__android.setFrameRate(clock->window, rate, 0) == 0 && rate > 0.0f;
 }
 
 GPU_HIDE

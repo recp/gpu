@@ -82,6 +82,13 @@ framePacerVsync(GPUPacer *p, const GPUPacerVsync *v) {
     p->nextTick = v->vsync + interval;
   }
 
+  /* a period that changed (a rate set, the display's own) makes the last
+   * estimate no measure of the interval to this one: unknown, as after a
+   * resume (else a faster rate's first target can fall on the last one) */
+  if (p->previousPeriod > 0.0 && fabs(period - p->previousPeriod) > 0.1 * p->previousPeriod)
+    p->previousPresent = 0.0;
+  p->previousPeriod = period;
+
   /* estimates follow the usual compositor pipeline: a frame submitted before
    * the next refresh is composed then and shown one refresh later */
   timing.deadline          = v->deadline > 0.0 ? v->deadline : v->vsync + period * p->latencyFrames;
@@ -169,6 +176,28 @@ pacerPause(GPUFramePacer *fp, bool paused) {
     pacerClockUnlock(clock);
 }
 
+static GPUResult
+pacerRate(GPUFramePacer *fp, float minRate, float maxRate, float preferredRate) {
+  GPUPacer *p;
+
+  if (!(p = fp->_priv) || !pacerOnOwner(p))
+    return GPU_ERROR_INVALID_ARGUMENT;
+
+  if (p->anyThread)
+    pacerClockLock(p->clock);
+
+  p->minRate       = minRate;
+  p->maxRate       = maxRate;
+  p->preferredRate = preferredRate;
+  p->nextTick      = 0.0; /* the next refresh ticks, at the new rate after it */
+  pacerClockRate(p->clock, p);
+
+  if (p->anyThread)
+    pacerClockUnlock(p->clock);
+
+  return GPU_OK;
+}
+
 static void
 pacerDestroy(GPUFramePacer *fp) {
   GPUPacerClock *clock;
@@ -228,6 +257,7 @@ GPU_HIDE uintptr_t pacerThreadSelf(void) { return 0u; }
 GPU_HIDE double    pacerHostSeconds(void) { return 0.0; }
 GPU_HIDE void      pacerClockRun(GPUPacerClock *clock, bool run) { (void)clock; (void)run; }
 GPU_HIDE void      pacerClockDestroy(GPUPacerClock *clock) { (void)clock; }
+GPU_HIDE void      pacerClockRate(GPUPacerClock *clock, const GPUPacer *pacer) { (void)clock; (void)pacer; }
 GPU_HIDE void      pacerClockLock(GPUPacerClock *clock) { (void)clock; }
 GPU_HIDE void      pacerClockUnlock(GPUPacerClock *clock) { (void)clock; }
 
@@ -246,6 +276,7 @@ void
 framePacerUseClock(GPUFrameApi *api) {
   api->createPacer      = pacerCreate;
   api->pausePacer       = pacerPause;
+  api->ratePacer        = pacerRate;
   api->destroyPacer     = pacerDestroy;
   api->prepareWithPacer = pacerPrepare;
 }
