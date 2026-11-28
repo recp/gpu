@@ -413,6 +413,23 @@ if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS"
   set_tests_properties(frame-pacer PROPERTIES
     ENVIRONMENT "${gpu_frame_pacer_env}"
     SKIP_RETURN_CODE 77 LABELS "frame-pacer;onscreen" TIMEOUT 40 RUN_SERIAL TRUE)
+  # frames and GPU work where the system doesn't show the view (covered on
+  # macOS, the background on iOS), on any Apple backend; static builds also
+  # refuse by hand (GPU_TEST_REFUSAL)
+  add_executable(gpu-apple-background-test apple_background.m apple_window.m runner.c)
+  target_link_libraries(gpu-apple-background-test PRIVATE gpu)
+  gpu_link_apple_framework(gpu-apple-background-test AppKit "${GPU_FRAMEWORK_UI}")
+  gpu_link_apple_framework(gpu-apple-background-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
+  gpu_link_apple_framework(gpu-apple-background-test QuartzCore "${GPU_FRAMEWORK_QUARTZCORE}")
+  gpu_enable_c11_atomics(gpu-apple-background-test)
+  if(NOT BUILD_SHARED_LIBS AND (GPU_BUILD_VULKAN OR GPU_BUILD_WEBGPU))
+    target_compile_definitions(gpu-apple-background-test PRIVATE GPU_TEST_REFUSAL=1)
+  endif()
+
+  add_test(NAME apple-background COMMAND gpu-apple-background-test)
+  set_tests_properties(apple-background PROPERTIES
+    ENVIRONMENT "${gpu_frame_pacer_env}"
+    SKIP_RETURN_CODE 77 LABELS "frame-pacer" TIMEOUT 40 RUN_SERIAL TRUE)
 elseif(WIN32 AND (GPU_BUILD_DX12 OR GPU_BUILD_VULKAN OR GPU_BUILD_WEBGPU))
   add_executable(gpu-frame-pacer-test frame_pacer.c frame_pacer_win32.c runner.c)
   target_link_libraries(gpu-frame-pacer-test PRIVATE gpu)
