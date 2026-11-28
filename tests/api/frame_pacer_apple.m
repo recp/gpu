@@ -68,6 +68,11 @@ pacerHostPresentKind(void) {
   return "display";
 }
 
+double
+pacerHostDisplayRate(void) {
+  return appleWindowDisplayRate(pacer__window);
+}
+
 void
 pacerHostClose(void) {
   appleWindowClose(pacer__window);

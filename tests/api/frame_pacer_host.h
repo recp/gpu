@@ -49,6 +49,11 @@ pacerHostPresented(double *times, uint32_t capacity);
 const char*
 pacerHostPresentKind(void);
 
+/* the fastest refresh the window's display gives this app, Hz: what a pacer
+ * with no rate asked ticks at there; zero where the host can't tell */
+double
+pacerHostDisplayRate(void);
+
 void
 pacerHostClose(void);
 

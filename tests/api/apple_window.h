@@ -60,6 +60,13 @@ appleWindowWaitShown(AppleWindow *window, bool shown, double seconds);
 void
 appleWindowResize(AppleWindow *window, uint32_t width, uint32_t height);
 
+/* the fastest refresh its display gives this app, Hz: the screen's most (an
+ * phone app's 60 without CADisableMinimumFrameDurationOnPhone in its
+ * Info.plist); zero while the system may hold it lower (Low Power Mode, a
+ * thermal limit) */
+double
+appleWindowDisplayRate(AppleWindow *window);
+
 /* hidden as the platform hides it: on macOS covered by another window, on iOS
  * the app sent to the background (kept running there by a background task).
  * False when it can't be, or wasn't hidden within that long */

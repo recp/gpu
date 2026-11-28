@@ -118,6 +118,12 @@ pacerHostPresentKind(void) {
   return "ready in the queue (image reader, GPU done)";
 }
 
+/* the refresh of a display the image reader isn't on: the cadence alone checked */
+double
+pacerHostDisplayRate(void) {
+  return 0.0;
+}
+
 void
 pacerHostClose(void) {
   if (pacer__reader)

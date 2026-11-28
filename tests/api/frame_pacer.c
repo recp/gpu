@@ -16,8 +16,8 @@
 
 /* the frame pacer on every backend: ticks near the display's refresh on the
  * creating thread, pause stops them, frames drawn in ticks and by hand,
- * destruction in and out of a tick with no tick after it, a lower rate, and
- * how long a tick's frame takes to reach the display */
+ * destruction in and out of a tick with no tick after it, a lower rate, the
+ * display's fastest, and how long a tick's frame takes to reach the display */
 
 #include "frame_pacer_host.h"
 #include "test.h"
@@ -542,7 +542,7 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
   PacerTest state;
   uint32_t  ticks, frames;
   bool      ok, unconsumed;
-  double    rate, start;
+  double    rate, start, fastest;
 #if defined(PACER_TEST_VULKAN)
   uint32_t  frameIndex;
 #endif
@@ -745,6 +745,28 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
     if (!ok)
       goto cleanup;
   }
+
+  /* the display's fastest asked: each refresh at the most the host says it
+   * gives (where it can't tell, at the ticks' own refresh) */
+  reset_counts(&state, PHASE_IDLE);
+  ok = make_pacer(&state, 1u, GPU_FRAME_RATE_FASTEST);
+  if (ok)
+    GPUSetFramePacerPaused(state.pacer, false);
+  start = pacerHostNow();
+  pacerHostPump(1.0);
+  if ((fastest = pacerHostDisplayRate()) <= 0.0) {
+    double refreshes[INTERVAL_CAPACITY], refresh;
+
+    memcpy(refreshes, state.refreshes, state.refreshCount * sizeof(*refreshes));
+    refresh = percentile(refreshes, state.refreshCount, 0.5);
+    fastest = refresh > 0.0 ? 1.0 / refresh : rate;
+  }
+  ok = ok && check_cadence(&state, "fastest asked", pacerHostNow() - start, fastest) && !state.failed;
+  printf("pacer: the display's fastest asked ticks at %.0f Hz=%s\n", fastest, ok ? "pass" : "fail");
+  GPUDestroyFramePacer(state.pacer);
+  state.pacer = NULL;
+  if (!ok)
+    goto cleanup;
 
   /* the swapchain destroyed in a tick */
   reset_counts(&state, PHASE_DESTROY_SWAPCHAIN);

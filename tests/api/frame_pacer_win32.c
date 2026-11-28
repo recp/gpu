@@ -97,6 +97,12 @@ pacerHostPresentKind(void) {
   return "display";
 }
 
+/* each vblank of the output's mode, the system's to choose: the cadence alone checked */
+double
+pacerHostDisplayRate(void) {
+  return 0.0;
+}
+
 void
 pacerHostClose(void) {
   if (pacer__window)

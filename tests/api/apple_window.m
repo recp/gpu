@@ -17,6 +17,7 @@
 #include "apple_window.h"
 #import <QuartzCore/QuartzCore.h>
 #import <TargetConditionals.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -166,6 +167,29 @@ appleWindowResize(AppleWindow *window, uint32_t width, uint32_t height) {
   }
 }
 
+double
+appleWindowDisplayRate(AppleWindow *window) {
+  NSProcessInfo *process;
+  id             faster;
+  double         rate;
+
+  if (!window)
+    return 0.0;
+
+  rate = 0.0;
+  @autoreleasepool {
+    process = [NSProcessInfo processInfo];
+    if (!process.lowPowerModeEnabled && process.thermalState < NSProcessInfoThermalStateSerious) {
+      rate   = (double)window->window.windowScene.screen.maximumFramesPerSecond;
+      faster = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CADisableMinimumFrameDurationOnPhone"];
+      if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone
+          && !([faster respondsToSelector:@selector(boolValue)] && [faster boolValue]))
+        rate = fmin(rate, 60.0);
+    }
+  }
+  return rate;
+}
+
 /* no public call sends an app to the background: UIApplication's suspend does
  * what the home gesture does. The background task keeps the app running there
  * (the system suspends it seconds after otherwise) */
@@ -291,6 +315,25 @@ appleWindowResize(AppleWindow *window, uint32_t width, uint32_t height) {
   @autoreleasepool {
     [window->window setContentSize:NSMakeSize(width, height)];
   }
+}
+
+double
+appleWindowDisplayRate(AppleWindow *window) {
+  NSProcessInfo *process;
+  NSScreen      *screen;
+  double         rate;
+
+  if (!window)
+    return 0.0;
+
+  rate = 0.0;
+  @autoreleasepool {
+    process = [NSProcessInfo processInfo];
+    screen  = window->window.screen ? window->window.screen : [NSScreen mainScreen];
+    if (!process.lowPowerModeEnabled && process.thermalState < NSProcessInfoThermalStateSerious)
+      rate = (double)screen.maximumFramesPerSecond;
+  }
+  return rate;
 }
 
 bool
