@@ -923,7 +923,9 @@ vk__waitResourcesIdle(GPUSwapchainVk *swapchain) {
 
   vk_waitSwapchainIdle(swapchain);
 
-  return vk__waitPresent(swapchain) || vkDeviceWaitIdle(swapchain->device) == VK_SUCCESS;
+  /* from the background no device wait (vk_gpuRefused): MoltenVK's commits a
+   * command buffer the system refuses. The swapchain's own work is waited */
+  return vk__waitPresent(swapchain) || vk_gpuRefused() || vkDeviceWaitIdle(swapchain->device) == VK_SUCCESS;
 }
 
 static bool

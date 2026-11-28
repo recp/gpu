@@ -29,6 +29,11 @@ vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
   renderFinished = swapchain->renderFinished[swapchain->acquiredImageIndex];
   waitStage      = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
+  /* nothing to MoltenVK from the background (vk_gpuRefused) */
+  if (vk_gpuRefused()) {
+    return false;
+  }
+
   if (!sync->fence || !renderFinished
       || vkResetFences(swapchain->device, 1u, &sync->fence) != VK_SUCCESS) {
     vk_setSwapchainStatus(swapchain, VK_ERROR_UNKNOWN);
@@ -57,7 +62,9 @@ vk__presentAcquiredFrame(GPUSwapchainVk *swapchain) {
 
 /* an acquired image's semaphore is waited by an empty batch, its fence waited
  * for: a swapchain goes with no acquire still signalling (a semaphore destroyed
- * with its signal pending loses the device on MoltenVK). Not presented */
+ * with its signal pending loses the device on MoltenVK). Not presented. A held
+ * image too; from the background no batch goes (vk_gpuRefused): its acquire
+ * was made before, and its signal has landed */
 GPU_HIDE
 void
 vk_settleAcquiredFrame(GPUSwapchainVk *swapchain) {
@@ -66,7 +73,14 @@ vk_settleAcquiredFrame(GPUSwapchainVk *swapchain) {
   VkPipelineStageFlags waitStage;
   VkResult             result;
 
-  if (!swapchain || !swapchain->frameActive || !swapchain->imageAcquired || swapchain->frameSubmitted) {
+  if (!swapchain || (!swapchain->imageHeld
+                     && (!swapchain->frameActive || !swapchain->imageAcquired || swapchain->frameSubmitted))) {
+    return;
+  }
+
+  if (vk_gpuRefused()) {
+    swapchain->imageAcquired = false;
+    swapchain->imageHeld     = false;
     return;
   }
 
@@ -91,6 +105,31 @@ vk_settleAcquiredFrame(GPUSwapchainVk *swapchain) {
 
   (void)vkWaitForFences(swapchain->device, 1u, &sync->fence, VK_TRUE, UINT64_MAX);
   swapchain->imageAcquired = false;
+  swapchain->imageHeld     = false;
+}
+
+/* the frame's image: a held one (vk_endFrame), its semaphore still to be
+ * waited, else the next one acquired into the slot's semaphore */
+static VkResult
+vk__takeImage(GPUSwapchainVk *swapchain, GPUFrameSyncVk *sync, uint64_t timeout, uint32_t *imageIndex) {
+  VkResult result;
+
+  if (swapchain->imageHeld) {
+    *imageIndex          = swapchain->acquiredImageIndex;
+    swapchain->imageHeld = false;
+    return VK_SUCCESS;
+  }
+
+  vk_swapchainClaim(swapchain);
+  result = vkAcquireNextImageKHR(swapchain->device,
+                                 swapchain->swapchain,
+                                 timeout,
+                                 sync->imageAvailable,
+                                 VK_NULL_HANDLE,
+                                 imageIndex);
+  vk_swapchainUnclaim(swapchain);
+
+  return result;
 }
 
 GPU_HIDE
@@ -149,6 +188,15 @@ vk_beginFrame(GPUApi *api, GPUSwapchain *swapchainObj) {
     return NULL;
   }
 
+  /* a view the system doesn't show gives MoltenVK no drawable for up to a
+   * second (taken at the frame's first pass), and from the background the
+   * acquire's own semaphore signal is a command buffer the system refuses:
+   * no frame there, at once */
+  if (vk_framesRefused(swapchain)) {
+    swapchainSetStatus(swapchainObj, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
+    return NULL;
+  }
+
   sync = &swapchain->frameSync[swapchain->frameIndex];
 
   if (!sync->fence) {
@@ -173,14 +221,7 @@ vk_beginFrame(GPUApi *api, GPUSwapchain *swapchainObj) {
   }
 
   imageIndex = 0u;
-  vk_swapchainClaim(swapchain);
-  result     = vkAcquireNextImageKHR(swapchain->device,
-                                     swapchain->swapchain,
-                                     UINT64_MAX,
-                                     sync->imageAvailable,
-                                     VK_NULL_HANDLE,
-                                     &imageIndex);
-  vk_swapchainUnclaim(swapchain);
+  result     = vk__takeImage(swapchain, sync, UINT64_MAX, &imageIndex);
   vk_setSwapchainStatus(swapchain, result);
 
   if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
@@ -262,6 +303,13 @@ vk_beginDrawable(GPUApi *api, GPUSwapchain *swapchainObj, void *pacer) {
     return NULL;
   }
 
+  /* a display link ticks where the view isn't shown and in the background:
+   * no frame there (vk_beginFrame) */
+  if (vk_framesRefused(swapchain)) {
+    swapchainSetStatus(swapchainObj, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
+    return NULL;
+  }
+
   sync = &swapchain->frameSync[swapchain->frameIndex];
 
   if (!sync->fence || vkGetFenceStatus(swapchain->device, sync->fence) != VK_SUCCESS
@@ -301,6 +349,12 @@ vk_acquireDrawable(GPUApi *api, GPUFrame *frame) {
     return swapchain && swapchain->imageAcquired;
   }
 
+  /* gone to the background, or out of view, since its tick */
+  if (vk_framesRefused(swapchain)) {
+    swapchainSetStatus(swapchain->gpuSwapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
+    return false;
+  }
+
   /* a paced frame was begun because the display can take it (the tick's
    * checks): its image is waited for as a drawn frame's must be, until a
    * backstop of a few refreshes past its deadline (Android's queue frees a
@@ -313,14 +367,7 @@ vk_acquireDrawable(GPUApi *api, GPUFrame *frame) {
 
   sync       = &swapchain->frameSync[swapchain->frameIndex];
   imageIndex = 0u;
-  vk_swapchainClaim(swapchain);
-  result     = vkAcquireNextImageKHR(swapchain->device,
-                                     swapchain->swapchain,
-                                     timeout,
-                                     sync->imageAvailable,
-                                     VK_NULL_HANDLE,
-                                     &imageIndex);
-  vk_swapchainUnclaim(swapchain);
+  result     = vk__takeImage(swapchain, sync, timeout, &imageIndex);
 
   if (result == VK_TIMEOUT || result == VK_NOT_READY) {
     return false;
@@ -353,13 +400,20 @@ vk_endFrame(GPUApi *api, GPUFrame *frame) {
     return;
   }
 
-  /* a paced frame that never took its image left the slot unused */
+  /* a paced frame that never took its image left the slot unused. One whose
+   * submit failed (refused from the background, say), or one ended in the
+   * background, keeps its image, slot and signalled semaphore for the next
+   * frame: presenting it would show an image never drawn, or be refused */
   if (swapchain->imageAcquired) {
-    if (!swapchain->frameSubmitted) {
-      (void)vk__presentAcquiredFrame(swapchain);
-    }
+    if (!swapchain->frameSubmitted && (swapchain->frameScheduled || vk_gpuRefused())) {
+      swapchain->imageHeld = true;
+    } else {
+      if (!swapchain->frameSubmitted) {
+        (void)vk__presentAcquiredFrame(swapchain);
+      }
 
-    swapchain->frameIndex = (swapchain->frameIndex + 1u) % swapchain->imageCount;
+      swapchain->frameIndex = (swapchain->frameIndex + 1u) % swapchain->imageCount;
+    }
   }
 
   swapchain->imageAcquired  = false;

@@ -77,6 +77,11 @@ vk__queueSubmit(GPUQueueVk         *queue,
                 uint64_t           *serial) {
   VkResult result;
 
+  /* from the background nothing reaches MoltenVK (vk_gpuRefused) */
+  if (vk_gpuRefused()) {
+    return VK_ERROR_NOT_PERMITTED_EXT;
+  }
+
   vk_queueSubmitLock(queue);
   result = vkQueueSubmit(queue->queRaw, 1u, info, fence);
 
@@ -264,11 +269,15 @@ vk__reportQueueError(GPUCommandBuffer *cmdb,
     type = GPU_DEVICE_ERROR_OUT_OF_MEMORY;
   }
 
-  snprintf(message,
-           sizeof(message),
-           "Vulkan %s failed: %d",
-           operation,
-           result);
+  if (result == VK_ERROR_NOT_PERMITTED_EXT) {
+    snprintf(message, sizeof(message), "Vulkan %s refused: the app is in the background", operation);
+  } else {
+    snprintf(message,
+             sizeof(message),
+             "Vulkan %s failed: %d",
+             operation,
+             result);
+  }
   deviceReportError(device,
                     type,
                     GPU_DEVICE_LOST_REASON_UNKNOWN,
@@ -813,7 +822,8 @@ vk__waitTransfer(GPUQueue          *queue,
     if (vk__queueLost(native))
       return GPU_ERROR_DEVICE_LOST;
 
-    (void)vkDeviceWaitIdle(device->device);
+    if (!vk_gpuRefused())
+      (void)vkDeviceWaitIdle(device->device);
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
@@ -844,6 +854,20 @@ vk__flushTransfers(GPUQueue *queue, bool wait) {
   if (vk__queueLost(native)) {
     vk_abortTransfer(queue);
     return GPU_ERROR_DEVICE_LOST;
+  }
+
+  /* from the background (vk_gpuRefused) an open batch stays open: it goes
+   * with the first submit once the app is back. What's in flight is waited */
+  if (native->transferOpen && vk_gpuRefused()) {
+    deviceReportError(queue->_device,
+                      GPU_DEVICE_ERROR_BACKEND,
+                      GPU_DEVICE_LOST_REASON_UNKNOWN,
+                      GPU_ERROR_BACKEND_FAILURE,
+                      "Vulkan transfer submit refused: the app is in the background");
+    for (i = 0u; wait && i < GPU_VK_TRANSFER_SLOT_COUNT; i++)
+      (void)vk__waitTransfer(queue, &native->transferSlots[i], false);
+
+    return GPU_ERROR_BACKEND_FAILURE;
   }
 
   if (native->transferOpen) {
@@ -1016,6 +1040,48 @@ vk__finishCommandBuffers(uint32_t                 count,
                         recycle ? vk__recycleCommandBuffer : NULL,
                         result);
   }
+}
+
+/* work submitted from the background (vk_gpuRefused): those command buffers
+ * fail alone and at once, reported as a backend failure; the queue goes on,
+ * and an open transfer batch waits for the first submit once the app is back */
+static GPUResult
+vk__refuseCommandBuffers(uint32_t                 count,
+                         GPUCommandBuffer *const *buffers,
+                         const char              *operation) {
+  vk__reportQueueError(buffers[0], operation, VK_ERROR_NOT_PERMITTED_EXT);
+  vk__finishCommandBuffers(count, buffers, true, GPU_ERROR_BACKEND_FAILURE);
+  return GPU_ERROR_BACKEND_FAILURE;
+}
+
+/* a refused submit never runs: what it would signal is given, as Metal gives
+ * a failed command buffer's, so what waits on it once the app is back isn't
+ * held for good. A value the semaphore is past already stays */
+static void
+vk__settleSignals(GPUDeviceVk *device, const GPUQueueSubmitExInfo *info) {
+#if defined(__APPLE__)
+  VkSemaphoreSignalInfo signal = {0};
+  GPUSemaphoreVk       *semaphore;
+  uint64_t              value;
+  uint32_t              i;
+
+  signal.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO;
+  for (i = 0u; i < info->signalCount; i++) {
+    semaphore = info->pSignals[i].semaphore ? info->pSignals[i].semaphore->_priv : NULL;
+    if (!semaphore || semaphore->device != device->device || !semaphore->semaphore
+        || vkGetSemaphoreCounterValue(device->device, semaphore->semaphore, &value) != VK_SUCCESS
+        || value >= info->pSignals[i].value) {
+      continue;
+    }
+
+    signal.semaphore = semaphore->semaphore;
+    signal.value     = info->pSignals[i].value;
+    (void)vkSignalSemaphore(device->device, &signal);
+  }
+#else
+  GPU__UNUSED(device);
+  GPU__UNUSED(info);
+#endif
 }
 
 static VkPipelineStageFlags
@@ -1193,6 +1259,11 @@ vk_submitEx(GPUQueue                   *queueHandle,
     }
 
     commands[i] = natives[i]->command;
+  }
+
+  if (vk_gpuRefused()) {
+    vk__settleSignals(device, info);
+    return vk__refuseCommandBuffers(info->commandBufferCount, info->ppCommandBuffers, "advanced queue submit");
   }
 
   flushResult = vk__flushTransfers(queueHandle, false);
@@ -1427,6 +1498,23 @@ vk_frameCompletionDone(GPUFrameSyncVk *sync) {
   return completed;
 }
 
+/* a queue's work in flight waited for, nothing submitted: from the background
+ * (vk_gpuRefused) an open transfer batch stays open */
+GPU_HIDE
+void
+vk_waitQueueInFlight(GPUQueue *queue) {
+  GPUQueueVk *native;
+  uint32_t    slot;
+
+  if (!queue || !(native = queue->_priv))
+    return;
+
+  for (slot = 0u; slot < GPU_VK_TRANSFER_SLOT_COUNT; slot++)
+    (void)vk__waitTransfer(queue, &native->transferSlots[slot], false);
+
+  vk__waitQueueIdle(native);
+}
+
 GPU_HIDE
 void
 vk_waitSwapchainIdle(GPUSwapchainVk *swapchain) {
@@ -1485,7 +1573,8 @@ vk_waitDeviceIdle(GPUDevice *__restrict device) {
   }
 
   /* vkDeviceWaitIdle would wait for what a lost queue abandoned, maybe for
-   * good: then each queue's own work instead */
+   * good: then each queue's own work instead. So too from the background,
+   * where MoltenVK's commits a command buffer the system refuses */
   for (i = 0u; i < deviceVk->nCreatedQueues; i++) {
     if (deviceVk->createdQueues[i] && vk__queueLost(deviceVk->createdQueues[i]->_priv))
       break;
@@ -1498,6 +1587,13 @@ vk_waitDeviceIdle(GPUDevice *__restrict device) {
     }
 
     return GPU_ERROR_DEVICE_LOST;
+  }
+
+  if (vk_gpuRefused()) {
+    for (j = 0u; j < deviceVk->nCreatedQueues; j++)
+      vk_waitQueueInFlight(deviceVk->createdQueues[j]);
+
+    return flushResult;
   }
 
   before = gpuRetireLoad(&deviceVk->retire.serial);
@@ -2163,6 +2259,12 @@ vk_commitCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
     return GPU_ERROR_BACKEND_FAILURE;
   }
 
+  if (vk_gpuRefused()) {
+    vk__reportQueueError(cmdb, "queue submit", VK_ERROR_NOT_PERMITTED_EXT);
+    finishCommandBuffer(cmdb, vk__recycleCommandBuffer, GPU_ERROR_BACKEND_FAILURE);
+    return GPU_ERROR_BACKEND_FAILURE;
+  }
+
   commitResult = vk__flushTransfers(queue->queue, false);
 
   if (commitResult != GPU_OK) {
@@ -2306,6 +2408,10 @@ vk_submitCommandBuffers(GPUQueue                *__restrict queueHandle,
     }
 
     commands[i] = natives[i]->command;
+  }
+
+  if (vk_gpuRefused()) {
+    return vk__refuseCommandBuffers(count, buffers, "queue batch submit");
   }
 
   flushResult = vk__flushTransfers(queueHandle, false);

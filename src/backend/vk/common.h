@@ -744,6 +744,7 @@ struct GPUQueueVk {
 
 typedef struct GPUSurfaceVk {
   void        *metalLayer;
+  void        *shown;      /* appleWatchView's: frames only while the system shows the view */
   VkInstance   inst;
   VkSurfaceKHR surface;
   uint32_t     formats[GPU_FORMAT_COUNT];
@@ -862,6 +863,7 @@ struct GPUSwapchainVk {
   bool              frameScheduled;
   bool              frameSubmitted;
   bool              imageAcquired;   /* a paced frame acquires at its first use */
+  bool              imageHeld;       /* the acquired image of a frame refused its submit: the next frame's */
   struct GPUPresenterVk *presenter; /* presents off the submitting thread; NULL: in the submit */
   struct GPUFrameFeedback *timingFeedbacks[GPU_VK_TIMING_RING]; /* by present id, oldest first */
   uint32_t          timingIds[GPU_VK_TIMING_RING];
@@ -1156,6 +1158,10 @@ void
 vk_waitSwapchainIdle(GPUSwapchainVk *swapchain);
 
 GPU_HIDE
+void
+vk_waitQueueInFlight(GPUQueue *queue);
+
+GPU_HIDE
 bool
 vk_reserveCommandBuffers(GPUQueue *queue, uint32_t minimumCount);
 
@@ -1229,6 +1235,31 @@ vk_setDebugName(GPUDevice   *device,
 }
 
 #endif
+
+/* iOS: the app in the background. The system refuses its GPU work, and
+ * MoltenVK loses the device and the physical device to one refused command
+ * buffer, its own included (an acquire's semaphore signal, a wait for idle):
+ * nothing goes to MoltenVK there that would commit one, and what can't wait
+ * fails alone (VK_ERROR_NOT_PERMITTED_EXT, a backend failure) */
+static inline bool
+vk_gpuRefused(void) {
+#if defined(__APPLE__)
+  return appleGPURefused();
+#else
+  return false;
+#endif
+}
+
+/* no frame where the system doesn't show the view, or from the background */
+static inline bool
+vk_framesRefused(const GPUSwapchainVk *swapchain) {
+#if defined(__APPLE__)
+  return appleGPURefused() || (swapchain->surface && appleViewHidden(swapchain->surface->shown));
+#else
+  (void)swapchain;
+  return false;
+#endif
+}
 
 static inline void
 vk_setSwapchainStatus(GPUSwapchainVk *swapchain, VkResult result) {

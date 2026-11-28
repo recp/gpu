@@ -351,6 +351,7 @@ vk_createSurface(GPUApi *__restrict api, GPUInstance *__restrict inst, const GPU
         break;
       }
 
+      surface->shown   = appleWatchView(info->nativeHandle);
       metalInfo.sType  = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
       metalInfo.pLayer = surface->metalLayer;
       err              = vkCreateMetalSurfaceEXT(instVk->inst,
@@ -402,6 +403,7 @@ vk_createSurface(GPUApi *__restrict api, GPUInstance *__restrict inst, const GPU
 
   if (err != VK_SUCCESS) {
 #if defined(__APPLE__)
+    appleUnwatchView(surface->shown);
     destroyMetalLayer(surface->metalLayer);
 #endif
     free(surface);
@@ -430,6 +432,7 @@ vk_destroySurface(GPUSurface *__restrict surface) {
       vkDestroySurfaceKHR(surfaceVk->inst, surfaceVk->surface, NULL);
     }
 #if defined(__APPLE__)
+    appleUnwatchView(surfaceVk->shown);
     destroyMetalLayer(surfaceVk->metalLayer);
 #endif
     free(surfaceVk);

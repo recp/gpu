@@ -3686,6 +3686,10 @@ vk_createDevice(GPUAdapter   *__restrict adapter,
   }
 #endif
 
+#if defined(__APPLE__)
+  /* from the device on, the app's background is followed (vk_gpuRefused) */
+  appleWatchGPUAccess();
+#endif
   result = vkCreateDevice(adapterVk->physicalDevice,
                           &deviceCI,
                           NULL,
@@ -4086,7 +4090,7 @@ err:
   free(plans);
 
   if (deviceVk) {
-    if (deviceVk->device) {
+    if (deviceVk->device && !vk_gpuRefused()) {
       vkDeviceWaitIdle(deviceVk->device);
     }
 
@@ -4174,7 +4178,12 @@ vk_destroyDevice(GPUDevice * __restrict device) {
   }
 
   if (deviceVk) {
-    if (deviceVk->device) {
+    /* from the background MoltenVK's idle wait commits a command buffer of
+     * its own, which the system refuses: each queue's own work instead */
+    if (deviceVk->device && vk_gpuRefused()) {
+      for (i = 0u; i < deviceVk->nCreatedQueues; i++)
+        vk_waitQueueInFlight(deviceVk->createdQueues[i]);
+    } else if (deviceVk->device) {
       vkDeviceWaitIdle(deviceVk->device);
     }
 
