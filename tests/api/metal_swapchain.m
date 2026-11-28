@@ -27,6 +27,34 @@
   } \
 } while (0)
 
+/* AppKit's events dispatched: a window's occlusion is known only through them */
+static void
+pump_events(double seconds) {
+  NSDate  *deadline;
+  NSEvent *event;
+
+  deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
+  do {
+    event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                               untilDate:[NSDate dateWithTimeIntervalSinceNow:0.002]
+                                  inMode:NSDefaultRunLoopMode
+                                 dequeue:YES];
+    if (event)
+      [NSApp sendEvent:event];
+  } while (deadline.timeIntervalSinceNow > 0.0);
+}
+
+static void
+run_until(NSWindow *window, bool visible, double seconds) {
+  NSDate *deadline;
+
+  deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
+  while (!!(window.occlusionState & NSWindowOcclusionStateVisible) != visible
+         && deadline.timeIntervalSinceNow > 0.0) {
+    pump_events(0.005);
+  }
+}
+
 static bool
 present(GPUDevice *device, GPUSwapchain *swapchain, NSWindow *window, uint32_t index,
         id<CAMetalDrawable> *outDrawable) {
@@ -110,6 +138,7 @@ check_options(GPUAdapter *adapter, GPUSurface *surface) {
   GPUSwapchainOptions    options    = {0};
   GPUDevice            *device;
   GPUSwapchain         *swapchain = NULL;
+  NSView               *view;
   bool                  ok = true;
 
   if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK)
@@ -148,8 +177,61 @@ check_options(GPUAdapter *adapter, GPUSurface *surface) {
   }
 
   GPUDestroySwapchain(swapchain);
+  /* the view's own layer, the default swapchain's, is AppKit's again and in
+   * the window's tree: what goes on the view next (check_windows' sublayer)
+   * shows */
+  view = surface->_priv;
+  CHECK(view.layer && ![view.layer isKindOfClass:[CAMetalLayer class]] && view.layer.superlayer);
   GPUDestroyDevice(device);
   printf("options: default, disabled features, malformed chains=%s\n", ok ? "pass" : "fail");
+  return ok;
+}
+
+/* frames shown on both windows' screens. Core Animation gives no
+ * presentation time to a fresh layer's first presents (the epochs' bursts)
+ * nor to the first after a second idle, and a refresh shows only its last
+ * present: frames go on as an app's do, one a refresh, until one of each
+ * window's has its time. A window hidden meanwhile leaves them unseen, not
+ * failed */
+static bool
+check_presented(GPUDevice *device, GPUSwapchain **swapchains, GPUSurface **surfaces, bool *onscreen) {
+  id<CAMetalDrawable> drawables[2] = {nil, nil};
+  NSWindow           *windows[2];
+  NSDate             *deadline;
+  uint32_t            window, round;
+  bool                seen[2] = {false, false};
+  bool                ok = true;
+
+  for (window = 0u; window < 2u; window++)
+    windows[window] = ((NSView *)surfaces[window]->_priv).window;
+
+  for (round = 0u; round < 30u && !(seen[0] && seen[1]); round++) {
+    for (window = 0u; window < 2u; window++) {
+      if (!(windows[window].occlusionState & NSWindowOcclusionStateVisible)) {
+        *onscreen = false;
+        goto done;
+      }
+
+      [drawables[window] release];
+      drawables[window] = nil;
+      CHECK(present(device, swapchains[window], windows[window], round + window, &drawables[window])
+            && drawables[window]);
+    }
+
+    [CATransaction flush];
+    deadline = [NSDate dateWithTimeIntervalSinceNow:0.05];
+    do {
+      pump_events(0.002);
+      for (window = 0u; window < 2u; window++)
+        seen[window] = seen[window] || drawables[window].presentedTime > 0.0;
+    } while (!(seen[0] && seen[1]) && deadline.timeIntervalSinceNow > 0.0);
+  }
+
+  CHECK(seen[0] && seen[1]);
+
+done:
+  for (window = 0u; window < 2u; window++)
+    [drawables[window] release];
   return ok;
 }
 
@@ -164,11 +246,9 @@ check_windows(GPUAdapter *adapter, GPUSurface **surfaces, bool *onscreen) {
   GPUSwapchainCreateInfo       info      = {0};
   GPUSwapchainOptions          options   = {0};
   GPUSwapchain               *swapchains[2] = {NULL, NULL};
-  id<CAMetalDrawable>          drawables[2]  = {nil, nil};
   GPUDevice                  *device;
   GPUSwapchainMetal          *native;
   CGColorSpaceRef             expected;
-  NSDate                     *deadline;
   pthread_t                   worker;
   void                       *workerResult;
   uint32_t                    window, epoch, value;
@@ -244,10 +324,8 @@ check_windows(GPUAdapter *adapter, GPUSurface **surfaces, bool *onscreen) {
       CHECK(native->layer.drawableSize.width == ceil((100.0 + epoch) * scales[epoch])
            && native->layer.drawableSize.height == ceil((84.0 + epoch) * scales[epoch]));
       CHECK(GPUResizeSwapchain(swapchains[window], 96u, 80u) == GPU_OK);
-      [drawables[window] release];
-      drawables[window] = nil;
       CHECK(present(device, swapchains[window], ((NSView *)surfaces[window]->_priv).window,
-                    epoch + window, &drawables[window]));
+                    epoch + window, NULL));
     }
     [CATransaction commit];
   }
@@ -255,55 +333,17 @@ check_windows(GPUAdapter *adapter, GPUSurface **surfaces, bool *onscreen) {
   [CATransaction flush];
   [NSApp updateWindows];
   CHECK(deviceApi(device)->device.waitIdle(device) == GPU_OK);
-  *onscreen = (((NSView *)surfaces[0]->_priv).window.occlusionState & NSWindowOcclusionStateVisible)
-              && (((NSView *)surfaces[1]->_priv).window.occlusionState & NSWindowOcclusionStateVisible);
-  deadline = [NSDate dateWithTimeIntervalSinceNow:2.0];
-  while (*onscreen && (drawables[0].presentedTime == 0.0 || drawables[1].presentedTime == 0.0)
-         && [deadline timeIntervalSinceNow] > 0.0) {
-    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                           beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.002]];
-  }
-  if (*onscreen)
-    CHECK(drawables[0].presentedTime > 0.0 && drawables[1].presentedTime > 0.0);
-  else
+  *onscreen = true;
+  CHECK(check_presented(device, swapchains, surfaces, onscreen));
+  if (!*onscreen)
     printf("onscreen timestamps unavailable: test windows are occluded\n");
 
 cleanup:
-  for (window = 0u; window < 2u; window++) {
-    [drawables[window] release];
+  for (window = 0u; window < 2u; window++)
     GPUDestroySwapchain(swapchains[window]);
-  }
   GPUDestroyDevice(device);
   printf("multiwindow: sRGB/P3, scale/KVO, transaction, thread rules, transient ring=%s\n", ok ? "pass" : "fail");
   return ok;
-}
-
-/* AppKit's events dispatched: a window's occlusion is known only through them */
-static void
-pump_events(double seconds) {
-  NSDate  *deadline;
-  NSEvent *event;
-
-  deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
-  do {
-    event = [NSApp nextEventMatchingMask:NSEventMaskAny
-                               untilDate:[NSDate dateWithTimeIntervalSinceNow:0.002]
-                                  inMode:NSDefaultRunLoopMode
-                                 dequeue:YES];
-    if (event)
-      [NSApp sendEvent:event];
-  } while (deadline.timeIntervalSinceNow > 0.0);
-}
-
-static void
-run_until(NSWindow *window, bool visible, double seconds) {
-  NSDate *deadline;
-
-  deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
-  while (!!(window.occlusionState & NSWindowOcclusionStateVisible) != visible
-         && deadline.timeIntervalSinceNow > 0.0) {
-    pump_events(0.005);
-  }
 }
 
 /* a covered window gives no frame, at once and not after nextDrawable's
@@ -392,12 +432,18 @@ main(void) {
                                                 backing:NSBackingStoreBuffered
                                                   defer:NO];
       [windows[i] setReleasedWhenClosed:NO];
+      /* above other apps' windows, without taking focus: only frames of a
+       * window the system shows reach the screen */
+      [windows[i] setLevel:NSFloatingWindowLevel];
       [windows[i] orderFrontRegardless];
       surfaces[i] = GPUCreateSurfaceFromNative(instance, adapter, windows[i].contentView,
                                                GPU_SURFACE_APPLE_NSVIEW, 1.0f);
       if (!surfaces[i])
         goto cleanup;
     }
+
+    for (i = 0u; i < 2u; i++)
+      run_until(windows[i], true, 0.5);
 
     ok = check_options(adapter, surfaces[0]) && check_windows(adapter, surfaces, &onscreen)
          && check_hidden(adapter, surfaces[0], windows[0]);
