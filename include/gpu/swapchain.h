@@ -78,6 +78,8 @@ typedef struct GPUSwapchainCreateInfo {
  * the caller's current Core Animation transaction. classic Metal waits for GPU
  * scheduling in this opt-in mode, never GPU completion. default presentation
  * remains asynchronous. pause an attached pacer before reconfiguration.
+ * destroying a swapchain that took a view's own layer gives the view an
+ * AppKit layer again.
  */
 
 GPU_EXPORT

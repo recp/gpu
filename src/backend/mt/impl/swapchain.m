@@ -26,6 +26,9 @@
 #if TARGET_OS_OSX || TARGET_OS_IOS
   GPUViewHandle     *occlusionView; /* the surface's view: whether its window is shown is tracked */
 #endif
+#if TARGET_OS_OSX
+  NSView            *hostView;      /* the view whose own layer is the swapchain's */
+#endif
 }
 
 - (void)gpuObserveObject:(id)object keyPath:(NSString *)keyPath;
@@ -33,6 +36,9 @@
 #if TARGET_OS_OSX || TARGET_OS_IOS
 - (void)gpuObserveOcclusionOf:(GPUViewHandle *)view;
 - (void)gpuStopObservingOcclusion;
+#endif
+#if TARGET_OS_OSX
+- (void)gpuGiveBackLayer:(CALayer *)layer;
 #endif
 @end
 
@@ -111,6 +117,24 @@
     occlusionView = nil;
   }
 }
+
+/* a view whose own layer was the swapchain's gets one of AppKit's back, at
+ * once and in the window's tree. Only taking ours out of its superlayer would
+ * leave the view a dead layer outside the tree: nothing drawn there after
+ * (another swapchain's sublayer, AppKit's own drawing) would show. AppKit
+ * builds the layer when wantsLayer turns on; a cleared one only at its next
+ * display pass and never outside a window, too late for a swapchain made on
+ * the view right after. A layer something else put there stays */
+- (void)gpuGiveBackLayer:(CALayer *)layer {
+  if (hostView && hostView.layer == layer) {
+    hostView.layer      = nil;
+    hostView.wantsLayer = NO;
+    hostView.wantsLayer = YES;
+  }
+
+  [hostView release];
+  hostView = nil;
+}
 #elif TARGET_OS_IOS
 /* a scene in the background may not use the GPU: a frame drawn there fails
  * (cmdque.m's not permitted) and nextDrawable can wait out its second, so
@@ -166,6 +190,9 @@
 #if TARGET_OS_OSX || TARGET_OS_IOS
   [self gpuStopObservingOcclusion];
 #endif
+#if TARGET_OS_OSX
+  [hostView release];
+#endif
   [super dealloc];
 }
 
@@ -208,6 +235,7 @@ mt_swapchainAttachToView(GPUSwapchain *__restrict swapchain,
   _viewHandle.wantsLayer = YES;
   if (replace) {
     _viewHandle.layer      = swapchainMtl->layer;
+    ((GPUSwapchainObjc *)swapchainMtl->objc)->hostView = [_viewHandle retain];
   } else {
     [_viewHandle.layer addSublayer:swapchainMtl->layer];
   }
@@ -400,6 +428,9 @@ mt_destroySwapchain(GPUSwapchain *__restrict swapchain) {
       [(GPUSwapchainObjc *)swapchainMtl->objc gpuStopObserving];
 #if TARGET_OS_OSX || TARGET_OS_IOS
       [(GPUSwapchainObjc *)swapchainMtl->objc gpuStopObservingOcclusion];
+#endif
+#if TARGET_OS_OSX
+      [(GPUSwapchainObjc *)swapchainMtl->objc gpuGiveBackLayer:swapchainMtl->layer];
 #endif
       [(id)swapchainMtl->objc release];
     }
