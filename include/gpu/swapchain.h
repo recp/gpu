@@ -76,7 +76,8 @@ typedef struct GPUSwapchainCreateInfo {
  * Apple view/layer creation, resize, scale and destruction stay on the main
  * thread. transaction swapchains also encode/submit/present on that thread in
  * the caller's current Core Animation transaction. classic Metal waits for GPU
- * scheduling in this opt-in mode, never GPU completion. default presentation
+ * scheduling in this opt-in mode, never GPU completion; Metal 4, with no such
+ * point, for the frame's completion, up to a second. default presentation
  * remains asynchronous. pause an attached pacer before reconfiguration.
  * destroying a swapchain that took a view's own layer gives the view an
  * AppKit layer again.
