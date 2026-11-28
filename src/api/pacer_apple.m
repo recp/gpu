@@ -64,8 +64,11 @@ struct GPUPacerClock {
   vsync.vsync    = sender.timestamp;
   vsync.period   = interval > 0.0 ? interval : 0.0;
   vsync.deadline = sender.targetTimestamp + (pacer->latencyFrames - 1u) * vsync.period;
+  /* what the tick leaves autoreleased goes with it, not with the caller's run loop */
   [self retain];
-  framePacerVsync(pacer, &vsync);
+  @autoreleasepool {
+    framePacerVsync(pacer, &vsync);
+  }
   [self release];
 }
 @end
