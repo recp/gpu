@@ -77,9 +77,10 @@ webgpu__acquireTexture(GPUSwapchain *swapchain, GPUSwapchainWebGPU *native) {
   native->frame.target     = &native->texture;
   native->frame.targetView = &native->view;
 
-  if (surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal) {
-    swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_SUBOPTIMAL);
-  }
+  /* a texture had is the swapchain ready again (Metal's and DX12's too), from
+   * an unavailable frame before (the view out of view, say) */
+  swapchainSetStatus(swapchain, surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal
+                                  ? GPU_SWAPCHAIN_STATUS_SUBOPTIMAL : GPU_SWAPCHAIN_STATUS_READY);
 
   return true;
 }
