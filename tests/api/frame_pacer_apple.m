@@ -22,8 +22,14 @@
 
 static NSWindow *pacer__window;
 
+/* ticks are the system's to give: a covered window gets none, or a few, so the
+ * window is shown above other apps' (not activated: no focus taken) and waited
+ * for, bounded; one never shown is no window to pace */
 bool
 pacerHostOpen(GPUInstance *inst, GPUAdapter *adapter, uint32_t width, uint32_t height, GPUSurface **outSurface) {
+  NSDate *deadline;
+
+  *outSurface = NULL;
   @autoreleasepool {
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
@@ -32,11 +38,24 @@ pacerHostOpen(GPUInstance *inst, GPUAdapter *adapter, uint32_t width, uint32_t h
                                                   backing:NSBackingStoreBuffered
                                                     defer:NO];
     [pacer__window setReleasedWhenClosed:NO];
-    [pacer__window orderFront:nil];
+    [pacer__window setLevel:NSFloatingWindowLevel];
+    [pacer__window orderFrontRegardless];
+  }
+
+  deadline = [NSDate dateWithTimeIntervalSinceNow:0.5];
+  while (!(pacer__window.occlusionState & NSWindowOcclusionStateVisible) && deadline.timeIntervalSinceNow > 0.0)
+    pacerHostPump(0.005);
+
+  if (!(pacer__window.occlusionState & NSWindowOcclusionStateVisible)) {
+    pacerHostClose();
+    return false;
+  }
+
+  @autoreleasepool {
     *outSurface = GPUCreateSurfaceFromNative(inst, adapter, [pacer__window contentView],
                                              GPU_SURFACE_APPLE_NSVIEW, 1.0f);
-    return *outSurface != NULL;
   }
+  return *outSurface != NULL;
 }
 
 bool

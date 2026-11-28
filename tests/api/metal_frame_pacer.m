@@ -211,7 +211,23 @@ pump(double seconds) {
   }
 }
 
+/* ticks are the system's to give: a covered window gets none, or a few, so the
+ * window is shown above other apps' (not activated: no focus taken) and waited
+ * for, bounded */
 static bool
+show_window(NSWindow *window) {
+  NSDate *deadline;
+
+  [window setLevel:NSFloatingWindowLevel];
+  [window orderFrontRegardless];
+  deadline = [NSDate dateWithTimeIntervalSinceNow:0.5];
+  while (!(window.occlusionState & NSWindowOcclusionStateVisible) && deadline.timeIntervalSinceNow > 0.0)
+    pump(0.005);
+
+  return (window.occlusionState & NSWindowOcclusionStateVisible) != 0;
+}
+
+static int
 check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
   GPUFramePacerCreateInfo info = {0};
   PacerTest              state = {0};
@@ -227,7 +243,13 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
                                         backing:NSBackingStoreBuffered
                                           defer:NO];
   [window setReleasedWhenClosed:NO];
-  [window orderFront:nil];
+  if (!show_window(window)) {
+    printf("pacer: the window isn't shown here; skip\n");
+    [window close];
+    [window release];
+    return 77;
+  }
+
   surface = GPUCreateSurfaceFromNative(instance, adapter, [window contentView], GPU_SURFACE_APPLE_NSVIEW, 1.0f);
   state.device    = device;
   state.swapchain = GPUCreateSwapchainDefault(device, surface, 96u, 96u);
@@ -376,7 +398,7 @@ cleanup:
 
   printf("pacer: paused draws/resize, owner thread, callback rejection, unconsumed cleanup, resume, manual ownership, destruction=%s\n",
          ok ? "pass" : "fail");
-  return ok;
+  return ok ? 0 : 1;
 }
 
 int
@@ -409,7 +431,7 @@ main(void) {
       return 1;
     }
 
-    status = check_pacer(instance, adapter, device) ? 0 : 1;
+    status = check_pacer(instance, adapter, device);
     GPUDestroyDevice(device);
     GPUDestroyInstance(instance);
     return status;
