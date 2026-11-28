@@ -17,7 +17,8 @@
 /* the frame pacer on every backend: ticks near the display's refresh on the
  * creating thread, pause stops them, frames drawn in ticks and by hand,
  * destruction in and out of a tick with no tick after it, a lower rate, the
- * display's fastest, and how long a tick's frame takes to reach the display */
+ * display's fastest, rates set while it runs, and how long a tick's frame
+ * takes to reach the display */
 
 #include "frame_pacer_host.h"
 #include "test.h"
@@ -66,6 +67,7 @@ typedef struct PacerTest {
   double         refreshes[INTERVAL_CAPACITY]; /* the ticks' refreshInterval */
   uint32_t       refreshCount;
   double         refresh;     /* the display's period: the idle ticks' median refreshInterval */
+  float          tickRate;    /* the maxRate PHASE_RATE_IN_TICK sets */
   PacerSample    samples[SAMPLE_CAPACITY];
   GPUFrameFeedback *feedbacks[SAMPLE_CAPACITY];
   uint32_t       sampleCount;
@@ -84,6 +86,7 @@ enum {
   PHASE_PAUSE_DRAWN,      /* draw, then pause */
   PHASE_REPLACE,          /* draw, destroy, make another, begin a manual frame */
   PHASE_IDLE,             /* ticks that draw nothing */
+  PHASE_RATE_IN_TICK,     /* set the rate in a tick, then idle */
   PHASE_MEASURE           /* draw and record each tick */
 };
 
@@ -279,6 +282,12 @@ tick(GPUFrame *frame, const GPUFrameTiming *timing, void *user) {
     case PHASE_IDLE:
       return; /* unconsumed: released, nothing presented */
 
+    case PHASE_RATE_IN_TICK:
+      if (GPUSetFramePacerRate(state->pacer, 0.0f, state->tickRate, 0.0f) != GPU_OK)
+        state->failed = true;
+      state->phase = PHASE_IDLE;
+      return;
+
     case PHASE_DESTROY_PACER:
       GPUDestroyFramePacer(state->pacer);
       state->pacer = NULL;
@@ -423,6 +432,18 @@ check_cadence(PacerTest *state, const char *what, double seconds, double expectR
   /* ticks near the expected rate; a loaded machine may miss a few */
   return n > 4u && rate > expectRate * 0.6 && rate < expectRate * 1.15
          && fabs(median * expectRate - 1.0) < 0.2;
+}
+
+/* a second of ticks at the rate just set, after a moment to take it */
+static bool
+check_rate_set(PacerTest *state, const char *what, double expectRate) {
+  double start;
+
+  pacerHostPump(0.25);
+  reset_counts(state, PHASE_IDLE);
+  start = pacerHostNow();
+  pacerHostPump(1.0);
+  return check_cadence(state, what, pacerHostNow() - start, expectRate) && !state->failed;
 }
 
 static bool
@@ -763,6 +784,35 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
   }
   ok = ok && check_cadence(&state, "fastest asked", pacerHostNow() - start, fastest) && !state.failed;
   printf("pacer: the display's fastest asked ticks at %.0f Hz=%s\n", fastest, ok ? "pass" : "fail");
+  GPUDestroyFramePacer(state.pacer);
+  state.pacer = NULL;
+  if (!ok)
+    goto cleanup;
+
+  /* rates set while it runs: the fastest, half the display's, none again,
+   * the fastest from inside a tick; rates create refuses are refused */
+  reset_counts(&state, PHASE_IDLE);
+  ok = make_pacer(&state, 1u, 0.0f)
+       && GPUSetFramePacerRate(state.pacer, 2.0f, 1.0f, 0.0f) == GPU_ERROR_INVALID_ARGUMENT
+       && GPUSetFramePacerRate(state.pacer, 0.0f, NAN, 0.0f) == GPU_ERROR_INVALID_ARGUMENT
+       && GPUSetFramePacerRate(state.pacer, 0.0f, 60.0f, 90.0f) == GPU_ERROR_INVALID_ARGUMENT
+       && GPUSetFramePacerRate(NULL, 0.0f, 0.0f, 0.0f) == GPU_ERROR_INVALID_ARGUMENT;
+  if (ok)
+    GPUSetFramePacerPaused(state.pacer, false);
+  ok = ok && GPUSetFramePacerRate(state.pacer, 0.0f, GPU_FRAME_RATE_FASTEST, 0.0f) == GPU_OK
+       && check_rate_set(&state, "set to the fastest", fastest);
+  if (ok && rate > 50.0)
+    ok = GPUSetFramePacerRate(state.pacer, 0.0f, (float)(rate * 0.5), 0.0f) == GPU_OK
+         && check_rate_set(&state, "set to half", rate * 0.5);
+  ok = ok && GPUSetFramePacerRate(state.pacer, 0.0f, 0.0f, 0.0f) == GPU_OK
+       && check_rate_set(&state, "set to none", rate);
+  if (ok) {
+    state.tickRate = GPU_FRAME_RATE_FASTEST;
+    reset_counts(&state, PHASE_RATE_IN_TICK);
+    pacerHostPump(0.1);
+    ok = state.phase == PHASE_IDLE && !state.failed && check_rate_set(&state, "set in a tick", fastest);
+  }
+  printf("pacer: rates set while running=%s\n", ok ? "pass" : "fail");
   GPUDestroyFramePacer(state.pacer);
   state.pacer = NULL;
   if (!ok)
