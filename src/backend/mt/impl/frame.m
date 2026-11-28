@@ -72,6 +72,15 @@ mt_beginDrawableFrame(GPUApi *api, GPUSwapchain *swapchain, void *nativeDrawable
   if (swapchainMtl->presentsWithTransaction && ![NSThread isMainThread])
     return NULL;
 
+#if TARGET_OS_IOS
+  /* a pacer's display link hands out drawables in the background too: there
+   * the frame couldn't be drawn, so the tick comes with none */
+  if (atomic_load_explicit(&swapchainMtl->hidden, memory_order_relaxed)) {
+    swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
+    return NULL;
+  }
+#endif
+
   drawable = (id<CAMetalDrawable>)nativeDrawable;
   if (!drawable) {
     swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
