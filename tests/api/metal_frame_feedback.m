@@ -609,6 +609,7 @@ run_cases(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
                                                 backing:NSBackingStoreBuffered
                                                   defer:NO];
   [fixture.window setReleasedWhenClosed:NO];
+  [fixture.window setLevel:NSFloatingWindowLevel];
   [fixture.window orderFrontRegardless];
   fixture.surface = GPUCreateSurfaceFromNative(instance, adapter, fixture.window.contentView,
                                                 GPU_SURFACE_APPLE_NSVIEW, 1.0f);
@@ -625,6 +626,13 @@ run_cases(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
     printf("feedback: window ordered=%u visible=%u occlusion=%llu\n", fixture.window.visible,
            !!(fixture.window.occlusionState & NSWindowOcclusionStateVisible),
            (unsigned long long)fixture.window.occlusionState);
+  }
+
+  /* a window the system doesn't show gives no frames */
+  if (ok && !(fixture.window.occlusionState & NSWindowOcclusionStateVisible)) {
+    printf("feedback: the window isn't shown here; skip\n");
+    fixture.unavailable = true;
+  } else if (ok) {
     positive = check_manual(&fixture, false)
                && check_manual(&fixture, true)
                && check_paced(&fixture);
@@ -647,7 +655,7 @@ run_cases(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
 }
 
 static Observation*
-create_orphan(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
+create_orphan(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device, bool *shown) {
   ObservationData   data;
   Observation      *observation;
   GPUFrame         *frame = NULL;
@@ -656,6 +664,7 @@ create_orphan(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
   GPUSwapchain     *swapchain = NULL;
   GPUQueue         *queue;
   NSWindow         *window;
+  NSDate           *deadline;
   bool              ok = false;
 
   observation = [Observation new];
@@ -669,7 +678,17 @@ create_orphan(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
                                         backing:NSBackingStoreBuffered
                                           defer:NO];
   [window setReleasedWhenClosed:NO];
-  [window orderFront:nil];
+  [window setLevel:NSFloatingWindowLevel];
+  [window orderFrontRegardless];
+  deadline = [NSDate dateWithTimeIntervalSinceNow:0.5];
+  while (!(window.occlusionState & NSWindowOcclusionStateVisible) && deadline.timeIntervalSinceNow > 0.0)
+    pump(0.005);
+
+  /* a window the system doesn't show gives no frame */
+  *shown = (window.occlusionState & NSWindowOcclusionStateVisible) != 0;
+  if (!*shown)
+    goto cleanup;
+
   surface = GPUCreateSurfaceFromNative(instance, adapter, window.contentView,
                                         GPU_SURFACE_APPLE_NSVIEW, 1.0f);
   swapchain = GPUCreateSwapchainDefault(device, surface, 64u, 64u);
@@ -734,6 +753,7 @@ main(void) {
     const char          *requested;
     GPUResult            result;
     int                  status = 1;
+    bool                 shown = true;
 
     atomic_init(&kCallbacks, 0u);
     requested = getenv("GPU_METAL_MODE");
@@ -783,8 +803,8 @@ main(void) {
       goto cleanup;
 
     status = run_cases(instance, adapter, device);
-    if ((status == 0 || status == 77) && !(orphan = create_orphan(instance, adapter, device)))
-      status = 1;
+    if ((status == 0 || status == 77) && !(orphan = create_orphan(instance, adapter, device, &shown)))
+      status = shown ? 1 : 77;
 
 cleanup:
     GPUDestroyDevice(device);

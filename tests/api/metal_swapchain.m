@@ -28,7 +28,7 @@
 } while (0)
 
 static bool
-present(GPUDevice *device, GPUSwapchain *swapchain, uint32_t index,
+present(GPUDevice *device, GPUSwapchain *swapchain, NSWindow *window, uint32_t index,
         id<CAMetalDrawable> *outDrawable) {
   GPURenderPassColorAttachment color = {0};
   GPURenderPassCreateInfo      info  = {0};
@@ -40,8 +40,11 @@ present(GPUDevice *device, GPUSwapchain *swapchain, uint32_t index,
   bool                        ok = true;
 
   native = swapchain->_priv;
-  if (!(frame = GPUBeginFrame(swapchain)))
-    return false;
+  if (!(frame = GPUBeginFrame(swapchain))) {
+    /* a window the system doesn't show gives no frame, and at once */
+    return !(window.occlusionState & NSWindowOcclusionStateVisible)
+           && GPUGetSwapchainStatus(swapchain) == GPU_SWAPCHAIN_STATUS_UNAVAILABLE;
+  }
 
   CHECK(frame->target->width == (uint32_t)native->layer.drawableSize.width
        && frame->target->height == (uint32_t)native->layer.drawableSize.height
@@ -141,7 +144,7 @@ check_options(GPUAdapter *adapter, GPUSurface *surface) {
   if (swapchain) {
     CHECK(GPUSetSwapchainScale(swapchain, 2.0f) == GPU_ERROR_UNSUPPORTED);
     CHECK(!((GPUSwapchainMetal *)swapchain->_priv)->layer.presentsWithTransaction);
-    CHECK(present(device, swapchain, 0u, NULL));
+    CHECK(present(device, swapchain, ((NSView *)surface->_priv).window, 0u, NULL));
   }
 
   GPUDestroySwapchain(swapchain);
@@ -243,7 +246,8 @@ check_windows(GPUAdapter *adapter, GPUSurface **surfaces, bool *onscreen) {
       CHECK(GPUResizeSwapchain(swapchains[window], 96u, 80u) == GPU_OK);
       [drawables[window] release];
       drawables[window] = nil;
-      CHECK(present(device, swapchains[window], epoch + window, &drawables[window]));
+      CHECK(present(device, swapchains[window], ((NSView *)surfaces[window]->_priv).window,
+                    epoch + window, &drawables[window]));
     }
     [CATransaction commit];
   }
@@ -271,6 +275,96 @@ cleanup:
   }
   GPUDestroyDevice(device);
   printf("multiwindow: sRGB/P3, scale/KVO, transaction, thread rules, transient ring=%s\n", ok ? "pass" : "fail");
+  return ok;
+}
+
+/* AppKit's events dispatched: a window's occlusion is known only through them */
+static void
+pump_events(double seconds) {
+  NSDate  *deadline;
+  NSEvent *event;
+
+  deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
+  do {
+    event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                               untilDate:[NSDate dateWithTimeIntervalSinceNow:0.002]
+                                  inMode:NSDefaultRunLoopMode
+                                 dequeue:YES];
+    if (event)
+      [NSApp sendEvent:event];
+  } while (deadline.timeIntervalSinceNow > 0.0);
+}
+
+static void
+run_until(NSWindow *window, bool visible, double seconds) {
+  NSDate *deadline;
+
+  deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
+  while (!!(window.occlusionState & NSWindowOcclusionStateVisible) != visible
+         && deadline.timeIntervalSinceNow > 0.0) {
+    pump_events(0.005);
+  }
+}
+
+/* a covered window gives no frame, at once and not after nextDrawable's
+ * second; shown again, frames come back */
+static bool
+check_hidden(GPUAdapter *adapter, GPUSurface *surface, NSWindow *window) {
+  GPUDeviceCreateInfo deviceInfo = {0};
+  GPUSwapchain       *swapchain  = NULL;
+  GPUDevice          *device     = NULL;
+  GPUFrame           *frame;
+  NSWindow           *cover;
+  double              start, waited;
+  bool                ok = true;
+
+  [window setLevel:NSFloatingWindowLevel];
+  [window orderFrontRegardless];
+  run_until(window, true, 1.0);
+  if (!(window.occlusionState & NSWindowOcclusionStateVisible)) {
+    printf("hidden window: not shown to begin with; skip\n");
+    return true;
+  }
+
+  if (GPUCreateDevice(adapter, &deviceInfo, &device) != GPU_OK
+      || !(swapchain = GPUCreateSwapchainDefault(device, surface, 96u, 80u))) {
+    GPUDestroyDevice(device);
+    return false;
+  }
+
+  cover = [[NSWindow alloc] initWithContentRect:NSInsetRect(window.frame, -8.0, -8.0)
+                                      styleMask:NSWindowStyleMaskBorderless
+                                        backing:NSBackingStoreBuffered
+                                          defer:NO];
+  [cover setReleasedWhenClosed:NO];
+  [cover setOpaque:YES];
+  [cover setBackgroundColor:[NSColor blackColor]];
+  [cover setLevel:NSStatusWindowLevel];
+  [cover orderFrontRegardless];
+  run_until(window, false, 1.0);
+  if (!(window.occlusionState & NSWindowOcclusionStateVisible)) {
+    start  = CACurrentMediaTime();
+    frame  = GPUBeginFrame(swapchain);
+    waited = CACurrentMediaTime() - start;
+    CHECK(!frame && waited < 0.1 && GPUGetSwapchainStatus(swapchain) == GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
+    GPUEndFrame(frame);
+  } else {
+    printf("hidden window: a cover didn't hide it here; skip\n");
+  }
+
+  [cover orderOut:nil];
+  run_until(window, true, 1.0);
+  if (window.occlusionState & NSWindowOcclusionStateVisible) {
+    frame = GPUBeginFrame(swapchain);
+    CHECK(frame && GPUGetSwapchainStatus(swapchain) == GPU_SWAPCHAIN_STATUS_READY);
+    GPUEndFrame(frame);
+  }
+
+  [cover close];
+  [cover release];
+  GPUDestroySwapchain(swapchain);
+  GPUDestroyDevice(device);
+  printf("hidden window: no frame, at once; frames when shown again=%s\n", ok ? "pass" : "fail");
   return ok;
 }
 
@@ -305,7 +399,8 @@ main(void) {
         goto cleanup;
     }
 
-    ok = check_options(adapter, surfaces[0]) && check_windows(adapter, surfaces, &onscreen);
+    ok = check_options(adapter, surfaces[0]) && check_windows(adapter, surfaces, &onscreen)
+         && check_hidden(adapter, surfaces[0], windows[0]);
 
 cleanup:
     for (i = 0u; i < 2u; i++) {
