@@ -1611,6 +1611,25 @@ mt_discardCommandBuffer(GPUCommandBuffer *__restrict cmdb) {
   return GPU_OK;
 }
 
+#if MT_HAS_METAL4
+/* the layer's residency set (its drawables) goes on the queue that presents
+ * them, once, as Metal 4 asks of a layer's set; a swapchain moved to another
+ * queue takes it along */
+static void
+mt_presentResidency(GPUSwapchainMetal *swapchain, MTCommandQueue *queue) API_AVAILABLE(macos(26.0), ios(26.0)) {
+  if (!swapchain || !swapchain->residencySet || swapchain->residencyQueue == queue->modern)
+    return;
+
+  if (swapchain->residencyQueue) {
+    [(id<MTL4CommandQueue>)swapchain->residencyQueue removeResidencySet:swapchain->residencySet];
+    [swapchain->residencyQueue release];
+  }
+
+  [(id<MTL4CommandQueue>)queue->modern addResidencySet:swapchain->residencySet];
+  swapchain->residencyQueue = [queue->modern retain];
+}
+#endif
+
 GPU_HIDE
 GPUResult
 mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
@@ -1653,15 +1672,13 @@ mt_cmdbufCommit(GPUCommandBuffer *__restrict cmdb) {
       MTL4CommitOptions *options;
 
       drawable = native->drawable;
-
-      if (drawable) {
-        [native->modern useResidencySet:drawable.layer.residencySet];
-      }
+      mt_presentResidency(native->presentSwapchain, queue);
 
       [native->residency commit];
       [native->modern endCommandBuffer];
-      buffers[0]       = native->modern;
-      native->drawable = nil;
+      buffers[0]               = native->modern;
+      native->drawable         = nil;
+      native->presentSwapchain = NULL;
 
       /* serialized submission rearms the handlers consumed by each commit. */
       options = queue->commitOptions;

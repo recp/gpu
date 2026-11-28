@@ -220,6 +220,17 @@ mt_createSwapchain(GPUApi                       *__restrict api,
   objc->swapchainMtl       = swapchainMtl;
   objc->backingScaleFactor = surface->scale;
 
+#if MT_HAS_METAL4
+  /* Metal 4 makes drawables resident through the layer's set, on the queue (cmdque.m) */
+  if (deviceMT->commandMode == MTCommandMode4) {
+    if (@available(macOS 26.0, iOS 26.0, *)) {
+      @autoreleasepool {
+        swapchainMtl->residencySet = [swapchainMtl->layer.residencySet retain];
+      }
+    }
+  }
+#endif
+
   /* AppKit owns the backing layer's colour space; explicit tagging needs a
    * sublayer so display changes cannot overwrite the requested content space. */
   mt_swapchainAttachToView(swapchain, surface->_priv, true,
@@ -288,6 +299,15 @@ mt_destroySwapchain(GPUSwapchain *__restrict swapchain) {
       [(GPUSwapchainObjc *)swapchainMtl->objc gpuStopObserving];
       [(id)swapchainMtl->objc release];
     }
+
+#if MT_HAS_METAL4
+    if (swapchainMtl->residencyQueue) {
+      if (@available(macOS 26.0, iOS 26.0, *))
+        [(id<MTL4CommandQueue>)swapchainMtl->residencyQueue removeResidencySet:swapchainMtl->residencySet];
+      [swapchainMtl->residencyQueue release];
+    }
+#endif
+    [swapchainMtl->residencySet release];
 
     if (swapchainMtl->layer) {
       [swapchainMtl->layer removeFromSuperlayer];

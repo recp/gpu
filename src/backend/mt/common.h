@@ -117,6 +117,8 @@ enum {
 typedef struct GPUSwapchainMetal {
   CAMetalLayer  *layer;
   void          *objc;
+  id             residencySet;   /* the layer's (Metal 4): on residencyQueue, the queue that presents */
+  id             residencyQueue;
   GPUFrame       frame;
   GPUTexture     target;
   GPUTextureView targetView;
@@ -369,6 +371,7 @@ struct MTCommandBuffer {
   id                                     previousResidencyAllocation;
   id<CAMetalDrawable>                    drawable;
   id<CAMetalDrawable>                    feedbackDrawable;
+  GPUSwapchainMetal                     *presentSwapchain; /* drawable's: its layer's residency set */
   MTCommandQueue                        *owner;
   MTCommandBuffer                       *next;
   MTCommandBuffer                       *poolNext;

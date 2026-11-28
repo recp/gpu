@@ -1142,6 +1142,7 @@ mt_recycleCommandBuffer(GPUCommandBuffer *cmdb) {
     native->feedbackDrawable = nil;
   }
   native->drawable              = nil;
+  native->presentSwapchain      = NULL;
   native->pendingAfterStages    = 0u;
   native->pendingBeforeStages   = 0u;
   native->pendingVisibility     = 0u;
@@ -1218,13 +1219,15 @@ mt_cmdBufDrawable(GPUCommandBuffer *cmdb, GPUFrame *frame) {
       return false;
 
     [native->drawable release];
-    native->drawable = [(id<CAMetalDrawable>)frame->drawable retain];
+    native->drawable         = [(id<CAMetalDrawable>)frame->drawable retain];
+    native->presentSwapchain = swapchain;
     return true;
   }
 #if MT_HAS_METAL4
   if (native->mode == MTCommandMode4) {
     [native->drawable release];
-    native->drawable = [(id<CAMetalDrawable>)frame->drawable retain];
+    native->drawable         = [(id<CAMetalDrawable>)frame->drawable retain];
+    native->presentSwapchain = swapchain;
     return true;
   }
 #endif
