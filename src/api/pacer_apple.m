@@ -101,7 +101,6 @@ pacerClockCreate(GPUPacer *pacer, GPUSwapchain *swapchain, GPUPacerClock **outCl
   GPUPacerClock      *clock;
   CADisplayLink      *link;
   void               *view;
-  float               preferred;
 
   *outClock = NULL;
   if (@available(macOS 14.0, iOS 15.0, tvOS 15.0, *)) {
@@ -131,12 +130,7 @@ pacerClockCreate(GPUPacer *pacer, GPUSwapchain *swapchain, GPUPacerClock **outCl
     }
 
     link.paused = YES;
-    if (pacer->maxRate > 0.0f) {
-      /* Core Animation takes no zero minimum with a maximum: none asked is the rate asked */
-      preferred = pacer->preferredRate > 0.0f ? pacer->preferredRate : pacer->maxRate;
-      link.preferredFrameRateRange = CAFrameRateRangeMake(pacer->minRate > 0.0f ? pacer->minRate : preferred,
-                                                          pacer->maxRate, preferred);
-    }
+    link.preferredFrameRateRange = frameRateRange(pacer->minRate, pacer->maxRate, pacer->preferredRate);
 
     target->pacer = pacer;
     target->link  = [link retain];

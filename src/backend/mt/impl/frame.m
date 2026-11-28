@@ -192,8 +192,7 @@ mt_endFrame(GPUApi   *__restrict api,
   created.delegate = self;
   created.paused   = YES;
   created.preferredFrameLatency = latencyFrames;
-  if (rateRange.maximum > 0.0f)
-    created.preferredFrameRateRange = rateRange;
+  created.preferredFrameRateRange = rateRange;
 
   link = created;
   [link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
@@ -254,7 +253,6 @@ mt_createFramePacer(GPUFramePacer *pacer, const GPUFramePacerCreateInfo *info) {
 #if __has_include(<QuartzCore/CAMetalDisplayLink.h>)
   GPUFramePacerTarget *target;
   GPUSwapchainMetal  *native;
-  float               preferred;
 
   if (@available(macOS 14.0, iOS 17.0, *)) {
     native = pacer->swapchain->_priv;
@@ -268,12 +266,7 @@ mt_createFramePacer(GPUFramePacer *pacer, const GPUFramePacerCreateInfo *info) {
     target->thread = [[NSThread currentThread] retain];
     target->paused = true;
     target->latencyFrames = info->latencyFrames ? info->latencyFrames : 1u;
-    if (info->maxRate > 0.0f) {
-      /* Core Animation takes no zero minimum with a maximum: none asked is the rate asked */
-      preferred = info->preferredRate > 0.0f ? info->preferredRate : info->maxRate;
-      target->rateRange = CAFrameRateRangeMake(info->minRate > 0.0f ? info->minRate : preferred,
-                                               info->maxRate, preferred);
-    }
+    target->rateRange     = frameRateRange(info->minRate, info->maxRate, info->preferredRate);
 
     if (![target attachToLayer:native->layer]) {
       [target release];

@@ -64,4 +64,27 @@ GPU_HIDE
 bool
 frameAcquire(GPUFrame *frame);
 
+#if defined(__APPLE__) && defined(__OBJC__)
+#  import <QuartzCore/QuartzCore.h>
+
+/* a pacer's rates as a display link's range. None asked is Core Animation's
+ * default: the system's choice (60 Hz on a phone's faster display). Asked
+ * above the display's (GPU_FRAME_RATE_FASTEST), the link ticks at the
+ * fastest its display gives now, on another display, under Low Power Mode
+ * or a thermal limit too, with no UIKit or AppKit read off the main thread.
+ * Core Animation refuses a zero minimum with a maximum (an exception): none
+ * asked is the rate asked */
+API_AVAILABLE(macos(12.0), ios(15.0), tvos(15.0))
+static inline CAFrameRateRange
+frameRateRange(float minRate, float maxRate, float preferredRate) {
+  float preferred;
+
+  if (!(maxRate > 0.0f))
+    return CAFrameRateRangeDefault;
+
+  preferred = preferredRate > 0.0f ? preferredRate : maxRate;
+  return CAFrameRateRangeMake(minRate > 0.0f ? minRate : preferred, maxRate, preferred);
+}
+#endif
+
 #endif /* gpu_frame_internal_h */

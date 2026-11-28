@@ -82,6 +82,11 @@ typedef struct GPUFramePacerCreateInfo {
   float           preferredRate;
 } GPUFramePacerCreateInfo;
 
+/* a maxRate above any display's: each refresh at the fastest rate the
+ * display gives now (lower in Low Power Mode, under a thermal limit, for a
+ * phone app without CADisableMinimumFrameDurationOnPhone) */
+#define GPU_FRAME_RATE_FASTEST 1000.0f
+
 /* created paused on the calling thread's run loop; all pacer calls stay there.
  * enable GPU_FEATURE_FRAME_PACER when creating the device. one pacer per swapchain;
  * GPUBeginFrame is allowed while paused, on that thread, outside a callback and
@@ -104,7 +109,9 @@ typedef struct GPUFramePacerCreateInfo {
  * callback frames are borrowed for that callback only; NULL means skip encoding.
  * finish/submit normally; an unconsumed frame is released on callback return.
  * destroying the pacer in its callback is supported. the device must outlive it.
- * latencyFrames: zero/one selects one frame, two permits two; zero rates use defaults.
+ * latencyFrames: zero/one selects one frame, two permits two. zero rates
+ * leave the rate to the system (Core Animation holds a phone's faster
+ * display to 60 Hz); GPU_FRAME_RATE_FASTEST asks for the display's fastest.
  */
 GPU_EXPORT
 GPUResult
