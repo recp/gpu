@@ -124,6 +124,7 @@ typedef struct GPUSwapchainMetal {
   GPUTextureView targetView;
   bool           frameActive;
   bool           presentsWithTransaction;
+  _Atomic(bool)  hidden;         /* macOS: its window isn't shown (occlusion), kept on the main thread */
 } GPUSwapchainMetal;
 
 typedef struct MTResourcePool MTResourcePool;

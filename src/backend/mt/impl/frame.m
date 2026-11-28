@@ -136,6 +136,12 @@ mt_beginFrame(GPUApi *api, GPUSwapchain *swapchain) {
   if (native->presentsWithTransaction && ![NSThread isMainThread])
     return NULL;
 
+  /* a window the system doesn't show: nextDrawable would wait out its second */
+  if (atomic_load_explicit(&native->hidden, memory_order_relaxed)) {
+    swapchainSetStatus(swapchain, GPU_SWAPCHAIN_STATUS_UNAVAILABLE);
+    return NULL;
+  }
+
   /* the frame holds the drawable: nothing left in the caller's pool keeps its
    * buffer from the layer once the frame ends */
   @autoreleasepool {

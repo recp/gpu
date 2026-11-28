@@ -23,10 +23,17 @@
   float             backingScaleFactor;
   id                observedObject;
   NSString          *observedKeyPath;
+#if TARGET_OS_OSX
+  NSView            *occlusionView; /* the surface's view, whose window's occlusion is tracked */
+#endif
 }
 
 - (void)gpuObserveObject:(id)object keyPath:(NSString *)keyPath;
 - (void)gpuStopObserving;
+#if TARGET_OS_OSX
+- (void)gpuObserveOcclusionOf:(NSView *)view;
+- (void)gpuStopObservingOcclusion;
+#endif
 @end
 
 @implementation GPUSwapchainObjc
@@ -67,8 +74,50 @@
   }
 }
 
+#if TARGET_OS_OSX
+/* a window the system doesn't show (covered, minimized, on another Space, the
+ * screen locked) gives its layer no drawable for up to a second: frames are
+ * refused there (mt_beginFrame), as DXGI's occluded present. Only AppKit's
+ * word on a change counts, on the main thread: a window just ordered reads
+ * hidden until AppKit hears from the window server, and one whose events
+ * nobody dispatches would read so for good. A view in no window is not hidden */
+- (void)gpuObserveOcclusionOf:(NSView *)view {
+  [self gpuStopObservingOcclusion];
+  occlusionView = [view retain];
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(gpuOcclusionChanged:)
+                                               name:NSWindowDidChangeOcclusionStateNotification
+                                             object:nil];
+}
+
+- (void)gpuOcclusionChanged:(NSNotification *)note {
+  NSWindow *window;
+
+  window = occlusionView.window;
+  if (note.object != window)
+    return;
+
+  atomic_store_explicit(&swapchainMtl->hidden,
+                        window && !(window.occlusionState & NSWindowOcclusionStateVisible),
+                        memory_order_relaxed);
+}
+
+- (void)gpuStopObservingOcclusion {
+  if (occlusionView) {
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:NSWindowDidChangeOcclusionStateNotification
+                                                  object:nil];
+    [occlusionView release];
+    occlusionView = nil;
+  }
+}
+#endif
+
 - (void)dealloc {
   [self gpuStopObserving];
+#if TARGET_OS_OSX
+  [self gpuStopObservingOcclusion];
+#endif
   [super dealloc];
 }
 
@@ -126,6 +175,10 @@ mt_swapchainAttachToView(GPUSwapchain *__restrict swapchain,
     [(GPUSwapchainObjc *)swapchainMtl->objc gpuObserveObject:_viewHandle.layer
                                                      keyPath:@"bounds"];
   }
+
+#if TARGET_OS_OSX
+  [(GPUSwapchainObjc *)swapchainMtl->objc gpuObserveOcclusionOf:_viewHandle];
+#endif
 }
 
 GPU_HIDE
@@ -297,6 +350,9 @@ mt_destroySwapchain(GPUSwapchain *__restrict swapchain) {
 
     if (swapchainMtl->objc) {
       [(GPUSwapchainObjc *)swapchainMtl->objc gpuStopObserving];
+#if TARGET_OS_OSX
+      [(GPUSwapchainObjc *)swapchainMtl->objc gpuStopObservingOcclusion];
+#endif
       [(id)swapchainMtl->objc release];
     }
 
