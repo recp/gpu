@@ -15,6 +15,7 @@
  */
 
 #include "../../src/backend/mt/common.h"
+#include "apple_window.h"
 #include <math.h>
 #include <pthread.h>
 
@@ -194,63 +195,25 @@ tick(GPUFrame *frame, const GPUFrameTiming *timing, void *user) {
   }
 }
 
-static void
-pump(double seconds) {
-  NSDate  *deadline;
-  NSEvent *event;
-
-  deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
-  while (deadline.timeIntervalSinceNow > 0.0) {
-    event = [NSApp nextEventMatchingMask:NSEventMaskAny
-                             untilDate:[NSDate dateWithTimeIntervalSinceNow:0.005]
-                                inMode:NSDefaultRunLoopMode
-                               dequeue:YES];
-    if (event)
-      [NSApp sendEvent:event];
-    [NSApp updateWindows];
-  }
-}
-
-/* ticks are the system's to give: a covered window gets none, or a few, so the
- * window is shown above other apps' (not activated: no focus taken) and waited
- * for, bounded */
-static bool
-show_window(NSWindow *window) {
-  NSDate *deadline;
-
-  [window setLevel:NSFloatingWindowLevel];
-  [window orderFrontRegardless];
-  deadline = [NSDate dateWithTimeIntervalSinceNow:0.5];
-  while (!(window.occlusionState & NSWindowOcclusionStateVisible) && deadline.timeIntervalSinceNow > 0.0)
-    pump(0.005);
-
-  return (window.occlusionState & NSWindowOcclusionStateVisible) != 0;
-}
-
 static int
 check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
   GPUFramePacerCreateInfo info = {0};
   PacerTest              state = {0};
   GPUSurface            *surface;
-  NSWindow              *window;
+  AppleWindow           *window;
   uint32_t               frames, ticks;
   bool                   ok;
 
-  [NSApplication sharedApplication];
-  [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
-  window = [[NSWindow alloc] initWithContentRect:NSMakeRect(40, 40, 96, 96)
-                                      styleMask:NSWindowStyleMaskTitled
-                                        backing:NSBackingStoreBuffered
-                                          defer:NO];
-  [window setReleasedWhenClosed:NO];
-  if (!show_window(window)) {
+  /* ticks are the system's to give: a covered window gets none, or a few, so
+   * the window is waited for, bounded */
+  window = appleWindowOpen(40.0, 40.0, 96u, 96u);
+  if (!appleWindowWaitShown(window, true, 0.5)) {
     printf("pacer: the window isn't shown here; skip\n");
-    [window close];
-    [window release];
+    appleWindowClose(window);
     return 77;
   }
 
-  surface = GPUCreateSurfaceFromNative(instance, adapter, [window contentView], GPU_SURFACE_APPLE_NSVIEW, 1.0f);
+  surface = appleWindowSurface(window, instance, adapter);
   state.device    = device;
   state.swapchain = GPUCreateSwapchainDefault(device, surface, 96u, 96u);
   state.queue     = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
@@ -269,13 +232,13 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
   if (!ok)
     goto cleanup;
 
-  pump(0.08);
+  appleWindowPump(0.08);
   ok = state.frames == 0u && state.ticks == 0u && check_pacer_thread(state.swapchain)
        && check_paused_clear(&state, 96u, 96u);
   if (!ok)
     goto cleanup;
 
-  [window setContentSize:NSMakeSize(128, 80)];
+  appleWindowResize(window, 128u, 80u);
   ok = GPUResizeSwapchain(state.swapchain, 128u, 80u) == GPU_OK
        && check_paused_clear(&state, 128u, 80u);
   if (!ok)
@@ -283,9 +246,9 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
 
   GPUSetFramePacerPaused(state.pacer, false);
   ok = begin_rejected(state.swapchain);
-  pump(0.6);
+  appleWindowPump(0.6);
   frames = state.frames;
-  pump(0.08);
+  appleWindowPump(0.08);
   ok = ok && frames == 8u && state.frames == frames && !state.failed
        && check_paused_clear(&state, 128u, 80u);
   if (!ok)
@@ -294,7 +257,7 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
   state.phase  = 3u;
   state.frames = 0u;
   GPUSetFramePacerPaused(state.pacer, false);
-  pump(0.2);
+  appleWindowPump(0.2);
   ok = state.frames == 1u && !state.failed && check_paused_clear(&state, 128u, 80u);
   if (!ok)
     goto cleanup;
@@ -302,7 +265,7 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
   state.phase  = 4u;
   state.frames = 0u;
   GPUSetFramePacerPaused(state.pacer, false);
-  pump(0.2);
+  appleWindowPump(0.2);
   ok = state.frames == 1u && !state.failed && check_paused_clear(&state, 128u, 80u);
   if (!ok)
     goto cleanup;
@@ -315,7 +278,7 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
 
   ticks = state.ticks;
   GPUSetFramePacerPaused(state.pacer, false);
-  pump(0.08);
+  appleWindowPump(0.08);
   ok = state.frames == 1u && state.ticks == ticks && !state.failed
        && begin_rejected(state.swapchain);
   if (!ok)
@@ -335,7 +298,7 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
     goto cleanup;
 
   GPUSetFramePacerPaused(state.pacer, false);
-  pump(0.2);
+  appleWindowPump(0.2);
   ok = state.frames == 1u && state.pacer && state.manual && !state.failed;
   if (!ok)
     goto cleanup;
@@ -354,7 +317,7 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
   if (state.pacer)
     GPUSetFramePacerPaused(state.pacer, false);
 
-  pump(0.2);
+  appleWindowPump(0.2);
   ok = ok && state.frames == 1u && state.pacer == NULL && !state.failed;
   if (!ok)
     goto cleanup;
@@ -365,7 +328,7 @@ check_pacer(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
   if (state.pacer)
     GPUSetFramePacerPaused(state.pacer, false);
 
-  pump(0.2);
+  appleWindowPump(0.2);
   ok = ok && state.frames == 1u && !state.swapchain && !state.pacer && !state.failed;
   if (!ok)
     goto cleanup;
@@ -391,8 +354,7 @@ cleanup:
   GPUDestroyFramePacer(state.pacer);
   GPUDestroySwapchain(state.swapchain);
   GPUDestroySurface(surface);
-  [window close];
-  [window release];
+  appleWindowClose(window);
   if (!ok)
     fprintf(stderr, "pacer failed: phase=%u frames=%u ticks=%u\n", state.phase, state.frames, state.ticks);
 

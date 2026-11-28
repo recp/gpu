@@ -14,73 +14,41 @@
  * limitations under the License.
  */
 
-/* frame_pacer.c's window on macOS: a small titled window, the main run loop */
+/* frame_pacer.c's window on Apple platforms (apple_window.m): a small window
+ * shown by the system, the main run loop */
 
 #include "frame_pacer_host.h"
-#import <AppKit/AppKit.h>
+#include "apple_window.h"
 #import <QuartzCore/QuartzCore.h>
 
-static NSWindow *pacer__window;
+static AppleWindow *pacer__window;
 
 /* ticks are the system's to give: a covered window gets none, or a few, so the
- * window is shown above other apps' (not activated: no focus taken) and waited
- * for, bounded; one never shown is no window to pace */
+ * window is waited for, bounded; one never shown is no window to pace */
 bool
 pacerHostOpen(GPUInstance *inst, GPUAdapter *adapter, uint32_t width, uint32_t height, GPUSurface **outSurface) {
-  NSDate *deadline;
-
   *outSurface = NULL;
-  @autoreleasepool {
-    [NSApplication sharedApplication];
-    [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
-    pacer__window = [[NSWindow alloc] initWithContentRect:NSMakeRect(40, 40, width, height)
-                                                styleMask:NSWindowStyleMaskTitled
-                                                  backing:NSBackingStoreBuffered
-                                                    defer:NO];
-    [pacer__window setReleasedWhenClosed:NO];
-    [pacer__window setLevel:NSFloatingWindowLevel];
-    [pacer__window orderFrontRegardless];
-  }
+  if (!(pacer__window = appleWindowOpen(40.0, 40.0, width, height)))
+    return false;
 
-  deadline = [NSDate dateWithTimeIntervalSinceNow:0.5];
-  while (!(pacer__window.occlusionState & NSWindowOcclusionStateVisible) && deadline.timeIntervalSinceNow > 0.0)
-    pacerHostPump(0.005);
-
-  if (!(pacer__window.occlusionState & NSWindowOcclusionStateVisible)) {
+  if (!appleWindowWaitShown(pacer__window, true, 0.5)) {
     pacerHostClose();
     return false;
   }
 
-  @autoreleasepool {
-    *outSurface = GPUCreateSurfaceFromNative(inst, adapter, [pacer__window contentView],
-                                             GPU_SURFACE_APPLE_NSVIEW, 1.0f);
-  }
+  *outSurface = appleWindowSurface(pacer__window, inst, adapter);
   return *outSurface != NULL;
 }
 
 bool
 pacerHostResize(uint32_t width, uint32_t height) {
-  [pacer__window setContentSize:NSMakeSize(width, height)];
+  appleWindowResize(pacer__window, width, height);
   return true;
 }
 
 void
 pacerHostPump(double seconds) {
-  @autoreleasepool {
-    NSDate  *deadline;
-    NSEvent *event;
-
-    deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
-    while (deadline.timeIntervalSinceNow > 0.0) {
-      event = [NSApp nextEventMatchingMask:NSEventMaskAny
-                                 untilDate:[NSDate dateWithTimeIntervalSinceNow:0.002]
-                                    inMode:NSDefaultRunLoopMode
-                                   dequeue:YES];
-      if (event)
-        [NSApp sendEvent:event];
-      [NSApp updateWindows];
-    }
-  }
+  appleWindowPump(seconds);
 }
 
 double
@@ -102,7 +70,6 @@ pacerHostPresentKind(void) {
 
 void
 pacerHostClose(void) {
-  [pacer__window close];
-  [pacer__window release];
-  pacer__window = nil;
+  appleWindowClose(pacer__window);
+  pacer__window = NULL;
 }

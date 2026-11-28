@@ -15,6 +15,7 @@
  */
 
 #include "../../src/backend/mt/common.h"
+#include "apple_window.h"
 #import <QuartzCore/CATransaction.h>
 #include <math.h>
 #include <pthread.h>
@@ -54,7 +55,7 @@ typedef struct Fixture {
   GPUQueue     *queue;
   GPUSurface   *surface;
   GPUSwapchain *swapchain;
-  NSWindow     *window;
+  AppleWindow  *window;
   bool          unavailable;
 } Fixture;
 
@@ -198,23 +199,6 @@ attach(GPUFrame *frame, Observation *observation, bool nativeOracle) {
 }
 
 static void
-pump(double seconds) {
-  NSDate  *deadline;
-  NSEvent *event;
-
-  deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
-  while (deadline.timeIntervalSinceNow > 0.0) {
-    event = [NSApp nextEventMatchingMask:NSEventMaskAny
-                             untilDate:[NSDate dateWithTimeIntervalSinceNow:0.003]
-                                inMode:NSDefaultRunLoopMode
-                               dequeue:YES];
-    if (event)
-      [NSApp sendEvent:event];
-    [NSApp updateWindows];
-  }
-}
-
-static void
 drain(GPUQueue *queue) {
   MTCommandQueue *native;
 
@@ -247,7 +231,7 @@ wait_observation(Observation *observation, uint32_t mask, bool nativeOracle, boo
         && (!selfDestroy || data.selfDestroyed))
       return true;
 
-    pump(0.003);
+    appleWindowPump(0.003);
   } while (deadline.timeIntervalSinceNow > 0.0);
 
   fprintf(stderr, "frame feedback: timeout id=%llu events=%u mask=%u native=%u complete=%u\n",
@@ -374,7 +358,7 @@ check_manual(Fixture *fixture, bool selfDestroy) {
              status == PRESENTATION_OBSERVED ? "pass" : "fail", attempt + 1u);
       return status == PRESENTATION_OBSERVED;
     }
-    pump(0.02);
+    appleWindowPump(0.02);
   }
   fixture->unavailable = true;
   printf("feedback: no actual manual presentation after 3 fresh frames; skip\n");
@@ -423,7 +407,7 @@ check_paced(Fixture *fixture) {
     GPUSetFramePacerPaused(test.pacer, false);
     deadline = [NSDate dateWithTimeIntervalSinceNow:3.0];
     while (!test.observation && deadline.timeIntervalSinceNow > 0.0) {
-      pump(0.003);
+      appleWindowPump(0.003);
     }
     status = test.observation && !test.failed && test.observation->target > 0.0
                ? check_presented(test.observation, false) : PRESENTATION_FAILED;
@@ -435,7 +419,7 @@ check_paced(Fixture *fixture) {
       ok = status == PRESENTATION_OBSERVED;
       goto cleanup;
     }
-    pump(0.02);
+    appleWindowPump(0.02);
   }
   fixture->unavailable = true;
   printf("feedback: no actual paced presentation after 3 fresh frames; skip\n");
@@ -577,7 +561,7 @@ check_cancel_pending(Fixture *fixture) {
   if (GPUWaitFence(fence, UINT64_C(5000000000)) != GPU_OK)
     goto cleanup;
   drain(fixture->queue);
-  pump(0.1);
+  appleWindowPump(0.1);
   ok = atomic_load_explicit(&kCallbacks, memory_order_relaxed) == before;
 
 cleanup:
@@ -599,37 +583,22 @@ cleanup:
 static int
 run_cases(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
   Fixture fixture = {0};
-  NSDate *deadline;
   bool    ok, positive, controls;
 
-  fixture.device = device;
-  fixture.queue  = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
-  fixture.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(60, 60, 96, 96)
-                                              styleMask:NSWindowStyleMaskTitled
-                                                backing:NSBackingStoreBuffered
-                                                  defer:NO];
-  [fixture.window setReleasedWhenClosed:NO];
-  [fixture.window setLevel:NSFloatingWindowLevel];
-  [fixture.window orderFrontRegardless];
-  fixture.surface = GPUCreateSurfaceFromNative(instance, adapter, fixture.window.contentView,
-                                                GPU_SURFACE_APPLE_NSVIEW, 1.0f);
-  fixture.swapchain = GPUCreateSwapchainDefault(device, fixture.surface, 96u, 96u);
+  fixture.device    = device;
+  fixture.queue     = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
+  fixture.window    = appleWindowOpen(60.0, 60.0, 96u, 96u);
+  fixture.surface   = appleWindowSurface(fixture.window, instance, adapter);
+  fixture.swapchain = fixture.surface ? GPUCreateSwapchainDefault(device, fixture.surface, 96u, 96u) : NULL;
   [CATransaction flush];
   ok = fixture.queue && fixture.surface && fixture.swapchain;
   if (ok) {
-    /* an ordered window may still be occluded; wait only a bounded interval. */
-    deadline = [NSDate dateWithTimeIntervalSinceNow:0.5];
-    while (!(fixture.window.occlusionState & NSWindowOcclusionStateVisible)
-           && deadline.timeIntervalSinceNow > 0.0) {
-      pump(0.005);
-    }
-    printf("feedback: window ordered=%u visible=%u occlusion=%llu\n", fixture.window.visible,
-           !!(fixture.window.occlusionState & NSWindowOcclusionStateVisible),
-           (unsigned long long)fixture.window.occlusionState);
+    /* an ordered window may still be covered; wait only a bounded interval. */
+    printf("feedback: window shown=%u\n", appleWindowWaitShown(fixture.window, true, 0.5));
   }
 
   /* a window the system doesn't show gives no frames */
-  if (ok && !(fixture.window.occlusionState & NSWindowOcclusionStateVisible)) {
+  if (ok && !appleWindowShown(fixture.window)) {
     printf("feedback: the window isn't shown here; skip\n");
     fixture.unavailable = true;
   } else if (ok) {
@@ -649,8 +618,7 @@ run_cases(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device) {
   drain(fixture.queue);
   GPUDestroySwapchain(fixture.swapchain);
   GPUDestroySurface(fixture.surface);
-  [fixture.window close];
-  [fixture.window release];
+  appleWindowClose(fixture.window);
   return !ok ? 1 : fixture.unavailable ? 77 : 0;
 }
 
@@ -663,8 +631,7 @@ create_orphan(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device, boo
   GPUSurface       *surface = NULL;
   GPUSwapchain     *swapchain = NULL;
   GPUQueue         *queue;
-  NSWindow         *window;
-  NSDate           *deadline;
+  AppleWindow      *window;
   bool              ok = false;
 
   observation = [Observation new];
@@ -673,24 +640,14 @@ create_orphan(GPUInstance *instance, GPUAdapter *adapter, GPUDevice *device, boo
 
   observation->frameId = UINT64_C(0x600000001);
   queue = GPUGetQueue(device, GPU_QUEUE_GRAPHICS, 0u);
-  window = [[NSWindow alloc] initWithContentRect:NSMakeRect(80, 80, 64, 64)
-                                      styleMask:NSWindowStyleMaskTitled
-                                        backing:NSBackingStoreBuffered
-                                          defer:NO];
-  [window setReleasedWhenClosed:NO];
-  [window setLevel:NSFloatingWindowLevel];
-  [window orderFrontRegardless];
-  deadline = [NSDate dateWithTimeIntervalSinceNow:0.5];
-  while (!(window.occlusionState & NSWindowOcclusionStateVisible) && deadline.timeIntervalSinceNow > 0.0)
-    pump(0.005);
+  window = appleWindowOpen(80.0, 80.0, 64u, 64u);
 
   /* a window the system doesn't show gives no frame */
-  *shown = (window.occlusionState & NSWindowOcclusionStateVisible) != 0;
+  *shown = appleWindowWaitShown(window, true, 0.5);
   if (!*shown)
     goto cleanup;
 
-  surface = GPUCreateSurfaceFromNative(instance, adapter, window.contentView,
-                                        GPU_SURFACE_APPLE_NSVIEW, 1.0f);
+  surface = appleWindowSurface(window, instance, adapter);
   swapchain = GPUCreateSwapchainDefault(device, surface, 64u, 64u);
   if (!queue || !surface || !swapchain || !(frame = GPUBeginFrame(swapchain))
       || !attach(frame, observation, false) || !(command = encode_clear(queue, frame)))
@@ -710,8 +667,7 @@ cleanup:
   GPUEndFrame(frame);
   GPUDestroySwapchain(swapchain);
   GPUDestroySurface(surface);
-  [window close];
-  [window release];
+  appleWindowClose(window);
   if (!ok) {
     cancel(observation);
     [observation release];
@@ -757,9 +713,11 @@ main(void) {
 
     atomic_init(&kCallbacks, 0u);
     requested = getenv("GPU_METAL_MODE");
+#if TARGET_OS_OSX
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
     [NSApp finishLaunching];
+#endif
     if (GPUCreateInstance(NULL, &instance) != GPU_OK)
       goto cleanup;
 

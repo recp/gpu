@@ -172,7 +172,7 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
       SKIP_RETURN_CODE 77 LABELS "framebuffer-fetch" TIMEOUT 30 RUN_SERIAL TRUE)
   endforeach()
 
-  add_executable(gpu-metal-swapchain-test metal_swapchain.m)
+  add_executable(gpu-metal-swapchain-test metal_swapchain.m apple_window.m)
   target_link_libraries(gpu-metal-swapchain-test PRIVATE gpu)
   gpu_link_apple_framework(gpu-metal-swapchain-test AppKit "${GPU_FRAMEWORK_UI}")
   gpu_link_apple_framework(gpu-metal-swapchain-test Metal "${GPU_FRAMEWORK_METAL}")
@@ -374,7 +374,7 @@ if(GPU_BUILD_METAL)
 endif()
 
 if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
-  add_executable(gpu-metal-frame-pacer-test metal_frame_pacer.m)
+  add_executable(gpu-metal-frame-pacer-test metal_frame_pacer.m apple_window.m)
 
   target_link_libraries(gpu-metal-frame-pacer-test PRIVATE gpu)
   gpu_link_apple_framework(gpu-metal-frame-pacer-test AppKit "${GPU_FRAMEWORK_UI}")
@@ -394,7 +394,7 @@ endif()
 # the pacer on any backend (frame_pacer.c): a window on screen, the main run loop
 if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS"
    AND (GPU_BUILD_METAL OR GPU_BUILD_VULKAN OR GPU_BUILD_WEBGPU))
-  add_executable(gpu-frame-pacer-test frame_pacer.c frame_pacer_apple.m runner.c)
+  add_executable(gpu-frame-pacer-test frame_pacer.c frame_pacer_apple.m apple_window.m runner.c)
   target_link_libraries(gpu-frame-pacer-test PRIVATE gpu)
   gpu_link_apple_framework(gpu-frame-pacer-test AppKit "${GPU_FRAMEWORK_UI}")
   gpu_link_apple_framework(gpu-frame-pacer-test Foundation "${GPU_FRAMEWORK_FOUNDATION}")
@@ -484,7 +484,7 @@ if(GPU_BUILD_METAL AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set_tests_properties(metal-completion-timing PROPERTIES LABELS "frame-feedback;timing" TIMEOUT 10)
   endif()
 
-  add_executable(gpu-metal-frame-feedback-test metal_frame_feedback.m)
+  add_executable(gpu-metal-frame-feedback-test metal_frame_feedback.m apple_window.m)
 
   target_link_libraries(gpu-metal-frame-feedback-test PRIVATE gpu)
   gpu_link_apple_framework(gpu-metal-frame-feedback-test AppKit "${GPU_FRAMEWORK_UI}")
